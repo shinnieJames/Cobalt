@@ -5,31 +5,29 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 /**
- * Wire shape of the response to {@code POST /checkin}, gunzipped
- * before decoding.
+ * Models the wire shape of the response to the checkin POST, decoded after the body has been gunzipped.
  *
- * @apiNote
- * Only the two fields Cobalt cares about (the assigned Android id
- * and its security token) are mapped; all other fields the server
- * returns are ignored.
+ * <p>The message carries the credentials Cobalt needs to authenticate against the FCM message connection
+ * service: the server-assigned Android id and its paired security token. The matching request is built from
+ * {@link FcmCheckinRequest}.
+ *
+ * @implNote This implementation maps only the two fields Cobalt consumes; every other field the server
+ * returns is left out of the schema and discarded during decoding.
  */
 @ProtobufMessage(name = "FcmCheckinResponse")
 public final class FcmCheckinResponse {
     /**
-     * Server-assigned 64-bit Android device id.
+     * Holds the server-assigned 64-bit Android device id.
      *
-     * @apiNote
-     * Becomes the username on the MCS login.
+     * <p>This value is used as the username when logging in to the FCM message connection service.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.FIXED64)
     long androidId;
 
     /**
-     * Server-assigned 64-bit security token paired with
-     * {@link #androidId}.
+     * Holds the server-assigned 64-bit security token paired with {@link #androidId}.
      *
-     * @apiNote
-     * Becomes the password on the MCS login.
+     * <p>This value is used as the password when logging in to the FCM message connection service.
      */
     @ProtobufProperty(index = 8, type = ProtobufType.FIXED64)
     long securityToken;
@@ -37,7 +35,7 @@ public final class FcmCheckinResponse {
     /**
      * Constructs a new checkin response with the given values.
      *
-     * @param androidId     the assigned Android id
+     * @param androidId     the server-assigned Android id
      * @param securityToken the paired security token
      */
     FcmCheckinResponse(long androidId, long securityToken) {

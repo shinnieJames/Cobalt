@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.filter;
 
 import com.github.auties00.cobalt.call.frame.audio.AudioFrame;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -8,13 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link AudioPipe}.
+ * Covers {@link AudioPipe} hand-off between its sink and source: frames written to the sink are
+ * delivered untouched to the source, the buffered-frame count is reported, and the capacity bound
+ * is enforced.
  */
 class AudioPipeTest {
-    /**
-     * Frame written to the sink reaches the source untouched.
-     */
     @Test
+    @DisplayName("Frame written to the sink reaches the source untouched")
     void writeThenRead() throws InterruptedException {
         var pipe = new AudioPipe();
         var pcm = new short[]{1, 2, 3, 4};
@@ -24,10 +25,8 @@ class AudioPipeTest {
         assertEquals(100L, got.ptsMs());
     }
 
-    /**
-     * The pipe reports the queue size after a write.
-     */
     @Test
+    @DisplayName("Reports the queue size after a write")
     void sizeReflectsBufferedFrames() throws InterruptedException {
         var pipe = new AudioPipe();
         assertEquals(0, pipe.size());
@@ -35,10 +34,8 @@ class AudioPipeTest {
         assertEquals(1, pipe.size());
     }
 
-    /**
-     * Constructor rejects a non-positive capacity.
-     */
     @Test
+    @DisplayName("Constructor rejects a non-positive capacity")
     void rejectsNonPositiveCapacity() {
         assertThrows(IllegalArgumentException.class, () -> new AudioPipe(0));
         assertThrows(IllegalArgumentException.class, () -> new AudioPipe(-1));

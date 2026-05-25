@@ -13,13 +13,6 @@ dist/
 package-lock.json
 *.tsbuildinfo
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-venv/
-
 # IDEs
 .idea/
 *.iml
@@ -39,5 +32,5 @@ desktop.ini
 # Testing
 .test/
 
-# Claude Code local settings
-.claude/settings.local.json
+# Validation run data (incremental-mode anchor, reports, captures)
+validation/

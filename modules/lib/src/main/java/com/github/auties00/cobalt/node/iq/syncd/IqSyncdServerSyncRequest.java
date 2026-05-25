@@ -15,36 +15,33 @@ import java.util.Objects;
 import java.util.SequencedCollection;
 
 /**
- * Outbound {@code <iq xmlns="w:sync:app:state" type="set">} stanza that drives the syncd
- * app-state two-way sync loop for a typed list of collection entries.
+ * Outbound {@code <iq xmlns="w:sync:app:state" type="set">} stanza that drives the
+ * syncd app-state two-way sync loop for a typed list of collection entries.
  *
- * @apiNote
- * Use this to back WA Web's {@code WAWebSyncdServerSync.serverSync} loop: each
- * iteration uploads any pending local mutations as encrypted patches and asks the
- * relay for any patches / snapshot it has buffered for the bound collections. The
- * caller drives a fresh request per iteration; the relay's per-collection state
- * (see {@link IqSyncdServerSyncCollectionState}) determines whether to issue a
- * follow-up. The reply is parsed by {@link IqSyncdServerSyncResponse}.
+ * <p>Each iteration of the sync loop uploads any pending local mutations as
+ * encrypted patches and asks the relay for any patches or snapshot it has buffered
+ * for the bound collections. A fresh request is built per iteration; the relay's
+ * per-collection {@link IqSyncdServerSyncCollectionState state} determines whether
+ * a follow-up iteration is needed. The reply is parsed by
+ * {@link IqSyncdServerSyncResponse}.
  *
  * @implNote
- * This implementation mirrors WA Web's {@code WAWebSyncdRequestBuilderBuild.buildSyncIqNode}
- * verbatim: the outbound payload is a single {@code <sync>} child carrying one
+ * The outbound payload is a single {@code <sync>} child carrying one
  * {@code <collection name return_snapshot version>} per entry, with an optional
- * {@code <patch>} grandchild when the entry ships encrypted local mutations. WA
- * Web's {@code return_snapshot} attribute is set to {@code "true"} when the
- * caller has no local version (initial bootstrap) and {@code "false"} otherwise.
+ * {@code <patch>} grandchild when the entry ships encrypted local mutations. The
+ * {@code return_snapshot} attribute is {@code "true"} when the entry has no local
+ * version (initial bootstrap) and {@code "false"} otherwise; the relay uses it to
+ * decide whether to ship a snapshot blob or only patches.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdServerSync")
 @WhatsAppWebModule(moduleName = "WAWebSyncdRequestBuilderBuild")
 public final class IqSyncdServerSyncRequest implements IqOperation.Request {
     /**
-     * The default collection version emitted in the {@code version} attribute when
-     * the caller has never synced a collection.
+     * Holds the default collection version emitted in the {@code version} attribute
+     * when the caller has never synced a collection.
      *
-     * @apiNote
-     * Matches WA Web's {@code WASyncdConst.DEFAULT_COLLECTION_VERSION = 0}; the
-     * relay interprets a zero version paired with {@code return_snapshot="true"}
-     * as an initial-bootstrap request.
+     * <p>The relay interprets a zero version paired with
+     * {@code return_snapshot="true"} as an initial-bootstrap request.
      */
     @WhatsAppWebExport(moduleName = "WASyncdConst",
             exports = "DEFAULT_COLLECTION_VERSION", adaptation = WhatsAppAdaptation.DIRECT)
@@ -59,10 +56,9 @@ public final class IqSyncdServerSyncRequest implements IqOperation.Request {
     /**
      * Constructs a new server-sync request bound to the given collection entries.
      *
-     * @apiNote
-     * An empty list produces a degenerate {@code <sync/>} child with no collection
-     * grandchildren; WA Web treats this as a no-op iteration and returns an empty
-     * reply. Callers normally pass at least one entry.
+     * <p>An empty list produces a degenerate {@code <sync/>} child with no
+     * collection grandchildren, which the relay treats as a no-op iteration that
+     * returns an empty reply; callers normally pass at least one entry.
      *
      * @param collections the collection entries; never {@code null}, may be empty
      * @throws NullPointerException if {@code collections} is {@code null}
@@ -85,16 +81,16 @@ public final class IqSyncdServerSyncRequest implements IqOperation.Request {
     /**
      * Builds the outbound {@code <iq>} stanza from the typed collection list.
      *
-     * @apiNote
-     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
-     * attribute, which the dispatch layer assigns. The encrypted patch protobuf
-     * bytes carried in {@link IqSyncdServerSyncRequestCollection#patch()} are
-     * routed verbatim into the optional {@code <patch>} grandchild.
+     * <p>The returned {@link NodeBuilder} is wire-ready except for the IQ
+     * {@code id} attribute, which the dispatch layer assigns. The encrypted patch
+     * bytes carried in {@link IqSyncdServerSyncRequestCollection#patch()} are routed
+     * verbatim into the optional {@code <patch>} grandchild.
      *
      * @implNote
      * This implementation sets {@code return_snapshot="true"} when the local
-     * version is empty and {@code "false"} otherwise; the relay uses this to
-     * decide whether to ship a snapshot blob or only patches.
+     * version is empty and {@code "false"} otherwise, falling back to
+     * {@link #DEFAULT_COLLECTION_VERSION} for the {@code version} attribute when no
+     * local version is present.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the typed
      *         {@code <sync>}/{@code <collection>} payload
@@ -131,6 +127,14 @@ public final class IqSyncdServerSyncRequest implements IqOperation.Request {
                 .content(syncNode);
     }
 
+    /**
+     * Compares this request to another for equality across the bound collection
+     * entries.
+     *
+     * @param obj the object to compare against, or {@code null}
+     * @return {@code true} when {@code obj} is an {@link IqSyncdServerSyncRequest}
+     *         with an equal collection list
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -143,11 +147,23 @@ public final class IqSyncdServerSyncRequest implements IqOperation.Request {
         return Objects.equals(this.collections, that.collections);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)} over the bound
+     * collection entries.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(collections);
     }
 
+    /**
+     * Returns a debugging representation listing the bound collection entries.
+     *
+     * @return a string of the form
+     *         {@code IqSyncdServerSyncRequest[collections=...]}
+     */
     @Override
     public String toString() {
         return "IqSyncdServerSyncRequest[collections=" + collections + ']';

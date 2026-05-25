@@ -15,21 +15,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza that polls the relay for a delta of newsletter
- * status updates (view counts and emoji reactions per status post).
+ * Polls the relay for a delta of newsletter status updates (view counts and emoji reactions per
+ * status post).
  *
- * @apiNote
- * Drives WA Web's periodic per-JID status-updates poll
- * ({@code WAWebNewsletterGetStatusUpdatesJob.fetchNewsletterStatusUpdates}),
- * which is deduplicated by JID via an in-flight {@code Map}. The
+ * <p>The relay echoes the matching {@link SmaxNewslettersGetNewsletterStatusUpdatesResponse}. The
  * resulting IQ has shape:
  * {@snippet :
  *     <iq xmlns="newsletter" type="get" to="<newsletterJid>">
  *         <status_updates count="100" since="1700000000" after="99"/>
  *     </iq>
- * }
- * The relay echoes the matching
- * {@link SmaxNewslettersGetNewsletterStatusUpdatesResponse}.
+ * }</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterStatusUpdatesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterIQGetRequestMixin")
@@ -57,21 +52,16 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
     /**
      * Constructs a new request.
      *
-     * @apiNote
-     * WA Web's job invariably passes
-     * {@link SmaxNewslettersGetNewsletterStatusUpdatesDirection.After}
-     * at pivot {@code 99} (the minimum allowed server-id) and a
-     * {@code count} of {@code 100} to pull the full known-status
-     * history; {@code since} is left {@code null}.
+     * <p>A periodic full-history poll passes
+     * {@link SmaxNewslettersGetNewsletterStatusUpdatesDirection.After} at pivot {@code 99} (the
+     * minimum allowed server-id) and a {@code count} of {@code 100} to pull the full known-status
+     * history, leaving {@code since} {@code null}.</p>
      *
-     * @param newsletterJid the newsletter {@link Jid}; never
-     *                      {@code null}
+     * @param newsletterJid the newsletter {@link Jid}; never {@code null}
      * @param count         the per-call cap; must be non-negative
-     * @param since         the optional unix-second floor; may be
-     *                      {@code null}
+     * @param since         the optional unix-second floor; may be {@code null}
      * @param direction     the cursor; never {@code null}
-     * @throws NullPointerException if {@code newsletterJid} or
-     *                              {@code direction} is {@code null}
+     * @throws NullPointerException if {@code newsletterJid} or {@code direction} is {@code null}
      */
     public SmaxNewslettersGetNewsletterStatusUpdatesRequest(Jid newsletterJid, int count, Long since, SmaxNewslettersGetNewsletterStatusUpdatesDirection direction) {
         this.newsletterJid = Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
@@ -101,8 +91,7 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
     /**
      * Returns the optional unix-second floor.
      *
-     * @return an {@link Optional} carrying the floor, or empty when
-     *         the request asks for the full delta
+     * @return an {@link Optional} carrying the floor, or empty when the request asks for the full delta
      */
     public Optional<Long> since() {
         return Optional.ofNullable(since);
@@ -118,11 +107,9 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza carrying the
-     * {@code <status_updates>} payload.
+     * Builds the outbound {@code <iq>} stanza carrying the {@code <status_updates>} payload.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <status_updates>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <status_updates>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutNewslettersGetNewsletterStatusUpdatesRequest",
@@ -151,8 +138,7 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
      * Compares two requests for value equality on every field.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a request with equal
-     *         field values
+     * @return {@code true} when {@code obj} is a request with equal field values
      */
     @Override
     public boolean equals(Object obj) {

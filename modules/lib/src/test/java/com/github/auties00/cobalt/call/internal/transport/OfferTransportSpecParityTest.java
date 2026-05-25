@@ -11,11 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Live-oracle parity tests for {@link OfferTransportSpec}: feeds a
- * captured inbound {@code <offer>} payload through
- * {@link OfferTransportSpec#parse} and asserts that the relay tokens,
- * te2 endpoints, participants, and call key are all present + shaped
- * as the capture-time wire dictated.
+ * Live-oracle parity tests for {@link OfferTransportSpec}. Feeds a captured inbound {@code <offer>}
+ * payload through {@link OfferTransportSpec#parse} and asserts that the relay tokens, te2 endpoints,
+ * participants, and call key are all present and shaped as the capture-time wire dictated. The
+ * fixtures are real WA Web transport stanzas loaded through {@code CallFixtures}; tests no-op when the
+ * fixture is unavailable.
  */
 @DisplayName("OfferTransportSpec live wire oracle")
 class OfferTransportSpecParityTest {
@@ -37,13 +37,13 @@ class OfferTransportSpecParityTest {
         assertNotNull(spec.peerPid(), "peer_pid must be present");
         assertNotNull(spec.selfPid(), "self_pid must be present");
 
-        // <key> + <hbh_key> are the call-session keys — both required.
+        // <key> and <hbh_key> are the call-session keys; both required.
         assertNotNull(spec.callKey(), "<key> must be present");
         assertTrue(spec.callKey().length > 0);
         assertNotNull(spec.hbhKey(), "<hbh_key> must be present");
         assertTrue(spec.hbhKey().length > 0);
 
-        // At least one te2 endpoint — the relay election needs candidates.
+        // At least one te2 endpoint: the relay election needs candidates.
         assertFalse(spec.te2Endpoints().isEmpty(),
                 "at least one <te2> endpoint must be parsed; got " + spec.te2Endpoints());
         var first = spec.te2Endpoints().get(0);
@@ -63,7 +63,6 @@ class OfferTransportSpecParityTest {
     @Test
     @DisplayName("offer without <relay> returns Optional.empty (e.g. signaling-only Cobalt offer)")
     void offerWithoutRelayReturnsEmpty() {
-        // Build a minimal stripped-down offer with no <relay>.
         var offer = new NodeBuilder()
                 .description("offer")
                 .attribute("call-id", "CID-NO-RELAY")

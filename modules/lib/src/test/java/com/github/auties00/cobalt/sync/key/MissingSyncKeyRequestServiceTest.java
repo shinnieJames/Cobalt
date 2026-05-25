@@ -25,83 +25,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins the early-return gates of {@link MissingSyncKeyRequestService} that decide whether a
- * request reaches the peer-message dispatch path.
+ * request reaches the peer-message dispatch path: empty input, the
+ * {@link WhatsAppClientOfflineResumeState#COMPLETE} resume guard, all-ids-already-tracked,
+ * and {@code null}-id filtering.
  *
- * @apiNote
- * Covers the four guards on the entry-point flow:
- * <ul>
- * <li>empty key-id collection short-circuits before scheduling
- * <li>the {@link WhatsAppClientOfflineResumeState#COMPLETE} guard short-circuits during
- *     restart resume
- * <li>every supplied id already in the missing-key store reduces the filter to empty
- * <li>{@link MissingSyncKeyRequestService#reRequestMissingKeys} short-circuits on empty
- * </ul>
- * Live peer-message dispatch and the per-device fan-out are exercised by the Phase 9
- * integration cycles.
- *
- * @implNote
- * This implementation wires both {@link MissingSyncKeyRequestService} and
- * {@link MissingSyncKeyTimeoutScheduler} per test to mirror the cyclic-dependency
- * resolution in {@link com.github.auties00.cobalt.sync.WebAppStateService}; without the
- * scheduler the trackMissingKeys terminal scheduler call would be a no-op and the all-
- * already-tracked test would not exercise the same code path.
+ * <p>Each test wires both {@link MissingSyncKeyRequestService} and
+ * {@link MissingSyncKeyTimeoutScheduler} the same way
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService} resolves their cyclic
+ * dependency (construct both, then {@link MissingSyncKeyRequestService#setTimeoutScheduler});
+ * without the scheduler the all-already-tracked path would not reach the same terminal call.
+ * The wait-for-key timeout is set to 30 days so no scheduled timer can fire mid-test.
  */
 @DisplayName("MissingSyncKeyRequestService")
 class MissingSyncKeyRequestServiceTest {
-    /**
-     * The fixed self phone-number JID used by every test in this class.
-     */
     private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
-
-    /**
-     * The fixed self LID JID used by every test in this class.
-     */
     private static final Jid SELF_LID = Jid.of("83116928594000@lid");
-
-    /**
-     * The fixed self device JID used by every test in this class (device 1).
-     */
     private static final Jid SELF_PN_DEVICE_1 = Jid.of("19250000001:1@s.whatsapp.net");
 
-    /**
-     * The synthetic {@link TestWhatsAppClient} wired to {@link #store}.
-     */
     private TestWhatsAppClient client;
-
-    /**
-     * The {@link WhatsAppStore} the request service reads and mutates.
-     */
     private WhatsAppStore store;
-
-    /**
-     * The {@link TestABPropsService} preloaded with the wait-for-key timeout used by
-     * {@link MissingSyncKeyTimeoutScheduler}.
-     */
     private TestABPropsService props;
-
-    /**
-     * The system under test.
-     */
     private MissingSyncKeyRequestService requestService;
-
-    /**
-     * The companion scheduler wired in via
-     * {@link MissingSyncKeyRequestService#setTimeoutScheduler}.
-     */
     private MissingSyncKeyTimeoutScheduler timeoutScheduler;
 
-    /**
-     * Builds a fresh harness per test: temporary store seeded with the device JIDs, AB
-     * props with a 30-day wait-for-key timeout, request service wired to the scheduler.
-     *
-     * @apiNote
-     * The 30-day timeout is large enough that no scheduled timer can fire mid-test.
-     *
-     * @implNote
-     * This implementation closes the cyclic-dependency loop the same way
-     * {@link com.github.auties00.cobalt.sync.WebAppStateService} does: construct both
-     * collaborators, then call {@link MissingSyncKeyRequestService#setTimeoutScheduler}.
-     */
     @BeforeEach
     void setUp() {
         props = TestABPropsService.builder().build();
@@ -116,25 +62,14 @@ class MissingSyncKeyRequestServiceTest {
         requestService.setTimeoutScheduler(timeoutScheduler);
     }
 
-    /**
-     * Shuts down the scheduler so its single-threaded executor does not leak between
-     * tests.
-     */
     @AfterEach
     void tearDown() {
         timeoutScheduler.shutdown();
     }
 
-    /**
-     * Tests for the four early-return gates of {@code requestMissingKeys}.
-     */
     @Nested
     @DisplayName("requestMissingKeys - early-return gates")
     class RequestMissingKeys {
-        /**
-         * Asserts that an empty input is a no-op and does not touch the missing-key
-         * store.
-         */
         @Test
         @DisplayName("empty collection is a no-op (no scheduler/store side effect)")
         void emptyIsNoOp() {
@@ -144,16 +79,8 @@ class MissingSyncKeyRequestServiceTest {
                     "empty input must not track anything in the missing-key store");
         }
 
-        /**
-         * Asserts that the resume-from-restart guard short-circuits before reaching the
-         * dispatch path.
-         *
-         * @implNote
-         * Default {@code offlineResumeState} is {@code INIT}, so
-         * {@code isResumeFromRestartComplete()} returns {@code false}; a passing test
-         * proves the guard returns before {@code sendKeyRequestToAllDevices}, which would
-         * otherwise throw on the {@link TestWhatsAppClient}'s empty companion-device list.
-         */
+        // Default offlineResumeState is INIT, so the resume guard returns before
+        // sendKeyRequestToAllDevices, which would otherwise throw on the empty companion-device list.
         @Test
         @DisplayName("resume-from-restart not complete short-circuits (no send attempt)")
         void resumeIncompleteShortCircuits() {
@@ -163,10 +90,6 @@ class MissingSyncKeyRequestServiceTest {
                     "no missing-key tracking until resume completes");
         }
 
-        /**
-         * Asserts that an input where every id is already tracked reduces the filter to
-         * empty and short-circuits before any send attempt.
-         */
         @Test
         @DisplayName("every id already tracked -> handleMissingKeys returns before sending")
         void allAlreadyTrackedShortCircuits() {
@@ -184,9 +107,6 @@ class MissingSyncKeyRequestServiceTest {
                     "existing missing-key tracker stays in place");
         }
 
-        /**
-         * Asserts that {@code null} entries inside the input are filtered before tracking.
-         */
         @Test
         @DisplayName("null keyIds inside the input are filtered out before tracking")
         void nullKeyIdsFiltered() {
@@ -194,10 +114,6 @@ class MissingSyncKeyRequestServiceTest {
                     Arrays.asList(null, null)));
         }
 
-        /**
-         * Asserts that the single-id overload routes through the same body as the
-         * collection overload.
-         */
         @Test
         @DisplayName("single-key entry point delegates to requestMissingKeys")
         void singleKeyDelegates() {
@@ -206,15 +122,9 @@ class MissingSyncKeyRequestServiceTest {
         }
     }
 
-    /**
-     * Tests for the empty short-circuit of {@code reRequestMissingKeys}.
-     */
     @Nested
     @DisplayName("reRequestMissingKeys - empty short-circuit")
     class ReRequestMissingKeys {
-        /**
-         * Asserts that an empty input short-circuits before any send attempt.
-         */
         @Test
         @DisplayName("empty collection is a no-op")
         void emptyIsNoOp() {
@@ -222,22 +132,9 @@ class MissingSyncKeyRequestServiceTest {
         }
     }
 
-    /**
-     * Tests for the post-construction wiring helper
-     * {@link MissingSyncKeyRequestService#setTimeoutScheduler}.
-     */
     @Nested
     @DisplayName("setTimeoutScheduler - post-construction wiring")
     class SetTimeoutScheduler {
-        /**
-         * Asserts that wiring the scheduler reference does not throw.
-         *
-         * @implNote
-         * The setter exists because {@link MissingSyncKeyTimeoutScheduler} also depends on
-         * the request service, producing a cyclic construction dependency that
-         * {@link com.github.auties00.cobalt.sync.WebAppStateService} resolves by
-         * constructing both then calling this method.
-         */
         @Test
         @DisplayName("accepts the scheduler reference and does not throw")
         void wiringAccepted() {

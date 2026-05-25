@@ -5,7 +5,6 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.smax.SmaxOperation;
 import com.github.auties00.cobalt.node.smax.util.SmaxBaseServerErrorMixin;
 import com.github.auties00.cobalt.node.smax.util.SmaxIqResultResponseMixin;
@@ -15,25 +14,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsUnlinkGroupsRequest}.
+ * Models the reply family for a {@link SmaxGroupsUnlinkGroupsRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsUnlinkGroupsRPC}.
- * {@link Success} always wraps the per-sub-group result rows returned by the relay; individual rows may carry an
- * {@link Success.UnlinkedGroup#errorTag()} signalling a per-sub-group failure even when the envelope is
- * successful, so callers must walk the list to detect partial failures.
+ * <p>Exactly one of {@link Success}, {@link ClientError}, or {@link ServerError} parses cleanly from a given
+ * inbound IQ stanza. {@link Success} wraps the per-sub-group result rows returned by the relay; individual rows
+ * may carry an {@link Success.UnlinkedGroup#errorTag()} signalling a per-sub-group failure even when the IQ
+ * envelope itself succeeded, so consumers must walk {@link Success#unlinkedGroups()} to detect partial failures
+ * rather than treating a {@link Success} verdict as a guarantee that every sub-group was unlinked.
  */
+@WhatsAppWebModule(moduleName = "WASmaxGroupsUnlinkGroupsRPC")
 public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Response
         permits SmaxGroupsUnlinkGroupsResponse.Success, SmaxGroupsUnlinkGroupsResponse.ClientError, SmaxGroupsUnlinkGroupsResponse.ServerError {
 
     /**
-     * Dispatches the inbound IQ across each {@link SmaxGroupsUnlinkGroupsResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each variant in priority order and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsUnlinkGroupsRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}, matching
+     * the priority of the WA Web RPC dispatcher. An empty result means the stanza matched none of the documented
+     * shapes; the original {@code request} is forwarded to each variant parser so echoed identifiers can be
+     * validated against the outbound stanza.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when no variant matches and leaves the
+     * error-handling decision to the caller, whereas WA Web throws a parsing failure on the same path.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsUnlinkGroupsRequest} stanza, used to validate echoed
@@ -58,21 +60,23 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
     }
 
     /**
-     * The reply variant carrying the per-sub-group result rows when the relay accepted the request envelope.
+     * Carries the per-sub-group result rows returned when the relay accepted the request envelope.
      *
-     * @apiNote The IQ envelope succeeds even when individual rows carry an
-     * {@link UnlinkedGroup#errorTag()} signalling a per-sub-group failure (one of the six tags listed on
-     * {@link UnlinkedGroup}); callers must walk {@link #unlinkedGroups()} to detect partial failures.
+     * <p>The IQ envelope succeeds even when individual rows carry an {@link UnlinkedGroup#errorTag()} signalling a
+     * per-sub-group failure (one of the six tags listed on {@link UnlinkedGroup}), so consumers must walk
+     * {@link #unlinkedGroups()} to detect partial failures.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsUnlinkGroupsResponseSuccess")
     final class Success implements SmaxGroupsUnlinkGroupsResponse {
         /**
-         * The per-sub-group result rows projected from the {@code <unlink>} child.
+         * Holds the per-sub-group result rows projected from the {@code <unlink>} child.
          */
         private final List<UnlinkedGroup> unlinkedGroups;
 
         /**
-         * Constructs a {@link Success}.
+         * Constructs a success reply from its per-sub-group result rows.
+         *
+         * <p>The supplied list is defensively copied so the constructed instance is immutable.
          *
          * @param unlinkedGroups the per-sub-group result rows
          * @throws NullPointerException if {@code unlinkedGroups} is {@code null}
@@ -92,12 +96,16 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
         }
 
         /**
-         * Tries to parse a {@link Success} variant from {@code node}.
+         * Tries to parse a success reply from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseUnlinkGroupsResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request, must carry an {@code <unlink unlink_type="sub_group">}
-         * child, and the child must contain at least one {@code <group>} grand-child carrying a {@code jid}
-         * attribute.
+         * <p>The IQ must validate as a {@code type="result"} echo of {@code request} per
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, must carry an
+         * {@code <unlink unlink_type="sub_group">} child, and that child must hold at least one {@code <group>}
+         * grand-child carrying a {@code jid} attribute. Each {@code <group>} contributes one {@link UnlinkedGroup}
+         * row; its first child whose description is one of the six discriminators recognised by
+         * {@link UnlinkedGroup#isErrorTag(String)} becomes the row's {@link UnlinkedGroup#errorTag()}. The result is
+         * empty when validation fails, the {@code <unlink>} child is absent or carries a different
+         * {@code unlink_type}, any {@code <group>} lacks a {@code jid}, or no rows are produced.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -182,25 +190,18 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
         }
 
         /**
-         * Per-sub-group result row inside a {@link Success}.
+         * Holds one per-sub-group result row inside a {@link Success}.
          *
-         * @apiNote {@link #errorTag()} captures the per-sub-group discriminator emitted by the relay when an
-         * individual unlink fails; values mirror the WA Web mixin family:
-         * <ul>
-         *   <li>{@code "bad_request"}</li>
-         *   <li>{@code "not_authorized"}</li>
-         *   <li>{@code "not_exist"}</li>
-         *   <li>{@code "not_acceptable"}</li>
-         *   <li>{@code "partial_server_error"}</li>
-         *   <li>{@code "server_error"}</li>
-         * </ul>
-         * Empty when the unlink succeeded for that sub-group.
+         * <p>{@link #errorTag()} captures the per-sub-group discriminator emitted by the relay when an individual
+         * unlink fails; it is empty when the unlink succeeded for that sub-group. The recognised tags are
+         * {@code "bad_request"}, {@code "not_authorized"}, {@code "not_exist"}, {@code "not_acceptable"},
+         * {@code "partial_server_error"}, and {@code "server_error"}.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsUnlinkGroupsResponseSuccess")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupBadRequestOrNotAuthorizedOrNotExistOrNotAcceptableOrPartialServerErrorOrServerErrorMixinGroup")
         public static final class UnlinkedGroup {
             /**
-             * Returns whether {@code description} is one of the documented sub-group error discriminator tags.
+             * Returns whether {@code description} is one of the six recognised sub-group error discriminator tags.
              *
              * @param description the child tag to test
              * @return {@code true} when the tag is a sub-group error discriminator
@@ -215,22 +216,22 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
             }
 
             /**
-             * The sub-group {@link Jid} echoed by the relay.
+             * Holds the sub-group {@link Jid} echoed by the relay.
              */
             private final Jid jid;
 
             /**
-             * Whether the relay echoed the {@code remove_orphaned_members="true"} flag.
+             * Holds whether the relay echoed the {@code remove_orphaned_members="true"} flag.
              */
             private final boolean removeOrphanedMembers;
 
             /**
-             * The optional per-sub-group error-discriminator tag.
+             * Holds the per-sub-group error-discriminator tag, or {@code null} when the unlink succeeded.
              */
             private final String errorTag;
 
             /**
-             * Constructs an {@link UnlinkedGroup} result row.
+             * Constructs a result row from its sub-group identifier, eviction flag, and optional error tag.
              *
              * @param jid                   the sub-group {@link Jid}
              * @param removeOrphanedMembers whether the relay echoed the eviction flag
@@ -253,7 +254,7 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
             }
 
             /**
-             * Returns whether the eviction flag was echoed.
+             * Returns whether the relay echoed the eviction flag.
              *
              * @return {@code true} when the {@code remove_orphaned_members="true"} attribute is present
              */
@@ -262,10 +263,9 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
             }
 
             /**
-             * Returns the optional per-sub-group error-discriminator tag.
+             * Returns the per-sub-group error-discriminator tag.
              *
-             * @return an {@link Optional} carrying the tag, or empty when the unlink succeeded for this
-             *         sub-group
+             * @return an {@link Optional} carrying the tag, or empty when the unlink succeeded for this sub-group
              */
             public Optional<String> errorTag() {
                 return Optional.ofNullable(errorTag);
@@ -316,23 +316,25 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
-     * referencing a non-existent parent or sub-group pairing.
+     * Models the reply emitted when the relay rejected the request envelope.
+     *
+     * <p>This variant covers rejections such as a malformed envelope, an unauthorised caller, or a reference to a
+     * non-existent parent or sub-group pairing.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsUnlinkGroupsResponseClientError")
     final class ClientError implements SmaxGroupsUnlinkGroupsResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the human-readable error text echoed by the relay, or {@code null} when omitted.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ClientError} from raw error attributes.
+         * Constructs a client-error reply from its error code and optional error text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be {@code null}
@@ -352,7 +354,7 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
         }
 
         /**
-         * Returns the optional human-readable error text echoed by the relay.
+         * Returns the human-readable error text echoed by the relay.
          *
          * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
@@ -361,10 +363,13 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from {@code node}.
+         * Tries to parse a client-error reply from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Validation is delegated to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which
+         * matches the shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope for the
+         * client-error code range; its {@link com.github.auties00.cobalt.node.smax.util.SmaxIqErrorResponseMixin.Envelope#code()}
+         * and {@link com.github.auties00.cobalt.node.smax.util.SmaxIqErrorResponseMixin.Envelope#text()} populate
+         * this reply. The result is empty when the envelope does not match.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -422,22 +427,22 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Models the reply emitted on a transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsUnlinkGroupsResponseServerError")
     final class ServerError implements SmaxGroupsUnlinkGroupsResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the human-readable error text echoed by the relay, or {@code null} when omitted.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ServerError} from raw error attributes.
+         * Constructs a server-error reply from its error code and optional error text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be {@code null}
@@ -457,7 +462,7 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
         }
 
         /**
-         * Returns the optional human-readable error text echoed by the relay.
+         * Returns the human-readable error text echoed by the relay.
          *
          * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
@@ -466,10 +471,13 @@ public sealed interface SmaxGroupsUnlinkGroupsResponse extends SmaxOperation.Res
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from {@code node}.
+         * Tries to parse a server-error reply from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Validation is delegated to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which
+         * matches the shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope for the
+         * server-error code range; its {@link com.github.auties00.cobalt.node.smax.util.SmaxIqErrorResponseMixin.Envelope#code()}
+         * and {@link com.github.auties00.cobalt.node.smax.util.SmaxIqErrorResponseMixin.Envelope#text()} populate
+         * this reply. The result is empty when the envelope does not match.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

@@ -4,55 +4,51 @@ package com.github.auties00.cobalt.stream.message;
  * Enumerates the fine-grained internal payment-message status values used by
  * the inbound payment notification pipeline.
  *
- * @apiNote
- * Surfaces the {@code NotificationTransactionStatus} enum exposed by
- * {@code WAWebPaymentStatusUtils} as a typed Cobalt counterpart. Each
- * constant corresponds to a specific
+ * <p>Each constant corresponds to a specific
  * ({@link PaymentMessageTransactionType}, server-reported status string)
  * pair. The message stream and notification handlers resolve a value of
  * this enum from an inbound {@code <transaction>} stanza via
- * {@code WAWebPaymentStatusUtils.getNotificationTransactionStatus} and
- * then map it to {@code PaymentInfo.Status} and
- * {@code PaymentInfo.TxnStatus} via
- * {@code WAWebPaymentStatusUtils.getPaymentWebStatus} and
- * {@code WAWebPaymentStatusUtils.getPaymentTxnWebStatus}.
+ * {@code WAWebPaymentStatusUtils.getNotificationTransactionStatus} and then
+ * map it onto {@code PaymentInfo.Status} and {@code PaymentInfo.TxnStatus}
+ * through {@code WAWebPaymentStatusUtils.getPaymentWebStatus} and
+ * {@code WAWebPaymentStatusUtils.getPaymentTxnWebStatus}. The enum is the
+ * typed Cobalt counterpart of the {@code NotificationTransactionStatus}
+ * enum exposed by {@code WAWebPaymentStatusUtils}.
  */
 public enum PaymentMessageStatus {
     /**
      * Indicates that no status has been resolved.
      *
-     * @apiNote
-     * Mirrors the {@code STATUS_UNSET = 0} member of
-     * {@code WAWebPaymentStatusUtils.NotificationTransactionStatus}.
-     * Produced whenever the server-reported {@code status} attribute
+     * <p>Produced whenever the server-reported {@code status} attribute
      * fails to match any case of
-     * {@code getNotificationTransactionStatus}.
+     * {@code getNotificationTransactionStatus}, corresponding to the
+     * {@code STATUS_UNSET = 0} member of
+     * {@code WAWebPaymentStatusUtils.NotificationTransactionStatus}.
      */
     STATUS_UNSET,
 
     /**
      * Indicates that a payment request has just been initialised.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_INIT = 11}.
+     * <p>Corresponds to {@code REQUEST_PAY_INIT = 11}.
      */
     REQUEST_PAY_INIT,
 
     /**
      * Indicates that a payment request has been successfully collected.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_SUCCESS = 12}. Produced when the server
-     * reports {@code "COLLECT_SUCCESS"} for a request-type transaction.
+     * <p>Produced when the server reports {@code "COLLECT_SUCCESS"} for a
+     * request-type transaction, corresponding to
+     * {@code REQUEST_PAY_SUCCESS = 12}.
      */
     REQUEST_PAY_SUCCESS,
 
     /**
      * Indicates that a payment request has failed.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_FAILED = 13}. Produced when the server
-     * reports {@code "COLLECT_FAILED"} for a request-type transaction.
+     * <p>Produced when the server reports {@code "COLLECT_FAILED"} for a
+     * request-type transaction, corresponding to
+     * {@code REQUEST_PAY_FAILED = 13}.
      */
     REQUEST_PAY_FAILED,
 
@@ -60,47 +56,43 @@ public enum PaymentMessageStatus {
      * Indicates that a payment request was blocked by the payment
      * provider's risk system.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_FAILED_RISK = 14}. Produced when the
-     * server reports {@code "COLLECT_FAILED_RISK"} for a request-type
-     * transaction.
+     * <p>Produced when the server reports {@code "COLLECT_FAILED_RISK"} for
+     * a request-type transaction, corresponding to
+     * {@code REQUEST_PAY_FAILED_RISK = 14}.
      */
     REQUEST_PAY_FAILED_RISK,
 
     /**
      * Indicates that a payment request has been rejected by the payer.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_REJECTED = 15}. Produced when the server
-     * reports {@code "COLLECT_REJECTED"} for a request-type transaction.
+     * <p>Produced when the server reports {@code "COLLECT_REJECTED"} for a
+     * request-type transaction, corresponding to
+     * {@code REQUEST_PAY_REJECTED = 15}.
      */
     REQUEST_PAY_REJECTED,
 
     /**
-     * Indicates that a payment request has expired before being
-     * fulfilled.
+     * Indicates that a payment request has expired before being fulfilled.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_EXPIRED = 16}. Produced when the server
-     * reports {@code "COLLECT_EXPIRED"} for a request-type transaction.
+     * <p>Produced when the server reports {@code "COLLECT_EXPIRED"} for a
+     * request-type transaction, corresponding to
+     * {@code REQUEST_PAY_EXPIRED = 16}.
      */
     REQUEST_PAY_EXPIRED,
 
     /**
      * Indicates that a payment request has been fulfilled by the payer.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_FULFILLED = 17}.
+     * <p>Corresponds to {@code REQUEST_PAY_FULFILLED = 17}.
      */
     REQUEST_PAY_FULFILLED,
 
     /**
      * Indicates that a payment request has been cancelled.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_CANCELLED = 18}. Produced when the
-     * server reports {@code "COLLECT_CANCELED"} for a request-type
-     * transaction.
+     * <p>Produced when the server reports {@code "COLLECT_CANCELED"} for a
+     * request-type transaction, corresponding to
+     * {@code REQUEST_PAY_CANCELLED = 18}.
      */
     REQUEST_PAY_CANCELLED,
 
@@ -108,8 +100,7 @@ public enum PaymentMessageStatus {
      * Indicates that a payment request is in the process of being
      * cancelled.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_CANCELLING = 19}.
+     * <p>Corresponds to {@code REQUEST_PAY_CANCELLING = 19}.
      */
     REQUEST_PAY_CANCELLING,
 
@@ -117,19 +108,17 @@ public enum PaymentMessageStatus {
      * Indicates that a scheduled payment for a received peer-to-peer
      * request has been collected.
      *
-     * @apiNote
-     * Mirrors {@code REQUEST_PAY_SCHEDULED_PAYMENT_SUCCESS = 20}. Only
-     * resolved under the
+     * <p>Resolved only under the
      * {@link PaymentMessageTransactionType#TYPE_P2P_REQ_SCHEDULED_PAYMENT_RCVD}
-     * branch.
+     * branch, corresponding to
+     * {@code REQUEST_PAY_SCHEDULED_PAYMENT_SUCCESS = 20}.
      */
     REQUEST_PAY_SCHEDULED_PAYMENT_SUCCESS,
 
     /**
      * Indicates that an incoming payment has been initialised.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_INIT = 101}.
+     * <p>Corresponds to {@code RECV_PAY_INIT = 101}.
      */
     RECV_PAY_INIT,
 
@@ -137,10 +126,9 @@ public enum PaymentMessageStatus {
      * Indicates that an incoming payment is pending until the receiver
      * finishes setup.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_PENDING_SETUP = 102}. Produced when the
-     * server reports {@code "PENDING_SETUP"} on a P2P/P2M-received
-     * transaction.
+     * <p>Produced when the server reports {@code "PENDING_SETUP"} on a
+     * P2P/P2M-received transaction, corresponding to
+     * {@code RECV_PAY_PENDING_SETUP = 102}.
      */
     RECV_PAY_PENDING_SETUP,
 
@@ -148,44 +136,40 @@ public enum PaymentMessageStatus {
      * Indicates that an incoming payment is pending because of a direct
      * account settlement failure.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_PENDING = 103}. Produced when the server
-     * reports {@code "FAILED_DA"} on a P2P/P2M-received transaction.
+     * <p>Produced when the server reports {@code "FAILED_DA"} on a
+     * P2P/P2M-received transaction, corresponding to
+     * {@code RECV_PAY_PENDING = 103}.
      */
     RECV_PAY_PENDING,
 
     /**
-     * Indicates that an incoming payment failed but the server is going
-     * to retry.
+     * Indicates that an incoming payment failed but the server is going to
+     * retry.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_RETRY_ON_FAILURE = 104}. Produced when the
-     * server reports {@code "FAILED_PROCESSING"} on a P2P/P2M-received
-     * transaction.
+     * <p>Produced when the server reports {@code "FAILED_PROCESSING"} on a
+     * P2P/P2M-received transaction, corresponding to
+     * {@code RECV_PAY_RETRY_ON_FAILURE = 104}.
      */
     RECV_PAY_RETRY_ON_FAILURE,
 
     /**
      * Indicates that an incoming payment failed terminally.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_FAILURE = 105}.
+     * <p>Corresponds to {@code RECV_PAY_FAILURE = 105}.
      */
     RECV_PAY_FAILURE,
 
     /**
      * Indicates that an incoming payment was successfully credited.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_SUCCESS = 106}.
+     * <p>Corresponds to {@code RECV_PAY_SUCCESS = 106}.
      */
     RECV_PAY_SUCCESS,
 
     /**
      * Indicates that an incoming payment expired before completion.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_EXPIRED = 107}.
+     * <p>Corresponds to {@code RECV_PAY_EXPIRED = 107}.
      */
     RECV_PAY_EXPIRED,
 
@@ -193,17 +177,15 @@ public enum PaymentMessageStatus {
      * Indicates that an incoming payment was blocked by the payment
      * provider's risk system.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_FAILURE_RISK = 108}.
+     * <p>Corresponds to {@code RECV_PAY_FAILURE_RISK = 108}.
      */
     RECV_PAY_FAILURE_RISK,
 
     /**
-     * Indicates that the receiver-side withdrawal of an incoming payment
-     * is in progress.
+     * Indicates that the receiver-side withdrawal of an incoming payment is
+     * in progress.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_WITHDRAWAL_PROCESSING = 109}.
+     * <p>Corresponds to {@code RECV_PAY_WITHDRAWAL_PROCESSING = 109}.
      */
     RECV_PAY_WITHDRAWAL_PROCESSING,
 
@@ -211,8 +193,7 @@ public enum PaymentMessageStatus {
      * Indicates that the receiver-side withdrawal of an incoming payment
      * failed transiently.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_WITHDRAWAL_FAILURE = 110}.
+     * <p>Corresponds to {@code RECV_PAY_WITHDRAWAL_FAILURE = 110}.
      */
     RECV_PAY_WITHDRAWAL_FAILURE,
 
@@ -220,26 +201,23 @@ public enum PaymentMessageStatus {
      * Indicates that the receiver-side withdrawal of an incoming payment
      * has failed permanently.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_WITHDRAWAL_PERMANENT_FAILED = 111}.
+     * <p>Corresponds to {@code RECV_PAY_WITHDRAWAL_PERMANENT_FAILED = 111}.
      */
     RECV_PAY_WITHDRAWAL_PERMANENT_FAILED,
 
     /**
      * Indicates that an incoming payment was cancelled by the sender.
      *
-     * @apiNote
-     * Mirrors {@code RECV_PAY_SENDER_CANCELED = 112}.
+     * <p>Corresponds to {@code RECV_PAY_SENDER_CANCELED = 112}.
      */
     RECV_PAY_SENDER_CANCELED,
 
     /**
      * Indicates that an outgoing payment has been initialised.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_INIT = 401}. Produced when the server
-     * reports {@code "INITIAL"} on a P2P/P2M-sent or deposit
-     * transaction.
+     * <p>Produced when the server reports {@code "INITIAL"} on a
+     * P2P/P2M-sent or deposit transaction, corresponding to
+     * {@code SEND_PAY_INIT = 401}.
      */
     SEND_PAY_INIT,
 
@@ -247,8 +225,7 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment is pending until the receiver
      * completes setup.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_PENDING_RECEIVER = 402}.
+     * <p>Corresponds to {@code SEND_PAY_PENDING_RECEIVER = 402}.
      */
     SEND_PAY_PENDING_RECEIVER,
 
@@ -256,36 +233,31 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment is pending because of a direct
      * account settlement failure.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_PENDING = 403}. Produced when the server
-     * reports {@code "FAILED_DA"} on a P2P/P2M-sent or deposit
-     * transaction.
+     * <p>Produced when the server reports {@code "FAILED_DA"} on a
+     * P2P/P2M-sent or deposit transaction, corresponding to
+     * {@code SEND_PAY_PENDING = 403}.
      */
     SEND_PAY_PENDING,
 
     /**
-     * Indicates that the refund of an outgoing payment is pending
-     * because of a direct account settlement failure.
+     * Indicates that the refund of an outgoing payment is pending because
+     * of a direct account settlement failure.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_REFUND_PENDING = 404}.
+     * <p>Corresponds to {@code SEND_PAY_REFUND_PENDING = 404}.
      */
     SEND_PAY_REFUND_PENDING,
 
     /**
-     * Indicates that an outgoing payment has been completed
-     * successfully.
+     * Indicates that an outgoing payment has been completed successfully.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_SUCCESS = 405}.
+     * <p>Corresponds to {@code SEND_PAY_SUCCESS = 405}.
      */
     SEND_PAY_SUCCESS,
 
     /**
      * Indicates that an outgoing payment has failed.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_FAILURE = 406}.
+     * <p>Corresponds to {@code SEND_PAY_FAILURE = 406}.
      */
     SEND_PAY_FAILURE,
 
@@ -293,24 +265,21 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment was blocked by the payment
      * provider's risk system.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_FAILURE_RISK = 407}.
+     * <p>Corresponds to {@code SEND_PAY_FAILURE_RISK = 407}.
      */
     SEND_PAY_FAILURE_RISK,
 
     /**
      * Indicates that an outgoing payment has been refunded.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_REFUNDED = 408}.
+     * <p>Corresponds to {@code SEND_PAY_REFUNDED = 408}.
      */
     SEND_PAY_REFUNDED,
 
     /**
      * Indicates that the refund of an outgoing payment has failed.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_REFUND_FAILED = 409}.
+     * <p>Corresponds to {@code SEND_PAY_REFUND_FAILED = 409}.
      */
     SEND_PAY_REFUND_FAILED,
 
@@ -318,17 +287,15 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment failed during receiver-side
      * processing.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_FAILURE_RECEIVER = 410}.
+     * <p>Corresponds to {@code SEND_PAY_FAILURE_RECEIVER = 410}.
      */
     SEND_PAY_FAILURE_RECEIVER,
 
     /**
-     * Indicates that the refund of an outgoing payment is being
-     * processed but cannot complete cleanly.
+     * Indicates that the refund of an outgoing payment is being processed
+     * but cannot complete cleanly.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_REFUND_FAILED_PROCESSING = 411}.
+     * <p>Corresponds to {@code SEND_PAY_REFUND_FAILED_PROCESSING = 411}.
      */
     SEND_PAY_REFUND_FAILED_PROCESSING,
 
@@ -336,10 +303,9 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment is pending refund after a final
      * direct-account settlement failure.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_PENDING_REFUND = 412}. Produced when the
-     * server reports {@code "FAILED_DA_FINAL"} on a P2P/P2M-sent or
-     * deposit transaction.
+     * <p>Produced when the server reports {@code "FAILED_DA_FINAL"} on a
+     * P2P/P2M-sent or deposit transaction, corresponding to
+     * {@code SEND_PAY_PENDING_REFUND = 412}.
      */
     SEND_PAY_PENDING_REFUND,
 
@@ -347,8 +313,7 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment authorisation cancellation is
      * being processed but cannot complete cleanly.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING = 413}.
+     * <p>Corresponds to {@code SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING = 413}.
      */
     SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING,
 
@@ -356,35 +321,31 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment authorisation cancellation has
      * failed.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_AUTH_CANCEL_FAILED = 414}.
+     * <p>Corresponds to {@code SEND_PAY_AUTH_CANCEL_FAILED = 414}.
      */
     SEND_PAY_AUTH_CANCEL_FAILED,
 
     /**
-     * Indicates that an outgoing payment authorisation has been
-     * cancelled.
+     * Indicates that an outgoing payment authorisation has been cancelled.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_AUTH_CANCELED = 415}.
+     * <p>Corresponds to {@code SEND_PAY_AUTH_CANCELED = 415}.
      */
     SEND_PAY_AUTH_CANCELED,
 
     /**
      * Indicates that an outgoing payment has expired.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_EXPIRED = 416}.
+     * <p>Corresponds to {@code SEND_PAY_EXPIRED = 416}.
      */
     SEND_PAY_EXPIRED,
 
     /**
      * Indicates that an outgoing payment authorisation has succeeded.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_AUTH_SUCCESS = 417}. Resolved under the
+     * <p>Resolved under the
      * {@link PaymentMessageTransactionType#TYPE_P2P_REQ_SCHEDULED_PAYMENT_RCVD}
-     * branch when the server reports {@code "AUTH_SUCCESS"}.
+     * branch when the server reports {@code "AUTH_SUCCESS"}, corresponding
+     * to {@code SEND_PAY_AUTH_SUCCESS = 417}.
      */
     SEND_PAY_AUTH_SUCCESS,
 
@@ -392,101 +353,89 @@ public enum PaymentMessageStatus {
      * Indicates that an outgoing payment authorisation success is in the
      * process of being cancelled.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_AUTH_SUCCESS_CANCELING = 418}.
+     * <p>Corresponds to {@code SEND_PAY_AUTH_SUCCESS_CANCELING = 418}.
      */
     SEND_PAY_AUTH_SUCCESS_CANCELING,
 
     /**
-     * Indicates that an outgoing payment is being reviewed by the
-     * payment provider.
+     * Indicates that an outgoing payment is being reviewed by the payment
+     * provider.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_IN_REVIEW = 419}.
+     * <p>Corresponds to {@code SEND_PAY_IN_REVIEW = 419}.
      */
     SEND_PAY_IN_REVIEW,
 
     /**
      * Indicates that an outgoing payment is pending processing.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_PENDING_PROCESSING = 420}. Produced when
-     * the server reports {@code "PENDING"} on a P2P/P2M-sent or deposit
-     * transaction.
+     * <p>Produced when the server reports {@code "PENDING"} on a
+     * P2P/P2M-sent or deposit transaction, corresponding to
+     * {@code SEND_PAY_PENDING_PROCESSING = 420}.
      */
     SEND_PAY_PENDING_PROCESSING,
 
     /**
      * Indicates that an outgoing payment was cancelled by the user.
      *
-     * @apiNote
-     * Mirrors {@code SEND_PAY_USER_CANCELED = 421}.
+     * <p>Corresponds to {@code SEND_PAY_USER_CANCELED = 421}.
      */
     SEND_PAY_USER_CANCELED,
 
     /**
      * Indicates that a withdrawal has been initialised.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_INIT = 601}.
+     * <p>Corresponds to {@code WITHDRAWAL_INIT = 601}.
      */
     WITHDRAWAL_INIT,
 
     /**
      * Indicates that a withdrawal is pending processing.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_PENDING = 602}.
+     * <p>Corresponds to {@code WITHDRAWAL_PENDING = 602}.
      */
     WITHDRAWAL_PENDING,
 
     /**
      * Indicates that a withdrawal is being reviewed.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_IN_REVIEW = 603}.
+     * <p>Corresponds to {@code WITHDRAWAL_IN_REVIEW = 603}.
      */
     WITHDRAWAL_IN_REVIEW,
 
     /**
      * Indicates that a withdrawal completed successfully.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_SUCCESS = 604}.
+     * <p>Corresponds to {@code WITHDRAWAL_SUCCESS = 604}.
      */
     WITHDRAWAL_SUCCESS,
 
     /**
      * Indicates that a withdrawal failed.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_FAILED = 605}. Produced when the server
-     * reports {@code "FAILED"} or {@code "DECLINED"} on a withdrawal
-     * transaction.
+     * <p>Produced when the server reports {@code "FAILED"} or
+     * {@code "DECLINED"} on a withdrawal transaction, corresponding to
+     * {@code WITHDRAWAL_FAILED = 605}.
      */
     WITHDRAWAL_FAILED,
 
     /**
      * Indicates that a withdrawal was cancelled by the user.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_USER_CANCELED = 606}.
+     * <p>Corresponds to {@code WITHDRAWAL_USER_CANCELED = 606}.
      */
     WITHDRAWAL_USER_CANCELED,
 
     /**
      * Indicates that a withdrawal has expired.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_EXPIRED = 607}.
+     * <p>Corresponds to {@code WITHDRAWAL_EXPIRED = 607}.
      */
     WITHDRAWAL_EXPIRED,
 
     /**
      * Indicates that a withdrawal is currently active.
      *
-     * @apiNote
-     * Mirrors {@code WITHDRAWAL_ACTIVE = 608}.
+     * <p>Corresponds to {@code WITHDRAWAL_ACTIVE = 608}.
      */
     WITHDRAWAL_ACTIVE
 }

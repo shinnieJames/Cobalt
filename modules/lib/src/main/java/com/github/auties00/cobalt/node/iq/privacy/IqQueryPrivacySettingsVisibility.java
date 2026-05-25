@@ -7,36 +7,33 @@ import java.util.Optional;
 /**
  * Closed set of visibility tokens that a privacy {@link IqQueryPrivacySettingsCategoryName} may take
  * on the wire.
- *
- * @apiNote
+ * <p>
  * Not every constant is legal for every category; the per-category constraints documented on each
  * value mirror the {@code VISIBILITY}, {@code ALL_NONE}, {@code ONLINE_VISIBILITY},
- * {@code ALL_CONTACTS}, {@code CALL_ADD}, and {@code DEFENSE_MODE_STATE} enum tables exported by
- * WA Web's {@code WAWebPrivacySettings} constants module. Use these constants when constructing an
+ * {@code ALL_CONTACTS}, {@code CALL_ADD}, and {@code DEFENSE_MODE_STATE} enum tables exported by WA
+ * Web's {@code WAWebPrivacySettings} constants module. These constants are used when constructing an
  * {@link IqSetPrivacyRequest} and when reading the
  * {@link IqQueryPrivacySettingsResponse.Success#categories()} map.
  *
  * @implNote
  * This implementation collapses the six WA Web sub-tables into a single union enum; the
  * {@code error} sentinel that WA Web's {@code *_WITH_ERROR} tables emit when the relay rejects an
- * individual category is intentionally not modelled. The rejection signal is surfaced instead by
- * an empty {@link IqSetPrivacyResponse.CategoryOutcome#value()} on the typed parse path.
+ * individual category is intentionally not modelled. The rejection signal is surfaced instead by an
+ * empty {@link IqSetPrivacyResponse.CategoryOutcome#value()} on the typed parse path.
  */
 @WhatsAppWebModule(moduleName = "WAWebPrivacySettings")
 public enum IqQueryPrivacySettingsVisibility {
     /**
      * The {@code all} token.
-     *
-     * @apiNote
-     * Legal on every category. Means "visible to everyone" for visibility categories, "on" for
-     * boolean toggles, and "anyone can add" for permission categories.
+     * <p>
+     * Legal on every category. Means visible to everyone for visibility categories, on for boolean
+     * toggles, and anyone can add for permission categories.
      */
     ALL("all"),
 
     /**
      * The {@code contacts} token.
-     *
-     * @apiNote
+     * <p>
      * Legal on {@link IqQueryPrivacySettingsCategoryName#LAST_SEEN},
      * {@link IqQueryPrivacySettingsCategoryName#PROFILE_PICTURE},
      * {@link IqQueryPrivacySettingsCategoryName#ABOUT},
@@ -49,13 +46,12 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * The {@code contact_blacklist} token.
-     *
-     * @apiNote
+     * <p>
      * Legal on {@link IqQueryPrivacySettingsCategoryName#LAST_SEEN},
      * {@link IqQueryPrivacySettingsCategoryName#PROFILE_PICTURE},
      * {@link IqQueryPrivacySettingsCategoryName#ABOUT}, and
-     * {@link IqQueryPrivacySettingsCategoryName#GROUP_ADD}. Means "visible to contacts except the
-     * named exclusion set" and requires the request to carry a non-empty
+     * {@link IqQueryPrivacySettingsCategoryName#GROUP_ADD}. Means visible to contacts except the
+     * named exclusion set, and requires the request to carry a non-empty
      * {@link IqSetPrivacyRequest#users()} list together with the
      * {@link IqSetPrivacyRequest#dhash()} digest of that list (matching WA Web's
      * {@code privacyDisallowedList} persistence).
@@ -64,9 +60,8 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * The {@code none} token.
-     *
-     * @apiNote
-     * Means "hidden from everyone" or "off". Legal on the visibility categories
+     * <p>
+     * Means hidden from everyone or off. Legal on the visibility categories
      * ({@link IqQueryPrivacySettingsCategoryName#LAST_SEEN},
      * {@link IqQueryPrivacySettingsCategoryName#PROFILE_PICTURE},
      * {@link IqQueryPrivacySettingsCategoryName#ABOUT}) and on the read-receipts toggle
@@ -76,8 +71,7 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * The {@code match_last_seen} token.
-     *
-     * @apiNote
+     * <p>
      * Legal only on {@link IqQueryPrivacySettingsCategoryName#ONLINE}; means the online indicator
      * follows whatever {@link IqQueryPrivacySettingsCategoryName#LAST_SEEN} is set to.
      */
@@ -85,8 +79,7 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * The {@code known} token.
-     *
-     * @apiNote
+     * <p>
      * Legal only on {@link IqQueryPrivacySettingsCategoryName#CALL_ADD}; restricts who may add the
      * user to a group call to peers the user has previously interacted with.
      */
@@ -94,17 +87,15 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * The {@code off} token.
-     *
-     * @apiNote
-     * Legal only on {@link IqQueryPrivacySettingsCategoryName#DEFENSE_MODE}; signals defense mode
-     * is disabled (no server-side quarantine of unsolicited messages).
+     * <p>
+     * Legal only on {@link IqQueryPrivacySettingsCategoryName#DEFENSE_MODE}; signals defense mode is
+     * disabled (no server-side quarantine of unsolicited messages).
      */
     OFF("off"),
 
     /**
      * The {@code on_standard} token.
-     *
-     * @apiNote
+     * <p>
      * Legal only on {@link IqQueryPrivacySettingsCategoryName#DEFENSE_MODE}; enables the standard
      * tier of server-side quarantine for messages from unknown senders.
      */
@@ -118,9 +109,6 @@ public enum IqQueryPrivacySettingsVisibility {
     /**
      * Constructs a visibility constant from its wire token.
      *
-     * @apiNote
-     * Constructor is package-private as enum constants are the only producers.
-     *
      * @param wire the wire token; never {@code null}
      */
     IqQueryPrivacySettingsVisibility(String wire) {
@@ -129,10 +117,10 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * Returns the wire token for this visibility.
-     *
-     * @apiNote
-     * Use when serialising a {@code <category value=...>} attribute on an
-     * {@link IqSetPrivacyRequest}; consumers should not pattern match on the string.
+     * <p>
+     * Used when serialising a {@code <category value=...>} attribute on an
+     * {@link IqSetPrivacyRequest}; consumers compare the enum value rather than pattern matching on
+     * the string.
      *
      * @return the wire token; never {@code null}
      */
@@ -142,11 +130,11 @@ public enum IqQueryPrivacySettingsVisibility {
 
     /**
      * Resolves the constant whose {@link #wire()} equals the supplied token.
-     *
-     * @apiNote
-     * Used by {@link IqQueryPrivacySettingsResponse.Success#of} and
-     * {@link IqSetPrivacyResponse.Success#of} when projecting inbound {@code value} attributes back
-     * into the typed model.
+     * <p>
+     * Projects an inbound {@code value} attribute back into the typed model; used by
+     * {@link IqQueryPrivacySettingsResponse.Success#of(com.github.auties00.cobalt.node.Node, com.github.auties00.cobalt.node.Node)}
+     * and
+     * {@link IqSetPrivacyResponse.Success#of(com.github.auties00.cobalt.node.Node, com.github.auties00.cobalt.node.Node)}.
      *
      * @implNote
      * This implementation walks {@link #values()} linearly; the enum is small enough that a static

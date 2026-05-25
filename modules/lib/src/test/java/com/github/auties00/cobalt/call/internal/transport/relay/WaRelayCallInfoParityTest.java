@@ -15,31 +15,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Parity test for {@link WaRelayCallInfo}
- * against the captured WA-CALL-INFO attribute payload.
+ * Parity suite for {@link WaRelayCallInfo} against the captured WA-CALL-INFO attribute payload.
  *
- * <p>Asserts the observed shape: a 95-byte protobuf payload that
- * decodes to nine entries enumerating every (IP version, relay) pair
- * from the matching {@code RelayListUpdate} (3 relays × 3 IP versions
- * including "any").
+ * <p>Pins both the protobuf wire format (round-trip byte-equality) and the engine-emitted axis
+ * grid: a 95-byte payload decoding to nine entries that enumerate every (IP version, relay) pair
+ * from the matching {@code RelayListUpdate} (3 relays by 3 IP versions, including "any").
  *
- * <p>Pins both the protobuf wire format (round-trip byte-equality) and
- * the engine-emitted axis grid.
+ * <p>The captured WA Web relay bytes are read from {@code src/test/resources/fixtures/relay/}.
  */
 public class WaRelayCallInfoParityTest {
 
-    /**
-     * Classpath path of the captured-bytes fixture.
-     */
     private static final String FIXTURE = "fixtures/relay/stun-bytes-raw.json";
 
-    /**
-     * Decodes the WA-CALL-INFO attribute of the first 344-byte
-     * Allocate Request and asserts that the entry grid matches the
-     * documented 3-relay × 3-IP-version axis pattern.
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void firstAllocateRequestCallInfoMatchesAxisGrid() throws IOException {
         var attrValue = firstCallInfoBytes();
@@ -62,12 +49,6 @@ public class WaRelayCallInfoParityTest {
         }
     }
 
-    /**
-     * Round-trips the WA-CALL-INFO payload and asserts byte-equality
-     * with the captured bytes.
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void callInfoRoundTripsByteExact() throws IOException {
         var attrValue = firstCallInfoBytes();
@@ -77,13 +58,6 @@ public class WaRelayCallInfoParityTest {
                 "WA-CALL-INFO round-trip must be byte-exact");
     }
 
-    /**
-     * Locates the WA-CALL-INFO attribute value in the first captured
-     * 344-byte Allocate Request.
-     *
-     * @return the raw 95-byte attribute value
-     * @throws IOException if the fixture file cannot be read
-     */
     private static byte[] firstCallInfoBytes() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
         var trace = raw.getJSONArray("captured").getJSONObject(0).getJSONArray("trace");

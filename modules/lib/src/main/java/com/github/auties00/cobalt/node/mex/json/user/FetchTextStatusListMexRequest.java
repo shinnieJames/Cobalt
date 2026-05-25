@@ -22,63 +22,55 @@ import java.util.Optional;
 /**
  * Builds the MEX IQ stanza that batches text-status fetches for several users.
  *
- * @apiNote Powers the text status displayed on the Status tab and on the
- * Search Within Chat header. WA Web's
- * {@code WAWebMexFetchTextStatusListJob.mexGetTextStatusList} de-duplicates
- * the JID list and batches the inputs through {@code WABatcher} with a 50
- * ms window before invoking the relay. Pair the dispatched stanza with
- * {@link FetchTextStatusListMexResponse} to consume the reply.
+ * <p>The text status is the message displayed on the Status tab and on the Search Within Chat
+ * header. The request carries an {@code input} GraphQL variable holding the batch of users to query;
+ * the dispatched stanza is paired with {@link FetchTextStatusListMexResponse} to consume the reply.
  *
- * @implNote This implementation accepts the {@code input} variable as an
- * already-serialised string and forwards it verbatim. WA Web instead
- * constructs the variable as an array of
- * {@code [{jid, last_update_time, privacy_token?}]} objects and attaches
- * per-entry {@code privacy_token.tctoken} values when the
- * {@code isProfileScrappingProtectionInMexFetchEnabled} gate is on; Cobalt
- * callers that need those features must materialise the array at a higher
- * layer.
+ * @implNote This implementation accepts the {@code input} variable as an already-serialised string
+ * and forwards it verbatim. WhatsApp Web instead constructs the variable as an array of
+ * {@code [{jid, last_update_time, privacy_token?}]} objects, de-duplicates the JID list, batches the
+ * inputs through a 50 ms window before invoking the relay, and attaches per-entry
+ * {@code privacy_token.tctoken} values when the profile-scraping-protection gate is enabled. Cobalt
+ * callers that need those features must materialise the array at a higher layer.
  *
  * @see FetchTextStatusListMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchTextStatusListJob")
 public final class FetchTextStatusListMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled-document id the relay maps to the persisted query.
+     * Holds the compiled-document identifier the relay maps to the persisted query.
      *
-     * @apiNote Used as the {@code query_id} attribute of the outbound
-     * {@code <query>} node. Matches the {@code params.id} field of
-     * {@code WAWebMexFetchTextStatusListJobQuery.graphql} for the snapshot
-     * this file was generated against.
+     * <p>Emitted as the {@code query_id} attribute of the outbound {@code <query>} node.
+     *
+     * @implNote The value matches the compiled query for the WhatsApp Web snapshot this file was
+     * generated against, and must be rotated together with that bundle.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "24072923595647473";
 
     /**
-     * The GraphQL operation name reported alongside this request.
+     * Holds the GraphQL operation name reported alongside this request.
      *
-     * @apiNote Mirrors {@code params.name} on
-     * {@code WAWebMexFetchTextStatusListJobQuery.graphql}; WA Web tags the
-     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
+     * <p>WhatsApp Web tags this name onto its per-operation latency metrics.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJobQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexGetTextStatusList";
 
     /**
-     * The {@code input} GraphQL variable carrying the pre-serialised batch.
+     * Holds the {@code input} GraphQL variable carrying the pre-serialised batch.
      */
     private final String input;
 
     /**
      * Constructs a request that asks for the text-status of a batch of users.
      *
-     * @apiNote {@code input} must already be the JSON string representation
-     * of the {@code [{jid, last_update_time}]} array the relay expects;
-     * Cobalt does not materialise the array on the caller's behalf.
+     * <p>The argument must already be the JSON string representation of the
+     * {@code [{jid, last_update_time}]} array the relay expects; the array is not materialised on
+     * the caller's behalf.
      *
-     * @param input the serialised batch payload, or {@code null} to omit
-     *              the variable
+     * @param input the serialised batch payload, or {@code null} to omit the variable
      */
     public FetchTextStatusListMexRequest(String input) {
         this.input = input;
@@ -103,10 +95,9 @@ public final class FetchTextStatusListMexRequest implements MexOperation.Request
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation emits {@code {"variables": {"input": <input>}}}
-     * (or {@code {"variables": {}}} when {@code input} is {@code null}) and
-     * defers envelope construction to
-     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
+     * @implNote This implementation emits {@code {"variables": {"input": <input>}}}, or
+     * {@code {"variables": {}}} when {@code input} is {@code null}, and defers envelope construction
+     * to {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJob", exports = "mexGetTextStatusList",
             adaptation = WhatsAppAdaptation.ADAPTED)

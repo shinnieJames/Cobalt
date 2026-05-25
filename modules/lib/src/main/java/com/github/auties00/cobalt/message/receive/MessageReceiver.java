@@ -17,12 +17,10 @@ import java.util.Objects;
  * Sealed base for the two inbound message receivers that collapse WhatsApp Web's
  * {@code WAWebHandleMsg} entry point into a per-stanza-class implementation.
  *
- * @apiNote
- * Subclasses are package-private and only reachable through
- * {@link MessageReceivingService#process(Node)}; embedders never instantiate or
- * subclass directly. The base owns the shared protobuf decoder and the
- * {@code isMeAccount} JID comparison so both subclasses agree on which messages are
- * self-authored.
+ * <p>The base owns the shared protobuf decoder and the self-account JID comparison so
+ * both subclasses agree on which messages are self-authored. Subclasses are
+ * package-private and only reachable through {@link MessageReceivingService#process(Node)};
+ * neither is instantiated nor subclassed outside this package.
  *
  * @implSpec
  * A subclass must convert a raw inbound {@code <message>} node into the appropriate
@@ -45,19 +43,14 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
     /**
      * Central session store shared with every receive subclass.
      *
-     * @apiNote
-     * Holds the local PN, LID, Signal sessions, sender keys, and the per-chat message
-     * cache used by every concrete receiver to identify the self account and to look
-     * up bot-message metadata.
+     * <p>Holds the local PN, LID, Signal sessions, sender keys, and the per-chat
+     * message cache that every concrete receiver uses to identify the self account and
+     * to look up bot-message metadata.
      */
     final WhatsAppStore store;
 
     /**
      * Constructs a receiver bound to the given store.
-     *
-     * @apiNote
-     * Invoked only by the package-private subclass constructors; the orchestrator does
-     * not call this directly.
      *
      * @param store the central session store; must be non-{@code null}
      * @throws NullPointerException if {@code store} is {@code null}
@@ -70,10 +63,9 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * Processes an incoming {@code <message>} node into the receiver's concrete
      * {@link MessageInfo} subtype.
      *
-     * @apiNote
-     * Called by {@link MessageReceivingService#process(Node)} after the orchestrator
-     * has selected the receiver based on the {@code from} JID; a {@code null} return
-     * means the message was intentionally dropped (unavailable fanout placeholder or
+     * <p>Invoked by {@link MessageReceivingService#process(Node)} after the router has
+     * selected the receiver from the {@code from} JID. A {@code null} return means the
+     * message was intentionally dropped (an unavailable fanout placeholder or a
      * newsletter with no payload) and the caller acknowledges with a plain ack.
      *
      * @implSpec
@@ -95,8 +87,7 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
     /**
      * Returns the logged-in device's PN JID or fails fast when no session is active.
      *
-     * @apiNote
-     * Used by subclasses to construct {@code DeviceSentMessage} fallbacks and bot
+     * <p>Subclasses call this to construct device-sent-message fallbacks and bot
      * target-sender JIDs when the stanza does not carry one.
      *
      * @implNote
@@ -116,11 +107,10 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * Decodes the raw protobuf plaintext into a {@link MessageContainer}, returning
      * {@code null} on parse failure rather than throwing.
      *
-     * @apiNote
-     * Used by both receivers after decryption (chat path) or after reading the
-     * {@code <plaintext>} child (newsletter path); a {@code null} return lets the
-     * caller decide whether to NACK, retry, or silently drop based on the originating
-     * stanza class.
+     * <p>Both receivers call this after obtaining the plaintext (after decryption on
+     * the chat path, after reading the {@code <plaintext>} child on the newsletter
+     * path). A {@code null} return lets the caller decide whether to NACK, retry, or
+     * silently drop based on the originating stanza class.
      *
      * @implNote
      * This implementation logs the failure at WARNING level and swallows the
@@ -149,10 +139,9 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
     /**
      * Returns whether the parsed stanza was authored by the logged-in user.
      *
-     * @apiNote
-     * Convenience overload over {@link #isFromMe(Jid)} for callers that already hold
-     * the parsed stanza; used by {@link ChatMessageReceiver} to gate
-     * recipient-attribute validation and DSM expectations.
+     * <p>Convenience overload over {@link #isFromMe(Jid)} for callers that already hold
+     * the parsed stanza; {@link ChatMessageReceiver} uses it to gate recipient-attribute
+     * validation and device-sent-message expectations.
      *
      * @param stanza the parsed stanza
      * @return {@code true} if {@link MessageReceiveStanza#senderJid()} matches the
@@ -168,11 +157,9 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * Returns whether the given sender JID matches the logged-in user's account in
      * either the PN or LID addressing mode.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebUserPrefsMeUser.isMeAccount} predicate; both
-     * addressing modes are checked so a message addressed via either appears as self,
-     * which matters for the companion-device receipts that always loop back via the
-     * primary PN.
+     * <p>Both addressing modes are checked so a message addressed via either appears as
+     * self, which matters for the companion-device receipts that always loop back via
+     * the primary PN. A {@code null} sender returns {@code false}.
      *
      * @implNote
      * This implementation compares user-level JIDs via {@link Jid#toUserJid()} so

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.internal.rtp;
 
 import com.github.auties00.cobalt.call.internal.rtp.srtp.SrtpEndpoint;
+import com.github.auties00.cobalt.call.internal.transport.dtls.DtlsSrtpDriver;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.DataUtils;
 
@@ -8,93 +9,86 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Inbound side of an RTP stream — accepts SRTP-protected bytes
- * (typically from
- * {@link com.github.auties00.cobalt.call.internal.transport.dtls.DtlsSrtpDriver#setSrtpHandler}),
- * unprotects them via {@link SrtpEndpoint#unprotectRtp}, parses the
- * RTP header, drops anything not addressed to the configured SSRC,
- * runs the packet through the {@link JitterBuffer}, and emits each
- * payload (with a missing-packet flag for PLC triggers) to the
- * configured downstream {@link Consumer}.
+ * Receives SRTP-protected packets, reorders them, and delivers each in-order payload downstream.
  *
- * <h2>Lifecycle</h2>
+ * <p>Inbound bytes (typically routed from {@link DtlsSrtpDriver#setSrtpHandler(Consumer)}) are
+ * unprotected via {@link SrtpEndpoint#unprotectRtp(byte[])}, parsed into an {@link RtpPacket},
+ * filtered against the configured SSRC and payload type, queued into the {@link JitterBuffer}, and
+ * then emitted in sequence (each carrying a missing-packet flag for concealment triggers) to the
+ * configured {@link InboundListener}.
+ *
+ * <p>The lifecycle is:
  *
  * <ol>
- *   <li>Construct with the SRTP endpoint, expected SSRC, and a
- *       {@code downstream} {@link InboundListener}.</li>
- *   <li>Wire {@link #onSrtpPacket(byte[])} to the DTLS driver's
- *       SRTP handler.</li>
- *   <li>Periodically call {@link #drain()} on the call's media
- *       scheduler — every drain emits as many in-order packets and
- *       PLC triggers as the jitter buffer can provide right now.</li>
+ *   <li>Construct with the SRTP endpoint, expected SSRC and payload type, and a downstream
+ *       {@link InboundListener}.</li>
+ *   <li>Wire {@link #onSrtpPacket(byte[])} to the DTLS driver's SRTP handler.</li>
+ *   <li>Periodically call {@link #drain()} on the call's media scheduler; each drain emits as many
+ *       in-order packets and concealment triggers as the jitter buffer can currently supply.</li>
  * </ol>
  *
- * <h2>Threading</h2>
- *
- * <p>{@link #onSrtpPacket} is safe to call from the network-receive
- * thread. {@link #drain()} runs on the media thread. The two share
- * the {@link JitterBuffer}, which is not internally synchronised —
- * {@code RtpReceiver} synchronises both calls on its own monitor.
+ * <p>{@link #onSrtpPacket(byte[])} is safe to call from the network-receive thread and
+ * {@link #drain()} from the media thread; both share the non-synchronised {@link JitterBuffer},
+ * which this class guards by synchronising both methods on its own monitor.
  */
 public final class RtpReceiver {
     /**
-     * SRTP endpoint for unprotecting inbound packets.
+     * SRTP endpoint that unprotects inbound packets.
      */
     private final SrtpEndpoint srtp;
 
     /**
-     * Expected SSRC — packets with a different SSRC are silently
-     * dropped (we don't multiplex multiple sources on one receiver).
+     * SSRC accepted by this receiver; a packet bearing a different SSRC is dropped, since one
+     * receiver does not multiplex multiple sources.
      */
     private final int expectedSsrc;
 
     /**
-     * Expected payload type — packets with a mismatched PT are
-     * dropped.
+     * Payload type accepted by this receiver; a packet bearing a different type is dropped.
      */
     private final int expectedPayloadType;
 
     /**
-     * The reorder + miss-detection buffer.
+     * Reorder and miss-detection buffer feeding {@link #drain()}.
      */
     private final JitterBuffer jitter;
 
     /**
-     * Where decoded payloads (and PLC triggers) are delivered.
+     * Listener that receives each decoded payload and concealment trigger.
      */
     private final InboundListener downstream;
 
     /**
-     * Functional interface invoked for each in-order RTP payload —
-     * either a real packet or a PLC trigger.
+     * Receives one in-order RTP payload, real or synthesised, from an {@link RtpReceiver}.
      */
     @FunctionalInterface
     public interface InboundListener {
         /**
-         * Receives one inbound RTP packet or PLC marker.
+         * Receives one inbound RTP payload or packet-loss-concealment marker.
          *
-         * @param inbound the inbound payload
+         * @param inbound the delivered payload
          */
         void onInbound(InboundRtp inbound);
     }
 
     /**
-     * One delivered packet — either a real payload or a missing-packet
-     * marker that the codec should run PLC for.
+     * One delivered RTP payload, either a real packet or a missing-packet marker for which the
+     * codec should run packet-loss concealment.
      *
-     * @param payload      the codec payload bytes (empty for
-     *                     {@code missing == true})
-     * @param timestamp    RTP timestamp (32-bit unsigned)
-     * @param sequenceNumber the wire sequence number (0..65535) — for
-     *                       missing markers, the seq the lost packet
-     *                       would have carried
-     * @param marker       RTP M bit
-     * @param missing      whether this is a synthesised PLC trigger
+     * @param payload        the codec payload bytes, empty when {@code missing} is {@code true}
+     * @param timestamp      the 32-bit unsigned RTP timestamp
+     * @param sequenceNumber the wire sequence number in {@code [0, 65535]}; for a missing marker,
+     *                       the sequence the lost packet would have carried
+     * @param marker         the RTP M bit
+     * @param missing        whether this is a synthesised concealment trigger rather than a real
+     *                       payload
      */
     public record InboundRtp(byte[] payload, long timestamp, int sequenceNumber,
                              boolean marker, boolean missing) {
         /**
-         * Compact constructor — null-checks payload.
+         * Validates the components and rejects a null payload.
+         *
+         * @throws NullPointerException if {@code payload} is {@code null}
          */
         public InboundRtp {
             Objects.requireNonNull(payload, "payload cannot be null");
@@ -102,14 +96,16 @@ public final class RtpReceiver {
     }
 
     /**
-     * Constructs a new receiver with default jitter-buffer sizing
-     * (capacity 64 packets, max-gap 5 — enough for ~640 ms of audio
-     * at 10-ms frames or ~2 s of video at 30 fps).
+     * Constructs a receiver with the default jitter-buffer sizing.
      *
      * @param srtp                the SRTP endpoint
      * @param expectedSsrc        the SSRC to accept
      * @param expectedPayloadType the payload type to accept
-     * @param downstream          where to emit decoded payloads
+     * @param downstream          the listener that receives decoded payloads
+     * @throws NullPointerException if {@code srtp} or {@code downstream} is {@code null}
+     * @implNote This implementation sizes the default {@link JitterBuffer} at capacity 64 and
+     * maximum gap 5, which spans roughly 640 ms of audio at 10 ms frames or roughly 2 s of video at
+     * 30 fps.
      */
     public RtpReceiver(SrtpEndpoint srtp, int expectedSsrc, int expectedPayloadType,
                        InboundListener downstream) {
@@ -117,15 +113,18 @@ public final class RtpReceiver {
     }
 
     /**
-     * Constructs a new receiver with an explicit jitter buffer —
-     * useful for tests that want a smaller buffer or different gap
-     * tolerance.
+     * Constructs a receiver with an explicit jitter buffer.
+     *
+     * <p>This overload lets a caller supply a buffer with non-default capacity or gap tolerance,
+     * for example a smaller buffer in tests.
      *
      * @param srtp                the SRTP endpoint
      * @param expectedSsrc        the SSRC to accept
      * @param expectedPayloadType the payload type to accept
-     * @param downstream          where to emit decoded payloads
-     * @param jitter              the jitter buffer
+     * @param downstream          the listener that receives decoded payloads
+     * @param jitter              the jitter buffer to use
+     * @throws NullPointerException if {@code srtp}, {@code downstream}, or {@code jitter} is
+     *                              {@code null}
      */
     public RtpReceiver(SrtpEndpoint srtp, int expectedSsrc, int expectedPayloadType,
                        InboundListener downstream, JitterBuffer jitter) {
@@ -139,7 +138,7 @@ public final class RtpReceiver {
     /**
      * Returns the SSRC this receiver accepts.
      *
-     * @return the SSRC
+     * @return the accepted SSRC
      */
     public int expectedSsrc() {
         return expectedSsrc;
@@ -148,19 +147,22 @@ public final class RtpReceiver {
     /**
      * Returns the payload type this receiver accepts.
      *
-     * @return the payload type
+     * @return the accepted payload type
      */
     public int expectedPayloadType() {
         return expectedPayloadType;
     }
 
     /**
-     * Hands one inbound SRTP packet to the receiver. Returns
-     * synchronously after the packet has been queued in the jitter
-     * buffer; the actual emission to {@code downstream} happens in
-     * {@link #drain()}.
+     * Accepts one inbound SRTP packet and queues its decoded form for later emission.
+     *
+     * <p>The bytes are unprotected, decoded, and filtered against the expected SSRC and payload
+     * type, then offered to the jitter buffer. A packet that fails to unprotect, fails to decode,
+     * or does not match the SSRC and payload type is silently dropped. The method returns once the
+     * packet has been queued; emission to {@code downstream} happens in {@link #drain()}.
      *
      * @param srtpBytes the protected SRTP packet
+     * @throws NullPointerException if {@code srtpBytes} is {@code null}
      */
     public synchronized void onSrtpPacket(byte[] srtpBytes) {
         Objects.requireNonNull(srtpBytes, "srtpBytes cannot be null");
@@ -183,16 +185,15 @@ public final class RtpReceiver {
     }
 
     /**
-     * Drains the jitter buffer, emitting all in-order packets and
-     * PLC triggers that are currently available. Returns after the
-     * buffer reports {@link JitterBuffer#hasNext()} is {@code false}
-     * and no PLC trigger is pending.
+     * Drains the jitter buffer, emitting every in-order packet and concealment trigger currently
+     * available.
      *
-     * <p>Invariant: each call advances the receiver's "next emitted
-     * sequence number" by zero or more positions; never goes
-     * backwards.
+     * <p>The method loops until {@link JitterBuffer#hasNext()} reports no in-order packet and
+     * {@link JitterBuffer#pollMissing()} reports no pending gap, delivering each polled packet and
+     * each concealment trigger to {@code downstream}. The receiver's next-emitted sequence advances
+     * by zero or more positions per call and never moves backwards.
      *
-     * @return the number of packets/markers emitted in this drain
+     * @return the number of packets and markers emitted during this call
      */
     public synchronized int drain() {
         var emitted = 0;
@@ -207,21 +208,21 @@ public final class RtpReceiver {
             if (gap == 0) {
                 return emitted;
             }
-            // Synthesise a missing-packet marker. We don't know the
-            // exact sequence the lost packet would have carried; we
-            // pass the next-expected seq as a hint to the decoder.
             deliver(null, true);
             emitted++;
         }
     }
 
     /**
-     * Builds and dispatches one {@link InboundRtp} to the downstream
-     * listener.
+     * Builds one {@link InboundRtp} and dispatches it to the downstream listener.
      *
-     * @param packet  the source packet, or {@code null} for a
-     *                missing marker
-     * @param missing whether to flag this as a PLC trigger
+     * <p>For a missing marker the payload is {@link DataUtils#EMPTY_BYTE_ARRAY} and the timestamp,
+     * sequence number, and marker bit are zeroed, since the exact values the lost packet carried
+     * are unknown. A listener exception is swallowed so one bad downstream consumer cannot stall the
+     * drain loop.
+     *
+     * @param packet  the source packet, or {@code null} for a missing marker
+     * @param missing whether to flag this delivery as a concealment trigger
      */
     private void deliver(RtpPacket packet, boolean missing) {
         var inbound = missing

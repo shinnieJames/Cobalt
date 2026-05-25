@@ -10,27 +10,18 @@ import com.github.auties00.cobalt.node.Node;
 import java.util.Objects;
 
 /**
- * Shared envelope-validation helper for the legacy
- * {@code <iq id type="error">} reply produced by SMAX domains that pre-date
- * the standard echoed-{@code from} contract.
+ * Validates the legacy {@code <iq id type="error">} reply produced by SMAX domains that pre-date the
+ * standard echoed-{@code from} contract.
  *
- * @apiNote
- * Two WA Web domains still use this relaxed envelope:
- * {@code WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin}
- * (BizCtwaNativeAd, consumed by
- * {@code WASmaxInBizCtwaNativeAdUploadAdMediaResponseError}) and
- * {@code WASmaxInPrivacyDeprecatedIQErrorResponseOptionalFromMixin}
- * (Privacy, consumed by
- * {@code WASmaxInPrivacyGetContactBlacklistResponseError}). Both make
- * the {@code from} attribute optional and accept either a domain JID
- * ({@code s.whatsapp.net}, {@code g.us}, {@code call}) or a user JID
- * (phone, LID, interop, msgr, or bot); the relay never has to echo the
- * request's {@code to}.
+ * <p>This relaxed envelope makes the {@code from} attribute optional and accepts either a domain JID
+ * ({@code s.whatsapp.net}, {@code g.us}, {@code call}) or a user JID (phone, LID, interop, msgr, or
+ * bot); the relay never has to echo the request's {@code to}. Two WA Web domains still use it: the
+ * BizCtwaNativeAd upload-ad-media response error and the Privacy get-contact-blacklist response
+ * error.
  *
  * @implNote
- * This implementation collapses both byte-identical WA Web clones into a
- * single helper; the {@code @WhatsAppWebModule} list keeps the source
- * manifest pointing at both upstream modules.
+ * This implementation collapses both byte-identical WA Web clones into a single helper; the
+ * {@code @WhatsAppWebModule} list keeps the source manifest pointing at both upstream modules.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInPrivacyDeprecatedIQErrorResponseOptionalFromMixin")
@@ -39,37 +30,32 @@ public final class SmaxDeprecatedIqErrorResponseOptionalFromMixin {
     /**
      * Refuses instantiation of the static-only utility.
      *
-     * @apiNote
-     * The class exposes only static helpers; the throwing constructor
-     * guards against reflective instantiation.
+     * <p>The class exposes only static helpers; the throwing constructor guards against reflective
+     * instantiation.
      */
     private SmaxDeprecatedIqErrorResponseOptionalFromMixin() {
         throw new AssertionError("SmaxDeprecatedIqErrorResponseOptionalFromMixin cannot be instantiated");
     }
 
     /**
-     * Validates that the supplied reply is a well-formed legacy
-     * {@code <iq type="error">} echoing the request's {@code id}
-     * attribute.
+     * Validates that the supplied reply is a well-formed legacy {@code <iq type="error">} echoing the
+     * request's {@code id} attribute.
      *
-     * @apiNote
-     * Returns {@code true} when the reply has the {@code iq} tag,
-     * carries {@code type="error"}, echoes the request's {@code id}
-     * verbatim, and either omits the {@code from} attribute or carries
-     * one that parses as a domain or user JID.
+     * <p>Returns {@code true} when the reply has the {@code iq} description, carries
+     * {@code type="error"}, echoes the request's {@code id} verbatim, and either omits the
+     * {@code from} attribute or carries one that parses as a domain or user JID per
+     * {@link #isDomainOrUserJid(String)}. A missing request {@code id}, a {@code from} that is neither
+     * a domain nor a user JID, or a non-{@code error} type yields {@code false}.
      *
      * @implNote
-     * This implementation hand-rolls the validation rather than
-     * delegating to {@link SmaxIqErrorResponseMixin#validate(Node, Node)}
-     * because the legacy envelope makes {@code from} optional and does
-     * not require an echo of {@code request.to}.
+     * This implementation hand-rolls the validation rather than delegating to
+     * {@link SmaxIqErrorResponseMixin#validate(Node, Node)} because the legacy envelope makes
+     * {@code from} optional and does not require an echo of the request's {@code to}.
      *
      * @param reply   the inbound stanza
-     * @param request the outbound stanza, used to cross-check the echoed
-     *                {@code id} attribute
-     * @return {@code true} when {@code reply} is a legacy error envelope
-     *         echoing {@code request}'s {@code id}; {@code false}
-     *         otherwise
+     * @param request the outbound stanza, used to cross-check the echoed {@code id} attribute
+     * @return {@code true} when {@code reply} is a legacy error envelope echoing {@code request}'s
+     *         {@code id}; {@code false} otherwise
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin",
@@ -99,25 +85,21 @@ public final class SmaxDeprecatedIqErrorResponseOptionalFromMixin {
     }
 
     /**
-     * Returns whether the supplied attribute value parses as a domain JID
-     * or as a user JID.
+     * Returns whether the supplied attribute value parses as a domain JID or as a user JID.
      *
-     * @apiNote
-     * Used by {@link #validate(Node, Node)} to enforce the WA Web
-     * {@code DOMAINJID_USERJID} optional-{@code from} contract: the
-     * relay may omit the attribute entirely, set it to a domain JID
-     * ({@code s.whatsapp.net}, {@code g.us}, or {@code call}), or set it
-     * to any user JID (phone, LID, interop, msgr, or bot).
+     * <p>{@link #validate(Node, Node)} uses this to enforce the optional-{@code from} contract: the
+     * relay may set {@code from} to a domain JID whose server is {@link JidServer#user()},
+     * {@link JidServer#groupOrCommunity()}, or {@link JidServer#call()} with no user component, or to
+     * any user JID that carries a user component.
      *
      * @implNote
-     * This implementation catches every {@link RuntimeException} from
-     * {@link Jid#of(String)} so a malformed attribute resolves to
-     * {@code false} rather than propagating; the domain-JID branch
-     * requires a missing user component while the user-JID branch
-     * requires a present user component.
+     * This implementation catches every {@link RuntimeException} from {@link Jid#of(String)} so a
+     * malformed attribute resolves to {@code false} rather than propagating; the domain-JID branch
+     * requires {@link Jid#hasUser()} to be {@code false} while the user-JID branch requires it to be
+     * {@code true}.
      *
      * @param value the raw attribute string
-     * @return {@code true} when {@code value} is a domain or user JID
+     * @return {@code true} when {@code value} is a domain or user JID; {@code false} otherwise
      */
     private static boolean isDomainOrUserJid(String value) {
         Jid jid;

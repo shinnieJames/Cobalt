@@ -15,29 +15,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Byte-exact parity test for {@link WaRelayPacket} against every
- * captured packet.
+ * Byte-exact parity suite for {@link WaRelayPacket} against every captured WA Web relay packet.
  *
- * <p>Every packet is decoded then re-encoded; the result must be
- * identical to the captured bytes. This pins both the decoder and the
- * encoder against the on-wire format the WhatsApp wasm engine actually
- * emits.
+ * <p>Every packet is decoded then re-encoded and must reproduce the captured bytes, pinning both
+ * the decoder and the encoder against the on-wire format the WhatsApp wasm engine emits. The
+ * captured bytes are read from {@code src/test/resources/fixtures/relay/stun-bytes-raw.json}.
  */
 public class WaRelayPacketParityTest {
 
-    /**
-     * Classpath path of the captured-bytes fixture under
-     * {@code src/test/resources/}.
-     */
     private static final String FIXTURE = "fixtures/relay/stun-bytes-raw.json";
 
-    /**
-     * Loads the fixture and asserts that every captured packet
-     * round-trips byte-for-byte through {@link WaRelayPacket#decode}
-     * and {@link WaRelayPacket#encode}.
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void everyCapturedPacketRoundTripsByteExact() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -68,13 +55,6 @@ public class WaRelayPacketParityTest {
         assertTrue(checked >= 2, "expected at least 2 round-trip checks, got " + checked);
     }
 
-    /**
-     * Asserts that the first 344-byte packet matches the documented
-     * Allocate Request shape: WA-RELAY-TOKEN, WA-CALL-INFO,
-     * XOR-RELAYED-ADDRESS, MESSAGE-INTEGRITY.
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void firstAllocateRequestHasExpectedAttributes() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -104,12 +84,6 @@ public class WaRelayPacketParityTest {
         assertEquals(20, attrs.get(3).value().length, "MESSAGE-INTEGRITY should be 20 bytes (HMAC-SHA1)");
     }
 
-    /**
-     * Asserts that the first 20-byte packet is a header-only WA
-     * keepalive (msgType 0x0801, no attributes).
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void firstKeepaliveIsHeaderOnly() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -132,12 +106,6 @@ public class WaRelayPacketParityTest {
         assertEquals(12, packet.transactionId().length);
     }
 
-    /**
-     * Hex-encodes the given bytes for assertion error messages.
-     *
-     * @param b the bytes
-     * @return the lower-case hex string
-     */
     private static String hex(byte[] b) {
         var sb = new StringBuilder(b.length * 2);
         for (var x : b) {

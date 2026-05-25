@@ -16,22 +16,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code spam} IQ that reports an individual user or business, with the offending
- * messages, calls and user-initiated extensions inlined under {@code <spam_list>}.
+ * Reports an individual user or business as an outbound {@code spam} IQ, inlining the offending
+ * messages, calls and user-initiated extensions under {@code <spam_list>}.
  *
- * @apiNote
- * Drives the "Report contact" / "Report business" surfaces invoked by WA Web's
- * {@code WAWebReportSpamJob}; pair with {@link SmaxIndividualReportResponse} to consume the
- * relay's verdict. The {@link Builder} mirrors WA Web's optional mixin chain (biz-opt-out,
- * biz-report, ui-state-set, TC-token, FRX, is-known-chat); a minimal report only requires
- * {@link Builder#spamListSpamFlow(String)}.
+ * <p>A minimal report requires only {@link Builder#spamListSpamFlow(String)}; the reportee JID,
+ * is-known-chat marker, business-opt-out, business-report, ui-state-set, TC-token and FRX fields
+ * are optional. The relay's verdict is parsed by {@link SmaxIndividualReportResponse}.
  *
  * @implNote
- * This implementation flattens the WA Web mixin chain (BaseIQSetRequest, BaseReport, FRX,
- * IsKnownChat, BizOptOut, BizReport, UIStateSet, TCToken) into a single {@link NodeBuilder}
- * that pins {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. Per WA
- * Web's optional-merge wiring the biz-opt-out / biz-report / ui-state-set / TC-token children
- * attach to {@code <spam_list>}, not to the outer {@code <iq>}.
+ * This implementation flattens the WA Web mixin chain into a single {@link NodeBuilder} that pins
+ * {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. The biz-opt-out,
+ * biz-report, ui-state-set and TC-token children attach to {@code <spam_list>}, not to the outer
+ * {@code <iq>}; only FRX attaches to the outer {@code <iq>}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamIndividualReportRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamBaseReportMixin")
@@ -44,108 +40,74 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamTCTokenMixin")
 public final class SmaxIndividualReportRequest implements SmaxOperation.Request {
     /**
-     * The optional reportee JID.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list jid="..."/>} when present; WA Web allows omission when the
-     * subject can be inferred from the attached message attribution alone.
+     * Holds the optional reportee JID routed into {@code <spam_list jid="..."/>} when present;
+     * may be omitted when the subject is inferable from the attached message attribution.
      */
     private final Jid spamListJid;
 
     /**
-     * The spam-flow identifier surfacing the user-facing report flow.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list spam_flow="..."/>}; carries the WA Web enum that names the
-     * surface from which the report was issued.
+     * Holds the spam-flow identifier routed into {@code <spam_list spam_flow="..."/>}, naming the
+     * user-facing surface that issued the report.
      */
     private final String spamListSpamFlow;
 
     /**
-     * The optional {@code is_known_chat} marker.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list is_known_chat="..."/>} when present.
+     * Holds the optional {@code is_known_chat} marker routed into
+     * {@code <spam_list is_known_chat="..."/>} when present.
      */
     private final String spamListIsKnownChat;
 
     /**
-     * The optional pre-built {@code <biz_opt_out>} child.
-     *
-     * @apiNote
-     * Appended under {@code <spam_list>} when present; surfaces the business-opt-out flag for
-     * reports against business accounts.
+     * Holds the optional pre-built {@code <biz_opt_out>} child appended under {@code <spam_list>}
+     * when present, for reports against business accounts.
      */
     private final Node bizOptOutChild;
 
     /**
-     * The optional pre-built {@code <ui_state_set>} child.
-     *
-     * @apiNote
-     * Appended under {@code <spam_list>} when present; surfaces UI-state metadata captured at
-     * report time.
+     * Holds the optional pre-built {@code <ui_state_set>} child appended under {@code <spam_list>}
+     * when present, surfacing UI-state metadata captured at report time.
      */
     private final Node uistateSetChild;
 
     /**
-     * The optional pre-built {@code <biz_report>} child.
-     *
-     * @apiNote
-     * Appended under {@code <spam_list>} when present; surfaces the business-report payload
-     * for reports against business accounts.
+     * Holds the optional pre-built {@code <biz_report>} child appended under {@code <spam_list>}
+     * when present, for reports against business accounts.
      */
     private final Node bizReportChild;
 
     /**
-     * The optional pre-built {@code <tc_token>} child.
-     *
-     * @apiNote
-     * Appended under {@code <spam_list>} when present; surfaces the trust-center token bound
-     * to the report.
+     * Holds the optional pre-built {@code <tc_token>} child appended under {@code <spam_list>}
+     * when present, surfacing the trust-center token bound to the report.
      */
     private final Node tcTokenChild;
 
     /**
-     * The optional pre-built {@code <frx>} (free-form reporting extensions) child.
-     *
-     * @apiNote
-     * Appended under the outer {@code <iq>} when present; bundles tagset, context and
-     * parameters that the FRX backend consumes.
+     * Holds the optional pre-built {@code <frx>} (free-form reporting extensions) child appended
+     * under the outer {@code <iq>} when present.
      */
     private final Node frxChild;
 
     /**
-     * The pre-built {@code <message>} children harvested from the offending chat (WA Web caps
-     * this at 210).
-     *
-     * @apiNote
-     * Appended in insertion order under {@code <spam_list>}; never {@code null}.
+     * Holds the pre-built {@code <message>} children harvested from the offending chat (WA Web
+     * caps this at 210), appended in insertion order under {@code <spam_list>}; never
+     * {@code null}.
      */
     private final List<Node> messageChildren;
 
     /**
-     * The pre-built {@code <call>} children harvested from the offending chat (WA Web caps this
-     * at 5).
-     *
-     * @apiNote
-     * Appended in insertion order under {@code <spam_list>}; never {@code null}.
+     * Holds the pre-built {@code <call>} children harvested from the offending chat (WA Web caps
+     * this at 5), appended in insertion order under {@code <spam_list>}; never {@code null}.
      */
     private final List<Node> callChildren;
 
     /**
-     * The pre-built {@code <user_initiated_extension>} children (WA Web caps this at 5).
-     *
-     * @apiNote
-     * Appended in insertion order under {@code <spam_list>}; never {@code null}.
+     * Holds the pre-built {@code <user_initiated_extension>} children (WA Web caps this at 5),
+     * appended in insertion order under {@code <spam_list>}; never {@code null}.
      */
     private final List<Node> userInitiatedExtensionChildren;
 
     /**
      * Constructs a request from the assembled {@link Builder} state.
-     *
-     * @apiNote
-     * Invoked by {@link Builder#build()}; consumers use {@link #builder()} rather than calling
-     * this constructor directly.
      *
      * @param builder the source builder; never {@code null}
      */
@@ -165,10 +127,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns a new {@link Builder}.
-     *
-     * @apiNote
-     * The canonical entry point for assembling an individual spam report.
+     * Returns a new {@link Builder}, the canonical entry point for assembling an individual spam
+     * report.
      *
      * @return a new builder; never {@code null}
      */
@@ -177,11 +137,9 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional reportee JID.
+     * Returns the optional reportee JID, the {@code <spam_list jid>} value.
      *
-     * @apiNote
-     * Surfaces the {@code <spam_list jid>} value; empty when WA Web inferred the subject from
-     * the message attribution alone.
+     * <p>Empty when the subject was inferred from the message attribution alone.
      *
      * @return an {@link Optional} carrying the JID, or empty when omitted
      */
@@ -190,10 +148,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the spam-flow identifier.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list spam_flow>} value naming the user-facing surface.
+     * Returns the spam-flow identifier, the {@code <spam_list spam_flow>} value.
      *
      * @return the spam-flow; never {@code null}
      */
@@ -202,10 +157,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional {@code is_known_chat} marker.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list is_known_chat>} value.
+     * Returns the optional {@code is_known_chat} marker, the {@code <spam_list is_known_chat>}
+     * value.
      *
      * @return an {@link Optional} carrying the marker, or empty when omitted
      */
@@ -214,10 +167,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional biz-opt-out child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <biz_opt_out>} payload appended under {@code <spam_list>}.
+     * Returns the optional pre-built {@code <biz_opt_out>} child appended under
+     * {@code <spam_list>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -226,10 +177,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional ui-state-set child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <ui_state_set>} payload appended under {@code <spam_list>}.
+     * Returns the optional pre-built {@code <ui_state_set>} child appended under
+     * {@code <spam_list>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -238,10 +187,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional biz-report child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <biz_report>} payload appended under {@code <spam_list>}.
+     * Returns the optional pre-built {@code <biz_report>} child appended under
+     * {@code <spam_list>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -250,10 +197,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional TC-token child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <tc_token>} payload appended under {@code <spam_list>}.
+     * Returns the optional pre-built {@code <tc_token>} child appended under {@code <spam_list>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -262,10 +206,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional FRX child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <frx>} payload appended under the outer {@code <iq>}.
+     * Returns the optional pre-built {@code <frx>} child appended under the outer {@code <iq>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -274,10 +215,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the offending-message children.
-     *
-     * @apiNote
-     * Surfaces the {@code <message>} children captured from the chat at report time.
+     * Returns the offending-message children captured from the chat at report time.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -286,10 +224,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the offending-call children.
-     *
-     * @apiNote
-     * Surfaces the {@code <call>} children captured from the chat at report time.
+     * Returns the offending-call children captured from the chat at report time.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -298,10 +233,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the user-initiated-extension children.
-     *
-     * @apiNote
-     * Surfaces the {@code <user_initiated_extension>} children captured at report time.
+     * Returns the user-initiated-extension children captured at report time.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -312,17 +244,14 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Emits the outbound individual-report IQ ready for
-     * {@link com.github.auties00.cobalt.node.smax} dispatch.
+     * <p>Builds the {@code <spam_list>} child with its attributes and children, then attaches the
+     * optional FRX child to the outer {@code <iq>}.
      *
      * @implNote
-     * This implementation builds the {@code <spam_list>} child with attributes first
-     * (skipping {@code jid} when {@link #spamListJid} is {@code null}, per WA Web's
-     * {@code OPTIONAL} JID semantics), then concatenates the message / call /
-     * user-initiated-extension children in WA Web's documented order followed by the optional
-     * biz-opt-out / ui-state-set / biz-report / TC-token children; only FRX is attached to the
-     * outer {@code <iq>}.
+     * This implementation skips the {@code jid} attribute when {@link #spamListJid} is
+     * {@code null}, then concatenates the message, call and user-initiated-extension children
+     * followed by the optional biz-opt-out, ui-state-set, biz-report and TC-token children under
+     * {@code <spam_list>}; only FRX is attached to the outer {@code <iq>}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSpamIndividualReportRequest",
@@ -370,6 +299,12 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
                 .content(iqChildren);
     }
 
+    /**
+     * Compares this request to another for value equality across all fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxIndividualReportRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -392,6 +327,11 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
                 && Objects.equals(this.userInitiatedExtensionChildren, that.userInitiatedExtensionChildren);
     }
 
+    /**
+     * Returns a hash code derived from all fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(spamListJid, spamListSpamFlow, spamListIsKnownChat,
@@ -399,6 +339,11 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
                 messageChildren, callChildren, userInitiatedExtensionChildren);
     }
 
+    /**
+     * Returns a debug string listing the scalar fields and the child counts.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxIndividualReportRequest[spamListJid=" + spamListJid
@@ -410,125 +355,88 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Step-builder that assembles a {@link SmaxIndividualReportRequest} from the WA Web mixin
-     * inputs.
+     * Assembles a {@link SmaxIndividualReportRequest} from the WA Web mixin inputs.
      *
-     * @apiNote
-     * The canonical entry point for callers that need to issue an individual spam report; use
-     * {@link SmaxIndividualReportRequest#builder()} to obtain an instance.
+     * <p>The required {@link #spamListSpamFlow} is validated at setter time; the remaining fields
+     * are optional. Obtain an instance via {@link SmaxIndividualReportRequest#builder()}.
      *
      * @implNote
-     * This implementation collects the optional mixin payloads into private fields and validates
-     * the required {@link #spamListSpamFlow} at setter time; the resulting {@code build()} copy
-     * is immutable.
+     * This implementation collects the optional mixin payloads into private fields and produces an
+     * immutable copy from {@link #build()}.
      */
     public static final class Builder {
         /**
-         * The optional reportee JID.
-         *
-         * @apiNote
-         * Set via {@link #spamListJid(Jid)}; {@code null} when WA Web infers the subject from
-         * the attached message attribution alone.
+         * Holds the optional reportee JID, set via {@link #spamListJid(Jid)}; {@code null} when
+         * the subject is inferred from the attached message attribution alone.
          */
         private Jid spamListJid;
 
         /**
-         * The required spam-flow string.
-         *
-         * @apiNote
-         * Set via {@link #spamListSpamFlow(String)}; must be set before {@link #build()}.
+         * Holds the required spam-flow string, set via {@link #spamListSpamFlow(String)}.
          */
         private String spamListSpamFlow;
 
         /**
-         * The optional {@code is_known_chat} marker.
-         *
-         * @apiNote
-         * Set via {@link #spamListIsKnownChat(String)}; {@code null} when omitted.
+         * Holds the optional {@code is_known_chat} marker, set via
+         * {@link #spamListIsKnownChat(String)}.
          */
         private String spamListIsKnownChat;
 
         /**
-         * The optional pre-built {@code <biz_opt_out>} child.
-         *
-         * @apiNote
-         * Set via {@link #bizOptOutChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <biz_opt_out>} child, set via
+         * {@link #bizOptOutChild(Node)}.
          */
         private Node bizOptOutChild;
 
         /**
-         * The optional pre-built {@code <ui_state_set>} child.
-         *
-         * @apiNote
-         * Set via {@link #uistateSetChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <ui_state_set>} child, set via
+         * {@link #uistateSetChild(Node)}.
          */
         private Node uistateSetChild;
 
         /**
-         * The optional pre-built {@code <biz_report>} child.
-         *
-         * @apiNote
-         * Set via {@link #bizReportChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <biz_report>} child, set via
+         * {@link #bizReportChild(Node)}.
          */
         private Node bizReportChild;
 
         /**
-         * The optional pre-built {@code <tc_token>} child.
-         *
-         * @apiNote
-         * Set via {@link #tcTokenChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <tc_token>} child, set via
+         * {@link #tcTokenChild(Node)}.
          */
         private Node tcTokenChild;
 
         /**
-         * The optional pre-built {@code <frx>} child.
-         *
-         * @apiNote
-         * Set via {@link #frxChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <frx>} child, set via {@link #frxChild(Node)}.
          */
         private Node frxChild;
 
         /**
-         * The accumulated {@code <message>} children.
-         *
-         * @apiNote
-         * Appended via {@link #addMessageChild(Node)}; defaults to an empty list.
+         * Accumulates the {@code <message>} children appended via {@link #addMessageChild(Node)}.
          */
         private final List<Node> messageChildren = new ArrayList<>();
 
         /**
-         * The accumulated {@code <call>} children.
-         *
-         * @apiNote
-         * Appended via {@link #addCallChild(Node)}; defaults to an empty list.
+         * Accumulates the {@code <call>} children appended via {@link #addCallChild(Node)}.
          */
         private final List<Node> callChildren = new ArrayList<>();
 
         /**
-         * The accumulated {@code <user_initiated_extension>} children.
-         *
-         * @apiNote
-         * Appended via {@link #addUserInitiatedExtensionChild(Node)}; defaults to an empty
-         * list.
+         * Accumulates the {@code <user_initiated_extension>} children appended via
+         * {@link #addUserInitiatedExtensionChild(Node)}.
          */
         private final List<Node> userInitiatedExtensionChildren = new ArrayList<>();
 
         /**
          * Constructs an empty builder.
-         *
-         * @apiNote
-         * Prefer {@link SmaxIndividualReportRequest#builder()} over invoking this constructor
-         * directly.
          */
         public Builder() {
         }
 
         /**
-         * Sets the optional reportee JID.
+         * Sets the optional reportee JID routed into {@code <spam_list jid>} when set.
          *
-         * @apiNote
-         * Routes into {@code <spam_list jid>} when set; leave unset when WA Web's behaviour of
-         * inferring the subject from the attached message attribution is desired.
+         * <p>Leave unset to let the subject be inferred from the attached message attribution.
          *
          * @param spamListJid the JID; may be {@code null}
          * @return this builder
@@ -539,11 +447,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the spam-flow identifier.
-         *
-         * @apiNote
-         * Required; the resulting {@code <spam_list spam_flow>} attribute names the user-facing
-         * surface that triggered the report.
+         * Sets the spam-flow identifier, naming the user-facing surface that triggered the report
+         * through {@code <spam_list spam_flow>}.
          *
          * @param spamListSpamFlow the spam-flow; never {@code null}
          * @return this builder
@@ -556,10 +461,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the optional {@code is_known_chat} marker.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list is_known_chat>} when set.
+         * Sets the optional {@code is_known_chat} marker routed into
+         * {@code <spam_list is_known_chat>} when set.
          *
          * @param spamListIsKnownChat the marker; may be {@code null}
          * @return this builder
@@ -570,11 +473,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the optional pre-built {@code <biz_opt_out>} child.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list>} when set; only meaningful for reports against
-         * business accounts.
+         * Sets the optional pre-built {@code <biz_opt_out>} child routed under
+         * {@code <spam_list>} when set, meaningful only for reports against business accounts.
          *
          * @param bizOptOutChild the node; may be {@code null}
          * @return this builder
@@ -585,11 +485,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the optional pre-built {@code <ui_state_set>} child.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list>} when set; surfaces UI-state metadata captured at
-         * report time.
+         * Sets the optional pre-built {@code <ui_state_set>} child routed under
+         * {@code <spam_list>} when set, surfacing UI-state metadata captured at report time.
          *
          * @param uistateSetChild the node; may be {@code null}
          * @return this builder
@@ -600,11 +497,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the optional pre-built {@code <biz_report>} child.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list>} when set; only meaningful for reports against
-         * business accounts.
+         * Sets the optional pre-built {@code <biz_report>} child routed under {@code <spam_list>}
+         * when set, meaningful only for reports against business accounts.
          *
          * @param bizReportChild the node; may be {@code null}
          * @return this builder
@@ -615,11 +509,8 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the optional pre-built {@code <tc_token>} child.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list>} when set; surfaces the trust-center token bound to
-         * the report.
+         * Sets the optional pre-built {@code <tc_token>} child routed under {@code <spam_list>}
+         * when set, surfacing the trust-center token bound to the report.
          *
          * @param tcTokenChild the node; may be {@code null}
          * @return this builder
@@ -630,11 +521,10 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Sets the optional pre-built {@code <frx>} child.
+         * Sets the optional pre-built {@code <frx>} child routed under the outer {@code <iq>}
+         * when set.
          *
-         * @apiNote
-         * Routes under the outer {@code <iq>} when set; the caller is responsible for building
-         * the FRX payload per the WA Web schema.
+         * <p>The caller is responsible for building the FRX payload per the WA Web schema.
          *
          * @param frxChild the node; may be {@code null}
          * @return this builder
@@ -647,9 +537,9 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         /**
          * Appends a pre-built {@code <message>} child to the spam-list payload.
          *
-         * @apiNote
-         * WA Web caps the count at 210; this implementation does not enforce the cap and lets
-         * the relay reject oversize lists.
+         * @implNote
+         * WA Web caps the count at 210; this implementation does not enforce the cap and lets the
+         * relay reject oversize lists.
          *
          * @param messageNode the node; never {@code null}
          * @return this builder
@@ -664,7 +554,7 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         /**
          * Appends a pre-built {@code <call>} child to the spam-list payload.
          *
-         * @apiNote
+         * @implNote
          * WA Web caps the count at 5; this implementation does not enforce the cap and lets the
          * relay reject oversize lists.
          *
@@ -679,12 +569,11 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
         }
 
         /**
-         * Appends a pre-built {@code <user_initiated_extension>} child to the spam-list
-         * payload.
+         * Appends a pre-built {@code <user_initiated_extension>} child to the spam-list payload.
          *
-         * @apiNote
-         * WA Web caps the count at 5; this implementation does not enforce the cap and lets
-         * the relay reject oversize lists.
+         * @implNote
+         * WA Web caps the count at 5; this implementation does not enforce the cap and lets the
+         * relay reject oversize lists.
          *
          * @param node the node; never {@code null}
          * @return this builder
@@ -698,10 +587,6 @@ public final class SmaxIndividualReportRequest implements SmaxOperation.Request 
 
         /**
          * Builds an immutable {@link SmaxIndividualReportRequest} from the accumulated state.
-         *
-         * @apiNote
-         * Invoke once after all required and optional fields have been set; the resulting
-         * instance can be reused across dispatches.
          *
          * @return a new {@link SmaxIndividualReportRequest}; never {@code null}
          * @throws NullPointerException if {@code spamListSpamFlow} was not set

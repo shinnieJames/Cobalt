@@ -24,13 +24,12 @@ import java.util.Objects;
  * Applies the {@code device_capabilities} app-state sync action that
  * advertises a device's feature support across the user's linked devices.
  *
- * @apiNote
- * Drives the per-device capability matrix that companions consult before
- * surfacing chat lock, AI threads, business broadcasts and avatars; the
- * primary device emits its capability snapshot through the
+ * <p>This handler drives the per-device capability matrix that companions
+ * consult before surfacing chat lock, AI threads, business broadcasts and
+ * avatars; the primary device emits its capability snapshot through the
  * {@link SyncPatchType#REGULAR_LOW} collection. The mutation index is the
- * device's legacy JID string and only the entry where
- * {@link Jid#device()} is {@code 0} is treated as the primary's payload.
+ * device's legacy JID string and only the entry where {@link Jid#device()} is
+ * {@code 0} is treated as the primary's payload.
  *
  * @implNote
  * This implementation persists every {@link DeviceCapabilities} payload
@@ -52,11 +51,9 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
      * The legacy device-component value identifying the primary device in
      * the JID string parsed from the mutation index.
      *
-     * @apiNote
-     * Used to gate the
-     * {@code mergeDeviceCapabilitiesToStorage(caps, "primary")} branch in
-     * {@link #applyMutation}; companion devices report a non-zero device
-     * component and do not affect the primary capability snapshot.
+     * <p>Gates the primary-capability branch in {@link #applyMutation}; companion
+     * devices report a non-zero device component and do not affect the primary
+     * capability snapshot.
      */
     @WhatsAppWebExport(moduleName = "WAWebDeviceCapabilitiesSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int PRIMARY_DEVICE = 0;
@@ -64,11 +61,6 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
     /**
      * The position of the JID element inside the parsed mutation
      * {@code indexParts} array.
-     *
-     * @apiNote
-     * WA Web's {@code applyMutations} reads {@code e.indexParts[d]} where
-     * {@code d = 1}; preserving the constant keeps the wire-level layout
-     * change visible if WA Web ever reshapes the index.
      */
     @WhatsAppWebExport(moduleName = "WAWebDeviceCapabilitiesSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int JID_INDEX = 1;
@@ -78,11 +70,10 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
      * {@link DeviceCapabilities.LIDMigration#chatDbMigrationTimestamp}
      * arrives.
      *
-     * @apiNote
-     * The handler forwards the timestamp so the local LID 1:1 migration
+     * <p>The handler forwards the timestamp so the local LID 1:1 migration
      * state machine can advance, and reads back
-     * {@link LidMigrationService#isLidMigrated()} when emitting the
-     * lifecycle WAM event.
+     * {@link LidMigrationService#isLidMigrated()} when emitting the lifecycle
+     * WAM event.
      */
     private final LidMigrationService lidMigrationService;
 
@@ -97,12 +88,10 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
      * Constructs a {@link DeviceCapabilitiesHandler} bound to the given
      * dependencies.
      *
-     * @apiNote
-     * Mirrors WA Web's constructor for {@code DeviceCapabilitiesSync},
-     * which inherits {@code AccountSyncdActionBase} and assigns
-     * {@code this.collectionName = WASyncdConst.CollectionName.RegularLow};
-     * the assignment is surfaced via {@link #collectionName()} rather than
-     * as an instance field.
+     * @implNote
+     * This implementation surfaces the {@link SyncPatchType#REGULAR_LOW}
+     * collection through {@link #collectionName()} rather than holding it as an
+     * instance field.
      *
      * @param lidMigrationService the LID 1:1 migration service consulted
      *                            on primary capability arrival

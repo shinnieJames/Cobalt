@@ -13,15 +13,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Mirrors the "Always relay calls" privacy setting across linked devices.
  *
- * @apiNote
- * Cobalt embedders never invoke this handler directly; the sync dispatcher
- * routes incoming {@code setting_relayAllCalls} mutations here whenever
- * the user toggles "Always relay calls" on another linked device (typical
- * trigger: Privacy Settings -> Advanced -> Protect IP Address in Calls).
- * The handler writes the boolean preference onto
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)}
- * so Cobalt's VoIP layer routes subsequent calls through the WA relay
- * instead of letting the peer learn the local IP address.
+ * <p>The sync dispatcher routes incoming {@code setting_relayAllCalls} mutations here whenever the
+ * user toggles "Always relay calls" on another linked device (typical trigger: Privacy Settings,
+ * Advanced, Protect IP Address in Calls). The handler writes the boolean preference onto
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)} so Cobalt's VoIP
+ * layer routes subsequent calls through the WA relay instead of letting the peer learn the local IP
+ * address.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipRelayAllCallsSettingSync")
 public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler {
@@ -29,9 +26,7 @@ public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler 
     /**
      * Constructs the handler.
      *
-     * @apiNote
-     * The handler is stateless; Cobalt's sync registry holds a single
-     * instance per client.
+     * <p>The handler is stateless; Cobalt's sync registry holds a single instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipRelayAllCallsSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public VoipRelayAllCallsHandler() {
@@ -68,25 +63,20 @@ public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler 
     /**
      * {@inheritDoc}
      *
+     * <p>The mutation must be a {@link SyncdOperation#SET} whose decoded value is a
+     * {@link PrivacySettingRelayAllCalls}; any other operation is
+     * {@link MutationApplicationResult#unsupported()} and any other value is
+     * {@link MutationApplicationResult#malformed()}. The boolean is written into
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)}.
+     *
      * @implNote
-     * This implementation mirrors WA Web's per-mutation closure inside
-     * {@code WAWebVoipRelayAllCallsSettingSync.applyMutations}: it
-     * requires a {@link SyncdOperation#SET}, decodes the
-     * {@link PrivacySettingRelayAllCalls} value, and writes the boolean
-     * into
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)}
-     * in place of WA Web's
-     * {@code WAWebBackendApi.frontendSendAndReceive("setRelayAllCallsToUserPrefs", {disallowAllP2p: s})}
-     * shell hop. Cobalt's
-     * {@link PrivacySettingRelayAllCalls#isEnabled()} accessor coalesces
-     * a null Boolean to {@code false} per the project nullable-boolean
-     * convention, so the WA Web {@code s == null} short-circuit (which
-     * skips the persist call but still reports {@code Success}) is
-     * relaxed to a direct write of {@code false}. The trailing
-     * {@code WALogger.WARN} counters and the outer {@code try/catch -> Failed}
-     * wrapper are dropped per Cobalt's pluggable error model: thrown
-     * exceptions surface to the configured
-     * {@link com.github.auties00.cobalt.exception.WhatsAppClientErrorHandler}.
+     * This implementation replaces WA Web's {@code setRelayAllCallsToUserPrefs} backend shell hop
+     * with a direct store write. The {@link PrivacySettingRelayAllCalls#isEnabled()} accessor
+     * coalesces a null Boolean to {@code false}, so WA Web's null short-circuit (which skips the
+     * persist call but still reports success) is relaxed to a direct write of {@code false}. The
+     * warning counters and the outer try/catch-to-failed wrapper are dropped per Cobalt's pluggable
+     * error model: thrown exceptions surface to the configured
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientErrorHandler}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebVoipRelayAllCallsSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)

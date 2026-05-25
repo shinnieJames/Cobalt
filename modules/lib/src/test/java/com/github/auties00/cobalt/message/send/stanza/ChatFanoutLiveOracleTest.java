@@ -13,34 +13,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Wire-shape byte-equality oracle tests for {@link ChatFanoutStanza},
- * anchored to {@code <message>} stanzas captured from a live WhatsApp Web
- * session and committed under {@code fixtures/message/send/}.
- *
- * @apiNote
- * Each test loads one captured {@code <message>} from a {@code .jsonl}
- * fixture via {@link MessageFixtures#loadEvents(String)} plus
- * {@link MessageFixtures#buildNodeFromEvent}, then asserts the wire
+ * Wire-shape oracle for {@link ChatFanoutStanza}, comparing Cobalt output
+ * against {@code <message>} stanzas captured from a live WhatsApp Web
+ * session and committed under {@code fixtures/message/send/}. Each test
+ * loads one captured {@code <message>} via
+ * {@link MessageFixtures#loadEvents(String)} plus
+ * {@link MessageFixtures#buildNodeFromEvent} and asserts the wire
  * invariants WA Web emits: outer attribute set, child topology
  * (single-{@code <enc>} vs {@code <participants>}), per-participant
- * {@code <enc>} version and type, and the addressing-mode projection.
- * Cross-references {@link ChatFanoutStanza}; if the captured shape
- * drifts, regenerate the corpus via
+ * {@code <enc>} version and type, and the addressing-mode projection. Each
+ * test is skipped when its topic fixture is not available locally; if the
+ * captured shape drifts, regenerate the corpus via
  * {@code src/test/resources/fixtures/message/generate.mjs}.
- *
- * @implNote
- * This implementation skips each test when its topic fixture is not
- * available locally; the {@link #loadMessageStanza(String)} helper
- * centralises the load+rebuild sequence for the single-message topics.
  */
 @DisplayName("ChatFanoutStanza live wire oracle")
 class ChatFanoutLiveOracleTest {
 
-    /**
-     * Peer LID send: outer {@code <message>} carries
-     * {@code peer_recipient_pn} and every participant is LID-form;
-     * pre-fix the server rejected PN-form participants with error 479.
-     */
+    // Pre-fix the server rejected PN-form participants on a LID send with error 479.
     @Test
     @DisplayName("479 oracle: 1:1 peer LID send - every participant <to jid=...> is @lid")
     void peerTextAllParticipantsAreLid() {
@@ -81,10 +70,6 @@ class ChatFanoutLiveOracleTest {
                 "PKMSG-bearing fanout must include <device-identity>");
     }
 
-    /**
-     * Peer reactions wire-type as {@code "reaction"} and inherit the 1:1
-     * fanout topology.
-     */
     @Test
     @DisplayName("peer reaction: <message type=\"reaction\"> with same fanout shape")
     void peerReactionShape() {
@@ -99,12 +84,6 @@ class ChatFanoutLiveOracleTest {
                 "reaction must have either <participants> or a bare <enc>");
     }
 
-    /**
-     * The edit/revoke capture contains three outgoing {@code <message>}
-     * stanzas to the same peer: the initial send (no edit attr), the
-     * edit ({@code edit=1}), and the revoke ({@code edit=7}). Every send
-     * in the flow must still satisfy the 479 LID-participant invariant.
-     */
     @Test
     @DisplayName("peer edit + revoke: capture contains initial send + edit (edit=1) + revoke (edit=7)")
     void peerEditRevokeShape() {
@@ -145,11 +124,6 @@ class ChatFanoutLiveOracleTest {
         }
     }
 
-    /**
-     * Location sends wire-type as {@code "media"} and at least one
-     * participant {@code <enc>} carries
-     * {@code mediatype="location"}.
-     */
     @Test
     @DisplayName("location send: <message type=\"media\"> with <enc mediatype=\"location\">")
     void locationShape() {
@@ -168,10 +142,6 @@ class ChatFanoutLiveOracleTest {
                 "at least one <enc mediatype=\"location\"> required, got " + encsWithLocation);
     }
 
-    /**
-     * Group-invite-link sends are wire-type {@code "text"} (the URL
-     * itself is the body) and fan out under {@code <participants>}.
-     */
     @Test
     @DisplayName("group invite link send: outgoing text <message> with participants")
     void groupInviteLinkShape() {
@@ -185,10 +155,6 @@ class ChatFanoutLiveOracleTest {
                 "1:1 send must wrap <enc> in <participants>");
     }
 
-    /**
-     * Bot text sends carry an outer {@code @bot} chat JID and at least
-     * one participant {@code <to jid="...@bot">}.
-     */
     @Test
     @DisplayName("bot text (MSMSG): participants include @bot device with <enc type=pkmsg>")
     void botTextShape() {
@@ -206,10 +172,6 @@ class ChatFanoutLiveOracleTest {
         assertTrue(hasBotParticipant, "bot fanout must include a <to jid=...@bot> participant");
     }
 
-    /**
-     * Hosted business sends route as LID with a
-     * {@code peer_recipient_pn} fallback for legacy-routing.
-     */
     @Test
     @DisplayName("hosted business send: participants list with @lid devices, includes peer_recipient_pn")
     void hostedBizShape() {
@@ -232,10 +194,6 @@ class ChatFanoutLiveOracleTest {
                 "hosted business send: peer_recipient_pn must be present");
     }
 
-    /**
-     * Every captured peer fanout carries the {@code <device-identity>}
-     * sibling WA Web emits for PKMSG-bearing sends.
-     */
     @Test
     @DisplayName("every captured peer fanout has the auxiliary nodes WA Web emits (device-identity)")
     void peerFanoutCarriesDeviceIdentity() {
@@ -255,18 +213,7 @@ class ChatFanoutLiveOracleTest {
         }
     }
 
-    /**
-     * Loads the first outgoing {@code <message>} from the topic and
-     * rebuilds it as a Cobalt {@link Node}.
-     *
-     * @apiNote
-     * Helper for single-message topics (peer-text, peer-reaction,
-     * location, etc.); the multi-message edit/revoke topic loads its own
-     * stream inline.
-     *
-     * @param topic the fixture topic
-     * @return the rebuilt outgoing {@code <message>} node
-     */
+    // Single-message topics; the multi-message edit/revoke topic loads its own stream inline.
     private static Node loadMessageStanza(String topic) {
         var events = MessageFixtures.loadEvents(topic);
         var outgoing = events.stream()

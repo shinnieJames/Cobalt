@@ -12,72 +12,60 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * The homograph-attack heuristic that detects IDN labels likely to be
- * spoofing a Latin-script domain through Unicode look-alike characters.
+ * Detects internationalized-domain-name labels likely to be spoofing a Latin-script domain
+ * through Unicode look-alike characters (a homograph attack).
  *
- * <p>The algorithm has three layers:
+ * <p>The heuristic runs in three layers:
  *
  * <ul>
- *   <li>find the single non-ASCII label in the host; bail when more
- *       than one label contains non-ASCII characters (a polyglot host
- *       is presumed legitimate);</li>
- *   <li>when every code point in the label is drawn from
- *       {@link #HIGH_CONFUSABLES} (Cyrillic basic-Latin look-alikes),
- *       flag unless the recipient or sender phone is in a Cyrillic
- *       country or the recipient speaks a Cyrillic-script language;</li>
- *   <li>otherwise, collect up to {@link #MAX_CONFUSABLES_BEFORE_BAIL}
- *       confusable code points and flag when any one of them maps to
- *       languages disjoint from the recipient's languages and to
- *       regions disjoint from both country codes.</li>
+ *   <li>find the single non-ASCII label in the host; bail when more than one label
+ *       contains non-ASCII characters, presuming a polyglot host is legitimate;</li>
+ *   <li>when every code point in the label is drawn from {@link #HIGH_CONFUSABLES} (the
+ *       Cyrillic basic-Latin look-alikes), flag the label unless the recipient or sender
+ *       phone is in a Cyrillic country or the recipient speaks a Cyrillic-script
+ *       language;</li>
+ *   <li>otherwise, collect up to {@link #MAX_CONFUSABLES_BEFORE_BAIL} confusable code
+ *       points and flag when any one of them maps to languages disjoint from the
+ *       recipient's languages and to regions disjoint from both country codes.</li>
  * </ul>
  *
- * @apiNote
- * Mirrors {@code WAIdn.findSuspiciousCharacters}; called only from
- * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline}'s {@code isSuspicious} guard, which derives the country
- * codes from the chat and self JIDs before invoking it.
+ * <p>The verdict is exposed through {@link #isSuspicious(String, String, String, List)};
+ * the country-code helpers {@link #countryCodeOf(String)} and {@link #extractDigits(String)}
+ * live here because the heuristic and the helpers share no other dependencies.
  *
  * @implNote
- * This implementation transcribes the JS code-point map, the
- * Cyrillic-script language tags, the Cyrillic country codes, the
- * high-confusables string, and {@code WALanguagesAndRegions} verbatim
- * so the verdict matches the JS oracle on every input. The
- * {@code WAPhoneFindCC} country-code helpers live here because the
- * heuristic and the helpers share no other dependencies.
+ * This implementation transcribes the JS code-point map, the Cyrillic-script language
+ * tags, the Cyrillic country codes, the high-confusables string, and the
+ * language-to-regions table verbatim so the verdict matches the JS oracle on every input.
  */
 @WhatsAppWebModule(moduleName = "WAIdn")
 @WhatsAppWebModule(moduleName = "WALanguagesAndRegions")
 @WhatsAppWebModule(moduleName = "WAPhoneFindCC")
 public final class Idn {
     /**
-     * The pattern matching labels composed entirely of ASCII letters,
-     * digits, and dashes.
+     * Matches labels composed entirely of ASCII letters, digits, and dashes.
      *
-     * @apiNote
-     * A label matching this pattern is excluded from the suspicious
-     * scan: it cannot mix scripts, so a homograph spoof is impossible
-     * by construction.
+     * <p>A label matching this pattern is excluded from the suspicious scan: it cannot mix
+     * scripts, so a homograph spoof is impossible by construction.
      */
     private static final Pattern ASCII_LABEL = Pattern.compile("^[a-z0-9-]+$");
 
     /**
-     * The maximum number of confusable code points the heuristic
-     * tolerates before concluding the label is intentionally polyglot
-     * rather than homographic.
+     * Holds the maximum number of confusable code points the heuristic tolerates before
+     * concluding the label is intentionally polyglot rather than homographic.
      *
-     * @apiNote
-     * Matches the JS constant {@code f=2}; a label with three or more
-     * confusable code points is treated as deliberately mixed-script
-     * rather than a spoof.
+     * @implNote
+     * This implementation uses {@code 2}, the value of the JS constant; a label with three
+     * or more confusable code points is treated as deliberately mixed-script rather than a
+     * spoof.
      */
     private static final int MAX_CONFUSABLES_BEFORE_BAIL = 2;
 
     /**
-     * The Cyrillic-script language tags consulted when every code
-     * point in the label belongs to the high-confusable Cyrillic set.
+     * Holds the Cyrillic-script language tags consulted when every code point in the label
+     * belongs to the high-confusable Cyrillic set.
      *
-     * @apiNote
-     * Mirrors the {@code s} set in {@code WAIdn}; if the recipient
-     * speaks any of these languages the label is presumed legitimate
+     * <p>When the recipient speaks any of these languages the label is presumed legitimate
      * and the homograph flag does not fire.
      */
     @WhatsAppWebExport(moduleName = "WAIdn", exports = "findSuspiciousCharacters",
@@ -93,12 +81,10 @@ public final class Idn {
     );
 
     /**
-     * The country-code prefixes that ship with phones whose users
-     * realistically write Cyrillic.
+     * Holds the country-code prefixes that ship with phones whose users realistically
+     * write Cyrillic.
      *
-     * @apiNote
-     * Mirrors the {@code u} set in {@code WAIdn}; when the recipient
-     * or sender phone JID's country code matches one of these the
+     * <p>When the recipient or sender phone JID's country code matches one of these the
      * Cyrillic-only branch never flags the label.
      */
     @WhatsAppWebExport(moduleName = "WAIdn", exports = "findSuspiciousCharacters",
@@ -109,14 +95,11 @@ public final class Idn {
     );
 
     /**
-     * The Cyrillic basic-Latin look-alike code points.
+     * Holds the Cyrillic basic-Latin look-alike code points.
      *
-     * @apiNote
-     * Mirrors the {@code c} string literal in {@code WAIdn}. When
-     * every code point of the suspect label is drawn from this set,
-     * the Cyrillic-only branch of the heuristic runs; the label is
-     * flagged unless the recipient or sender country / language
-     * indicates Cyrillic is expected.
+     * <p>When every code point of the suspect label is drawn from this set, the
+     * Cyrillic-only branch of the heuristic runs; the label is flagged unless the recipient
+     * or sender country or language indicates Cyrillic is expected.
      */
     @WhatsAppWebExport(moduleName = "WAIdn", exports = "findSuspiciousCharacters",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -127,15 +110,11 @@ public final class Idn {
                     + "ꚙ";
 
     /**
-     * The code-point to legitimate-language table.
+     * Maps each confusable code point to the BCP-47 language tags whose orthographies
+     * legitimately contain it.
      *
-     * @apiNote
-     * Mirrors the {@code e} object literal in {@code WAIdn}. The keys
-     * are individual non-ASCII code points; the values are BCP-47
-     * language tags whose orthographies contain that code point. A
-     * code point present in this map is a confusable candidate; a
-     * code point absent from the map is treated as plain Latin and
-     * never raises suspicion.
+     * <p>A code point present in this map is a confusable candidate; a code point absent
+     * from the map is treated as plain Latin and never raises suspicion.
      */
     @WhatsAppWebExport(moduleName = "WAIdn", exports = "findSuspiciousCharacters",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -165,20 +144,18 @@ public final class Idn {
     );
 
     /**
-     * The language to country-code table.
+     * Maps each language tag to the country codes where it is spoken.
      *
-     * @apiNote
-     * Mirrors {@code WALanguagesAndRegions.LANGUAGE_TO_REGIONS}; used
-     * by the per-character branch to compute the set of regions
-     * covered by a confusable code point's languages and to decide
-     * whether the recipient or sender country falls within that set.
+     * <p>Used by the per-character branch to compute the set of regions covered by a
+     * confusable code point's languages and to decide whether the recipient or sender
+     * country falls within that set.
      */
     @WhatsAppWebExport(moduleName = "WALanguagesAndRegions", exports = "LANGUAGE_TO_REGIONS",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final Map<String, List<String>> LANGUAGE_TO_REGIONS = buildLanguageToRegions();
 
     /**
-     * The hidden constructor of the utility class.
+     * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -187,14 +164,14 @@ public final class Idn {
     }
 
     /**
-     * Builds the language to regions table.
+     * Builds the language-to-regions table.
      *
-     * @apiNote
-     * Held in a method rather than a field initializer so the
-     * cumulative entry count fits within the reasonable upper bound
-     * of {@link Map#ofEntries(Map.Entry[])}.
+     * @implNote
+     * This implementation holds the table in a method rather than a field initializer so
+     * the cumulative entry count fits within the upper bound of
+     * {@link Map#ofEntries(Map.Entry[])}.
      *
-     * @return the immutable language to regions map
+     * @return the immutable language-to-regions map
      */
     @WhatsAppWebExport(moduleName = "WALanguagesAndRegions", exports = "LANGUAGE_TO_REGIONS",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -416,32 +393,29 @@ public final class Idn {
     }
 
     /**
-     * Returns whether {@code host} is flagged as a likely IDN
-     * homograph attempt for the given recipient and sender context.
+     * Returns whether {@code host} is flagged as a likely IDN homograph attempt for the
+     * given recipient and sender context.
      *
-     * @apiNote
-     * The package-private entry point for the link-preview pipeline;
-     * called only from {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline}'s {@code isSuspicious} guard, which
-     * derives the country codes from the chat and self JIDs. See the
-     * class-level javadoc for the heuristic.
+     * <p>Returns {@code false} for a {@code null} or empty {@code host}. Otherwise splits
+     * the host on dots and locates the single non-ASCII label; a host with more than one
+     * non-ASCII label is presumed legitimate and yields {@code false}, as does a host with
+     * no non-ASCII label. The found label is then run through the Cyrillic-only branch and
+     * the per-character branch described in the class-level documentation. See
+     * {@link #isCharacterSuspicious(int, String, String, List)} for the single-code-point
+     * verdict and {@link #HIGH_CONFUSABLES} for the Cyrillic-only set.
      *
      * @implNote
-     * This implementation differs from the JS in return shape only;
-     * WA returns the suspicious code-point {@link Set} so
-     * the UI can highlight the offending characters, Cobalt returns a
-     * {@code boolean} because the preview pipeline only needs the
+     * This implementation differs from the JS in return shape only: WA returns the
+     * suspicious code-point {@link Set} so the UI can highlight the offending characters,
+     * whereas this returns a {@code boolean} because the preview pipeline only needs the
      * verdict and never renders the highlight.
      *
-     * @param host                 the host portion of the URL,
-     *                             pre-lowercased
-     * @param recipientCountryCode the country-code prefix of the
-     *                             recipient phone JID, or
-     *                             the {@code "ZZ"} LID sentinel
-     *                             for non-phone JIDs
-     * @param selfCountryCode      the country-code prefix of the
-     *                             local user's phone JID
-     * @param recipientLanguages   the recipient's stated languages
-     *                             (BCP-47 tags); empty when unknown
+     * @param host                 the host portion of the URL, pre-lowercased
+     * @param recipientCountryCode the country-code prefix of the recipient phone JID, or
+     *                             the {@code "ZZ"} LID sentinel for non-phone JIDs
+     * @param selfCountryCode      the country-code prefix of the local user's phone JID
+     * @param recipientLanguages   the recipient's stated languages (BCP-47 tags); empty
+     *                             when unknown
      * @return {@code true} when the label is flagged as suspicious
      */
     @WhatsAppWebExport(moduleName = "WAIdn", exports = "findSuspiciousCharacters",
@@ -504,15 +478,13 @@ public final class Idn {
     }
 
     /**
-     * Returns whether a single confusable code point flags the
-     * enclosing label.
+     * Returns whether a single confusable code point flags the enclosing label.
      *
-     * @apiNote
-     * Mirrors the inner filter in
-     * {@code WAIdn.findSuspiciousCharacters}: the code point flags
-     * unless one of its legitimate languages is in the recipient's
-     * spoken languages, or one of its covered regions contains the
-     * recipient or sender country code.
+     * <p>Returns {@code false} when the code point is not a confusable candidate. Otherwise
+     * the code point flags the label unless one of its legitimate languages is among the
+     * recipient's spoken languages, or one of the regions covered by those languages
+     * (looked up in {@link #LANGUAGE_TO_REGIONS}) contains the recipient or sender country
+     * code.
      *
      * @param codePoint            the confusable code point
      * @param recipientCountryCode the recipient's country code
@@ -543,25 +515,20 @@ public final class Idn {
     }
 
     /**
-     * Extracts the dialling-code prefix from a phone JID's user
-     * portion.
+     * Extracts the dialling-code prefix from a phone JID's user portion.
      *
-     * @apiNote
-     * Mirrors {@code WAPhoneFindCC.findCC}: matches the leading
-     * digits against {@link #COUNTRY_CODE_PREFIX} and returns the
-     * matched one or two-digit prefix; falls back to the first three
-     * characters when no prefix matches, or to the whole input when
-     * the phone user is shorter than three characters.
+     * <p>Returns the empty string for a {@code null} or empty input. Otherwise matches the
+     * leading digits against {@link #COUNTRY_CODE_PREFIX} and returns the matched one or
+     * two-digit prefix; when no prefix matches, falls back to the first three characters,
+     * or to the whole input when it is shorter than three characters.
      *
      * @implNote
-     * This implementation collapses the two JS exports {@code phoneCC}
-     * and {@code findCC} into one method; the JS {@code phoneCC} is a
-     * thin {@code function l(e){return s(e);}} delegating wrapper
-     * over {@code findCC} with no behavioural difference.
+     * This implementation collapses the two JS exports {@code phoneCC} and {@code findCC}
+     * into one method; {@code phoneCC} is a thin wrapper that delegates to {@code findCC}
+     * with no behavioural difference.
      *
      * @param phoneUser the user-prefix digits of a phone JID
-     * @return the resolved country code, or the input when no prefix
-     *         matches
+     * @return the resolved country code, or the input when no prefix matches
      */
     @WhatsAppWebExport(moduleName = "WAPhoneFindCC", exports = "phoneCC",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -579,20 +546,16 @@ public final class Idn {
     }
 
     /**
-     * Returns the concatenation of every maximal digit run in
-     * {@code input}.
+     * Returns the concatenation of every maximal digit run in {@code input}.
      *
-     * @apiNote
-     * Mirrors {@code WAPhoneFindCC.extractDigits}
-     * ({@code function u(e){var t=e.match(/\d+/g); return t!=null?t.join(""):""}})
-     * and is consumed by Cobalt's JID-prefix helpers when stripping
-     * formatting characters from a phone number before constructing
-     * the {@code @c.us} JID.
+     * <p>Scans {@code input} for runs of consecutive ASCII digits and concatenates them.
+     * Returns the empty string when {@code input} is {@code null} or empty, or when it
+     * contains no digit. Used by the JID-prefix helpers when stripping formatting
+     * characters from a phone number before constructing the JID.
      *
      * @param input the string to scan for digit runs
-     * @return the concatenation of every digit run, or the empty
-     *         string when {@code input} is {@code null} or contains
-     *         no digit
+     * @return the concatenation of every digit run, or the empty string when {@code input}
+     *         is {@code null} or contains no digit
      */
     @WhatsAppWebExport(moduleName = "WAPhoneFindCC", exports = "extractDigits",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -609,13 +572,9 @@ public final class Idn {
     }
 
     /**
-     * The pattern matching the leading dialling-code prefix of a
-     * phone JID's user portion.
+     * Matches the leading dialling-code prefix of a phone JID's user portion.
      *
-     * @apiNote
-     * Transcribed verbatim from the {@code e} regex literal in
-     * {@code WAPhoneFindCC}; covers every valid ITU country-code
-     * prefix in one or two-digit form.
+     * <p>Covers every valid ITU country-code prefix in one or two-digit form.
      */
     @WhatsAppWebExport(moduleName = "WAPhoneFindCC", exports = "findCC",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -623,11 +582,9 @@ public final class Idn {
             "^(1|2[07]|3[0-469]|4[013-9]|5[1-8]|6[0-6]|7|8[1246]|9[0-58])");
 
     /**
-     * The pattern matching one or more consecutive ASCII digits.
+     * Matches one or more consecutive ASCII digits.
      *
-     * @apiNote
-     * Used by {@link #extractDigits(String)} to enumerate every
-     * maximal digit run, mirroring the JS {@code /\d+/g}.
+     * <p>Consumed by {@link #extractDigits(String)} to enumerate every maximal digit run.
      */
     @WhatsAppWebExport(moduleName = "WAPhoneFindCC", exports = "extractDigits",
             adaptation = WhatsAppAdaptation.DIRECT)

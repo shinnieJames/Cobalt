@@ -9,35 +9,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Wire-shape oracle for encrypted reactions on CAG (community
- * announcement group) default subgroups, anchored to
- * {@code fixtures/message/send/cag-reaction-encrypted.jsonl}.
- *
- * @apiNote
- * Pins the wire shape WA Web emits when reacting on the
- * CAG-default-subgroup path: the inner {@code ReactionMessage} is wrapped
- * in an {@code EncReactionMessage} envelope, the {@code <enc>} carries
- * {@code decrypt-fail="hide"} (the addon hint that the recipient should
- * not show a placeholder if decryption fails), and the outer
- * {@code <message>} type is {@code "reaction"}. The byte-equality unit
- * for the envelope itself is
- * {@link com.github.auties00.cobalt.message.addon.EncMessageFactory};
- * this oracle pins only the stanza topology.
- *
- * @implNote
- * This implementation skips the assertion block when the topic fixture
- * is not available locally.
+ * Wire-shape oracle for encrypted reactions on CAG (community announcement
+ * group) default subgroups, comparing Cobalt output against the WA Web
+ * stanza captured in {@code fixtures/message/send/cag-reaction-encrypted.jsonl}.
+ * The captured shape wraps the inner {@code ReactionMessage} in an
+ * {@code EncReactionMessage} envelope, sets {@code decrypt-fail="hide"} on
+ * the {@code <enc>} (the addon hint that the recipient must not show a
+ * placeholder if decryption fails), and types the outer {@code <message>}
+ * as {@code "reaction"}. This oracle pins only the stanza topology; the
+ * byte-equality unit for the envelope lives in
+ * {@link com.github.auties00.cobalt.message.addon.EncMessageFactory}. The
+ * assertion block is skipped when the fixture is not available locally.
  */
 @DisplayName("CAG encrypted reaction live wire oracle")
 class CagEncReactionLiveOracleTest {
 
-    /**
-     * The encrypted CAG reaction stanza wire-types as
-     * {@code "reaction"}, uses {@code addressing_mode="lid"}, targets a
-     * {@code @g.us} JID, and carries a bare
-     * {@code <enc type="skmsg" decrypt-fail="hide">} sibling (no
-     * {@code <participants>} in steady state).
-     */
     @Test
     @DisplayName("CAG reaction: <message type=\"reaction\" addressing_mode=\"lid\"> with <enc type=\"skmsg\" decrypt-fail=\"hide\">")
     void cagEncReactionShape() {

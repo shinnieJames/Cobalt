@@ -10,19 +10,25 @@ import java.lang.foreign.ValueLayout;
 import java.util.Objects;
 
 /**
- * Opus encoder, backed by libopus via FFM. Bindings are
- * jextract-generated; this class is the high-level idiomatic-Java
- * wrapper.
+ * Encodes PCM frames into Opus packets through libopus over the Foreign
+ * Function and Memory API.
  *
- * <p>WhatsApp's wasm engine encodes voice at 16 kHz mono in 10 ms
- * frames (160 samples per frame, 320 bytes of PCM); to match exactly,
- * construct as {@code new OpusEncoder(16000, 1, OpusApplication.VOIP)}
- * and feed 160-sample {@code short[]} buffers.
+ * <p>Each instance owns one native {@code OpusEncoder} state and a set of
+ * reusable native scratch buffers (PCM input, packet output, and a
+ * single-int control argument), all allocated from a per-instance arena.
+ * Encoding copies the caller's PCM into the input buffer, invokes
+ * {@code opus_encode}, and copies the produced packet bytes back into a
+ * fresh Java array sized to the packet's actual length. Bitrate,
+ * complexity, DTX, FEC, and expected packet loss are adjusted through the
+ * {@code opus_encoder_ctl} controls exposed as setters. The instance is
+ * not thread-safe: the shared buffers and the native state must be driven
+ * from a single thread. Closing the encoder destroys the native state and
+ * releases the arena; any later call throws.
  *
- * <p>Maximum encoded frame size: by RFC 6716 §3, the worst-case Opus
- * packet is ~1275 bytes for a 60 ms frame at any bitrate; for 10 ms
- * frames at typical voice bitrates (16-32 kbps) it's well under 100
- * bytes. {@link #MAX_PACKET_BYTES} is sized for safety.
+ * <p>WhatsApp's call engine encodes voice at 16 kHz mono in 10 ms frames
+ * (160 samples per frame, 320 bytes of PCM); to match it, construct as
+ * {@code new OpusEncoder(16000, 1, OpusApplication.VOIP)} and feed
+ * 160-sample {@code short[]} buffers.
  */
 public final class OpusEncoder implements AutoCloseable {
     static {
@@ -30,71 +36,111 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Maximum Opus packet size we provision for the encode buffer.
-     * RFC 6716 §3 gives 1276 as the absolute maximum for a single
-     * 60 ms frame; for 10 ms / typical voice bitrates it's much
-     * smaller, but allocating once at construction avoids per-call
-     * sizing.
+     * Capacity, in bytes, of the native output buffer provisioned for one
+     * encoded packet.
+     *
+     * @implNote This implementation uses 1500, comfortably above the 1276
+     * bytes that RFC 6716 gives as the largest single Opus frame; 10 ms
+     * voice frames at typical bitrates are far smaller. The buffer is
+     * allocated once at construction so encoding never sizes per call.
      */
     public static final int MAX_PACKET_BYTES = 1500;
 
     /**
-     * Per-instance arena owning the encoder state pointer and the
-     * native scratch buffers reused across encode calls.
+     * Per-instance arena owning the native encoder state pointer and the
+     * reusable scratch buffers.
+     *
+     * <p>The arena is shared rather than confined so the segments it
+     * allocates outlive the constructing call frame; it is closed by
+     * {@link #close()}.
      */
     private final Arena arena;
 
     /**
-     * Pointer to the {@code OpusEncoder} state allocated by
-     * {@code opus_encoder_create}. Nulled by {@link #close}.
+     * Pointer to the native {@code OpusEncoder} state allocated by
+     * {@code opus_encoder_create}.
+     *
+     * <p>Set to {@link MemorySegment#NULL} once the state is destroyed, so
+     * that {@link #requireOpen()} can detect a closed encoder.
      */
     private MemorySegment state;
 
     /**
-     * Reusable native PCM input buffer ({@code MAX_FRAME_SAMPLES *
-     * channels * 2} bytes, sized for a 60 ms frame at 48 kHz stereo).
+     * Reusable native buffer that {@link #encode(short[], int)} copies the
+     * caller's PCM into before invoking {@code opus_encode}.
+     *
+     * @implNote This implementation sizes the buffer for a 60 ms frame at
+     * 48 kHz stereo (5760 samples per channel, two channels, two bytes per
+     * sample), the worst case the Opus format permits, so any legal frame
+     * fits without reallocation.
      */
     private final MemorySegment pcmBuf;
 
     /**
-     * Reusable native packet output buffer ({@link #MAX_PACKET_BYTES}
-     * bytes).
+     * Reusable native buffer that {@code opus_encode} writes the encoded
+     * packet bytes into.
+     *
+     * <p>Sized once at construction to {@link #MAX_PACKET_BYTES} bytes.
      */
     private final MemorySegment packetBuf;
 
     /**
-     * Single-int scratch for {@code opus_encoder_ctl} integer
-     * arguments.
+     * Single-int native scratch segment used as the {@code int *} out-arg
+     * for {@code OPUS_GET_*} controls.
+     *
+     * <p>Reused across every integer-out control call; the caller writes a
+     * zero into it before each invocation and reads back the value libopus
+     * stored.
      */
     private final MemorySegment intScratch;
 
     /**
-     * Lazily-cached variadic invoker for
-     * {@code opus_encoder_ctl(state, request, int)} — the typed
-     * shape of every {@code OPUS_SET_*_REQUEST} integer control.
+     * Lazily-built variadic invoker for the
+     * {@code opus_encoder_ctl(state, request, int)} call shape shared by
+     * every {@code OPUS_SET_*} integer control.
+     *
+     * @implNote This implementation caches one invoker per shape in a
+     * static {@code volatile} field, built under double-checked locking on
+     * the class monitor, because the jextract-generated variadic linker is
+     * relatively expensive to materialize and the descriptor is identical
+     * for all integer-set controls across all encoder instances.
      */
     private static volatile Opus.opus_encoder_ctl INT_CTL_INVOKER;
 
     /**
-     * Lazily-cached variadic invoker for
-     * {@code opus_encoder_ctl(state, request, int *)} — the typed
-     * shape of every {@code OPUS_GET_*_REQUEST} integer-out control.
+     * Lazily-built variadic invoker for the
+     * {@code opus_encoder_ctl(state, request, int *)} call shape shared by
+     * every {@code OPUS_GET_*} integer-out control.
+     *
+     * @implNote This implementation caches one invoker per shape in a
+     * static {@code volatile} field, built under double-checked locking on
+     * the class monitor, for the same reason as {@link #INT_CTL_INVOKER}:
+     * the integer-out descriptor is identical across all instances and is
+     * worth building only once.
      */
     private static volatile Opus.opus_encoder_ctl INT_OUT_CTL_INVOKER;
 
     /**
-     * Constructs a new encoder configured for the given sample rate,
-     * channel count, and application mode. Defaults DTX to enabled
-     * — matching WhatsApp's voice configuration.
+     * Constructs an encoder for the given sample rate, channel count, and
+     * application mode.
      *
-     * @param sampleRate the input sample rate (8000, 12000, 16000,
-     *                   24000, or 48000 Hz)
-     * @param channels   1 for mono, 2 for stereo
-     * @param app        the application mode (VOIP for calls)
-     * @throws NullPointerException if {@code app} is {@code null}
-     * @throws WhatsAppCallException.Opus   if libopus rejects the
-     *                              configuration
-     * @throws UnsatisfiedLinkError if libopus cannot be loaded
+     * <p>Allocates the native encoder state via {@code opus_encoder_create}
+     * and the reusable scratch buffers from a fresh shared arena, then
+     * enables DTX so silence frames are sent as the smallest possible
+     * packets. If libopus reports a non-zero error code or returns a null
+     * state pointer, the partially built native state and the arena are
+     * released before the exception propagates, so a failed construction
+     * leaks nothing.
+     *
+     * @param sampleRate the input sample rate in Hz; one of 8000, 12000,
+     *                   16000, 24000, or 48000
+     * @param channels   the channel count, 1 for mono or 2 for stereo
+     * @param app        the application mode, {@link OpusApplication#VOIP}
+     *                   for calls
+     * @throws NullPointerException      if {@code app} is {@code null}
+     * @throws IllegalArgumentException  if {@code channels} is not 1 or 2
+     * @throws WhatsAppCallException.Opus if libopus rejects the configuration
+     * @throws UnsatisfiedLinkError      if libopus cannot be loaded
      */
     public OpusEncoder(int sampleRate, int channels, OpusApplication app) {
         Objects.requireNonNull(app, "app cannot be null");
@@ -125,16 +171,24 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Encodes a single PCM frame and returns the compressed Opus
-     * packet bytes.
+     * Encodes one PCM frame and returns the compressed Opus packet.
      *
-     * @param pcm       the input PCM samples (signed 16-bit, native
-     *                  byte order)
-     * @param frameSize the per-channel sample count of one Opus frame
-     *                  (e.g. 160 for 10 ms at 16 kHz). Must be a
-     *                  legal Opus frame size.
-     * @return a fresh byte array of length {@code packetLen}
-     *         containing the encoded packet
+     * <p>The caller's samples are copied into the reusable native input
+     * buffer and passed to {@code opus_encode} together with the
+     * per-channel frame size and the output buffer cap
+     * ({@link #MAX_PACKET_BYTES}). The byte count libopus reports
+     * determines the length of the returned array. A negative return is
+     * turned into a thrown exception; a return of one byte indicates a DTX
+     * silence frame.
+     *
+     * @param pcm       the input PCM samples, signed 16-bit in native byte
+     *                  order, interleaved if stereo
+     * @param frameSize the per-channel sample count of one Opus frame, for
+     *                  example 160 for a 10 ms frame at 16 kHz; must be a
+     *                  legal Opus frame size
+     * @return a fresh {@code byte[]} of the encoded packet's exact length
+     * @throws NullPointerException       if {@code pcm} is {@code null}
+     * @throws IllegalStateException      if the encoder is closed
      * @throws WhatsAppCallException.Opus if encoding fails
      */
     public byte[] encode(short[] pcm, int frameSize) {
@@ -156,11 +210,15 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Sets the target bitrate in bits per second. Range:
-     * {@code 500..512000}; defaults to a profile-dependent value
-     * chosen by libopus.
+     * Sets the target bitrate in bits per second.
      *
-     * @param bps the target bitrate
+     * <p>Issues the {@code OPUS_SET_BITRATE} control. Accepted values
+     * range from 500 to 512000; when left unset, libopus chooses a
+     * profile-dependent default.
+     *
+     * @param bps the target bitrate in bits per second
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public void setBitrate(int bps) {
         ctlSetInt(Opus.OPUS_SET_BITRATE_REQUEST(), bps);
@@ -169,82 +227,121 @@ public final class OpusEncoder implements AutoCloseable {
     /**
      * Returns the current target bitrate.
      *
-     * @return the bitrate in bits per second
+     * <p>Issues the {@code OPUS_GET_BITRATE} control and returns the value
+     * libopus wrote.
+     *
+     * @return the target bitrate in bits per second
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public int bitrate() {
         return ctlGetInt(Opus.OPUS_GET_BITRATE_REQUEST());
     }
 
     /**
-     * Sets the encoder complexity level (0 = fastest / lowest
-     * quality, 10 = slowest / highest quality).
+     * Sets the encoder complexity level.
      *
-     * @param complexity the level in {@code 0..10}
+     * <p>Issues the {@code OPUS_SET_COMPLEXITY} control. The level ranges
+     * from 0 (fastest, lowest quality) to 10 (slowest, highest quality).
+     *
+     * @param complexity the complexity level in 0..10
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public void setComplexity(int complexity) {
         ctlSetInt(Opus.OPUS_SET_COMPLEXITY_REQUEST(), complexity);
     }
 
     /**
-     * Enables or disables DTX (discontinuous transmission). When
-     * enabled, the encoder emits very small packets during silence,
-     * which the decoder can reconstruct as comfort noise. Defaults
-     * to {@code true} for VOIP.
+     * Enables or disables discontinuous transmission (DTX).
      *
-     * @param enabled whether DTX is on
+     * <p>Issues the {@code OPUS_SET_DTX} control. With DTX on, the encoder
+     * emits very small packets during silence that the decoder
+     * reconstructs as comfort noise. This encoder enables DTX at
+     * construction to match WhatsApp's voice configuration.
+     *
+     * @param enabled {@code true} to enable DTX, {@code false} to disable it
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public void setUseDTX(boolean enabled) {
         ctlSetInt(Opus.OPUS_SET_DTX_REQUEST(), enabled ? 1 : 0);
     }
 
     /**
-     * Returns whether DTX is currently enabled.
+     * Returns whether discontinuous transmission (DTX) is enabled.
      *
-     * @return {@code true} if DTX is on
+     * <p>Issues the {@code OPUS_GET_DTX} control.
+     *
+     * @return {@code true} if DTX is enabled
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public boolean useDTX() {
         return ctlGetInt(Opus.OPUS_GET_DTX_REQUEST()) != 0;
     }
 
     /**
-     * Enables or disables in-band FEC (forward error correction).
-     * When enabled, the encoder inserts a low-bitrate copy of the
-     * previous frame into each packet so the decoder can recover from
-     * a single dropped packet. Defaults to {@code false}.
+     * Enables or disables in-band forward error correction (FEC).
      *
-     * @param enabled whether FEC is on
+     * <p>Issues the {@code OPUS_SET_INBAND_FEC} control. With FEC on, the
+     * encoder embeds a low-bitrate copy of the previous frame in each
+     * packet so the decoder can recover from a single dropped packet. FEC
+     * is off unless this is called; tune its redundancy with
+     * {@link #setPacketLossPercent(int)}.
+     *
+     * @param enabled {@code true} to enable FEC, {@code false} to disable it
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public void setUseInbandFEC(boolean enabled) {
         ctlSetInt(Opus.OPUS_SET_INBAND_FEC_REQUEST(), enabled ? 1 : 0);
     }
 
     /**
-     * Sets the expected packet-loss percentage in {@code 0..100}.
-     * Used together with {@link #setUseInbandFEC(boolean)} to tune
-     * FEC redundancy.
+     * Sets the expected packet-loss percentage.
      *
-     * @param percent the expected loss percentage
+     * <p>Issues the {@code OPUS_SET_PACKET_LOSS_PERC} control. The value
+     * ranges from 0 to 100 and, in combination with
+     * {@link #setUseInbandFEC(boolean)}, drives how much redundancy the
+     * encoder spends on loss recovery.
+     *
+     * @param percent the expected loss percentage in 0..100
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public void setPacketLossPercent(int percent) {
         ctlSetInt(Opus.OPUS_SET_PACKET_LOSS_PERC_REQUEST(), percent);
     }
 
     /**
-     * Resets the encoder's internal state without changing
-     * configuration — equivalent to a fresh encoder with the same
-     * settings, but reuses the allocation. Useful at the start of a
-     * new call.
+     * Resets the encoder's internal state without changing its
+     * configuration.
+     *
+     * <p>Issues the {@code OPUS_RESET_STATE} control, returning the
+     * encoder to the behavior of a freshly created one with the same
+     * settings while reusing the existing allocation. Useful at the start
+     * of a new call.
+     *
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     public void resetState() {
         ctlNoArg(Opus.OPUS_RESET_STATE());
     }
 
     /**
-     * Sends one integer-valued {@code OPUS_SET_*} control to the
-     * encoder via {@code opus_encoder_ctl}.
+     * Sends one integer-valued {@code OPUS_SET_*} control to the encoder.
      *
-     * @param request the control request code
-     * @param value   the integer payload
+     * <p>Lazily materializes the shared integer-set invoker
+     * ({@link #INT_CTL_INVOKER}) under double-checked locking, then invokes
+     * {@code opus_encoder_ctl} with the request code and payload. A
+     * non-zero return code is turned into a thrown exception.
+     *
+     * @param request the {@code OPUS_SET_*} control request code
+     * @param value   the integer payload for the control
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     private void ctlSetInt(int request, int value) {
         requireOpen();
@@ -270,11 +367,19 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Issues an {@code OPUS_GET_*} control whose out-arg is a
-     * single {@code int *}, returning the value libopus wrote.
+     * Issues an {@code OPUS_GET_*} control whose out-arg is a single
+     * {@code int *} and returns the value libopus wrote.
      *
-     * @param request the control request code
-     * @return the integer libopus wrote
+     * <p>Lazily materializes the shared integer-out invoker
+     * ({@link #INT_OUT_CTL_INVOKER}) under double-checked locking, zeroes
+     * the {@link #intScratch} segment, invokes {@code opus_encoder_ctl}
+     * with the request code and the scratch pointer, then reads the value
+     * back. A non-zero return code is turned into a thrown exception.
+     *
+     * @param request the {@code OPUS_GET_*} control request code
+     * @return the integer libopus stored into {@link #intScratch}
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     private int ctlGetInt(int request) {
         requireOpen();
@@ -302,21 +407,29 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Issues a no-argument control like {@code OPUS_RESET_STATE} via
-     * the underlying variadic CTL surface.
+     * Issues a payload-less control such as {@code OPUS_RESET_STATE}.
      *
-     * @param request the control request code
+     * @implNote This implementation forwards to {@link #ctlSetInt(int, int)}
+     * with a dummy zero argument so the shared integer-set invoker
+     * descriptor stays uniform; libopus ignores the extra argument for
+     * controls that take no payload.
+     *
+     * @param request the no-argument control request code
+     * @throws IllegalStateException      if the encoder is closed
+     * @throws WhatsAppCallException.Opus if the control call fails
      */
     private void ctlNoArg(int request) {
         requireOpen();
-        // OPUS_RESET_STATE has no payload — pass a dummy zero so the
-        // variadic invoker descriptor stays uniform with the
-        // integer-control case.
         ctlSetInt(request, 0);
     }
 
     /**
-     * Throws if the encoder has been closed.
+     * Verifies that the encoder is still open.
+     *
+     * <p>Treats both a {@code null} state field and a
+     * {@link MemorySegment#NULL} state pointer as closed.
+     *
+     * @throws IllegalStateException if the encoder has been closed
      */
     private void requireOpen() {
         if (state == null || state.equals(MemorySegment.NULL)) {
@@ -325,8 +438,12 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Calls {@code opus_encoder_destroy} if the state pointer is
-     * still live.
+     * Destroys the native encoder state if it is still live.
+     *
+     * <p>Calls {@code opus_encoder_destroy} and then nulls the state
+     * pointer to {@link MemorySegment#NULL}. Any throwable raised by the
+     * native call is swallowed so this method can run safely from a failed
+     * constructor or from {@link #close()}.
      */
     private void destroyState() {
         if (state == null || state.equals(MemorySegment.NULL)) {
@@ -340,8 +457,11 @@ public final class OpusEncoder implements AutoCloseable {
     }
 
     /**
-     * Destroys the encoder state and releases the per-instance
-     * arena. Idempotent.
+     * Destroys the native encoder state and releases the per-instance
+     * arena.
+     *
+     * <p>Idempotent: a second call after the state has already been
+     * destroyed returns without effect.
      */
     @Override
     public void close() {

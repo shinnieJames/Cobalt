@@ -8,40 +8,21 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Parity test for {@link CallIdGenerator}.
- *
- * <p>Asserts that Cobalt produces call identifiers in the same shape WA
- * Web's {@code WAWebVoipStartCall.me()} produces. The shape, taken from
- * live captures (e.g. {@code 00B8E865663D28CFFF9469A77156A381},
- * {@code 00949C98540619286C17161ABCA80113}), is:
- *
- * <ul>
- *   <li>32 characters total</li>
- *   <li>First two characters are always {@code "00"}</li>
- *   <li>Remaining 30 characters are uppercase hex {@code [0-9A-F]}</li>
- *   <li>Generated identifiers must not collide across calls</li>
- * </ul>
+ * Verifies that {@link CallIdGenerator} produces call identifiers in the same shape WhatsApp Web
+ * emits: 32 characters total, the fixed prefix {@code "00"}, then 30 uppercase hex characters, with
+ * no collisions across calls. The expected shape is anchored to identifiers captured from the live
+ * primary session, which double as a tripwire if WhatsApp Web ever changes the format.
  */
 public class CallIdGeneratorParityTest {
 
-    /**
-     * Pattern that every captured call id must match.
-     */
     private static final Pattern WA_WEB_CALL_ID = Pattern.compile("^00[0-9A-F]{30}$");
 
-    /**
-     * Sample call IDs captured from the live primary session at
-     * snapshot {@code 1038697023-47d2a47020a5}, used as a tripwire — if
-     * WA Web ever changes the format we want to know.
-     */
+    // Captured from the live primary session at snapshot 1038697023-47d2a47020a5.
     private static final String[] CAPTURED_LIVE_IDS = {
             "00B8E865663D28CFFF9469A77156A381",
             "00949C98540619286C17161ABCA80113"
     };
 
-    /**
-     * Captured live identifiers all match the format pattern.
-     */
     @Test
     public void capturedIdsMatchFormat() {
         for (var id : CAPTURED_LIVE_IDS) {
@@ -51,9 +32,6 @@ public class CallIdGeneratorParityTest {
         }
     }
 
-    /**
-     * Cobalt-generated identifiers also match the format pattern.
-     */
     @Test
     public void generatedIdMatchesFormat() {
         for (var i = 0; i < 64; i++) {
@@ -66,9 +44,6 @@ public class CallIdGeneratorParityTest {
         }
     }
 
-    /**
-     * Generator should produce distinct IDs across calls (CSPRNG-backed).
-     */
     @Test
     public void generatedIdsDoNotCollide() {
         var seen = new HashSet<String>();

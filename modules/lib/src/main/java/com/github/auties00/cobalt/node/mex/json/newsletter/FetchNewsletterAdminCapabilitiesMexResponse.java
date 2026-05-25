@@ -16,29 +16,23 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the fetch-newsletter-admin-capabilities query
- * built by {@link FetchNewsletterAdminCapabilitiesMexRequest}.
+ * Parses the MEX response of the fetch-newsletter-admin-capabilities query built by
+ * {@link FetchNewsletterAdminCapabilitiesMexRequest}.
  *
- * @apiNote
- * Exposes the raw capability tokens echoed under
- * {@code xwa2_newsletter_admin.capabilities}; callers can map each token to
- * the corresponding {@code WAWebNewsletterCapability} enum themselves,
- * mirroring WA Web's
- * {@code WAWebNewsletterModelUtils.getNewsletterCapabilityFromValue} call.
+ * <p>Exposes the raw capability tokens echoed under {@code xwa2_newsletter_admin.capabilities};
+ * callers map each token to the corresponding newsletter-capability enum themselves.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterAdminCapabilitiesJob")
 public final class FetchNewsletterAdminCapabilitiesMexResponse implements MexOperation.Response.Json {
     /**
-     * The unmodifiable list of capability tokens granted to the local user.
+     * Holds the unmodifiable list of capability tokens granted to the local user.
      */
     private final List<String> capabilities;
 
     /**
      * Constructs a response wrapping the parsed capability list.
      *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
+     * <p>Reserved for the static parser; external callers obtain instances via {@link #of(Node)}.
      *
      * @param capabilities the capability tokens echoed by the relay
      */
@@ -49,15 +43,13 @@ public final class FetchNewsletterAdminCapabilitiesMexResponse implements MexOpe
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_admin} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser; the returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_admin} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<FetchNewsletterAdminCapabilitiesMexResponse> of(Node node) {
         return node.getChild("result")
@@ -68,33 +60,27 @@ public final class FetchNewsletterAdminCapabilitiesMexResponse implements MexOpe
     /**
      * Returns the raw capability tokens granted to the authenticated admin.
      *
-     * @apiNote
-     * Callers wishing to mirror WA Web's behaviour should map each token
-     * via {@code WAWebNewsletterCapability} before consuming the result.
+     * <p>The list is unmodifiable; callers map each token to the corresponding newsletter-capability
+     * enum before consuming the result.
      *
-     * @return the unmodifiable list of capability tokens, never
-     *         {@code null} but possibly empty
+     * @return the unmodifiable list of capability tokens, never {@code null} but possibly empty
      */
     public List<String> capabilities() {
         return capabilities;
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
+     * <p>Reserved for the public {@link #of(Node)} overload.
      *
-     * @implNote
-     * This implementation drops {@code null} entries from the
-     * {@code capabilities} array and returns an unmodifiable copy of the
-     * surviving tokens; the relay reports an empty array when the local
-     * user holds no admin capabilities.
+     * @implNote This implementation drops {@code null} entries from the {@code capabilities} array
+     * and returns an unmodifiable copy of the surviving tokens; the relay reports an empty array when
+     * the local user holds no admin capabilities.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_admin} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_admin} root
      */
     private static Optional<FetchNewsletterAdminCapabilitiesMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

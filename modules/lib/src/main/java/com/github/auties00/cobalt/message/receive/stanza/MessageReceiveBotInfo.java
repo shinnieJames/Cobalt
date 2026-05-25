@@ -8,17 +8,17 @@ import java.util.Optional;
 
 /**
  * The bot-side metadata extracted from the {@code <bot>} child of an incoming
- * {@code <message>} stanza by {@link MessageReceiveStanzaParser}.
+ * {@code <message>} stanza.
  *
- * @apiNote
- * Populated only for messages that originate from a Meta AI bot or a
- * WhatsApp Business 1P/3P bot. The fields drive the streaming chunk pipeline
- * that {@link MessageReceiveStanza#botInfo()} feeds into the receive
- * handler: {@link #senderTimestampMs()} preserves the bot's own monotonic
- * ordering across out-of-order arrival, {@link #editTargetId()} and
- * {@link #editType()} let the renderer thread each chunk back onto the same
- * conversational turn ({@code first} / {@code inner} / {@code last}), and
- * {@link #bizBotType()} disambiguates 1P from 3P business bots.
+ * <p>Populated only for messages that originate from a Meta AI bot or a
+ * WhatsApp Business 1P/3P bot. The fields drive the streaming chunk pipeline:
+ * {@link #senderTimestampMs()} preserves the bot's own monotonic ordering
+ * across out-of-order arrival, {@link #editTargetId()} and {@link #editType()}
+ * thread each chunk back onto the same conversational turn
+ * ({@code first} / {@code inner} / {@code last}), and {@link #bizBotType()}
+ * disambiguates 1P from 3P business bots. Instances are produced by
+ * {@link MessageReceiveStanzaParser} and consumed via
+ * {@link MessageReceiveStanza#botInfo()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveBotInfo {
@@ -36,16 +36,15 @@ public final class MessageReceiveBotInfo {
     private final String editTargetId;
 
     /**
-     * The {@code edit} attribute carried by the {@code <bot>} child; mirrors
-     * WA Web's {@code BotMsgEditType} enum ({@code first} starts the
-     * stream, {@code inner} is a mid-stream token update, {@code last} marks
-     * completion).
+     * The {@code edit} attribute carried by the {@code <bot>} child;
+     * {@code first} starts the stream, {@code inner} is a mid-stream token
+     * update, {@code last} marks completion.
      */
     private final String editType;
 
     /**
      * The {@code type} attribute on the {@code <bot>} child, identifying the
-     * shape of the inner bot payload ({@code BotMsgBodyType}).
+     * shape of the inner bot payload.
      */
     private final String bodyType;
 
@@ -58,10 +57,6 @@ public final class MessageReceiveBotInfo {
     /**
      * Constructs a populated record from the values extracted by
      * {@link MessageReceiveStanzaParser}.
-     *
-     * @apiNote
-     * Not intended for direct use outside the parser; callers consume
-     * existing instances via {@link MessageReceiveStanza#botInfo()}.
      *
      * @param senderTimestampMs the bot-side monotonic timestamp, or {@code null}
      * @param editTargetId      the id of the first chunk in the stream, or {@code null}
@@ -88,11 +83,10 @@ public final class MessageReceiveBotInfo {
     /**
      * Returns the {@code sender_timestamp_ms} attribute, when present.
      *
-     * @apiNote
-     * The bot's own millisecond-precision ordering id, used by the streaming
-     * pipeline to reassemble chunks that may arrive out of order; kept as a
-     * string because the upstream attribute is sometimes outside {@code long}
-     * range.
+     * <p>The bot's own millisecond-precision ordering id, used by the
+     * streaming pipeline to reassemble chunks that may arrive out of order;
+     * kept as a string because the upstream attribute is sometimes outside
+     * {@code long} range.
      *
      * @return an {@link Optional} wrapping the timestamp string
      */
@@ -103,10 +97,8 @@ public final class MessageReceiveBotInfo {
     /**
      * Returns the {@code edit_target_id} attribute, when present.
      *
-     * @apiNote
-     * On {@code inner} and {@code last} chunks this references the id of the
-     * {@code first} chunk in the same bot reply; an {@code "edit_target_id"}
-     * value of {@code ""} on the {@code first} chunk itself.
+     * <p>On {@code inner} and {@code last} chunks this references the id of the
+     * {@code first} chunk in the same bot reply.
      *
      * @return an {@link Optional} wrapping the target id
      */
@@ -117,11 +109,9 @@ public final class MessageReceiveBotInfo {
     /**
      * Returns the streaming-edit marker, when present.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code BotMsgEditType}: {@code first} starts a bot
-     * reply, {@code inner} is a mid-stream token replacement, {@code last}
-     * marks completion. Used by the AI-rich-response stitcher to know when
-     * the bot has finished.
+     * <p>{@code first} starts a bot reply, {@code inner} is a mid-stream token
+     * replacement, and {@code last} marks completion; the rich-response
+     * stitcher uses it to know when the bot has finished.
      *
      * @return an {@link Optional} wrapping the edit type
      */
@@ -133,9 +123,8 @@ public final class MessageReceiveBotInfo {
      * Returns the {@code type} attribute on the {@code <bot>} child, when
      * present.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code BotMsgBodyType} and tells the protobuf parser
-     * which inner shape to decode (text, image, native flow, etc.).
+     * <p>Tells the protobuf parser which inner shape to decode (text, image,
+     * native flow, and similar).
      *
      * @return an {@link Optional} wrapping the body type
      */
@@ -146,10 +135,9 @@ public final class MessageReceiveBotInfo {
     /**
      * Returns the {@code biz_bot} attribute, when present.
      *
-     * @apiNote
-     * {@code "1"} identifies a WhatsApp Business 1P bot (Meta-hosted),
-     * {@code "3"} identifies a 3P bot; absence means a non-business bot such
-     * as Meta AI.
+     * <p>{@code "1"} identifies a WhatsApp Business 1P bot (Meta-hosted),
+     * {@code "3"} identifies a 3P bot; absence means a non-business bot such as
+     * Meta AI.
      *
      * @return an {@link Optional} wrapping the biz bot tier
      */

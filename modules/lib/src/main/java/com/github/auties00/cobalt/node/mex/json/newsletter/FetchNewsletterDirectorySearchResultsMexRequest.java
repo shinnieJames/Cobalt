@@ -20,80 +20,68 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Builds the MEX request that searches the newsletter discovery directory
- * by free-text query.
+ * Builds the MEX request that searches the newsletter discovery directory by free-text query.
  *
- * @apiNote
- * Drives the directory search box; the {@code searchText} argument carries
- * the user-typed query (matched against newsletter name, handle and
- * description on the server side), the {@code categories} list narrows the
- * search to specific topic categories, and {@code limit} plus
- * {@code cursorToken} drive forward pagination.
+ * <p>Backs the directory search box. The {@code searchText} argument carries the user-typed query,
+ * matched against newsletter name, handle and description on the server side; the {@code categories}
+ * list narrows the search to specific topic categories; and {@code limit} plus {@code cursorToken}
+ * drive forward pagination. The matching response is parsed by
+ * {@link FetchNewsletterDirectorySearchResultsMexResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDirectorySearchResultsJob")
 public final class FetchNewsletterDirectorySearchResultsMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexFetchNewsletterDirectorySearchResultsJobQuery.graphql} on
-     * the WhatsApp relay.
+     * Holds the compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterDirectorySearchResultsJobQuery.graphql} on the WhatsApp relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Sent as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9699865846759651";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this query.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterDirectorySearchResults";
 
     /**
-     * The user-typed free-text query.
+     * Holds the user-typed free-text query.
      */
     private final String searchText;
 
     /**
-     * The list of category enum strings to filter by, or {@code null} when no
-     * category filter is applied.
+     * Holds the list of category enum strings to filter by, or {@code null} when no category filter
+     * is applied.
      */
     private final List<String> categories;
 
     /**
-     * The page size, or {@code null} for the server default.
+     * Holds the page size, or {@code null} for the server default.
      */
     private final Long limit;
 
     /**
-     * The forward pagination cursor returned by the previous page, or
-     * {@code null} for the first page.
+     * Holds the forward pagination cursor returned by the previous page, or {@code null} for the
+     * first page.
      */
     private final String cursorToken;
 
     /**
-     * Whether to populate the {@code status_metadata} fragment in the
-     * response.
+     * Holds whether to populate the {@code status_metadata} fragment in the response.
      */
     private final boolean fetchStatusMetadata;
 
     /**
      * Constructs a request for one page of search results.
      *
-     * @apiNote
-     * The {@code categories} list must already carry the on-wire enum names
-     * produced by
-     * {@code WAWebNewsletterDirectoryCategoryUtils.getCategoryValueFromEnum}
-     * in WA Web. The {@code fetchStatusMetadata} flag mirrors the result of
-     * {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}.
+     * <p>The {@code categories} list must already carry the on-wire enum names the directory expects.
+     * The {@code fetchStatusMetadata} flag mirrors whether the newsletter status receiver is
+     * enabled.
      *
      * @param searchText          the free-text search query
-     * @param categories          the category enum-string filter, may be
-     *                            {@code null}
+     * @param categories          the category enum-string filter, may be {@code null}
      * @param limit               the page size, may be {@code null}
-     * @param cursorToken         the forward pagination cursor, may be
-     *                            {@code null}
-     * @param fetchStatusMetadata whether to request the optional
-     *                            {@code status_metadata} fragment
+     * @param cursorToken         the forward pagination cursor, may be {@code null}
+     * @param fetchStatusMetadata whether to request the optional {@code status_metadata} fragment
      */
     public FetchNewsletterDirectorySearchResultsMexRequest(String searchText,
                    List<String> categories,
@@ -110,8 +98,7 @@ public final class FetchNewsletterDirectorySearchResultsMexRequest implements Me
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns the value of {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -121,8 +108,7 @@ public final class FetchNewsletterDirectorySearchResultsMexRequest implements Me
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns the value of {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -130,20 +116,17 @@ public final class FetchNewsletterDirectorySearchResultsMexRequest implements Me
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the
+     * <p>Produces the
      * {@code {variables: {input: {search_text, categories, limit, start_cursor}, fetch_status_metadata}}}
      * payload.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterDirectorySearchResultsJob", exports = "mexFetchNewsletterDirectorySearchResults",

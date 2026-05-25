@@ -14,25 +14,23 @@ import java.util.Optional;
 
 /**
  * The sealed reply family for a {@link SmaxGroupsGetLinkedGroupRequest}.
- *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
- * cases: {@link Success} carries the linked group's preview metadata projected through the
- * {@code LinkedGroupInfoMixin} subtree, the two error variants surface the relay's reason codes. The
- * {@code WAWebGroupQuerySubGroupsJob.querySubgroup} caller in WA Web uses the same dispatch shape.
+ * <p>
+ * Exactly one of three variants matches a given inbound stanza: {@link Success} carries the located linked group's
+ * preview metadata, {@link ClientError} carries a caller-side rejection code, and {@link ServerError} carries a
+ * transient relay-side failure code.
  */
 public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.Response
         permits SmaxGroupsGetLinkedGroupResponse.Success, SmaxGroupsGetLinkedGroupResponse.ClientError, SmaxGroupsGetLinkedGroupResponse.ServerError {
 
     /**
-     * Dispatches the inbound IQ across each {@link SmaxGroupsGetLinkedGroupResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsGetLinkedGroupResponse} variant and returns the first that
+     * parses cleanly.
+     * <p>
+     * Variants are tried in priority order: {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     * The result is empty when the stanza matches none of the three variants.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsGetLinkedGroupRPC}:
-     * {@link Success} first, then {@link ClientError}, then {@link ServerError}.
-     *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation defers the no-match decision to the caller by returning an empty {@link Optional}
+     * rather than throwing, so the caller can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsGetLinkedGroupRequest} stanza, used to validate echoed ids
@@ -57,11 +55,10 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
 
     /**
      * The reply variant emitted when the relay located the linked group and returned its preview.
-     *
-     * @apiNote Surfaces as the {@code GetLinkedGroupResponseSuccess} case in {@code WAWebGroupQuerySubGroupsJob};
-     * the linked group's subject, picture, owner, admin list, ephemeral expiration, and addressing mode bind from
-     * {@link #group()}, while {@link #linkedGroupJid()} echoes the wrapper's {@code jid} and {@link #groupSize()}
-     * carries the participant count when the relay supplied it.
+     * <p>
+     * The linked group's subject, picture, owner, admin list, ephemeral expiration, and addressing mode are carried
+     * verbatim in the {@link #group()} subtree; {@link #linkedGroupJid()} echoes the wrapper's {@code jid} and
+     * {@link #groupSize()} carries the participant count when the relay supplied it.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetLinkedGroupResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsLinkedGroupInfoMixin")
@@ -73,21 +70,20 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
         private final Jid linkedGroupJid;
 
         /**
-         * The optional participant count clamped server-side to {@code [1, 19999]}; {@code null} when the relay
-         * omitted the {@code size} attribute.
+         * The optional participant count; {@code null} when the relay omitted the {@code size} attribute.
          */
         private final Integer groupSize;
 
         /**
-         * The raw {@code <group/>} subtree carrying the {@code GroupInfoMixin} payload.
+         * The raw {@code <group/>} subtree carrying the group-info payload.
          */
         private final Node group;
 
         /**
          * Constructs a {@link Success} reply.
-         *
-         * @apiNote Passing a non-null negative {@code groupSize} raises {@link IllegalArgumentException}; pass
-         * {@code null} when the relay's response omits the {@code size} attribute.
+         * <p>
+         * Pass {@code null} for {@code groupSize} when the relay's response omits the {@code size} attribute; a
+         * non-null negative value is rejected.
          *
          * @param linkedGroupJid the linked group {@link Jid}; never {@code null}
          * @param groupSize      the optional participant count; may be {@code null}
@@ -124,10 +120,10 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns the raw {@code <group/>} sub-node carrying the {@code GroupInfoMixin} payload.
-         *
-         * @apiNote Cobalt exposes the subtree verbatim so callers project subject, picture, owner, admin list,
-         * ephemeral expiration, and addressing mode directly without committing to the full mixin schema.
+         * Returns the raw {@code <group/>} sub-node carrying the group-info payload.
+         * <p>
+         * The subtree is exposed verbatim so callers project subject, picture, owner, admin list, ephemeral
+         * expiration, and addressing mode directly without committing to the full mixin schema.
          *
          * @return the {@code <group/>} node; never {@code null}
          */
@@ -137,9 +133,10 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
 
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxIqResultResponseMixin#validate(Node, Node)} for envelope validation, then
-         * matches the {@code <linked_group jid="..."><group .../></linked_group>} payload.
+         * <p>
+         * The envelope is validated through {@link SmaxIqResultResponseMixin#validate(Node, Node)} and the
+         * {@code <linked_group jid="..."><group .../></linked_group>} payload must be present; the {@code size}
+         * attribute is optional.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -214,9 +211,9 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
     /**
      * The reply variant emitted when the relay rejected the linked-group lookup as malformed, unauthorised, or
      * referencing a non-existent linkage.
-     *
-     * @apiNote Surfaces as the {@code GetLinkedGroupResponseClientError} case in {@code WAWebGroupQuerySubGroupsJob},
-     * which logs the {@link #errorCode()} as the HTTP-style status passed back to the community-page UI.
+     * <p>
+     * The {@link #errorCode()} carries the HTTP-style status assigned by the relay and {@link #errorText()} carries
+     * the optional human-readable reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetLinkedGroupResponseClientError")
     final class ClientError implements SmaxGroupsGetLinkedGroupResponse {
@@ -226,7 +223,7 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -261,9 +258,9 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
 
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which matches only client-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -322,10 +319,10 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
 
     /**
      * The reply variant emitted on transient relay-side failure.
-     *
-     * @apiNote Surfaces as the {@code GetLinkedGroupResponseServerError} case in {@code WAWebGroupQuerySubGroupsJob},
-     * where it is logged at the same severity as {@link ClientError} but typically signals retry-eligible relay
-     * outages rather than caller error.
+     * <p>
+     * Unlike {@link ClientError} this code typically signals a retry-eligible relay outage rather than a malformed or
+     * unauthorised request; {@link #errorCode()} carries the server-range status and {@link #errorText()} the optional
+     * reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetLinkedGroupResponseServerError")
     final class ServerError implements SmaxGroupsGetLinkedGroupResponse {
@@ -335,7 +332,7 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -370,9 +367,9 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
 
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which matches only server-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

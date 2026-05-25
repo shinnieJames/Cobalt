@@ -19,27 +19,25 @@ import com.github.auties00.libsignal.key.SignalPreKeyPair;
 import java.util.Objects;
 
 /**
- * Builds and dispatches the {@code <receipt>}, {@code <ack>}, and bot
- * {@code <ack>}-with-{@code class="message"} stanzas that respond to every incoming
- * message processed by the receive pipeline.
- *
- * @apiNote
- * Embedders never instantiate this class directly; it is constructed by the client
- * during session setup and invoked by the receive orchestrator after the
- * {@link com.github.auties00.cobalt.message.receive.crypto.MessageDecryptionResult}
- * has been resolved. The {@link MessageReceiptType} associated with each entry point
- * is what the server uses to fan out the delivery/retry status across the conversation
- * participants.
+ * Builds and dispatches the {@code <receipt>} and {@code <ack>} stanzas that respond to
+ * every incoming message processed by the receive pipeline.
+ * <p>
+ * The client constructs this handler during session setup and the receive orchestrator
+ * invokes it after the
+ * {@link com.github.auties00.cobalt.message.receive.crypto.MessageDecryptionResult} has
+ * been resolved. The {@link MessageReceiptType} associated with each entry point is what
+ * the server uses to fan out the delivery, read, or retry status across the conversation
+ * participants. Bot invoke-responses are acknowledged with an {@code <ack class="message">}
+ * stanza instead of a {@code <receipt>}.
  *
  * @implNote
  * This implementation centralises addressing decisions in three private resolvers
  * ({@link #resolveFrom(MessageReceiveStanza)},
  * {@link #resolveReceiptParticipant(MessageReceiveStanza)},
- * {@link #resolveRecipientForReceipt(MessageReceiveStanza)}) so each public entry
- * point only worries about the receipt-type selection; WhatsApp Web instead
- * threads {@code from}, {@code participant}, and {@code recipient} through every
- * call site of {@code sendDeliveryReceiptsAfterDecryption} and
- * {@code sendRetryReceipt}.
+ * {@link #resolveRecipientForReceipt(MessageReceiveStanza)}) so each public entry point
+ * only worries about the receipt-type selection; WhatsApp Web instead threads
+ * {@code from}, {@code participant}, and {@code recipient} through every call site of
+ * {@code sendDeliveryReceiptsAfterDecryption} and {@code sendRetryReceipt}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgSendReceipt")
 @WhatsAppWebModule(moduleName = "WAWebSendDeliveryReceiptJob")
@@ -48,44 +46,42 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WAWebSendReceiptJobCommon")
 public final class MessageReceiptHandler {
     /**
-     * Logger used for the prekey-bundle build-failure trace inside
-     * {@link #buildKeyBundleNode()}.
+     * Logs the prekey-bundle build-failure trace emitted by {@link #buildKeyBundleNode()}.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageReceiptHandler.class.getName());
 
     /**
-     * Retry count from which the {@code <keys>} bundle is attached to the retry
+     * Holds the retry count from which the {@code <keys>} bundle is attached to the retry
      * receipt.
+     * <p>
+     * The first retry is sent without the bundle because the sender is expected to still
+     * hold the original session; the second and subsequent retries carry the bundle so the
+     * sender can re-establish.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code d=2} threshold inside
-     * {@code WAWebSendRetryReceiptJob.sendRetryReceipt}: the first retry is sent
-     * without the bundle because the sender is expected to still hold the original
-     * session; the second and subsequent retries carry the bundle so the sender can
-     * re-establish.
+     * @implNote
+     * This implementation mirrors WhatsApp Web's {@code d=2} threshold inside
+     * {@code WAWebSendRetryReceiptJob.sendRetryReceipt}.
      */
     @WhatsAppWebExport(moduleName = "WAWebSendRetryReceiptJob", exports = "sendRetryReceipt",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final int RETRY_KEY_BUNDLE_THRESHOLD = 2;
 
     /**
-     * Client used to dispatch the constructed receipt stanzas over the socket.
+     * Holds the client used to dispatch the constructed receipt stanzas over the socket.
      */
     private final WhatsAppClient client;
 
     /**
-     * Central session store used to look up the local PN/LID, signed prekey pair,
+     * Holds the central session store used to look up the local PN/LID, signed prekey pair,
      * one-time prekeys, and the device-identity blob attached to the prekey bundle.
      */
     private final WhatsAppStore store;
 
     /**
      * Constructs a receipt handler bound to the given client.
-     *
-     * @apiNote
-     * Constructor injection; the client also supplies the store via
-     * {@link WhatsAppClient#store()} so the handler does not need a separate store
-     * argument.
+     * <p>
+     * The store is read from {@link WhatsAppClient#store()} so no separate store argument is
+     * required.
      *
      * @param client the client used to dispatch receipt stanzas
      * @throws NullPointerException if {@code client} is {@code null}
@@ -98,18 +94,15 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Sends a delivery receipt for a successfully processed message, assuming the
-     * message is active.
-     *
-     * @apiNote
-     * Convenience overload that delegates to
-     * {@link #sendDeliveryReceipt(MessageReceiveStanza, MessageInfo, boolean)} with
-     * {@code hasInactiveMsg} set to {@code false}; suitable for normal active-chat
+     * Sends a delivery receipt for a successfully processed message, assuming the message
+     * is active.
+     * <p>
+     * Delegates to {@link #sendDeliveryReceipt(MessageReceiveStanza, MessageInfo, boolean)}
+     * with the inactive-message flag set to {@code false}, which covers normal active-chat
      * deliveries where the inactive-chat fast path does not apply.
      *
      * @param stanza the parsed incoming stanza
-     * @param info   the processed message info, or {@code null} when no info was
-     *               produced
+     * @param info   the processed message info, or {@code null} when no info was produced
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendReceipt", exports = "sendReceipt",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -119,23 +112,24 @@ public final class MessageReceiptHandler {
 
     /**
      * Sends a delivery receipt for a successfully processed message.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's
-     * {@code WAWebSendDeliveryReceiptJob.sendDeliveryReceiptsAfterDecryption}; the
-     * resulting {@link MessageReceiptType} is selected from the stanza addressing:
+     * <p>
+     * The {@link MessageReceiptType} is selected from the stanza addressing:
      * <ul>
-     *   <li>peer messages -> {@link MessageReceiptType#PEER}.</li>
-     *   <li>self-sent messages from a companion device -> {@link MessageReceiptType#SENDER}.</li>
-     *   <li>inactive messages where the sender is not self ->
+     *   <li>peer messages resolve to {@link MessageReceiptType#PEER}.</li>
+     *   <li>self-sent messages from a companion device resolve to
+     *       {@link MessageReceiptType#SENDER}.</li>
+     *   <li>inactive messages where the sender is not self resolve to
      *       {@link MessageReceiptType#INACTIVE}.</li>
-     *   <li>everything else -> {@link MessageReceiptType#DELIVERY} (the type
-     *       attribute is dropped).</li>
+     *   <li>everything else resolves to {@link MessageReceiptType#DELIVERY}, where the
+     *       {@code type} attribute is dropped.</li>
      * </ul>
+     * The {@code participant} attribute is set only for group, community, or broadcast
+     * chats, and the {@code recipient} attribute only for a non-peer sender receipt with a
+     * resolved recipient.
      *
      * @param stanza         the parsed incoming stanza
-     * @param info           the processed message info, or {@code null} when no info
-     *                       was produced
+     * @param info           the processed message info, or {@code null} when no info was
+     *                       produced
      * @param hasInactiveMsg whether processing reported an inactive-message flag
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendReceipt", exports = "sendReceipt",
@@ -168,17 +162,14 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Sends a retry receipt that asks the sender to re-encrypt and re-send a
-     * payload that could not be decrypted.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebSendRetryReceiptJob.sendRetryReceipt}; the
-     * receipt carries the failure reason and the retry count, and from the
-     * {@value #RETRY_KEY_BUNDLE_THRESHOLD}th attempt onward attaches a fresh
-     * {@code <keys>} bundle so the sender can re-establish the Signal session. The
-     * call is skipped when the chat is a non-bot user but the participant is a bot
-     * (the WA Web {@code E} short-circuit), because the bot has no useful retry
-     * semantics on that channel.
+     * Sends a retry receipt that asks the sender to re-encrypt and re-send a payload that
+     * could not be decrypted.
+     * <p>
+     * The receipt carries the failure reason and the retry count, and from the
+     * {@value #RETRY_KEY_BUNDLE_THRESHOLD}th attempt onward attaches a fresh {@code <keys>}
+     * bundle so the sender can re-establish the Signal session. The call is skipped when
+     * the chat is a non-bot user but the participant is a bot, because the bot has no useful
+     * retry semantics on that channel.
      *
      * @param stanza      the parsed incoming stanza
      * @param retryReason the failure reason carried in the {@code error} attribute
@@ -253,15 +244,13 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Sends the specialised {@code <ack>} stanza used to acknowledge a bot
-     * invoke-response message.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebSendReceiptJobCommon.sendBotInvokeResponseAcks};
-     * bot replies use an {@code <ack class="message" type="text">} rather than a
-     * {@code <receipt>}, with the addressing flipped for 1:1 chats so that
-     * {@code to} is the bot author and {@code recipient} is the chat. Group and
-     * broadcast bot replies use {@code to = chat} and {@code participant = author}.
+     * Sends the specialised {@code <ack>} stanza used to acknowledge a bot invoke-response
+     * message.
+     * <p>
+     * Bot replies use an {@code <ack class="message" type="text">} rather than a
+     * {@code <receipt>}. For 1:1 chats the addressing is flipped so that {@code to} is the
+     * bot author and {@code recipient} is the chat; group and broadcast bot replies use
+     * {@code to = chat} and {@code participant = author}.
      *
      * @param stanza the parsed incoming stanza
      */
@@ -295,16 +284,13 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Returns whether the message originates from a bot sender that requires a
-     * bot-specific receipt rather than a normal delivery receipt.
-     *
-     * @apiNote
-     * Used by the orchestrator to choose between
+     * Returns whether the message originates from a bot sender that requires a bot-specific
+     * receipt rather than a normal delivery receipt.
+     * <p>
+     * The orchestrator uses this to choose between
      * {@link #sendDeliveryReceipt(MessageReceiveStanza, MessageInfo)} and
-     * {@link #sendBotInvokeResponseAck(MessageReceiveStanza)}; mirrors the
-     * {@code y} predicate inside WhatsApp Web's
-     * {@code WAWebHandleMsgSendReceipt.sendReceipt} that checks for a non-bot chat
-     * paired with a bot author.
+     * {@link #sendBotInvokeResponseAck(MessageReceiveStanza)}; the predicate holds when the
+     * chat is not on the bot server but the sender is.
      *
      * @param stanza the parsed incoming stanza
      * @return {@code true} when the chat is not on the bot server but the sender is
@@ -317,16 +303,13 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Sends a NACK for a message that failed validation or protobuf parsing,
-     * without a failure reason.
-     *
-     * @apiNote
-     * Convenience overload that delegates to
-     * {@link #sendNackReceipt(MessageReceiveStanza, int, Integer)} with
-     * {@code failureReason = null}; suitable for the
+     * Sends a NACK for a message that failed validation or protobuf parsing, without a
+     * failure reason.
+     * <p>
+     * Delegates to {@link #sendNackReceipt(MessageReceiveStanza, int, Integer)} with a
+     * {@code null} failure reason, which covers the
      * {@link com.github.auties00.cobalt.message.receive.crypto.MessageDecryptionResult#PARSE_ERROR}
-     * path where WhatsApp Web's {@code NackReason.ParsingError} has no extra
-     * {@code failure_reason} payload.
+     * path where the parsing error has no extra {@code failure_reason} payload.
      *
      * @param stanza    the parsed incoming stanza
      * @param errorCode the NACK error code carried in the {@code error} attribute
@@ -339,19 +322,15 @@ public final class MessageReceiptHandler {
 
     /**
      * Sends a NACK for a message that failed validation or protobuf parsing.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebHandleMsgSendAck.sendNack}; the resulting
-     * stanza is an {@code <ack class="message">} with an {@code error} attribute.
-     * For {@code InvalidProtobuf} (code 491) the stanza additionally carries a
-     * {@code <meta failure_reason=...>} child when the caller supplies a reason,
-     * matching WA Web's {@code u} helper inside the same module.
+     * <p>
+     * The resulting stanza is an {@code <ack class="message">} with an {@code error}
+     * attribute. For an invalid protobuf (error code 491) the stanza additionally carries a
+     * {@code <meta failure_reason=...>} child when the caller supplies a reason.
      *
      * @param stanza        the parsed incoming stanza
-     * @param errorCode     the NACK error code carried in the {@code error}
-     *                      attribute
-     * @param failureReason the failure-reason payload for InvalidProtobuf errors,
-     *                      or {@code null} to omit the {@code <meta>} child
+     * @param errorCode     the NACK error code carried in the {@code error} attribute
+     * @param failureReason the failure-reason payload for invalid-protobuf errors, or
+     *                      {@code null} to omit the {@code <meta>} child
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendNack",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -381,24 +360,19 @@ public final class MessageReceiptHandler {
     /**
      * Builds the {@code <keys>} bundle attached to a retry receipt from the
      * {@value #RETRY_KEY_BUNDLE_THRESHOLD}th attempt onward.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's local {@code h} helper inside
-     * {@code WAWebSendRetryReceiptJob}: the bundle includes the registered prekey
-     * type, the local identity key, a one-time prekey, the signed prekey, and the
-     * ADV-signed device identity; the sender uses these to install a fresh
-     * Signal session before re-encrypting.
+     * <p>
+     * The bundle includes the registered prekey type, the local identity key, a one-time
+     * prekey, the signed prekey, and the ADV-signed device identity; the sender uses these
+     * to install a fresh Signal session before re-encrypting.
      *
      * @implNote
-     * This implementation lazily provisions a one-time prekey when the local store
-     * has none: a random {@link SignalPreKeyPair} is generated and persisted so the
-     * next retry attempt sees a stable bundle. A build failure (for example a
-     * missing identity-key pair) is logged and the method returns {@code null} so
-     * the retry receipt still goes out without the bundle, matching WA Web's
-     * {@code y} catch branch.
+     * This implementation lazily provisions a one-time prekey when the local store has none:
+     * a random {@link SignalPreKeyPair} is generated and persisted so the next retry attempt
+     * sees a stable bundle. A build failure (for example a missing identity-key pair) is
+     * logged and the method returns {@code null} so the retry receipt still goes out without
+     * the bundle.
      *
-     * @return the {@code <keys>} node, or {@code null} when the bundle cannot be
-     *         built
+     * @return the {@code <keys>} node, or {@code null} when the bundle cannot be built
      */
     @WhatsAppWebExport(moduleName = "WAWebSendRetryReceiptJob", exports = "sendRetryReceipt",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -471,13 +445,11 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Resolves the JID that the {@code from} attribute (or, for receipt stanzas,
-     * the {@code to} attribute) should carry.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebMsgProcessingApiUtils.getFrom}; for 1:1
-     * chat messages the value is the sender's JID, for group, community,
-     * broadcast, and status messages the value is the chat JID.
+     * Resolves the JID that the {@code from} attribute, or for receipt stanzas the
+     * {@code to} attribute, should carry.
+     * <p>
+     * For 1:1 chat messages the value is the sender's JID; for group, community, broadcast,
+     * and status messages the value is the chat JID.
      *
      * @param stanza the parsed incoming stanza
      * @return the resolved JID
@@ -497,12 +469,11 @@ public final class MessageReceiptHandler {
 
     /**
      * Resolves the participant attribute placed on receipt stanzas.
-     *
-     * @apiNote
-     * Group, community, broadcast, and status receipts carry the sender device JID
-     * in the {@code participant} attribute so the server can route the receipt
-     * back to the originating device; 1:1 chats omit the attribute because the
-     * {@code to} JID already identifies the recipient.
+     * <p>
+     * Group, community, broadcast, and status receipts carry the sender device JID in the
+     * {@code participant} attribute so the server can route the receipt back to the
+     * originating device; 1:1 chats omit the attribute because the {@code to} JID already
+     * identifies the recipient.
      *
      * @param stanza the parsed incoming stanza
      * @return the participant JID, or {@code null} for 1:1 chats
@@ -522,24 +493,20 @@ public final class MessageReceiptHandler {
     /**
      * Resolves the recipient attribute placed on delivery and retry receipts for
      * companion-device messages.
-     *
-     * @apiNote
-     * The recipient is only meaningful for 1:1-style chat messages sent from the
-     * user's own account (i.e. echoed from a companion device); group, community,
-     * broadcast, and status receipts return {@code null} so the attribute is
-     * dropped.
+     * <p>
+     * The recipient is only meaningful for 1:1-style chat messages sent from the user's own
+     * account (echoed from a companion device); group, community, broadcast, and status
+     * receipts return {@code null} so the attribute is dropped.
      *
      * @implNote
      * This implementation collapses WhatsApp Web's three-way resolution chain
-     * ({@code originalBotRecipient} -> {@code preMatChat} -> {@code chat}) to a
-     * single {@code chat} fallback because Cobalt does not yet model the
-     * {@code originalBotRecipient} or {@code preMatChat} stanza metadata; the
-     * collapse is safe for non-bot self-echoes but loses fidelity on bot replies
-     * routed via a different recipient.
+     * ({@code originalBotRecipient}, then {@code preMatChat}, then {@code chat}) to a single
+     * {@code chat} fallback because Cobalt does not yet model the {@code originalBotRecipient}
+     * or {@code preMatChat} stanza metadata; the collapse is safe for non-bot self-echoes but
+     * loses fidelity on bot replies routed via a different recipient.
      *
      * @param stanza the parsed incoming stanza
-     * @return the recipient JID, or {@code null} when the receipt should omit the
-     *         attribute
+     * @return the recipient JID, or {@code null} when the receipt should omit the attribute
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendReceipt", exports = "sendReceipt",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -566,15 +533,11 @@ public final class MessageReceiptHandler {
     }
 
     /**
-     * Returns whether the receipt should use the {@link MessageReceiptType#SENDER}
-     * type.
-     *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code d} predicate inside
-     * {@code WAWebSendDeliveryReceiptJob.sendDeliveryReceiptsAfterDecryption}: the
-     * sender type is selected when the {@code from} JID is the local account's
-     * user, or when the participant JID is the local account's user, so a
-     * companion-device echo loops back to the primary as a sender confirmation.
+     * Returns whether the receipt should use the {@link MessageReceiptType#SENDER} type.
+     * <p>
+     * The sender type is selected when the {@code from} JID is the local account's user, or
+     * when the participant JID is the local account's user, so a companion-device echo loops
+     * back to the primary as a sender confirmation.
      *
      * @param from        the resolved {@code from} JID
      * @param participant the resolved participant JID, or {@code null} for 1:1
@@ -604,12 +567,10 @@ public final class MessageReceiptHandler {
 
     /**
      * Resolves the {@link MessageReceiptType} used for the delivery receipt path.
-     *
-     * @apiNote
-     * Mirrors the {@code u=DROP_ATTR / PEER_MSG / SENDER / INACTIVE} branching
-     * inside {@code WAWebSendDeliveryReceiptJob.sendDeliveryReceiptsAfterDecryption};
-     * peer messages win over sender and sender wins over the inactive-message
-     * branch.
+     * <p>
+     * Peer messages take priority over sender receipts, and sender receipts take priority
+     * over the inactive-message branch; anything else falls back to
+     * {@link MessageReceiptType#DELIVERY}.
      *
      * @param stanza         the parsed incoming stanza
      * @param isSender       whether the message is from the local account

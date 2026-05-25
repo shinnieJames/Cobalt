@@ -16,11 +16,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Routes a business chat to a specific agent in response to {@code agentChatAssignment} sync mutations.
  *
- * @apiNote
- * Drives the Business inbox agent-routing surface where a single chat
- * is assigned to (or unassigned from) a named agent. When the
- * assignment changes on another device, the server replays it here
- * and Cobalt embedders observe the result through
+ * <p>This handler drives the Business inbox agent-routing surface where a
+ * single chat is assigned to (or unassigned from) a named agent. When the
+ * assignment changes on another device, the server replays it here and the
+ * result becomes observable through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findChatAssignment(Jid)}.
  *
  * @implNote
@@ -40,9 +39,8 @@ public final class ChatAssignmentHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton chat-assignment handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this once during client
+     * bootstrap.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatAssignmentSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public ChatAssignmentHandler() {
@@ -70,19 +68,17 @@ public final class ChatAssignmentHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the JSON index {@code ["agentChatAssignment", chatJid]}
-     * and the {@link ChatAssignmentAction#deviceAgentID()} payload,
-     * verifies the agent exists in the store (when non-empty), then
-     * either drops the existing assignment for the chat (when the
-     * agent id is the empty string, mirroring WA Web's "unassign"
-     * sentinel) or upserts a new
-     * {@link com.github.auties00.cobalt.model.chat.ChatAssignment}.
-     * The previous {@code opened} flag is preserved across the upsert
-     * so reassignment does not reset the agent-opened indicator.
-     * Returns {@link MutationApplicationResult#unsupported()} for
-     * non-{@code SET} operations and orphan results when the agent or
-     * chat is not in the store.
+     * <p>Validates the JSON index {@code ["agentChatAssignment", chatJid]} and
+     * the {@link ChatAssignmentAction#deviceAgentID()} payload, verifies the
+     * agent exists in the store (when non-empty), then either drops the
+     * existing assignment for the chat (when the agent id is the empty string,
+     * mirroring WA Web's unassign sentinel) or upserts a new
+     * {@link com.github.auties00.cobalt.model.chat.ChatAssignment}. The
+     * previous {@code opened} flag is preserved across the upsert so
+     * reassignment does not reset the agent-opened indicator. Returns
+     * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
+     * operations and orphan results when the agent or chat is not in the
+     * store.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebChatAssignmentSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

@@ -12,23 +12,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <call><link_query/></call>} request that resolves an
- * existing call-link token to its metadata (creator, media, scheduled-event
- * presence, waiting-room state).
+ * Resolves an existing call-link token to its metadata.
  *
- * @apiNote
- * Drives the "Open call link" surface: when a user follows a
- * {@code https://call.whatsapp.com/{voice|video}/<token>} URL the client
- * issues this RPC to discover the link's owner and waiting-room flag before
- * joining or asking for approval.
+ * <p>This is the outbound {@code <call><link_query/></call>} request behind the
+ * "Open call link" surface: when a user follows a
+ * {@code https://call.whatsapp.com/{voice|video}/<token>} URL the client issues
+ * this RPC to discover the link's owner, media type, scheduled-event presence,
+ * and waiting-room state before joining or asking for approval.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutVoipLinkQueryRequest")
 public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
     /**
      * The call-link token to resolve.
      *
-     * @apiNote
-     * The same opaque suffix carried by the public
+     * <p>The same opaque suffix carried by the public
      * {@code https://call.whatsapp.com/{voice|video}/<token>} URL.
      */
     private final String linkQueryToken;
@@ -37,17 +34,17 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
      * The media type the caller plans to use, carried by the {@code media}
      * attribute.
      *
-     * @apiNote
-     * Either {@code "audio"} or {@code "video"} on the wire; the relay
-     * uses this to confirm the link's configured media matches the caller's
-     * intent before authorising the join.
+     * <p>Holds {@code "audio"} or {@code "video"} on the wire; the relay uses it
+     * to confirm the link's configured media matches the caller's intent before
+     * authorising the join.
      */
     private final String linkQueryMedia;
 
     /**
-     * The optional action attribute. Either {@code "preview"} for a passive
-     * resolve or {@code "edit"} for a creator-side metadata edit; absent for
-     * the default resolve.
+     * The optional action carried by the {@code action} attribute.
+     *
+     * <p>Either {@code "preview"} for a passive resolve or {@code "edit"} for a
+     * creator-side metadata edit; absent for the default resolve.
      */
     private final String linkQueryAction;
 
@@ -96,11 +93,10 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a {@code <call to="call">} envelope around a
-     * {@code <link_query>} child, mirroring
-     * {@code WASmaxOutVoipLinkQueryRequest.makeLinkQueryRequest}. The
-     * {@code action} attribute is omitted when {@link #linkQueryAction()}
-     * is empty.
+     * This implementation wraps a {@code <link_query/>} child in a
+     * {@code <call to="call">} envelope, stamping the {@code token} and
+     * {@code media} attributes and omitting {@code action} when
+     * {@link #linkQueryAction()} is empty.
      *
      * @return a {@link NodeBuilder} carrying the {@code <call><link_query/></call>}
      *         stanza
@@ -122,6 +118,13 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
                 .content(linkQueryBuilder.build());
     }
 
+    /**
+     * Compares this request to another object for value equality.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxLinkQueryRequest}
+     *         with equal fields, {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -136,11 +139,21 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
                 && Objects.equals(this.linkQueryAction, that.linkQueryAction);
     }
 
+    /**
+     * Returns a hash code derived from every field of this request.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(linkQueryToken, linkQueryMedia, linkQueryAction);
     }
 
+    /**
+     * Returns a debug string listing every field of this request.
+     *
+     * @return the string representation of this request
+     */
     @Override
     public String toString() {
         return "SmaxLinkQueryRequest[linkQueryToken=" + linkQueryToken

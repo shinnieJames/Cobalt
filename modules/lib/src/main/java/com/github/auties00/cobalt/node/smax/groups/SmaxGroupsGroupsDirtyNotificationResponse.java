@@ -14,12 +14,11 @@ import java.util.Optional;
 /**
  * The inbound {@code <notification type="w:gp2">} stanza that signals one or more groups' metadata has gone stale on
  * the client and must be re-queried.
- *
- * @apiNote Drives the {@code WAWebHandleGroupsDirtyNotification.handleGroupsDirtyNotificationJob} flow: WA Web pushes
- * this notification when group-server-side caches invalidate (group renames, ownership transfers, etc.); the client
- * must re-query the affected groups via the {@code queryAndUpdateGroupsMetadataByJids} job and then ack the
- * notification via {@link SmaxGroupsGroupsDirtyNotificationAcknowledgement}. The relay caps the affected-group list
- * at 10000 entries server-side.
+ * <p>
+ * The relay pushes this notification when group-side caches invalidate, for example on group renames or ownership
+ * transfers. After parsing, the client re-queries the affected groups and then acks the notification via
+ * {@link SmaxGroupsGroupsDirtyNotificationAcknowledgement}. The affected-group list is capped at 10000 entries
+ * server-side.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupsDirtyNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsServerNotificationMixin")
@@ -31,9 +30,8 @@ public final class SmaxGroupsGroupsDirtyNotificationResponse implements SmaxOper
 
     /**
      * Constructs a {@link SmaxGroupsGroupsDirtyNotificationResponse} projection.
-     *
-     * @apiNote {@code null} normalises to {@link List#of()} for callers that want to construct an empty notification
-     * directly.
+     * <p>
+     * A {@code null} argument normalises to {@link List#of()} so callers can construct an empty notification directly.
      *
      * @param dirtyGroups the list of stale group {@link Jid}s; may be {@code null}
      */
@@ -52,13 +50,13 @@ public final class SmaxGroupsGroupsDirtyNotificationResponse implements SmaxOper
 
     /**
      * Tries to parse a {@link SmaxGroupsGroupsDirtyNotificationResponse} from the given {@code <notification/>} stanza.
+     * <p>
+     * Parsing succeeds when the notification carries {@code type="w:gp2"}, a {@code from} JID on the {@code g.us}
+     * domain, and a {@code <groups_dirty>} child; each {@code <group jid="..."/>} entry contributes one dirty JID and
+     * entries without a {@code jid} attribute are skipped.
      *
-     * @apiNote Matches when the notification carries {@code type="w:gp2"}, a {@code from="g.us"} domain, and a
-     * {@code <groups_dirty>} child holding one or more {@code <group jid="..."/>} entries.
-     *
-     * @implNote WA Web's {@code parseGroupsDirtyNotificationRequest} bounds the dirty-group list to {@code [1, 10000]}
-     * and throws on out-of-range counts; Cobalt mirrors the matching shape but accepts zero entries so callers can
-     * detect an empty payload without exception handling.
+     * @implNote This implementation accepts zero {@code <group/>} entries rather than enforcing the WA Web
+     * {@code [1, 10000]} bound, so callers can detect an empty payload without exception handling.
      *
      * @param node the inbound notification stanza
      * @return an {@link Optional} carrying the parsed projection, or empty when the stanza shape does not match

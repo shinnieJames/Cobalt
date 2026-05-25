@@ -315,8 +315,8 @@ public final class WhatsAppDevice {
      * @apiNote
      * Mirrors {@code DeviceProps$PlatformType} from
      * {@code WAWebProtobufsCompanionReg.pb}; values include
-     * {@link ClientPlatformType#IOS_PHONE},
-     * {@link ClientPlatformType#ANDROID_PHONE},
+     * {@link ClientPlatformType#IOS},
+     * {@link ClientPlatformType#ANDROID},
      * {@link ClientPlatformType#WEB}, {@link ClientPlatformType#WINDOWS},
      * and {@link ClientPlatformType#MACOS}.
      */

@@ -15,13 +15,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that approves, rejects, or cancels pending sub-group
- * suggestions against a community parent group.
+ * Models the outbound {@code <iq type="set" xmlns="w:g2">} stanza that approves, rejects, or cancels pending
+ * sub-group suggestions against a community parent group.
  *
- * @apiNote Drives the community-admin "Approve sub-group", "Reject sub-group", and "Cancel sub-group suggestion"
- * affordances on the community-management screen. The relay processes all three sub-actions in one request and
- * returns per-suggestion echo rows in the matching {@link SmaxGroupsSubGroupSuggestionsActionResponse.Success}.
- * Each sub-action list is capped at 1000 entries; at least one of the three lists must be non-empty.
+ * <p>This request backs the community-admin approve, reject, and cancel actions on the sub-group suggestion
+ * queue. The relay processes all three sub-actions in one request and returns per-suggestion echo rows in the
+ * matching {@link SmaxGroupsSubGroupSuggestionsActionResponse.Success}. Each sub-action list is capped at 1000
+ * entries, and at least one of the three lists must be non-empty.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupSuggestionsActionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -50,9 +50,9 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     /**
      * Constructs a sub-group-suggestions-action request.
      *
-     * @apiNote The relay caps each of the three sub-action lists at 1000 entries; a caller batching wider
-     * suggestion-queue mutations should split the work across multiple requests. The three lists are defensively
-     * copied so post-construction mutation of the caller's lists has no effect on the request.
+     * <p>The relay caps each of the three sub-action lists at 1000 entries, so a caller batching wider
+     * suggestion-queue mutations should split the work across multiple requests. The three lists are copied so
+     * post-construction mutation of the caller's lists has no effect on the request.
      *
      * @param parentGroupJid the parent community {@link Jid}
      * @param approve        the approve list
@@ -81,7 +81,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     /**
      * Returns the parent (community) group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the parent group {@link Jid}; never {@code null}
      */
@@ -119,7 +119,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
      *         <sub_group_suggestions_action>
@@ -138,7 +138,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
      *         </sub_group_suggestions_action>
      *     </iq>
      * }
-     * a sub-action child is omitted when the corresponding caller list is empty.
+     * A sub-action child is omitted when the corresponding caller list is empty.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <sub_group_suggestions_action>}
      *         payload
@@ -239,10 +239,11 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     }
 
     /**
-     * Suggestion entry carrying the {@code creator}+{@code jid} pair used by the approve and reject lists.
+     * Represents a suggestion entry carrying the {@code creator}/{@code jid} pair used by the approve and reject
+     * lists.
      *
-     * @apiNote The {@code creator} attribute carries the {@link Jid} of the user who originally proposed the
-     * suggestion; {@code creator_pn} (optional) carries the corresponding phone-number JID echo when the
+     * <p>The {@code creator} attribute carries the {@link Jid} of the user who originally proposed the
+     * suggestion; the optional {@code creator_pn} carries the corresponding phone-number JID echo when the
      * suggestion was filed under the LID addressing mode.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupSuggestionMixin")
@@ -363,10 +364,10 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     }
 
     /**
-     * Suggestion entry carrying only the {@code jid} used by the cancel list.
+     * Represents a suggestion entry carrying only the {@code jid} used by the cancel list.
      *
-     * @apiNote The cancelling caller is implicit; the relay enforces ownership server-side, so cancel entries
-     * omit the {@code creator} attribute.
+     * <p>The cancelling caller is implicit; the relay enforces ownership server-side, so cancel entries omit the
+     * {@code creator} attribute.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupSuggestionWithoutCreatorMixin")
     public static final class JidSuggestion {

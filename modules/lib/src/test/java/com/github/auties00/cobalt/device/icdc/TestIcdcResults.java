@@ -6,29 +6,18 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Test-only helper that exposes the package-private {@link IcdcResult}
- * constructor to test code in other packages.
- *
- * @apiNote
- * Lives in {@code com.github.auties00.cobalt.device.icdc} so it can call the
- * package-private {@link IcdcResult} constructor; production code never sees
- * this class because it lives only on the test classpath.
+ * Test-only fixture mint that exposes the package-private {@link IcdcResult} constructor to
+ * test code in other packages. Lives in {@code com.github.auties00.cobalt.device.icdc} so it can
+ * reach the package-private constructor, and stays on the test classpath only.
  */
 public final class TestIcdcResults {
-    /**
-     * Hidden constructor; this is a static-helper class.
-     */
     private TestIcdcResults() {
         throw new AssertionError("TestIcdcResults is not instantiable");
     }
 
     /**
-     * Builds an {@link IcdcResult} from the supplied components.
-     *
-     * @apiNote
-     * Any argument may be {@code null} to model an absent field. Use when the
-     * test needs a specific {@link IcdcResult} shape rather than running the
-     * full {@link IcdcComputer} pipeline.
+     * Builds an {@link IcdcResult} from the supplied components, where any argument may be
+     * {@code null} to model an absent field.
      *
      * @param keyHash     the truncated identity key hash, or {@code null}
      * @param timestamp   the device-list snapshot timestamp, or {@code null}
@@ -47,10 +36,6 @@ public final class TestIcdcResults {
 
     /**
      * Builds an {@link IcdcResult} with all fields set to {@code null}.
-     *
-     * @apiNote
-     * Useful as a sentinel for tests that need a non-{@code null}
-     * {@link IcdcResult} reference but do not care about its contents.
      *
      * @return the empty {@link IcdcResult}
      */

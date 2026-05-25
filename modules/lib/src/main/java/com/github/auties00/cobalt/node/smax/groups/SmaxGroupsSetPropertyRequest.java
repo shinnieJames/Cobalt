@@ -14,13 +14,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that toggles one or more group-property flags.
+ * Models the outbound {@code <iq type="set" xmlns="w:g2">} stanza that toggles one or more group-property flags.
  *
- * @apiNote Drives the group-settings affordances on the group-info screen (admin-only edits, announcement mode,
- * shared history, ephemeral messages, membership approval, community sub-group creation, frequently-forwarded
- * label, admin-reports, etc.). Each toggle corresponds to a distinct child element under the IQ envelope. The
- * relay treats the children as orthogonal; opposing pairs (such as {@link #locked()} vs {@link #unlocked()},
- * {@link #announcement()} vs {@link #notAnnouncement()}) are not validated client-side, and the relay rejects
+ * <p>This request backs the group-settings switches (admin-only edits, announcement mode, shared history,
+ * ephemeral messages, membership approval, community sub-group creation, frequently-forwarded label,
+ * admin-reports, and others). Each toggle corresponds to a distinct child element under the IQ envelope. The
+ * relay treats the children as orthogonal; opposing pairs (such as {@link #locked()} versus {@link #unlocked()},
+ * {@link #announcement()} versus {@link #notAnnouncement()}) are not validated client-side, and the relay rejects
  * conflicting requests with a {@link SmaxGroupsSetPropertyResponse.ClientError}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetPropertyRequest")
@@ -115,9 +115,9 @@ public final class SmaxGroupsSetPropertyRequest implements SmaxOperation.Request
     /**
      * Constructs a set-property request.
      *
-     * @apiNote Each boolean parameter governs whether the matching child element is emitted; the {@code Integer}
-     * and {@code String} parameters carry optional attribute values. Opposing pairs are not validated
-     * client-side; the relay rejects conflicting requests with a {@link SmaxGroupsSetPropertyResponse.ClientError}.
+     * <p>Each boolean parameter governs whether the matching child element is emitted; the {@code Integer} and
+     * {@code String} parameters carry optional attribute values. Opposing pairs are not validated client-side;
+     * the relay rejects conflicting requests with a {@link SmaxGroupsSetPropertyResponse.ClientError}.
      *
      * @param groupJid                          the group {@link Jid}
      * @param locked                            whether to flip the group to locked
@@ -181,7 +181,7 @@ public final class SmaxGroupsSetPropertyRequest implements SmaxOperation.Request
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -219,7 +219,7 @@ public final class SmaxGroupsSetPropertyRequest implements SmaxOperation.Request
     /**
      * Returns the optional ephemeral-message expiration value.
      *
-     * @apiNote Empty when the request does not toggle ephemerality; present values are the expiration in
+     * <p>The result is empty when the request does not toggle ephemerality; present values are the expiration in
      * seconds.
      *
      * @return an {@link Optional} carrying the expiration in seconds, or empty
@@ -276,8 +276,8 @@ public final class SmaxGroupsSetPropertyRequest implements SmaxOperation.Request
     /**
      * Returns the optional membership-approval mode value.
      *
-     * @apiNote Present values are typically {@code "on"} or {@code "off"}; empty when the request omits the
-     * {@code <membership_approval_mode/>} child.
+     * <p>Present values are typically {@code "on"} or {@code "off"}; the result is empty when the request omits
+     * the {@code <membership_approval_mode/>} child.
      *
      * @return an {@link Optional} carrying the join-mode value, or empty
      */
@@ -306,7 +306,7 @@ public final class SmaxGroupsSetPropertyRequest implements SmaxOperation.Request
     /**
      * Returns whether the request allows non-admin sub-group creation.
      *
-     * @apiNote Only honoured by the relay on community parent groups.
+     * <p>The relay only honours this toggle on community parent groups.
      *
      * @return {@code true} when the {@code <allow_non_admin_sub_group_creation/>} child is emitted
      */
@@ -344,7 +344,7 @@ public final class SmaxGroupsSetPropertyRequest implements SmaxOperation.Request
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope nests each enabled toggle as a sibling under the IQ envelope, for example
+     * <p>The resulting envelope nests each enabled toggle as a sibling under the IQ envelope, for example
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <locked/>

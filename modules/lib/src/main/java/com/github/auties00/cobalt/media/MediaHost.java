@@ -19,33 +19,30 @@ import java.util.*;
  * {@link Fallback} hosts are used as alternate endpoints after the primary
  * path is exhausted.
  *
- * @apiNote
- * Cobalt embedders typically never see {@code MediaHost} instances
- * directly; they are owned by {@link MediaConnectionService} and selected through
- * {@link #routeSelection} during {@code upload}/{@code download} calls. Pass
- * the parsed {@link MediaConnectionService} around instead and let it pick a host
- * per attempt.
+ * <p>Host instances are owned by {@link MediaConnectionService} and selected
+ * through {@link #routeSelection} during upload and download calls; the
+ * parsed {@link MediaConnectionService} picks a host per attempt.
  */
 @WhatsAppWebModule(moduleName = "WAWebMediaHost")
 @WhatsAppWebModule(moduleName = "WAWebMediaHostsRouteSelection")
 @WhatsAppWebModule(moduleName = "WAWebMediaHostsMaybeSwitchHost")
 @WhatsAppWebModule(moduleName = "WABase64Modulo")
-sealed interface MediaHost {
+public sealed interface MediaHost {
 
     /**
-     * The remaining-bytes threshold below which a mid-transfer host
-     * switch is never attempted.
+     * The remaining-bytes threshold below which a mid-transfer host switch
+     * is never attempted.
      *
-     * @apiNote
-     * Consumed by {@link #maybeSwitchHost} during long-running document
-     * uploads/downloads: when fewer than 50 MiB remain the cost of
+     * <p>Consumed by {@link #maybeSwitchHost} during long-running document
+     * uploads and downloads: when fewer than 50 MiB remain the cost of
      * restarting on a new host outweighs any topology benefit, so the
      * current host is kept.
      *
      * @implNote
-     * This implementation exposes the constant only so {@link #maybeSwitchHost}
-     * can read it; the actual mid-transfer re-query loop that consumes
-     * {@link #maybeSwitchHost} is not yet wired in Cobalt.
+     * This implementation exposes the constant only so
+     * {@link #maybeSwitchHost} can read it; the actual mid-transfer
+     * re-query loop that consumes {@link #maybeSwitchHost} is not yet wired
+     * in Cobalt.
      */
     @WhatsAppWebExport(moduleName = "WAWebMediaHostsMaybeSwitchHost", exports = "THRESHOLD",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -54,10 +51,9 @@ sealed interface MediaHost {
     /**
      * The outcome of a {@link #maybeSwitchHost} decision.
      *
-     * @apiNote
-     * When {@link #changed} is {@code false} the {@link #host} field echoes
-     * the host passed as {@code current} so callers can assign the result
-     * unconditionally without a {@code null} check.
+     * <p>When {@link #changed} is {@code false} the {@link #host} field
+     * echoes the host passed as {@code current} so callers can assign the
+     * result unconditionally without a {@code null} check.
      *
      * @param changed whether the host should be switched
      * @param host    the host to use after the decision, never {@code null}
@@ -71,8 +67,7 @@ sealed interface MediaHost {
      * host after a fresh {@code media_conn} re-query returned a new route
      * list.
      *
-     * @apiNote
-     * Invoked by the periodic poll loop that watches for a CDN topology
+     * <p>Invoked by the periodic poll loop that watches for a CDN topology
      * change mid-upload or mid-download. The decision rules in priority
      * order are:
      * <ul>
@@ -142,13 +137,10 @@ sealed interface MediaHost {
     /**
      * Tests two hosts for equality by hostname only.
      *
-     * @apiNote
-     * Used by {@link #maybeSwitchHost} so that two host entries surfaced by
-     * different {@code media_conn} replies with cosmetically different IP
+     * <p>Used by {@link #maybeSwitchHost} so that two host entries surfaced
+     * by different {@code media_conn} replies with cosmetically different IP
      * orderings or rule encodings still register as the same host. Returns
-     * {@code false} if either operand is {@code null}, mirroring WA Web's
-     * {@code MediaHost.prototype.equals} short-circuit when the comparand
-     * is undefined.
+     * {@code false} if either operand is {@code null}.
      *
      * @param a the first host, may be {@code null}
      * @param b the second host, may be {@code null}
@@ -168,8 +160,7 @@ sealed interface MediaHost {
      * Tests whether {@code current} occupies a slot whose host has been
      * replaced by the server.
      *
-     * @apiNote
-     * Helper for the fallback-slot and nested-fallback-slot branches of
+     * <p>Helper for the fallback-slot and nested-fallback-slot branches of
      * {@link #maybeSwitchHost}: returns {@code true} only when
      * {@code current} matches the previous slot host, both slot hosts are
      * non-{@code null}, and the previous and new slot hosts differ.
@@ -195,11 +186,10 @@ sealed interface MediaHost {
      * Resolves the nested fallback host of a primary host as a synthetic
      * {@link Fallback}.
      *
-     * @apiNote
-     * Helper for the second nested-fallback branch of
-     * {@link #maybeSwitchHost}. Returns {@code null} when {@code primary}
-     * is {@code null}, when {@code primary} is not a {@link Primary}, or
-     * when the {@link Primary} carries no {@link Primary#fallbackHostname()}.
+     * <p>Helper for the second nested-fallback branch of
+     * {@link #maybeSwitchHost}. Returns {@code null} when {@code primary} is
+     * {@code null}, when {@code primary} is not a {@link Primary}, or when
+     * the {@link Primary} carries no {@link Primary#fallbackHostname()}.
      *
      * @implNote
      * This implementation synthesises the nested {@link Fallback} lazily
@@ -237,8 +227,7 @@ sealed interface MediaHost {
     /**
      * The two operations that may be performed against a CDN host.
      *
-     * @apiNote
-     * Consumed by {@link #routeSelection} to choose between the host's
+     * <p>Consumed by {@link #routeSelection} to choose between the host's
      * upload accepted-type set and its download accepted-type set;
      * {@link #DOWNLOAD} additionally participates in deterministic
      * bucket-based host selection.
@@ -249,8 +238,7 @@ sealed interface MediaHost {
         /**
          * The upload operation.
          *
-         * @apiNote
-         * Route selection picks the first host whose upload media-type
+         * <p>Route selection picks the first host whose upload media-type
          * set contains the requested type.
          */
         @WhatsAppWebExport(moduleName = "WAWebMmsOperationsConst", exports = "default",
@@ -262,8 +250,7 @@ sealed interface MediaHost {
         /**
          * The download operation.
          *
-         * @apiNote
-         * Route selection applies bucket-based matching when the
+         * <p>Route selection applies bucket-based matching when the
          * {@code mms_vcache_aggregation_enabled} AB prop is on, then falls
          * back to a linear scan against the download media-type set.
          */
@@ -277,14 +264,13 @@ sealed interface MediaHost {
     /**
      * The outcome of a single {@link #routeSelection} pass.
      *
-     * @apiNote
-     * Carries the best-matching host for the requested operation, the
+     * <p>Carries the best-matching host for the requested operation, the
      * first fallback-class host found in the connection's host list, and
      * the deterministic bucket that the selected host was matched against.
      * {@link #selectedBucket} is present only when the selected host came
      * from the bucket map ({@link Operation#DOWNLOAD} with a hit on the
-     * explicit bucket entry or the bucket-zero default); for uploads or
-     * for downloads that fell through to the linear scan it is empty.
+     * explicit bucket entry or the bucket-zero default); for uploads or for
+     * downloads that fell through to the linear scan it is empty.
      *
      * @param selectedHost   the selected host, or empty when none matched
      * @param fallbackHost   the fallback host, or empty when none exists
@@ -300,13 +286,13 @@ sealed interface MediaHost {
     }
 
     /**
-     * Picks the best CDN host and fallback host for the given operation
-     * and media type from a parsed host list.
+     * Picks the best CDN host and fallback host for the given operation and
+     * media type from a parsed host list.
      *
-     * @apiNote
-     * Drives the per-attempt host choice inside
-     * {@link MediaConnectionService#upload} and {@link MediaConnectionService#download}.
-     * The selection rules:
+     * <p>Drives the per-attempt host choice inside
+     * {@link MediaConnectionService#upload(MediaProvider, MediaPayload)} and
+     * {@link MediaConnectionService#download(MediaProvider)}. The selection
+     * rules:
      * <ul>
      *   <li>For downloads, try deterministic bucket-based routing first
      *       when {@code vcacheAggregationEnabled} is {@code true}: the
@@ -405,11 +391,10 @@ sealed interface MediaHost {
      * Tests whether {@code host} can serve a download for the specified
      * media type.
      *
-     * @apiNote
-     * Helper for the linear-scan branch of {@link #routeSelection}. The
+     * <p>Helper for the linear-scan branch of {@link #routeSelection}. The
      * media type is normalised through {@link #normalizeDownloadMediaType}
-     * (PTV/newsletter-PTV collapse onto video, product onto image) before
-     * the lookup.
+     * (PTV and newsletter-PTV collapse onto video, product onto image)
+     * before the lookup.
      *
      * @param host      the host to check
      * @param mediaType the media type to check
@@ -426,11 +411,10 @@ sealed interface MediaHost {
      * Tests whether {@code host} can accept an upload for the specified
      * media type.
      *
-     * @apiNote
-     * Helper for the linear-scan branch of {@link #routeSelection}. The
+     * <p>Helper for the linear-scan branch of {@link #routeSelection}. The
      * media type is normalised through {@link #normalizeUploadMediaType}
-     * (PTV collapses onto video, product-catalog-image onto product)
-     * before the lookup.
+     * (PTV collapses onto video, product-catalog-image onto product) before
+     * the lookup.
      *
      * @param host      the host to check
      * @param mediaType the media type to check
@@ -446,8 +430,7 @@ sealed interface MediaHost {
     /**
      * Builds a bucket-to-host map from the host list.
      *
-     * @apiNote
-     * Helper for the deterministic bucket-routing branch of
+     * <p>Helper for the deterministic bucket-routing branch of
      * {@link #routeSelection}.
      *
      * @implNote
@@ -475,8 +458,7 @@ sealed interface MediaHost {
      * Computes the modulo of a base64-encoded string treated as a
      * big-endian byte stream.
      *
-     * @apiNote
-     * Consumed by {@link #routeSelection} to map the encrypted file hash
+     * <p>Consumed by {@link #routeSelection} to map the encrypted file hash
      * to a deterministic download bucket. {@code divisor} is the server's
      * {@code maxBuckets} value.
      *
@@ -515,13 +497,12 @@ sealed interface MediaHost {
     String hostname();
 
     /**
-     * Returns the optional {@code class} attribute advertised by the
-     * server for this host.
+     * Returns the optional {@code class} attribute advertised by the server
+     * for this host.
      *
-     * @apiNote
-     * The {@code class} attribute groups hosts by deployment tier (for
-     * example {@code mms} versus {@code mmg}) and is propagated unchanged
-     * to downstream analytics and request tagging.
+     * <p>The {@code class} attribute groups hosts by deployment tier (for
+     * example {@code mms} versus {@code mmg}) and is propagated unchanged to
+     * downstream analytics and request tagging.
      *
      * @return an {@link Optional} holding the host class, or empty if the
      *         attribute is absent
@@ -533,11 +514,10 @@ sealed interface MediaHost {
     /**
      * Returns the IP addresses the server advertises for this host.
      *
-     * @apiNote
-     * Surfaces both the {@code ip4} and {@code ip6} {@code media_conn}
-     * attributes when present, in that order. Currently unused by
-     * Cobalt's download path (which lets the JVM resolve the hostname);
-     * exposed for callers that want to pin a CDN IP.
+     * <p>Surfaces both the {@code ip4} and {@code ip6} {@code media_conn}
+     * attributes when present, in that order. Currently unused by Cobalt's
+     * download path, which lets the JVM resolve the hostname; exposed for
+     * callers that want to pin a CDN IP.
      *
      * @return an unmodifiable list of IP address strings
      */
@@ -548,8 +528,7 @@ sealed interface MediaHost {
     /**
      * Returns the set of media types this host accepts for downloads.
      *
-     * @apiNote
-     * Defaults to the full set of routable server media types (with the
+     * <p>Defaults to the full set of routable server media types (with the
      * non-CDN-routed types stripped) when the {@code media_conn} response
      * omits the explicit rules.
      *
@@ -562,8 +541,7 @@ sealed interface MediaHost {
     /**
      * Returns the set of media types this host accepts for uploads.
      *
-     * @apiNote
-     * Defaults to the full set of routable server media types (with the
+     * <p>Defaults to the full set of routable server media types (with the
      * non-CDN-routed types stripped) when the {@code media_conn} response
      * omits the explicit rules.
      *
@@ -577,11 +555,10 @@ sealed interface MediaHost {
      * Returns the deterministic download bucket identifiers owned by this
      * host.
      *
-     * @apiNote
-     * Buckets participate in download host selection through
+     * <p>Buckets participate in download host selection through
      * {@link #routeSelection}: the encrypted file hash is reduced modulo
-     * {@code maxBuckets} to pick the bucket, then the owning host is
-     * looked up in the bucket map.
+     * {@code maxBuckets} to pick the bucket, then the owning host is looked
+     * up in the bucket map.
      *
      * @return an unmodifiable list of bucket numbers
      */
@@ -592,11 +569,10 @@ sealed interface MediaHost {
     /**
      * Returns the nested fallback hostname declared by this host, if any.
      *
-     * @apiNote
-     * Only {@link Primary} hosts can advertise a nested fallback;
+     * <p>Only {@link Primary} hosts can advertise a nested fallback;
      * {@link Fallback} hosts always return an empty optional. The nested
      * fallback is rotated to by
-     * {@link MediaConnectionService#selectHost(MediaHost, MediaHost, String, int, boolean)}
+     * {@link DefaultMediaConnectionService#selectHost(MediaHost, MediaHost, String, int, boolean)}
      * when the previous attempt against the selected host failed.
      *
      * @return an {@link Optional} holding the fallback hostname
@@ -609,9 +585,8 @@ sealed interface MediaHost {
      * Tests whether this host accepts a download of the media produced by
      * the given provider.
      *
-     * @apiNote
-     * The provider's media path is normalised (PTV variants collapse onto
-     * video, product onto image) before consulting the host's
+     * <p>The provider's media path is normalised (PTV variants collapse
+     * onto video, product onto image) before consulting the host's
      * accepted-type set.
      *
      * @param provider the media provider whose type to check
@@ -625,8 +600,7 @@ sealed interface MediaHost {
      * Tests whether this host accepts an upload of the media produced by
      * the given provider.
      *
-     * @apiNote
-     * The provider's media path is normalised (PTV collapses onto video,
+     * <p>The provider's media path is normalised (PTV collapses onto video,
      * product-catalog-image onto product) before consulting the host's
      * accepted-type set.
      *
@@ -640,10 +614,9 @@ sealed interface MediaHost {
     /**
      * Normalises a media path for the download accepted-type check.
      *
-     * @apiNote
-     * Folds the type aliases that share a host's download whitelist:
-     * {@link MediaPath#PTV} and {@link MediaPath#NEWSLETTER_PTV} collapse
-     * to {@link MediaPath#VIDEO}, {@link MediaPath#PRODUCT} collapses to
+     * <p>Folds the type aliases that share a host's download whitelist:
+     * {@link MediaPath#PTV} and {@link MediaPath#NEWSLETTER_PTV} collapse to
+     * {@link MediaPath#VIDEO}, {@link MediaPath#PRODUCT} collapses to
      * {@link MediaPath#IMAGE}, and every other type is returned unchanged.
      *
      * @param path the media path to normalise
@@ -662,12 +635,10 @@ sealed interface MediaHost {
     /**
      * Normalises a media path for the upload accepted-type check.
      *
-     * @apiNote
-     * Folds the type aliases that share a host's upload whitelist:
+     * <p>Folds the type aliases that share a host's upload whitelist:
      * {@link MediaPath#PTV} collapses to {@link MediaPath#VIDEO},
      * {@link MediaPath#PRODUCT_CATALOG_IMAGE} collapses to
-     * {@link MediaPath#PRODUCT}, and every other type is returned
-     * unchanged.
+     * {@link MediaPath#PRODUCT}, and every other type is returned unchanged.
      *
      * @param path the media path to normalise
      * @return the normalised media path
@@ -685,11 +656,10 @@ sealed interface MediaHost {
     /**
      * A primary CDN host.
      *
-     * @apiNote
-     * Primary hosts are the preferred endpoints picked by
-     * {@link #routeSelection}. They may advertise a nested fallback
-     * hostname with its own IP list, which the retry loop in
-     * {@link MediaConnectionService#selectHost(MediaHost, MediaHost, String, int, boolean)}
+     * <p>Primary hosts are the preferred endpoints picked by
+     * {@link #routeSelection}. They may advertise a nested fallback hostname
+     * with its own IP list, which the retry loop in
+     * {@link DefaultMediaConnectionService#selectHost(MediaHost, MediaHost, String, int, boolean)}
      * rotates to before falling back to a fallback-class host.
      *
      * @param hostname         the hostname of this host
@@ -751,8 +721,7 @@ sealed interface MediaHost {
     /**
      * A fallback-class CDN host.
      *
-     * @apiNote
-     * Fallback hosts are used as alternate endpoints when the primary
+     * <p>Fallback hosts are used as alternate endpoints when the primary
      * host has exhausted its retry budget. They never carry a nested
      * fallback of their own.
      *

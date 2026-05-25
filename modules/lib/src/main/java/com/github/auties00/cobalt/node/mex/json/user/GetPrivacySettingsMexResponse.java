@@ -18,20 +18,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Decoded reply to the privacy settings fetch query.
+ * Decodes the reply to the privacy settings fetch query.
  *
- * @apiNote Consume after dispatching {@link GetPrivacySettingsMexRequest}.
- * Each {@link Item} holds the {@code privacy_settings.settings} array for
- * one user (the array always carries one element for the authenticated
- * caller); each {@link Item.PrivacySettings.Settings} entry pairs a
- * feature key (such as {@code LAST}, {@code ONLINE}, {@code PROFILE}) with
- * its current setting value (such as {@code all} or {@code contacts}).
+ * <p>Each {@link Item} holds the {@code privacy_settings.settings} array for one user (the array
+ * carries one element for the authenticated caller); each {@link Item.PrivacySettings.Settings} entry
+ * pairs a feature key (such as {@code LAST}, {@code ONLINE}, {@code PROFILE}) with its current
+ * setting value (such as {@code all} or {@code contacts}). Consume this type after dispatching
+ * {@link GetPrivacySettingsMexRequest}.
  *
  * @see GetPrivacySettingsMexRequest
  */
 public final class GetPrivacySettingsMexResponse implements MexOperation.Response.Json {
     /**
-     * The decoded {@code xwa2_fetch_wa_users} array, one entry per user.
+     * Holds the decoded {@code xwa2_fetch_wa_users} array, one entry per user.
      */
     private final List<Item> items;
 
@@ -47,12 +46,11 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
     /**
      * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @apiNote Pass the IQ node received in reply to a stanza dispatched
-     * with {@link GetPrivacySettingsMexRequest#toNode()}.
+     * <p>Pass the IQ node received in reply to a stanza dispatched with
+     * {@link GetPrivacySettingsMexRequest#toNode()}.
      *
      * @param node the IQ reply stanza
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload is missing or malformed
+     * @return the decoded reply, or {@link Optional#empty()} when the payload is missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacySettingsQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -65,8 +63,7 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
     /**
      * Returns the decoded {@code xwa2_fetch_wa_users} entries.
      *
-     * @apiNote A typical reply carries exactly one entry (the authenticated
-     * caller).
+     * <p>A typical reply carries exactly one entry, the authenticated caller.
      *
      * @return the per-user records; may be empty, never {@code null}
      */
@@ -75,28 +72,26 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
     }
 
     /**
-     * A single decoded user record paired with the opaque relay id.
+     * Wraps a single decoded user record paired with the opaque relay identifier.
      *
-     * @apiNote The {@code id} field is the relay's per-row identifier; WA
-     * Web does not display it, but it is preserved on the Cobalt side so
-     * embedders mirroring WA Web's MEX tracing surface can correlate rows.
+     * <p>The {@code id} field is the relay's per-row identifier. WhatsApp Web does not display it, but
+     * Cobalt preserves it so embedders mirroring the MEX tracing surface can correlate rows.
      */
     public static final class Item {
         /**
-         * The decoded {@code privacy_settings} sub-object, possibly {@code null}.
+         * Holds the decoded {@code privacy_settings} sub-object, possibly {@code null}.
          */
         private final PrivacySettings privacySettings;
 
         /**
-         * The {@code id} field carrying the relay's row identifier.
+         * Holds the {@code id} field carrying the relay's row identifier.
          */
         private final String id;
 
         /**
          * Wraps the decoded fields of a user record.
          *
-         * @param privacySettings the decoded {@code privacy_settings}
-         *                        sub-object
+         * @param privacySettings the decoded {@code privacy_settings} sub-object
          * @param id the {@code id} row identifier reported by the relay
          */
         private Item(PrivacySettings privacySettings, String id) {
@@ -107,9 +102,8 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
         /**
          * Returns the decoded {@code privacy_settings} record.
          *
-         * @return the record wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when the relay omitted the
-         *         field
+         * @return the record wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+         *         relay omitted the field
          */
         public Optional<PrivacySettings> privacySettings() {
             return Optional.ofNullable(privacySettings);
@@ -118,28 +112,23 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
         /**
          * Returns the relay-assigned row identifier.
          *
-         * @return the identifier wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when the relay omitted the
-         *         field
+         * @return the identifier wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+         *         relay omitted the field
          */
         public Optional<String> id() {
             return Optional.ofNullable(id);
         }
 
         /**
-         * The {@code privacy_settings} sub-object of an
-         * {@code xwa2_fetch_wa_users} entry.
+         * Wraps the {@code privacy_settings} sub-object of an {@code xwa2_fetch_wa_users} entry.
          *
-         * @apiNote Mirrors the {@code XWA2PrivacySettingsResponse} GraphQL
-         * type. WA Web's
-         * {@code WAWebMexGetPrivacySetting.fetchPrivacySettings} loops the
-         * {@link #settings()} array and dispatches on the {@code feature}
-         * key to populate a typed privacy-setting object; Cobalt exposes
-         * the raw entries for callers to decode.
+         * <p>Exposes the raw per-feature entries for callers to decode; WhatsApp Web instead loops
+         * {@link #settings()} and dispatches on the {@code feature} key to populate a typed
+         * privacy-setting object.
          */
         public static final class PrivacySettings {
             /**
-             * The decoded {@code settings} array of per-feature entries.
+             * Holds the decoded {@code settings} array of per-feature entries.
              */
             private final List<Settings> settings;
 
@@ -162,23 +151,22 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
             }
 
             /**
-             * A single {@code (feature, setting)} pair.
+             * Wraps a single {@code (feature, setting)} pair.
              *
-             * @apiNote {@link #feature()} carries WA Web's enum tokens such
-             * as {@code LAST}, {@code PROFILE}, {@code READRECEIPTS};
-             * {@link #setting()} carries the policy value such as
-             * {@code all}, {@code contacts}, {@code none}, or the special
-             * {@code MYCONTACTSEXCEPT} / {@code MYCONTACTS} tokens WA Web
-             * normalises to {@code contact_blacklist} / {@code contacts}.
+             * <p>{@link #feature()} carries WA enum tokens such as {@code LAST}, {@code PROFILE},
+             * {@code READRECEIPTS}; {@link #setting()} carries the policy value such as {@code all},
+             * {@code contacts}, {@code none}, or the special {@code MYCONTACTSEXCEPT} and
+             * {@code MYCONTACTS} tokens WhatsApp Web normalises to {@code contact_blacklist} and
+             * {@code contacts}.
              */
             public static final class Settings {
                 /**
-                 * The {@code feature} field carrying the enum token.
+                 * Holds the {@code feature} field carrying the enum token.
                  */
                 private final String feature;
 
                 /**
-                 * The {@code setting} field carrying the policy value.
+                 * Holds the {@code setting} field carrying the policy value.
                  */
                 private final String setting;
 
@@ -196,9 +184,8 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
                 /**
                  * Returns the privacy-feature key.
                  *
-                 * @return the feature wrapped in an {@link Optional}, or
-                 *         {@link Optional#empty()} when the relay omitted
-                 *         the field
+                 * @return the feature wrapped in an {@link Optional}, or {@link Optional#empty()} when
+                 *         the relay omitted the field
                  */
                 public Optional<String> feature() {
                     return Optional.ofNullable(feature);
@@ -207,9 +194,8 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
                 /**
                  * Returns the policy value bound to the feature.
                  *
-                 * @return the setting wrapped in an {@link Optional}, or
-                 *         {@link Optional#empty()} when the relay omitted
-                 *         the field
+                 * @return the setting wrapped in an {@link Optional}, or {@link Optional#empty()} when
+                 *         the relay omitted the field
                  */
                 public Optional<String> setting() {
                     return Optional.ofNullable(setting);
@@ -218,14 +204,11 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
                 /**
                  * Decodes a single per-feature entry from a {@link JSONObject}.
                  *
-                 * @apiNote Used by {@link #ofArray(JSONArray)} while
-                 * walking the {@code settings} array; not part of the
-                 * public API.
+                 * <p>Invoked by {@link #ofArray(JSONArray)} while walking the {@code settings} array.
                  *
-                 * @param obj the JSON object to decode, possibly
-                 *            {@code null}
-                 * @return the decoded entry, or {@link Optional#empty()}
-                 *         when {@code obj} is {@code null}
+                 * @param obj the JSON object to decode, possibly {@code null}
+                 * @return the decoded entry, or {@link Optional#empty()} when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<Settings> of(JSONObject obj) {
                     if (obj == null) {
@@ -240,13 +223,10 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
                 /**
                  * Decodes the {@code settings} array of a {@link PrivacySettings}.
                  *
-                 * @apiNote Used by {@link PrivacySettings#of(JSONObject)};
-                 * not part of the public API.
+                 * <p>Invoked by {@link PrivacySettings#of(JSONObject)}.
                  *
-                 * @param arr the JSON array to decode, possibly
-                 *            {@code null}
-                 * @return the decoded entries in source order; empty when
-                 *         {@code arr} is {@code null}
+                 * @param arr the JSON array to decode, possibly {@code null}
+                 * @return the decoded entries in source order; empty when {@code arr} is {@code null}
                  */
                 static List<Settings> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -264,12 +244,10 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
             /**
              * Decodes a {@code privacy_settings} sub-object from a {@link JSONObject}.
              *
-             * @apiNote Used by {@link Item#of(JSONObject)}; not part of the
-             * public API.
+             * <p>Invoked by {@link Item#of(JSONObject)}.
              *
              * @param obj the JSON object to decode, possibly {@code null}
-             * @return the decoded record, or {@link Optional#empty()} when
-             *         {@code obj} is {@code null}
+             * @return the decoded record, or {@link Optional#empty()} when {@code obj} is {@code null}
              */
             static Optional<PrivacySettings> of(JSONObject obj) {
                 if (obj == null) {
@@ -283,14 +261,12 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
             /**
              * Decodes a list of {@code privacy_settings} sub-objects from a {@link JSONArray}.
              *
-             * @apiNote Provided for parity with other {@code ofArray}
-             * helpers; not invoked by the response decoder because each
-             * user record carries a single {@code privacy_settings}
-             * sub-object, not an array.
+             * <p>Provided for parity with other {@code ofArray} helpers; the response decoder does not
+             * invoke it because each user record carries a single {@code privacy_settings} sub-object,
+             * not an array.
              *
              * @param arr the JSON array to decode, possibly {@code null}
-             * @return the decoded records in source order; empty when
-             *         {@code arr} is {@code null}
+             * @return the decoded records in source order; empty when {@code arr} is {@code null}
              */
             static List<PrivacySettings> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -308,12 +284,11 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
         /**
          * Decodes a single user record from a {@link JSONObject}.
          *
-         * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
-         * {@code xwa2_fetch_wa_users} array; not part of the public API.
+         * <p>Invoked by {@link #ofArray(JSONArray)} while walking the {@code xwa2_fetch_wa_users}
+         * array.
          *
          * @param obj the JSON object to decode, possibly {@code null}
-         * @return the decoded record, or {@link Optional#empty()} when
-         *         {@code obj} is {@code null}
+         * @return the decoded record, or {@link Optional#empty()} when {@code obj} is {@code null}
          */
         static Optional<Item> of(JSONObject obj) {
             if (obj == null) {
@@ -328,13 +303,11 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
         /**
          * Decodes the {@code xwa2_fetch_wa_users} array of the MEX payload.
          *
-         * @apiNote Used by the package-level decoder to project the array
-         * nested under {@code data} of the {@code <result>} payload; not
-         * part of the public API.
+         * <p>Invoked by {@link GetPrivacySettingsMexResponse#of(byte[])} to project the array nested
+         * under {@code data} of the {@code <result>} payload.
          *
          * @param arr the JSON array to decode, possibly {@code null}
-         * @return the decoded records in source order; empty when
-         *         {@code arr} is {@code null}
+         * @return the decoded records in source order; empty when {@code arr} is {@code null}
          */
         static List<Item> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -352,12 +325,12 @@ public final class GetPrivacySettingsMexResponse implements MexOperation.Respons
     /**
      * Decodes the {@code <result>} payload bytes into a {@link GetPrivacySettingsMexResponse}.
      *
-     * @implNote This implementation projects {@code data.xwa2_fetch_wa_users};
-     * a missing {@code data} envelope yields {@link Optional#empty()}.
+     * <p>The payload is projected from {@code data.xwa2_fetch_wa_users}. A missing {@code data}
+     * envelope yields {@link Optional#empty()}.
      *
      * @param json the raw {@code <result>} payload bytes
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload does not parse or lacks the {@code data} envelope
+     * @return the decoded reply, or {@link Optional#empty()} when the payload does not parse or lacks
+     *         the {@code data} envelope
      */
     private static Optional<GetPrivacySettingsMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

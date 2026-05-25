@@ -30,21 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link StarMessageHandler}'s parity with
- * {@code WAWebStarMessageSync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy-path star/unstar flow, the
- * orphan branch when the message is unknown, the malformed-index
- * branches (missing slots, empty strings), the malformed-value branch
- * when the action is not a {@code StarAction}, the {@code REMOVE}
- * unsupported branch, and the default conflict-resolution tiebreaker.
- *
- * @implNote
- * The fixture seeds a single peer chat and an inbound message keyed
- * under {@link #MESSAGE_ID}; tests that exercise the unstar branch
- * pre-flip the starred flag before calling the handler so they can
- * observe the transition back to {@code false}.
+ * Verifies {@link StarMessageHandler}: applying an incoming star mutation
+ * and asserting the message store side-effect. The fixture seeds a single
+ * peer chat and an inbound message keyed under {@link #MESSAGE_ID}; unstar
+ * tests pre-flip the starred flag so they can observe the transition back
+ * to {@code false}.
  */
 @DisplayName("StarMessageHandler")
 class StarMessageHandlerTest {
@@ -55,37 +45,14 @@ class StarMessageHandlerTest {
 
     private TestWhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so seeded
-     * chats and messages do not leak between cases.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given star payload into a trusted {@code SET} mutation.
-     *
-     * @apiNote
-     * The five-slot index follows WA Web's
-     * {@code ["star", chatJid, messageId, fromMe, participant]} layout;
-     * tests passing {@code "0"} for {@code fromMe} and {@code participant}
-     * exercise the 1:1 chat branch.
-     *
-     * @param starred     the new starred flag
-     * @param chatJid     the remote chat JID
-     * @param messageId   the message id
-     * @param fromMe      the {@code fromMe} flag as {@code "0"} or {@code "1"}
-     * @param participant the participant JID string or {@code "0"}
-     * @param ts          the mutation timestamp
-     * @return the trusted mutation
-     */
+    // Five-slot index ["star", chatJid, messageId, fromMe, participant];
+    // "0" for fromMe and participant selects the 1:1 chat branch.
     private static DecryptedMutation.Trusted starMutation(boolean starred, Jid chatJid, String messageId, String fromMe, String participant, Instant ts) {
         var value = new SyncActionValueBuilder()
                 .timestamp(ts)
@@ -95,15 +62,7 @@ class StarMessageHandlerTest {
         return new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, 2);
     }
 
-    /**
-     * Seeds the peer chat with an inbound message keyed under
-     * {@link #MESSAGE_ID}.
-     *
-     * @apiNote
-     * Used by the happy-path tests so the handler's
-     * {@code findMessageById} lookup returns a populated message;
-     * orphan-branch tests deliberately skip this step.
-     */
+    // Orphan-branch tests deliberately skip this seed so findMessageById misses.
     private void seedMessage() {
         var chat = client.store().addNewChat(PEER);
         var key = new MessageKeyBuilder()

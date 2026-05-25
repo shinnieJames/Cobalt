@@ -10,30 +10,25 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed inbound reply hierarchy for the {@code WASmaxBizCtwaActionBannerSuggestionRPC}
- * SMAX receive RPC.
- *
- * @apiNote
+ * Models the sealed inbound reply hierarchy for the
+ * {@code WASmaxBizCtwaActionBannerSuggestionRPC} SMAX receive RPC.
+ * <p>
  * Carries the single {@link Notification} permit because the RPC is
- * {@code Receive}-shape (server-pushed only, no outbound counterpart).
- * The hierarchy mirrors the WA Web pipeline in which
- * {@code WAWebHandleBusinessNotification} routes
- * {@code <notification type="business">} stanzas bearing a
- * {@code <ctwa_suggestion/>} child through
- * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion}, which in turn
- * surfaces the click-to-WhatsApp "suggested banner" panel.
+ * {@link SmaxOperation.Response}-shape (server-pushed only, with no outbound
+ * counterpart). The notification surfaces the click-to-WhatsApp "suggested
+ * banner" panel for a {@code <notification type="business">} stanza bearing a
+ * {@code <ctwa_suggestion/>} child.
  */
 public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Response
         permits SmaxBannerSuggestionResponse.Notification {
 
     /**
      * Parses an inbound CTWA-banner-suggestion notification.
-     *
-     * @apiNote
-     * Equivalent to {@link Notification#of(Node)}; the factory exists at
-     * the sealed-interface level so callers can reach it without naming
-     * the permitted concrete type. Returns empty when the stanza shape
-     * does not match.
+     * <p>
+     * Equivalent to {@link Notification#of(Node)}; the factory exists at the
+     * sealed-interface level so callers can reach it without naming the
+     * permitted concrete type. Returns empty when the stanza shape does not
+     * match.
      *
      * @param node the inbound notification stanza received from the relay; never {@code null}
      * @return an {@link Optional} carrying the parsed notification, or empty when the stanza does not match
@@ -47,65 +42,61 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
     }
 
     /**
-     * The server-pushed {@code Notification} variant carrying the banner
+     * Models the server-pushed {@code Notification} variant carrying the banner
      * suggestion plus envelope echoes.
-     *
-     * @apiNote
-     * Wraps the parsed {@code <notification type="business">} envelope
-     * (server JID, optional target user JID) together with the
-     * {@code target_entity_id} carried on the {@code <ctwa_suggestion/>}
-     * child and the optional {@link SmaxBannerSuggestionBanner banner}
-     * grandchild. Consumers branch on {@link #banner()}: an absent banner
-     * tells the WA Web pipeline to log a missing-banner-data warning,
-     * a present banner with {@link SmaxBannerSuggestionFalseTrueFlag#TRUE
-     * revoked=true} flips the result into a "revoked banner" dismissal,
-     * and a present non-revoked banner drives the full rich-content
-     * panel.
+     * <p>
+     * Wraps the parsed {@code <notification type="business">} envelope (server
+     * JID, optional target user JID) together with the {@code target_entity_id}
+     * carried on the {@code <ctwa_suggestion/>} child and the optional
+     * {@link SmaxBannerSuggestionBanner banner} grandchild. Consumers branch on
+     * {@link #banner()}: an absent banner is treated as missing banner data, a
+     * present banner with {@link SmaxBannerSuggestionFalseTrueFlag#TRUE
+     * revoked=true} is dismissed, and a present non-revoked banner drives the
+     * full rich-content panel.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionServerNotificationMixin")
     final class Notification implements SmaxBannerSuggestionResponse {
         /**
-         * The {@code from} attribute, always the literal
+         * Holds the {@code from} attribute, always the literal
          * {@code s.whatsapp.net} server JID.
          */
         private final Jid from;
 
         /**
-         * The optional {@code to} user JID; absent when the relay
+         * Holds the optional {@code to} user JID; absent when the relay
          * broadcasts to every linked device.
          */
         private final Jid to;
 
         /**
-         * The {@code type} attribute, always the literal
+         * Holds the {@code type} attribute, always the literal
          * {@code "business"}.
          */
         private final String type;
 
         /**
-         * The {@code target_entity_id} attribute on the
-         * {@code <ctwa_suggestion/>} child, identifying the source CTWA
-         * entity (ad, account, message thread). The trailing
-         * {@code -<bannerType>} suffix is used by WA Web to discriminate
-         * between {@code recreate_ad} and {@code manage_ads} banner kinds.
+         * Holds the {@code target_entity_id} attribute on the
+         * {@code <ctwa_suggestion/>} child, identifying the source CTWA entity
+         * (ad, account, message thread). The trailing {@code -<bannerType>}
+         * suffix discriminates between {@code recreate_ad} and
+         * {@code manage_ads} banner kinds.
          */
         private final String targetEntityId;
 
         /**
-         * The optional {@code <banner/>} grandchild; absent when the
-         * relay omitted the payload.
+         * Holds the optional {@code <banner/>} grandchild; absent when the relay
+         * omitted the payload.
          */
         private final SmaxBannerSuggestionBanner banner;
 
         /**
-         * Constructs a notification from already-validated envelope and
-         * payload values.
-         *
-         * @apiNote
-         * Cobalt callers normally obtain a notification by parsing a
-         * stanza via {@link #of(Node)}; this constructor is exposed for
-         * tests and for hand-built fixtures.
+         * Constructs a notification from already-validated envelope and payload
+         * values.
+         * <p>
+         * Callers normally obtain a notification by parsing a stanza via
+         * {@link #of(Node)}; this constructor is exposed for tests and for
+         * hand-built fixtures.
          *
          * @param from           the server JID; never {@code null}
          * @param to             the optional target user JID; may be {@code null}
@@ -124,10 +115,9 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
 
         /**
          * Returns the server JID that emitted the notification.
-         *
-         * @apiNote
-         * Always the literal {@code s.whatsapp.net} JID; the parser
-         * rejects any other value before this getter is reachable.
+         * <p>
+         * Always the literal {@code s.whatsapp.net} JID; the parser rejects any
+         * other value before this getter is reachable.
          *
          * @return the JID; never {@code null}
          */
@@ -137,10 +127,9 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
 
         /**
          * Returns the optional target user JID.
-         *
-         * @apiNote
-         * Empty when the relay broadcasts the notification to every
-         * linked device of the account.
+         * <p>
+         * Empty when the relay broadcasts the notification to every linked
+         * device of the account.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -150,10 +139,9 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
 
         /**
          * Returns the notification type literal.
-         *
-         * @apiNote
-         * Always the literal {@code "business"}; the parser rejects any
-         * other value before this getter is reachable.
+         * <p>
+         * Always the literal {@code "business"}; the parser rejects any other
+         * value before this getter is reachable.
          *
          * @return the type; never {@code null}
          */
@@ -163,12 +151,10 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
 
         /**
          * Returns the CTWA target-entity identifier.
-         *
-         * @apiNote
-         * Identifies the source CTWA ad / account / thread; WA Web
-         * splits on {@code "-"} and uses the trailing suffix to pick the
-         * banner-kind logging slug
-         * ({@code parseCTWASuggestion-*-${bannerType}}).
+         * <p>
+         * Identifies the source CTWA ad, account, or thread; consumers split on
+         * {@code "-"} and use the trailing suffix to pick the banner-kind
+         * logging slug.
          *
          * @return the id; never {@code null}
          */
@@ -178,11 +164,10 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
 
         /**
          * Returns the optional banner projection.
-         *
-         * @apiNote
+         * <p>
          * Empty when the relay omitted the {@code <banner/>} grandchild;
-         * consumers treat that as a "missing banner data" telemetry
-         * event and skip rendering.
+         * consumers treat that as a missing-banner-data event and skip
+         * rendering.
          *
          * @return an {@link Optional} carrying the banner, or empty
          */
@@ -193,24 +178,19 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
         /**
          * Parses a notification from a {@code <notification type="business">}
          * stanza.
+         * <p>
+         * Returns empty when the stanza tag is wrong, when the {@code from}
+         * attribute is not the literal {@code s.whatsapp.net} server JID, when
+         * the {@code type} attribute is not the literal {@code "business"}, when
+         * the mandatory {@code <ctwa_suggestion/>} child or its
+         * {@code target_entity_id} attribute is missing, or when the optional
+         * {@code <banner/>} grandchild is present but fails to parse.
          *
-         * @apiNote
-         * Returns empty when the stanza tag is wrong, when the
-         * {@code from} attribute is not the literal {@code s.whatsapp.net}
-         * server JID, when the {@code type} attribute is not the literal
-         * {@code "business"}, when the mandatory {@code <ctwa_suggestion/>}
-         * child or its {@code target_entity_id} attribute is missing, or
-         * when the optional {@code <banner/>} grandchild is present but
-         * fails to parse.
-         *
-         * @implNote
-         * This implementation matches the WA Web parser ordering: the
-         * literal {@code from} server-JID check fires before the
-         * {@link Jid} resolution, and the literal {@code type="business"}
-         * check fires before the {@code <ctwa_suggestion/>} child lookup.
-         * The optional {@code to} attribute is fetched after the
+         * @implNote This implementation checks the literal {@code from}
+         * server-JID before the {@link Jid} resolution and checks the literal
+         * {@code type="business"} before the {@code <ctwa_suggestion/>} child
+         * lookup; the optional {@code to} attribute is fetched after the
          * {@code type} check and never causes parse failure.
-         *
          * @param node the candidate {@code <notification/>} stanza; never {@code null}
          * @return an {@link Optional} carrying the parsed notification, or empty when parsing fails
          * @throws NullPointerException if {@code node} is {@code null}
@@ -260,14 +240,13 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
         }
 
         /**
-         * Compares this notification to {@code obj} for structural equality
-         * on the envelope echoes and the banner projection.
+         * Compares this notification to {@code obj} for structural equality on
+         * the envelope echoes and the banner projection.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when {@code obj} is a {@link Notification}
-         *         with matching {@link #from()}, {@link #to()},
-         *         {@link #type()}, {@link #targetEntityId()}, and
-         *         {@link #banner()}
+         *         with matching {@link #from()}, {@link #to()}, {@link #type()},
+         *         {@link #targetEntityId()}, and {@link #banner()}
          */
         @Override
         public boolean equals(Object obj) {
@@ -296,8 +275,8 @@ public sealed interface SmaxBannerSuggestionResponse extends SmaxOperation.Respo
         }
 
         /**
-         * Returns a debug-friendly rendering naming the envelope echoes
-         * and the banner.
+         * Returns a debug-friendly rendering naming the envelope echoes and the
+         * banner.
          *
          * @return a record-style string with all five slot values
          */

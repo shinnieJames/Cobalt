@@ -30,24 +30,18 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link DeleteMessageForMeHandler} adapter for
- * {@code WAWebDeleteMessageForMeSync}.
+ * Exercises the {@link DeleteMessageForMeHandler} adapter for the
+ * {@code deleteMessageForMe} app-state sync action across metadata, the SET
+ * happy path, the orphan and malformed branches, the REMOVE rejection, the
+ * deleteMedia-driven conflict matrix (intentionally timestamp-independent on
+ * this handler), and the outbound builder helper.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code deleteMessageForMe}
- * app-state sync action across metadata, the SET happy path, the
- * orphan and malformed branches, the REMOVE rejection and the
- * deleteMedia-driven conflict matrix that is intentionally
- * timestamp-independent on this handler.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so each test starts from a clean single-device state. The
- * {@code seedMessage} helper installs a single
- * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} with a
- * fixed {@code MESSAGE_ID} so the orphan and removed paths can be
- * exercised without seeding history.
+ * <p>Each test runs against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * via {@link TestWhatsAppClient}, so it starts from a clean single-device state.
+ * The {@code seedMessage} helper installs a single
+ * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} keyed on a fixed
+ * {@code MESSAGE_ID} so the orphan and removed paths can be exercised without
+ * seeding history.
  */
 @DisplayName("DeleteMessageForMeHandler")
 class DeleteMessageForMeHandlerTest {

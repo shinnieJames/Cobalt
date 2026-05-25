@@ -15,16 +15,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction of platform-specific {@code <config>} payloads for
+ * Represents the sealed disjunction of platform-specific {@code <config>} payloads carried by a
  * {@link SmaxPushConfigSetSetVariant.Config}.
  *
- * @apiNote
- * Mirrors WA Web's {@code WASmaxOutPushConfigConfigMixins} branch
- * selector: one variant per supported push platform. Embedders pick the
- * variant matching their notification backend (Web Push, APNs, FCM-style
- * Android, WNS, FB, Enterprise) and pass the resulting
- * {@link SmaxPushConfigSetConfigVariant} into
- * {@link SmaxPushConfigSetSetVariant.Config}.
+ * <p>Each variant maps to one supported push platform: Facebook ({@link FbConfig}), Android
+ * ({@link AndroidConfig}), APNs/iOS ({@link AppleConfig}), Windows Notification Service
+ * ({@link WnsConfig}), enterprise deployments ({@link EnterpriseConfig}), and W3C Web Push
+ * ({@link WebConfig}). The caller picks the variant matching its notification backend and passes
+ * it to {@link SmaxPushConfigSetSetVariant.Config}, which materialises it via {@link #toNode()}.
  */
 public sealed interface SmaxPushConfigSetConfigVariant
         permits SmaxPushConfigSetConfigVariant.FbConfig, SmaxPushConfigSetConfigVariant.AndroidConfig,
@@ -32,51 +30,47 @@ public sealed interface SmaxPushConfigSetConfigVariant
         SmaxPushConfigSetConfigVariant.EnterpriseConfig, SmaxPushConfigSetConfigVariant.WebConfig {
 
     /**
-     * Builds the {@code <config platform=...>} child node.
+     * Builds the {@code <config platform=...>} child node for this variant.
      *
-     * @apiNote
-     * Invoked by {@link SmaxPushConfigSetSetVariant.Config#toNode()} to
-     * materialise the variant into the outbound stanza.
+     * <p>{@link SmaxPushConfigSetSetVariant.Config#toNode()} calls this method to materialise the
+     * variant into the outbound stanza.
      *
-     * @return the {@link Node}
+     * @implSpec Implementations must return a single {@link Node} whose description is
+     * {@code config} and whose {@code platform} attribute identifies the push backend.
+     * @return the {@link Node} for this variant
      */
     Node toNode();
 
     /**
-     * The Facebook-client {@code <config platform="fb">} variant.
+     * Represents the Facebook-client {@code <config platform="fb">} variant.
      *
-     * @apiNote
-     * Registers a Facebook-app push channel; carries the FB app id and
-     * device id with an optional FB user id.
+     * <p>Registers a Facebook-app push channel, carrying the FB app id and device id with an
+     * optional FB user id.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigFBClientMixin")
     final class FbConfig implements SmaxPushConfigSetConfigVariant {
         /**
-         * The mandatory {@code appid} attribute.
+         * Holds the mandatory {@code appid} attribute.
          */
         private final String configAppid;
 
         /**
-         * The mandatory {@code deviceid} attribute.
+         * Holds the mandatory {@code deviceid} attribute.
          */
         private final String configDeviceid;
 
         /**
-         * The optional {@code fbid} attribute.
+         * Holds the optional {@code fbid} attribute.
          */
         private final String configFbid;
 
         /**
-         * Constructs a Facebook-client config.
-         *
-         * @apiNote
-         * Used directly by embedders mirroring the FB-client push
-         * pipeline.
+         * Constructs a Facebook-client config from its three attributes.
          *
          * @param configAppid    the {@code appid} attribute
          * @param configDeviceid the {@code deviceid} attribute
          * @param configFbid     the optional {@code fbid} attribute
-         * @throws NullPointerException if any required argument is
+         * @throws NullPointerException if {@code configAppid} or {@code configDeviceid} is
          *                              {@code null}
          */
         public FbConfig(String configAppid, String configDeviceid, String configFbid) {
@@ -88,9 +82,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the {@code appid} attribute.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the FB app id.
-         *
          * @return the appid
          */
         public String configAppid() {
@@ -99,9 +90,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
 
         /**
          * Returns the {@code deviceid} attribute.
-         *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the FB device id.
          *
          * @return the device id
          */
@@ -112,10 +100,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the optional {@code fbid} attribute.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to optionally populate the FB user
-         * id.
-         *
          * @return an {@link Optional} carrying the FB id
          */
         public Optional<String> configFbid() {
@@ -123,13 +107,12 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config platform="fb">} node, emitting {@code fbid} only when present.
          *
-         * @implNote
-         * This implementation hard-codes {@code platform="fb"} per the
-         * {@code WASmaxOutPushConfigFBClientMixin.mergeFBClientMixin}
-         * fixture and emits the optional {@code fbid} attribute only
+         * @implNote This implementation hard-codes {@code platform="fb"} per the
+         * {@code mergeFBClientMixin} fixture and emits the optional {@code fbid} attribute only
          * when non-null.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigFBClientMixin",
@@ -148,10 +131,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this config to another object for equality on its three attributes.
          *
-         * @implNote
-         * This implementation compares the three carried attributes.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link FbConfig} with equal attributes
          */
         @Override
         public boolean equals(Object obj) {
@@ -168,10 +151,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the three carried attributes.
          *
-         * @implNote
-         * This implementation hashes the three carried attributes.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -179,11 +161,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this config.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -194,31 +174,26 @@ public sealed interface SmaxPushConfigSetConfigVariant
     }
 
     /**
-     * The Android-client {@code <config>} variant.
+     * Represents the Android-client {@code <config>} variant.
      *
-     * @apiNote
-     * Carries a list of per-group mute items; the relay uses the list to
-     * suppress push deliveries for muted groups on the Android
-     * notification channel.
+     * <p>Carries a list of per-group mute items; the relay uses the list to suppress push
+     * deliveries for muted groups on the Android notification channel.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigAndroidClientMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigAndroidClientConfigMixin")
     final class AndroidConfig implements SmaxPushConfigSetConfigVariant {
         /**
-         * The list of {@code <item jid mute/>} mute entries.
+         * Holds the list of {@code <item jid mute/>} mute entries.
          */
         private final List<AndroidMuteItem> itemArgs;
 
         /**
-         * Constructs an Android-client config.
+         * Constructs an Android-client config from its mute items.
          *
-         * @apiNote
-         * The supplied list is defensively copied to keep the variant
-         * immutable.
+         * <p>The supplied list is defensively copied to keep the variant immutable.
          *
          * @param itemArgs the mute items
-         * @throws NullPointerException if {@code itemArgs} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code itemArgs} is {@code null}
          */
         public AndroidConfig(List<AndroidMuteItem> itemArgs) {
             Objects.requireNonNull(itemArgs, "itemArgs cannot be null");
@@ -228,23 +203,18 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the mute items.
          *
-         * @apiNote
-         * Exposed for test and audit code; the list is unmodifiable.
-         *
-         * @return an unmodifiable {@link List} of
-         *         {@link AndroidMuteItem}
+         * @return an unmodifiable {@link List} of {@link AndroidMuteItem}
          */
         public List<AndroidMuteItem> itemArgs() {
             return itemArgs;
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config>} node with one {@code <item>} grandchild per mute entry.
          *
-         * @implNote
-         * This implementation emits one {@code <item>} grandchild per
-         * entry under the single {@code <config>} parent, mirroring the
-         * {@code mergeAndroidClientMixin} fixture.
+         * @implNote This implementation emits one {@code <item>} grandchild per entry under the
+         * single {@code <config>} parent, mirroring the {@code mergeAndroidClientMixin} fixture.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAndroidClientMixin",
@@ -262,10 +232,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this config to another object for equality on the mute-items list.
          *
-         * @implNote
-         * This implementation compares the items list.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link AndroidConfig} with an equal list
          */
         @Override
         public boolean equals(Object obj) {
@@ -280,10 +250,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the mute-items list.
          *
-         * @implNote
-         * This implementation hashes the items list.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -291,11 +260,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this config.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -303,35 +270,29 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * A single {@code <item jid mute/>} mute entry carried by an
+         * Represents a single {@code <item jid mute/>} mute entry carried by an
          * {@link AndroidConfig}.
          *
-         * @apiNote
-         * Pairs a group {@link Jid} with the numeric mute marker the
-         * relay forwards to the Android notification channel.
+         * <p>Pairs a group {@link Jid} with the numeric mute marker the relay forwards to the
+         * Android notification channel.
          */
         public static final class AndroidMuteItem {
             /**
-             * The group {@link Jid} being muted.
+             * Holds the group {@link Jid} being muted.
              */
             private final Jid itemJid;
 
             /**
-             * The numeric mute marker.
+             * Holds the numeric mute marker.
              */
             private final long itemMute;
 
             /**
-             * Constructs a mute item.
-             *
-             * @apiNote
-             * Used directly by embedders building the
-             * {@link AndroidConfig} list.
+             * Constructs a mute item from a group JID and a mute marker.
              *
              * @param itemJid  the group {@link Jid}
              * @param itemMute the mute marker
-             * @throws NullPointerException if {@code itemJid} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code itemJid} is {@code null}
              */
             public AndroidMuteItem(Jid itemJid, long itemMute) {
                 this.itemJid = Objects.requireNonNull(itemJid, "itemJid cannot be null");
@@ -340,10 +301,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
 
             /**
              * Returns the group {@link Jid}.
-             *
-             * @apiNote
-             * Used by {@link #toNode()} to populate the {@code jid}
-             * attribute.
              *
              * @return the {@link Jid}
              */
@@ -354,10 +311,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
             /**
              * Returns the mute marker.
              *
-             * @apiNote
-             * Used by {@link #toNode()} to populate the {@code mute}
-             * attribute.
-             *
              * @return the marker
              */
             public long itemMute() {
@@ -367,14 +320,8 @@ public sealed interface SmaxPushConfigSetConfigVariant
             /**
              * Builds the {@code <item jid mute/>} child node.
              *
-             * @apiNote
-             * Used by {@link AndroidConfig#toNode()} to assemble the
-             * surrounding {@code <config>} payload.
-             *
-             * @implNote
-             * This implementation matches the
-             * {@code makeAndroidClientItem} fixture verbatim.
-             *
+             * @implNote This implementation matches the {@code makeAndroidClientItem} fixture
+             * verbatim.
              * @return the {@link Node}
              */
             @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAndroidClientMixin",
@@ -389,11 +336,11 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this item to another object for equality on the JID and mute marker.
              *
-             * @implNote
-             * This implementation compares both the JID and the mute
-             * marker.
+             * @param obj the object to compare against
+             * @return {@code true} when {@code obj} is an {@link AndroidMuteItem} with an equal
+             *         JID and marker
              */
             @Override
             public boolean equals(Object obj) {
@@ -409,11 +356,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from the JID and mute marker.
              *
-             * @implNote
-             * This implementation hashes both fields via
-             * {@link Objects#hash(Object...)}.
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -421,11 +366,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering of this item.
              *
-             * @implNote
-             * This implementation mirrors the record-like rendering
-             * used across the {@code Smax*} stanza family.
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -436,160 +379,151 @@ public sealed interface SmaxPushConfigSetConfigVariant
     }
 
     /**
-     * The Apple-client {@code <config>} variant.
+     * Represents the Apple-client {@code <config>} variant.
      *
-     * @apiNote
-     * A thick record of APNs/iOS-specific attributes: device token, VoIP
-     * token, NSE (Notification Service Extension) flags, Apple Watch
-     * pairing, plus the per-chat preference list. Embedders mirroring
-     * the iOS client populate the full set; most other embedders can
-     * skip it.
+     * <p>Carries the full set of APNs/iOS-specific attributes: device token, VoIP token,
+     * Notification Service Extension flags, Apple Watch pairing, and the per-chat preference list.
+     * Callers mirroring the iOS client populate the complete set; callers on other platforms pick a
+     * different variant.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigAppleClientMixin")
     final class AppleConfig implements SmaxPushConfigSetConfigVariant {
         /**
-         * The mandatory {@code platform} attribute (typically one of
-         * {@code "iphone"} or {@code "ipad"}).
+         * Holds the mandatory {@code platform} attribute, typically {@code "iphone"} or
+         * {@code "ipad"}.
          */
         private final String configPlatform;
 
         /**
-         * Whether the {@code version="2"} marker is set.
+         * Holds whether the {@code version="2"} marker is set.
          */
         private final boolean hasConfigVersion2;
 
         /**
-         * The optional {@code id} attribute.
+         * Holds the optional {@code id} attribute.
          */
         private final String configId;
 
         /**
-         * The optional {@code voip} attribute carrying the VoIP token.
+         * Holds the optional {@code voip} attribute carrying the VoIP token.
          */
         private final String configVoip;
 
         /**
-         * The mandatory {@code preview} attribute.
+         * Holds the mandatory {@code preview} attribute.
          */
         private final String configPreview;
 
         /**
-         * The mandatory {@code default} attribute.
+         * Holds the mandatory {@code default} attribute.
          */
         private final String configDefault;
 
         /**
-         * The mandatory {@code groups} attribute.
+         * Holds the mandatory {@code groups} attribute.
          */
         private final String configGroups;
 
         /**
-         * The mandatory {@code call} attribute.
+         * Holds the mandatory {@code call} attribute.
          */
         private final String configCall;
 
         /**
-         * The optional {@code status_sound} attribute.
+         * Holds the optional {@code status_sound} attribute.
          */
         private final String configStatusSound;
 
         /**
-         * The mandatory {@code lg} (language) attribute.
+         * Holds the mandatory {@code lg} (language) attribute.
          */
         private final String configLg;
 
         /**
-         * The mandatory {@code lc} (locale) attribute.
+         * Holds the mandatory {@code lc} (locale) attribute.
          */
         private final String configLc;
 
         /**
-         * The optional {@code background_location} attribute.
+         * Holds the optional {@code background_location} attribute.
          */
         private final String configBackgroundLocation;
 
         /**
-         * The optional {@code nse_ver} attribute.
+         * Holds the optional {@code nse_ver} attribute.
          */
         private final String configNseVer;
 
         /**
-         * The optional {@code nse_call} attribute.
+         * Holds the optional {@code nse_call} attribute.
          */
         private final String configNseCall;
 
         /**
-         * The optional {@code nse_read} attribute.
+         * Holds the optional {@code nse_read} attribute.
          */
         private final String configNseRead;
 
         /**
-         * The optional {@code nse_retry} attribute.
+         * Holds the optional {@code nse_retry} attribute.
          */
         private final String configNseRetry;
 
         /**
-         * The optional {@code reg_push} attribute.
+         * Holds the optional {@code reg_push} attribute.
          */
         private final String configRegPush;
 
         /**
-         * The optional {@code pkey} attribute.
+         * Holds the optional {@code pkey} attribute.
          */
         private final String configPkey;
 
         /**
-         * The mandatory {@code voip_payload_type} attribute.
+         * Holds the mandatory {@code voip_payload_type} attribute.
          */
         private final String configVoipPayloadType;
 
         /**
-         * The optional {@code settings} attribute.
+         * Holds the optional {@code settings} attribute.
          */
         private final Long configSettings;
 
         /**
-         * The optional {@code app_mute} attribute.
+         * Holds the optional {@code app_mute} attribute.
          */
         private final Long configAppMute;
 
         /**
-         * The optional {@code apple_watch_id} attribute.
+         * Holds the optional {@code apple_watch_id} attribute.
          */
         private final String configAppleWatchId;
 
         /**
-         * The optional {@code apple_watch_pkey} attribute.
+         * Holds the optional {@code apple_watch_pkey} attribute.
          */
         private final String configAppleWatchPkey;
 
         /**
-         * The per-chat {@link AppleItem} entries.
+         * Holds the per-chat {@link AppleItem} entries.
          */
         private final List<AppleItem> itemArgs;
 
         /**
-         * Constructs an Apple-client config.
-         *
-         * @apiNote
-         * Used by embedders mirroring the iOS push pipeline; non-iOS
-         * embedders pick a different variant.
+         * Constructs an Apple-client config from the full set of APNs attributes.
          *
          * @param configPlatform           the platform marker
-         * @param hasConfigVersion2        whether the
-         *                                 {@code version="2"} marker is
-         *                                 set
+         * @param hasConfigVersion2        whether the {@code version="2"} marker is set
          * @param configId                 the optional id
          * @param configVoip               the optional voip token
          * @param configPreview            the preview marker
          * @param configDefault            the default marker
          * @param configGroups             the groups marker
          * @param configCall               the call marker
-         * @param configStatusSound        the optional status-sound
-         *                                 marker
+         * @param configStatusSound        the optional status-sound marker
          * @param configLg                 the language tag
          * @param configLc                 the locale tag
-         * @param configBackgroundLocation the optional bg-location marker
+         * @param configBackgroundLocation the optional background-location marker
          * @param configNseVer             the optional NSE version
          * @param configNseCall            the optional NSE call marker
          * @param configNseRead            the optional NSE read marker
@@ -602,8 +536,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
          * @param configAppleWatchId       the optional Apple Watch id
          * @param configAppleWatchPkey     the optional Apple Watch pkey
          * @param itemArgs                 the per-item entries
-         * @throws NullPointerException if any required argument is
-         *                              {@code null}
+         * @throws NullPointerException if any mandatory argument is {@code null}
          */
         public AppleConfig(String configPlatform, boolean hasConfigVersion2,
                            String configId, String configVoip,
@@ -646,9 +579,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the platform marker.
          *
-         * @apiNote
-         * Distinguishes {@code iphone} from {@code ipad} on the relay
-         * side; embedders pass the marker matching their device family.
+         * <p>Distinguishes {@code iphone} from {@code ipad} on the relay side.
          *
          * @return the marker
          */
@@ -657,11 +588,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns whether {@code version="2"} is set.
+         * Returns whether the {@code version="2"} marker is set.
          *
-         * @apiNote
-         * Toggles between the legacy and the modern v2 fixture; modern
-         * embedders set this to {@code true}.
+         * <p>Selects between the legacy and the modern v2 fixture.
          *
          * @return {@code true} when set
          */
@@ -670,11 +599,8 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional id.
-         *
-         * @apiNote
-         * Cobalt embedders normally leave this null; the relay only
-         * surfaces it for legacy iOS variants.
+         * Returns the optional {@code id} attribute, surfaced by the relay only for legacy iOS
+         * variants.
          *
          * @return an {@link Optional} carrying the id
          */
@@ -683,11 +609,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional voip token.
-         *
-         * @apiNote
-         * Required by embedders that route VoIP wake-ups through APNs;
-         * leave null when VoIP is disabled.
+         * Returns the optional VoIP token, required when VoIP wake-ups are routed through APNs.
          *
          * @return an {@link Optional} carrying the token
          */
@@ -696,11 +618,8 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the preview marker.
-         *
-         * @apiNote
-         * Controls whether the relay attaches the message preview to the
-         * APNs payload; embedders mirror the iOS Settings toggle.
+         * Returns the preview marker, controlling whether the relay attaches the message preview
+         * to the APNs payload.
          *
          * @return the marker
          */
@@ -709,10 +628,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the default marker.
-         *
-         * @apiNote
-         * Carries the default chat-notification mode.
+         * Returns the default marker carrying the default chat-notification mode.
          *
          * @return the marker
          */
@@ -721,10 +637,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the groups marker.
-         *
-         * @apiNote
-         * Carries the default group-notification mode.
+         * Returns the groups marker carrying the default group-notification mode.
          *
          * @return the marker
          */
@@ -733,10 +646,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the call marker.
-         *
-         * @apiNote
-         * Carries the default call-notification mode.
+         * Returns the call marker carrying the default call-notification mode.
          *
          * @return the marker
          */
@@ -745,11 +655,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional status-sound marker.
-         *
-         * @apiNote
-         * Used by embedders that surface a custom status-notification
-         * sound; leave null to fall back to the system default.
+         * Returns the optional status-sound marker; absence falls back to the system default.
          *
          * @return an {@link Optional} carrying the marker
          */
@@ -758,11 +664,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the language tag.
-         *
-         * @apiNote
-         * Picks the language used by the relay when localising
-         * notification text.
+         * Returns the language tag the relay uses when localising notification text.
          *
          * @return the tag
          */
@@ -771,11 +673,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the locale tag.
-         *
-         * @apiNote
-         * Picks the locale used by the relay when localising
-         * notification text.
+         * Returns the locale tag the relay uses when localising notification text.
          *
          * @return the tag
          */
@@ -786,10 +684,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the optional background-location marker.
          *
-         * @apiNote
-         * Required only by embedders that surface a background-location
-         * UI; leave null otherwise.
-         *
          * @return an {@link Optional} carrying the marker
          */
         public Optional<String> configBackgroundLocation() {
@@ -797,11 +691,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional NSE version.
-         *
-         * @apiNote
-         * Communicates the Notification Service Extension version that
-         * embedders ship with their iOS bundle.
+         * Returns the optional Notification Service Extension version.
          *
          * @return an {@link Optional} carrying the version
          */
@@ -810,11 +700,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional NSE call marker.
-         *
-         * @apiNote
-         * Communicates whether the NSE handles call wake-ups on the
-         * iOS client.
+         * Returns the optional NSE call marker indicating whether the NSE handles call wake-ups.
          *
          * @return an {@link Optional} carrying the marker
          */
@@ -823,11 +709,8 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional NSE read marker.
-         *
-         * @apiNote
-         * Communicates whether the NSE handles read-receipt wake-ups on
-         * the iOS client.
+         * Returns the optional NSE read marker indicating whether the NSE handles read-receipt
+         * wake-ups.
          *
          * @return an {@link Optional} carrying the marker
          */
@@ -836,11 +719,8 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional NSE retry marker.
-         *
-         * @apiNote
-         * Communicates whether the NSE retries failed decryptions on the
-         * iOS client.
+         * Returns the optional NSE retry marker indicating whether the NSE retries failed
+         * decryptions.
          *
          * @return an {@link Optional} carrying the marker
          */
@@ -849,10 +729,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional reg-push marker.
-         *
-         * @apiNote
-         * Carries the registration-push flag used by the iOS client.
+         * Returns the optional reg-push marker carrying the registration-push flag.
          *
          * @return an {@link Optional} carrying the marker
          */
@@ -861,11 +738,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional pkey.
-         *
-         * @apiNote
-         * Required by embedders that pin the iOS push channel to a
-         * specific public key.
+         * Returns the optional pkey that pins the iOS push channel to a specific public key.
          *
          * @return an {@link Optional} carrying the pkey
          */
@@ -874,11 +747,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the voip payload type.
+         * Returns the VoIP payload type that selects the APNs VoIP payload shape.
          *
-         * @apiNote
-         * Picks the APNs VoIP payload shape; required even when
-         * {@link #configVoip} is absent.
+         * <p>Required even when {@link #configVoip()} is absent.
          *
          * @return the type
          */
@@ -887,10 +758,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional settings mask.
-         *
-         * @apiNote
-         * Bitmask of notification settings forwarded to the relay.
+         * Returns the optional bitmask of notification settings forwarded to the relay.
          *
          * @return an {@link Optional} carrying the mask
          */
@@ -899,10 +767,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional app-mute mask.
-         *
-         * @apiNote
-         * Bitmask of app-mute settings forwarded to the relay.
+         * Returns the optional bitmask of app-mute settings forwarded to the relay.
          *
          * @return an {@link Optional} carrying the mask
          */
@@ -911,10 +776,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional Apple Watch id.
-         *
-         * @apiNote
-         * Required by embedders that pair an Apple Watch with the iOS
+         * Returns the optional Apple Watch id used when an Apple Watch is paired with the iOS
          * client.
          *
          * @return an {@link Optional} carrying the id
@@ -924,11 +786,8 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional Apple Watch pkey.
-         *
-         * @apiNote
-         * Required by embedders that pin the paired Apple Watch push
-         * channel to a specific public key.
+         * Returns the optional Apple Watch pkey that pins the paired-watch push channel to a
+         * specific public key.
          *
          * @return an {@link Optional} carrying the pkey
          */
@@ -937,12 +796,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the per-item entries.
+         * Returns the per-chat entries.
          *
-         * @apiNote
-         * One entry per chat with non-default mute/notify/call
-         * preferences; the relay merges the list with the global
-         * defaults.
+         * <p>Each entry carries non-default mute/notify/call preferences that the relay merges with
+         * the global defaults.
          *
          * @return an unmodifiable {@link List} of {@link AppleItem}
          */
@@ -951,15 +808,15 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config platform=...>} node with the full APNs attribute set and one
+         * {@code <item>} grandchild per per-chat entry.
          *
-         * @implNote
-         * This implementation hard-codes the mandatory attributes per
-         * the {@code mergeAppleClientMixin} fixture and adds every
-         * optional attribute only when its backing field is non-null;
-         * the {@code version="2"} marker is emitted via the
-         * {@link NodeBuilder} conditional-attribute overload keyed on
-         * {@link #hasConfigVersion2}.
+         * @implNote This implementation hard-codes the mandatory attributes per the
+         * {@code mergeAppleClientMixin} fixture and adds every optional attribute only when its
+         * backing field is non-null; the {@code version="2"} marker is emitted via the
+         * {@link NodeBuilder#attribute(String, String, boolean)} conditional overload keyed on
+         * {@link #hasConfigVersion2()}.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAppleClientMixin",
@@ -1028,11 +885,11 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this config to another object for equality on every attribute and the items
+         * list.
          *
-         * @implNote
-         * This implementation compares every carried attribute and the
-         * items list.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link AppleConfig} with equal state
          */
         @Override
         public boolean equals(Object obj) {
@@ -1070,14 +927,12 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from every attribute and the items list.
          *
-         * @implNote
-         * This implementation combines a primary
-         * {@link Objects#hash(Object...)} call over the scalar
-         * attributes with a separate combine for the items list to keep
-         * the running hash within the {@link Objects#hash(Object...)}
-         * varargs limit.
+         * @implNote This implementation combines a primary {@link Objects#hash(Object...)} call
+         * over the scalar attributes with a separate combine for the items list to keep the
+         * argument count within the {@link Objects#hash(Object...)} varargs limit.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1091,11 +946,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this config.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -1126,48 +979,44 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * A single {@code <item jid mute? notify? call?/>} entry carried
-         * by an {@link AppleConfig}.
+         * Represents a single {@code <item jid mute? notify? call?/>} entry carried by an
+         * {@link AppleConfig}.
          *
-         * @apiNote
-         * Pairs a chat {@link Jid} with the optional per-chat
-         * mute/notify/call overrides; the relay merges the entry with
-         * the global Apple defaults.
+         * <p>Pairs a chat {@link Jid} with the optional per-chat mute/notify/call overrides; the
+         * relay merges the entry with the global Apple defaults.
          */
         public static final class AppleItem {
             /**
-             * The target chat {@link Jid}.
+             * Holds the target chat {@link Jid}.
              */
             private final Jid itemJid;
 
             /**
-             * The optional mute marker.
+             * Holds the optional mute marker.
              */
             private final Long itemMute;
 
             /**
-             * The optional notify marker.
+             * Holds the optional notify marker.
              */
             private final String itemNotify;
 
             /**
-             * The optional call marker.
+             * Holds the optional call marker.
              */
             private final String itemCall;
 
             /**
              * Constructs an Apple per-chat entry.
              *
-             * @apiNote
-             * Leave any marker null to fall back to the global Apple
-             * default for the corresponding category.
+             * <p>A null marker falls back to the global Apple default for the corresponding
+             * category.
              *
              * @param itemJid    the chat {@link Jid}
              * @param itemMute   the optional mute marker
              * @param itemNotify the optional notify marker
              * @param itemCall   the optional call marker
-             * @throws NullPointerException if {@code itemJid} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code itemJid} is {@code null}
              */
             public AppleItem(Jid itemJid, Long itemMute, String itemNotify, String itemCall) {
                 this.itemJid = Objects.requireNonNull(itemJid, "itemJid cannot be null");
@@ -1179,10 +1028,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
             /**
              * Returns the target chat {@link Jid}.
              *
-             * @apiNote
-             * Used by {@link #toNode()} to populate the {@code jid}
-             * attribute.
-             *
              * @return the {@link Jid}
              */
             public Jid itemJid() {
@@ -1191,10 +1036,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
 
             /**
              * Returns the optional mute marker.
-             *
-             * @apiNote
-             * Used by {@link #toNode()} to optionally populate the
-             * {@code mute} attribute.
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -1205,10 +1046,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
             /**
              * Returns the optional notify marker.
              *
-             * @apiNote
-             * Used by {@link #toNode()} to optionally populate the
-             * {@code notify} attribute.
-             *
              * @return an {@link Optional} carrying the marker
              */
             public Optional<String> itemNotify() {
@@ -1218,10 +1055,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
             /**
              * Returns the optional call marker.
              *
-             * @apiNote
-             * Used by {@link #toNode()} to optionally populate the
-             * {@code call} attribute.
-             *
              * @return an {@link Optional} carrying the marker
              */
             public Optional<String> itemCall() {
@@ -1229,17 +1062,11 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * Builds the {@code <item>} child node.
+             * Builds the {@code <item>} child node, emitting each optional attribute only when
+             * present.
              *
-             * @apiNote
-             * Used by {@link AppleConfig#toNode()} to assemble the
-             * surrounding {@code <config>} payload.
-             *
-             * @implNote
-             * This implementation matches the {@code makeAppleClientItem}
-             * fixture verbatim and emits each optional attribute only
-             * when its backing field is non-null.
-             *
+             * @implNote This implementation matches the {@code makeAppleClientItem} fixture
+             * verbatim and emits each optional attribute only when its backing field is non-null.
              * @return the {@link Node}
              */
             @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAppleClientMixin",
@@ -1262,10 +1089,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this entry to another object for equality on all four fields.
              *
-             * @implNote
-             * This implementation compares all four carried fields.
+             * @param obj the object to compare against
+             * @return {@code true} when {@code obj} is an {@link AppleItem} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -1283,11 +1110,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from all four fields.
              *
-             * @implNote
-             * This implementation hashes all four carried fields via
-             * {@link Objects#hash(Object...)}.
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -1295,11 +1120,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering of this entry.
              *
-             * @implNote
-             * This implementation mirrors the record-like rendering
-             * used across the {@code Smax*} stanza family.
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -1312,37 +1135,29 @@ public sealed interface SmaxPushConfigSetConfigVariant
     }
 
     /**
-     * The Windows-Notification-Service-client
-     * {@code <config platform="wns">} variant.
+     * Represents the Windows-Notification-Service-client {@code <config platform="wns">} variant.
      *
-     * @apiNote
-     * Registers a WNS push channel for the Windows desktop client;
-     * carries the WNS channel id and an optional version marker.
+     * <p>Registers a WNS push channel for the Windows desktop client, carrying the WNS channel id
+     * and an optional version marker.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigWNSClientMixin")
     final class WnsConfig implements SmaxPushConfigSetConfigVariant {
         /**
-         * The optional {@code version} attribute.
+         * Holds the optional {@code version} attribute.
          */
         private final String configVersion;
 
         /**
-         * The mandatory {@code id} attribute carrying the WNS channel
-         * id.
+         * Holds the mandatory {@code id} attribute carrying the WNS channel id.
          */
         private final String configId;
 
         /**
-         * Constructs a WNS config.
-         *
-         * @apiNote
-         * Used directly by embedders mirroring the Windows desktop push
-         * pipeline.
+         * Constructs a WNS config from an optional version and the WNS channel id.
          *
          * @param configVersion the optional version
          * @param configId      the WNS channel id
-         * @throws NullPointerException if {@code configId} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code configId} is {@code null}
          */
         public WnsConfig(String configVersion, String configId) {
             this.configVersion = configVersion;
@@ -1350,11 +1165,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * Returns the optional version.
-         *
-         * @apiNote
-         * Used by {@link #toNode()} to optionally populate the
-         * {@code version} attribute.
+         * Returns the optional {@code version} attribute.
          *
          * @return an {@link Optional} carrying the version
          */
@@ -1365,10 +1176,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the WNS channel id.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the {@code id}
-         * attribute.
-         *
          * @return the id
          */
         public String configId() {
@@ -1376,12 +1183,13 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config platform="wns">} node, emitting {@code version} only when
+         * present.
          *
-         * @implNote
-         * This implementation hard-codes {@code platform="wns"} per the
-         * {@code mergeWNSClientMixin} fixture and emits the optional
-         * {@code version} attribute only when non-null.
+         * @implNote This implementation hard-codes {@code platform="wns"} per the
+         * {@code mergeWNSClientMixin} fixture and emits the optional {@code version} attribute only
+         * when non-null.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigWNSClientMixin",
@@ -1399,10 +1207,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this config to another object for equality on its two fields.
          *
-         * @implNote
-         * This implementation compares the two carried fields.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link WnsConfig} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -1418,11 +1226,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the two carried fields.
          *
-         * @implNote
-         * This implementation hashes the two carried fields via
-         * {@link Objects#hash(Object...)}.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1430,11 +1236,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this config.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -1444,29 +1248,22 @@ public sealed interface SmaxPushConfigSetConfigVariant
     }
 
     /**
-     * The Enterprise-client {@code <config platform="ent">} variant.
+     * Represents the Enterprise-client {@code <config platform="ent">} variant.
      *
-     * @apiNote
-     * Registers an enterprise-deployment push channel; carries only the
-     * enterprise id.
+     * <p>Registers an enterprise-deployment push channel, carrying only the enterprise id.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigEnterpriseClientMixin")
     final class EnterpriseConfig implements SmaxPushConfigSetConfigVariant {
         /**
-         * The mandatory {@code id} attribute carrying the enterprise id.
+         * Holds the mandatory {@code id} attribute carrying the enterprise id.
          */
         private final String configId;
 
         /**
-         * Constructs an enterprise-client config.
-         *
-         * @apiNote
-         * Used directly by embedders mirroring the enterprise push
-         * pipeline.
+         * Constructs an enterprise-client config from the enterprise id.
          *
          * @param configId the enterprise id
-         * @throws NullPointerException if {@code configId} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code configId} is {@code null}
          */
         public EnterpriseConfig(String configId) {
             this.configId = Objects.requireNonNull(configId, "configId cannot be null");
@@ -1475,10 +1272,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the enterprise id.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the {@code id}
-         * attribute.
-         *
          * @return the id
          */
         public String configId() {
@@ -1486,11 +1279,11 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config platform="ent">} node.
          *
-         * @implNote
-         * This implementation hard-codes {@code platform="ent"} per the
+         * @implNote This implementation hard-codes {@code platform="ent"} per the
          * {@code mergeEnterpriseClientMixin} fixture.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigEnterpriseClientMixin",
@@ -1505,10 +1298,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this config to another object for equality on the enterprise id.
          *
-         * @implNote
-         * This implementation compares the carried id.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link EnterpriseConfig} with an equal id
          */
         @Override
         public boolean equals(Object obj) {
@@ -1523,10 +1316,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the enterprise id.
          *
-         * @implNote
-         * This implementation hashes the carried id.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1534,11 +1326,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this config.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -1547,63 +1337,55 @@ public sealed interface SmaxPushConfigSetConfigVariant
     }
 
     /**
-     * The Web-client {@code <config platform="web">} variant.
+     * Represents the Web-client {@code <config platform="web">} variant.
      *
-     * @apiNote
-     * Registers a W3C Push API channel for the Web/Desktop client;
-     * carries the {@code PushSubscription.endpoint} URL plus the
-     * base64-encoded {@code auth} secret and {@code p256dh} application
-     * server key returned by {@code PushManager.subscribe}. WA Web's
-     * {@code WAWebSetPushConfigJob.setPushConfig} populates this variant
-     * directly from a {@code PushSubscription} after
-     * {@code WAWebSubscribePushManagerAction} obtains it; Cobalt
-     * embedders that subscribe to a custom push service typically follow
-     * the same flow.
+     * <p>Registers a W3C Push API channel for the Web/Desktop client, carrying the
+     * {@code PushSubscription.endpoint} URL plus the base64-encoded {@code auth} secret and
+     * {@code p256dh} application-server key returned by {@code PushManager.subscribe}, alongside
+     * optional language and locale tags. Callers subscribing to a custom push service populate the
+     * endpoint, auth, and key fields from their {@code PushSubscription}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigWebClientMixin")
     final class WebConfig implements SmaxPushConfigSetConfigVariant {
         /**
-         * The W3C Push API endpoint URL.
+         * Holds the W3C Push API endpoint URL.
          */
         private final String configEndpoint;
 
         /**
-         * The base64-encoded Push API auth secret.
+         * Holds the base64-encoded Push API auth secret.
          */
         private final String configAuth;
 
         /**
-         * The base64-encoded P-256 application-server public key.
+         * Holds the base64-encoded P-256 application-server public key.
          */
         private final String configP256dh;
 
         /**
-         * The optional language tag.
+         * Holds the optional language tag.
          */
         private final String configLg;
 
         /**
-         * The optional locale tag.
+         * Holds the optional locale tag.
          */
         private final String configLc;
 
         /**
-         * Constructs a Web Push config.
+         * Constructs a Web Push config from the subscription fields and optional locale tags.
          *
-         * @apiNote
-         * Populate {@code configEndpoint}, {@code configAuth}, and
-         * {@code configP256dh} from the {@code PushSubscription}
-         * returned by the W3C Push API; the language/locale tags are
-         * forwarded verbatim to the relay for notification
-         * localisation.
+         * <p>Populate {@code configEndpoint}, {@code configAuth}, and {@code configP256dh} from the
+         * {@code PushSubscription} returned by the W3C Push API; the language and locale tags are
+         * forwarded verbatim to the relay for notification localisation.
          *
          * @param configEndpoint the endpoint URL
          * @param configAuth     the auth secret
          * @param configP256dh   the P-256 key
          * @param configLg       the optional language tag
          * @param configLc       the optional locale tag
-         * @throws NullPointerException if any required argument is
-         *                              {@code null}
+         * @throws NullPointerException if {@code configEndpoint}, {@code configAuth}, or
+         *                              {@code configP256dh} is {@code null}
          */
         public WebConfig(String configEndpoint, String configAuth, String configP256dh,
                          String configLg, String configLc) {
@@ -1617,10 +1399,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the endpoint URL.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the {@code endpoint}
-         * attribute.
-         *
          * @return the URL
          */
         public String configEndpoint() {
@@ -1629,10 +1407,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
 
         /**
          * Returns the auth secret.
-         *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the {@code auth}
-         * attribute.
          *
          * @return the secret
          */
@@ -1643,10 +1417,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the P-256 key.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to populate the {@code p256dh}
-         * attribute.
-         *
          * @return the key
          */
         public String configP256dh() {
@@ -1655,10 +1425,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
 
         /**
          * Returns the optional language tag.
-         *
-         * @apiNote
-         * Used by {@link #toNode()} to optionally populate the
-         * {@code lg} attribute.
          *
          * @return an {@link Optional} carrying the tag
          */
@@ -1669,10 +1435,6 @@ public sealed interface SmaxPushConfigSetConfigVariant
         /**
          * Returns the optional locale tag.
          *
-         * @apiNote
-         * Used by {@link #toNode()} to optionally populate the
-         * {@code lc} attribute.
-         *
          * @return an {@link Optional} carrying the tag
          */
         public Optional<String> configLc() {
@@ -1680,12 +1442,13 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config platform="web">} node, emitting {@code lg} and {@code lc} only
+         * when present.
          *
-         * @implNote
-         * This implementation hard-codes {@code platform="web"} per the
-         * {@code mergeWebClientMixin} fixture and emits the optional
-         * {@code lg} and {@code lc} attributes only when non-null.
+         * @implNote This implementation hard-codes {@code platform="web"} per the
+         * {@code mergeWebClientMixin} fixture and emits the optional {@code lg} and {@code lc}
+         * attributes only when non-null.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigWebClientMixin",
@@ -1708,10 +1471,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this config to another object for equality on every attribute.
          *
-         * @implNote
-         * This implementation compares every carried attribute.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link WebConfig} with equal attributes
          */
         @Override
         public boolean equals(Object obj) {
@@ -1730,11 +1493,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from every carried attribute.
          *
-         * @implNote
-         * This implementation hashes every carried attribute via
-         * {@link Objects#hash(Object...)}.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1742,11 +1503,9 @@ public sealed interface SmaxPushConfigSetConfigVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this config.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {

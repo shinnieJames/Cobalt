@@ -28,8 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link CallLogHandler} - Cobalt's adapter for
- * {@code WAWebCallLogSync}.
+ * Covers {@link CallLogHandler}, which writes call log records keyed by call id from a four-part
+ * {@code ["call_log", peer, callId, fromMe]} index. SET adds the record, REMOVE drops it, and a
+ * missing inner log payload or wrong index arity is rejected as MALFORMED.
  */
 @DisplayName("CallLogHandler")
 class CallLogHandlerTest {

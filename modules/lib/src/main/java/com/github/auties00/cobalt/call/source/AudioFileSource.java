@@ -23,107 +23,111 @@ import java.util.Deque;
 import java.util.Objects;
 
 /**
- * Plays a media file as an {@link AudioSource}. Opens the file,
- * finds the first audio stream, decodes it, and converts each
- * decoded frame to 16 kHz mono signed-16-bit PCM so the output
- * matches the call wire format.
+ * Plays a media file as an {@link AudioSource} for transmission in a call.
  *
- * <p>Any container / codec the toolkit's FFmpeg build enables
- * decoders for is supported — by default that's WAV, FLAC, MP3,
- * AAC, Opus, Vorbis, MP4, MKV, OGG.
+ * <p>Opens the file, picks its first audio stream, decodes it, and resamples each decoded frame to
+ * 16 kHz mono signed 16-bit PCM so the output matches the call wire format. Any container or codec
+ * the bundled FFmpeg build enables a decoder for is supported, which by default covers WAV, FLAC,
+ * MP3, AAC, Opus, Vorbis, MP4, MKV, and OGG.
  *
- * <p>Output cadence: each {@link #next()} returns a 10 ms frame
- * (160 samples at 16 kHz). When the file's last decoded sample
- * doesn't reach a 10 ms boundary, the trailing partial frame is
- * dropped and the source signals end-of-stream by returning
- * {@code null}.
+ * <p>Each {@link #next()} returns one 160-sample, 10 ms frame. Sub-frame audio is never lost: the
+ * leftover samples from a decode that does not land on a 10 ms boundary are carried into the next
+ * decode. When the file ends, the trailing partial frame (if any) is dropped and {@link #next()}
+ * returns {@code null} to signal end-of-stream.
  *
- * <p>Lifecycle: {@link #close()} releases the demuxer / decoder /
- * resampler — call it (or use {@code try-with-resources}) when
- * the source is no longer needed.
+ * @apiNote Wire this source into a call to stream a file's audio to the remote participant. Always
+ * close the source (it is {@link AutoCloseable}, so prefer {@code try-with-resources}) to release
+ * the native demuxer, decoder, and resampler; otherwise their memory leaks for the life of the JVM.
  */
 public final class AudioFileSource implements AudioSource, AutoCloseable {
     /**
-     * Output sample rate the call layer expects.
+     * Holds the output sample rate, in Hz, that the call layer expects.
+     *
+     * @implNote This implementation uses 16000, the rate WhatsApp's Opus call configuration runs at,
+     * so the resampled output feeds the encoder directly.
      */
     private static final int OUT_SAMPLE_RATE = 16_000;
 
     /**
-     * Output samples per frame — 160 = 10 ms at 16 kHz.
+     * Holds the number of output samples per emitted frame.
+     *
+     * @implNote This implementation uses 160, which is 10 ms at {@link #OUT_SAMPLE_RATE}, the frame
+     * cadence the call layer consumes.
      */
     private static final int OUT_FRAME_SAMPLES = 160;
 
     /**
-     * Resource arena owning every libav* allocation. Closed when
-     * the source closes.
+     * Holds the arena owning every libav* allocation this source makes, closed when the source
+     * closes.
      */
     private final Arena arena;
 
     /**
-     * libavformat demuxer context — owns the input file handle.
+     * Holds the libavformat demuxer context pointer, which owns the input file handle.
      */
     private final MemorySegment formatCtx;
 
     /**
-     * libavcodec decoder context — owns the codec's internal
-     * buffers.
+     * Holds the libavcodec decoder context pointer, which owns the codec's internal buffers.
      */
     private final MemorySegment codecCtx;
 
     /**
-     * libswresample context — converts the decoded format to
-     * 16 kHz mono S16.
+     * Holds the libswresample context pointer that converts the decoded format to 16 kHz mono signed
+     * 16-bit PCM.
      */
     private final MemorySegment swrCtx;
 
     /**
-     * Reusable {@code AVPacket} for the demuxer read loop.
+     * Holds the reusable {@code AVPacket} pointer driven by the demuxer read loop.
      */
     private final MemorySegment packet;
 
     /**
-     * Reusable {@code AVFrame} for the decoder output.
+     * Holds the reusable {@code AVFrame} pointer that the decoder writes into.
      */
     private final MemorySegment frame;
 
     /**
-     * Index of the audio stream we picked.
+     * Holds the index of the audio stream chosen from the container.
      */
     private final int streamIndex;
 
     /**
-     * Queue of decoded-and-resampled samples we haven't yet
-     * emitted as a 10 ms frame.
+     * Holds the queue of decoded-and-resampled 10 ms frames not yet emitted by {@link #next()}.
      */
     private final Deque<short[]> readyFrames = new ArrayDeque<>();
 
     /**
-     * The leftover samples from the last decode that didn't fit
-     * a 10 ms frame. Carried into the next decode so we never
-     * lose sub-frame audio.
+     * Holds the leftover samples from the last decode that did not fill a 10 ms frame.
+     *
+     * <p>Carried into the next decode and prepended before the new samples are sliced, so sub-frame
+     * audio is never dropped mid-stream.
      */
     private short[] leftover = new short[0];
 
     /**
-     * Monotonic output pts in milliseconds — increments by 10
-     * per emitted frame.
+     * Holds the presentation timestamp, in milliseconds, of the next emitted frame, advanced by
+     * {@link #OUT_FRAME_SAMPLES} worth of time (10 ms) per frame.
      */
     private long ptsMs;
 
     /**
-     * Whether the demuxer has reached end-of-stream and the
-     * decoder has been flushed.
+     * Holds whether the demuxer has reached end-of-stream and the decoder has been flushed.
      */
     private boolean drained;
 
     /**
-     * Opens {@code path} and prepares the demuxer / decoder /
-     * resampler chain.
+     * Opens the given media file and prepares the demuxer, decoder, and resampler chain.
+     *
+     * <p>Ensures the FFmpeg libraries are loaded, opens the file, picks its first audio stream,
+     * opens a decoder for that stream's codec, and builds a resampler targeting 16 kHz mono signed
+     * 16-bit PCM. If any step fails the arena is closed before the exception propagates, so a failed
+     * construction leaks no native resources.
      *
      * @param path the media file to open
      * @throws NullPointerException  if {@code path} is {@code null}
-     * @throws IllegalStateException if the file can't be opened or
-     *                               has no audio stream
+     * @throws IllegalStateException if the file cannot be opened or has no audio stream
      */
     public AudioFileSource(Path path) {
         Objects.requireNonNull(path, "path cannot be null");
@@ -167,10 +171,13 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Returns the next decoded 10 ms frame, or {@code null} on
-     * end-of-stream.
+     * {@inheritDoc}
      *
-     * @return the next frame, or {@code null} on EOS
+     * <p>Drives the demux-decode-resample pipeline until a 10 ms frame is ready, then returns it
+     * with the next presentation timestamp and advances the timestamp by 10 ms. Returns
+     * {@code null} once the file is fully drained and no further frames remain.
+     *
+     * @return {@inheritDoc}
      */
     @Override
     public AudioFrame next() {
@@ -187,7 +194,11 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Drives one round of demux → decode → resample.
+     * Drives one round of demux, decode, and resample.
+     *
+     * <p>Reads one packet; on end-of-input it flushes the decoder and marks the source drained.
+     * Otherwise it feeds packets belonging to the chosen audio stream to the decoder and drains the
+     * resulting frames.
      */
     private void pump() {
         var read = Ffmpeg.av_read_frame(formatCtx, packet);
@@ -214,10 +225,14 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Pulls every available frame out of the decoder, resamples
-     * it to 16 kHz mono S16, and queues it for emission.
+     * Pulls every available frame out of the decoder, resamples each to 16 kHz mono signed 16-bit
+     * PCM, and queues it for emission.
      *
-     * @param flush whether the decoder is in flush mode (post-EOF)
+     * <p>When in flush mode and the decoder signals end-of-output, the resampler's internal buffer
+     * is flushed too so no tail samples are lost.
+     *
+     * @param flush whether the decoder is in flush mode (after end-of-input)
+     * @throws IllegalStateException if the decoder reports a hard failure
      */
     private void drainDecoder(boolean flush) {
         while (true) {
@@ -241,9 +256,14 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Runs one libswresample conversion of the current
-     * {@link #frame} into 16 kHz mono S16 and slices the output
-     * into 10 ms ready frames.
+     * Resamples the current {@link #frame} to 16 kHz mono signed 16-bit PCM and queues the output as
+     * 10 ms frames.
+     *
+     * <p>Sizes the output buffer from the input sample count rescaled to the output rate plus a small
+     * margin, runs one libswresample conversion, and slices the result into ready frames. Frames with
+     * no samples are skipped.
+     *
+     * @throws IllegalStateException if the resample fails
      */
     private void resampleAndQueue() {
         var inSamples = AVFrame.nb_samples(frame);
@@ -266,8 +286,11 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Drains any samples libswresample is still holding in its
-     * internal buffer (called when the demuxer hits EOF).
+     * Flushes any samples libswresample is still holding in its internal buffer and queues them.
+     *
+     * <p>Called when the demuxer hits end-of-input so the resampler's tail is not lost.
+     *
+     * @throws IllegalStateException if the flush conversion fails
      */
     private void flushResampler() {
         try (var local = Arena.ofConfined()) {
@@ -285,13 +308,14 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Slices {@code produced} freshly-resampled samples (in
-     * {@code outBuf}) into 10 ms chunks, prepending the
-     * {@link #leftover} carry, and pushes the chunks into
-     * {@link #readyFrames}.
+     * Slices freshly-resampled samples into 10 ms frames and pushes them onto the ready queue.
+     *
+     * <p>Prepends the {@link #leftover} carry from the previous decode, splits the combined samples
+     * into whole {@link #OUT_FRAME_SAMPLES}-length chunks, and stores any remainder as the new
+     * leftover carry for the next call.
      *
      * @param outBuf   the resampler output buffer
-     * @param produced the number of samples produced
+     * @param produced the number of samples produced into {@code outBuf}
      */
     private void queueResampled(MemorySegment outBuf, int produced) {
         var total = leftover.length + produced;
@@ -317,6 +341,10 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
 
     /**
      * Releases every libav* resource allocated by the source.
+     *
+     * <p>Frees the decoder output frame, the demuxer packet, the resampler, the decoder context, and
+     * the demuxer context, then closes the owning arena. Guards each pointer against {@code null} and
+     * a zero address, so the call is idempotent.
      */
     @Override
     public void close() {
@@ -360,11 +388,10 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Walks {@code formatCtx.streams[]} and returns the index of
-     * the first audio stream, or {@code -1} when none exists.
+     * Returns the index of the first audio stream in the container, or {@code -1} when none exists.
      *
      * @param formatCtx the demuxer context
-     * @return the audio stream index, or -1
+     * @return the audio stream index, or {@code -1} if the container has no audio stream
      */
     private static int pickAudioStream(MemorySegment formatCtx) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -382,12 +409,11 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Returns the {@code AVStream*} at the given index inside
-     * {@code formatCtx.streams[]}.
+     * Returns the {@code AVStream} pointer at the given index in the container.
      *
      * @param formatCtx the demuxer context
      * @param index     the stream index
-     * @return the stream pointer
+     * @return the stream pointer at that index
      */
     private static MemorySegment streamPointer(MemorySegment formatCtx, int index) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -398,13 +424,16 @@ public final class AudioFileSource implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Builds a libswresample context that converts the decoder's
-     * native channel layout / sample format / sample rate into
-     * 16 kHz mono S16.
+     * Builds a libswresample context that converts the decoder's native format to 16 kHz mono signed
+     * 16-bit PCM.
      *
-     * @param arena    the lifetime arena
-     * @param codecCtx the source codec context (decoder)
+     * <p>Reads the decoder's channel layout, sample format, and sample rate as the source parameters
+     * and targets a default mono layout at {@link #OUT_SAMPLE_RATE}, then initializes the context.
+     *
+     * @param arena    the lifetime arena that owns the allocations
+     * @param codecCtx the source decoder context
      * @return the initialized {@code SwrContext} pointer
+     * @throws IllegalStateException if the resampler cannot be allocated or initialized
      */
     private static MemorySegment buildResampler(Arena arena, MemorySegment codecCtx) {
         var swrPtr = arena.allocate(ValueLayout.ADDRESS);

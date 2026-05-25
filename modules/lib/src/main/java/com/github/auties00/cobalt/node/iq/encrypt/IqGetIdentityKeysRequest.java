@@ -17,9 +17,8 @@ import java.util.Objects;
  * Builds the bulk {@code <iq xmlns="encrypt" type="get"/>} that asks the relay for the long-term
  * identity public key of one or more peer devices.
  *
- * @apiNote
- * Used to materialise Signal-protocol identity records for newly discovered devices before any
- * Signal session can be initiated. WA Web drives this from the contact-sync path
+ * <p>This request materialises Signal-protocol identity records for newly discovered devices before
+ * any Signal session can be initiated. WA Web drives it from the contact-sync path
  * ({@code WAWebContactSyncApi}, {@code WAWebAdvSyncDeviceListApi}) after a fresh
  * {@code <list>...</list>} of devices is received, and from {@code WAWebGalaxyFlowsIdentityFetcher}
  * for the Galaxy-flows lazy fetch. The request body is a single {@code <identity/>} child carrying
@@ -36,8 +35,7 @@ public final class IqGetIdentityKeysRequest implements IqOperation.Request {
     /**
      * Constructs a bulk identity-key request for the supplied device JIDs.
      *
-     * @apiNote
-     * The list is defensively copied; subsequent mutation of the passed-in list does not affect
+     * <p>The list is defensively copied; subsequent mutation of the passed-in list does not affect
      * this instance. WA Web batches as many device JIDs as the relay accepts in one {@code <iq>};
      * the caller is expected to slice oversized lists before constructing this request.
      *
@@ -65,12 +63,11 @@ public final class IqGetIdentityKeysRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
-     * {@code xmlns="encrypt"} and {@code type="get"}, wrapping the {@link #deviceJids()} as one
-     * {@code <user jid="..."/>} per entry under a single {@code <identity/>} parent. Each
-     * {@link Jid} is rendered through {@link NodeBuilder#attribute(String, Object)} as-is, in the
-     * same canonical form WA Web's {@code DEVICE_JID(...)} helper emits.
+     * <p>Produces an {@code <iq>} addressed to {@link JidServer#user()} with {@code xmlns="encrypt"}
+     * and {@code type="get"}, wrapping {@link #deviceJids()} as one {@code <user jid="..."/>} per
+     * entry under a single {@code <identity/>} parent. Each {@link Jid} is rendered through
+     * {@link NodeBuilder#attribute(String, com.github.auties00.cobalt.model.jid.JidProvider)} in its
+     * canonical form.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",

@@ -12,19 +12,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Phase 1 lifecycle tests for {@link ActiveCallTransport}. Verifies
- * IDLE → STARTED → CLOSED state transitions, idempotent close, the
- * one-shot start guard, and that {@link ActiveCallTransport#dataChannel()}
- * stays empty until Phase 5 wires the DCEP exchange.
+ * Lifecycle tests for {@link ActiveCallTransport}. Covers the IDLE to STARTED to CLOSED state
+ * transitions, idempotent close, the one-shot start guard, and that
+ * {@link ActiveCallTransport#dataChannel()} stays empty until the DCEP exchange opens it.
  */
 @DisplayName("ActiveCallTransport — Phase 1 lifecycle")
 class ActiveCallTransportTest {
 
-    /**
-     * Constructs synthetic-but-valid {@link ActiveCallTransport.StartParameters}
-     * — enough to exercise the lifecycle, without touching real
-     * networking.
-     */
     private static ActiveCallTransport.StartParameters synthetic() {
         var creds = new IceCredentials(
                 "local-ufrag-test",
@@ -32,8 +26,7 @@ class ActiveCallTransportTest {
                 "remote-ufrag-test",
                 "remote-pwd-test-bytes".getBytes(StandardCharsets.UTF_8));
         var cert = DtlsCertificate.generate();
-        // Phase-2-aware: pass a null OfferTransportSpec (synthetic
-        // tests don't carry a real WA-relay payload).
+        // null OfferTransportSpec: synthetic tests carry no real WA-relay payload.
         return new ActiveCallTransport.StartParameters(creds, cert, new byte[32], true, null);
     }
 
@@ -56,8 +49,7 @@ class ActiveCallTransportTest {
         assertEquals(ActiveCallTransport.State.STARTED, t.state());
         assertEquals(params, t.startParameters().orElseThrow());
         assertTrue(t.iceAgent().isPresent(), "ICE agent must be constructed by start()");
-        // DataChannel is still empty — opened only after the (future)
-        // DCEP exchange in Phase 5.
+        // DataChannel stays empty until the DCEP exchange opens it.
         assertTrue(t.dataChannel().isEmpty());
     }
 
@@ -68,7 +60,7 @@ class ActiveCallTransportTest {
         t.start(synthetic());
         t.close();
         assertEquals(ActiveCallTransport.State.CLOSED, t.state());
-        // Idempotent — second + third close are no-ops, no throw.
+        // Idempotent: second and third close are no-ops, no throw.
         t.close();
         t.close();
         assertEquals(ActiveCallTransport.State.CLOSED, t.state());
@@ -80,8 +72,7 @@ class ActiveCallTransportTest {
         var t = new ActiveCallTransport();
         t.close();
         assertEquals(ActiveCallTransport.State.CLOSED, t.state());
-        // After CLOSED, start() must throw — the one-shot transition
-        // from IDLE has already happened.
+        // After CLOSED, start() must throw: the one-shot transition from IDLE has already happened.
         assertThrows(IllegalStateException.class, () -> t.start(synthetic()));
     }
 

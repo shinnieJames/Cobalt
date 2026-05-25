@@ -16,13 +16,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Persists the SMB-seller-configured custom payment methods (Brazil PIX phase 1) from {@code custom_payment_methods} sync mutations.
  *
- * @apiNote
- * Drives the SMB Brazil PIX seller surface where the merchant can
- * configure custom payment-method codes that are advertised to
- * customers in chat. When the merchant edits the methods on another
- * SMB device, the server replays the resulting
- * {@link CustomPaymentMethodsAction} here. Cobalt embedders read the
- * methods through
+ * <p>This handler drives the SMB Brazil PIX seller surface where the merchant
+ * can configure custom payment-method codes that are advertised to customers
+ * in chat. When the merchant edits the methods on another SMB device, the
+ * server replays the resulting {@link CustomPaymentMethodsAction} here, and the
+ * methods become readable through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#customPaymentMethods()}.
  *
  * @implNote
@@ -42,8 +40,7 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
     /**
      * The {@link ABPropsService} consulted before applying any mutation.
      *
-     * @apiNote
-     * Used to read the {@link ABProp#PAYMENTS_BR_PIX_PHASE_1_SELLER_SYNC_ENABLED}
+     * <p>Reads the {@link ABProp#PAYMENTS_BR_PIX_PHASE_1_SELLER_SYNC_ENABLED}
      * gate; when off every mutation in the batch resolves to
      * {@link MutationApplicationResult#unsupported()}.
      */
@@ -52,10 +49,8 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
     /**
      * Constructs the custom-payment-methods handler with its AB-props dependency.
      *
-     * @apiNote
-     * Instantiated by the sync handler registry with the shared
-     * {@link ABPropsService}. Embedders do not normally construct this
-     * directly.
+     * <p>The sync handler registry instantiates this with the shared
+     * {@link ABPropsService}.
      *
      * @param abPropsService the {@link ABPropsService} consulted on every mutation
      */
@@ -85,16 +80,13 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates SMB platform and AB-prop gating, then for SET
-     * mutations writes the
-     * {@link CustomPaymentMethodsAction#customPaymentMethods()} list
-     * into the store. Returns
-     * {@link MutationApplicationResult#unsupported()} for non-SMB
-     * platforms, when the AB-prop is off, or for non-{@code SET}
+     * <p>Validates SMB platform and AB-prop gating, then for SET mutations
+     * writes the {@link CustomPaymentMethodsAction#customPaymentMethods()} list
+     * into the store. Returns {@link MutationApplicationResult#unsupported()}
+     * for non-SMB platforms, when the AB-prop is off, or for non-{@code SET}
      * operations; returns
-     * {@link SyncdIndexUtils#malformedActionValue(String)} when the
-     * action is missing or mistyped.
+     * {@link SyncdIndexUtils#malformedActionValue(String)} when the action is
+     * missing or mistyped.
      *
      * @implNote
      * This implementation maps WA Web's

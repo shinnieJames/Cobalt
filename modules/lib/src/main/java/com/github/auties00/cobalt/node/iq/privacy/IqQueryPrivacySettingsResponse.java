@@ -16,16 +16,15 @@ import java.util.Optional;
 /**
  * Sealed family of inbound reply variants produced by the relay for an
  * {@link IqQueryPrivacySettingsRequest}.
- *
- * @apiNote
- * Pattern match against the three permitted subtypes ({@link Success}, {@link ClientError},
- * {@link ServerError}) to surface the per-category visibility map or the error envelope to the
- * caller; only one variant ever materialises per reply.
+ * <p>
+ * Pattern matching against the three permitted subtypes ({@link Success}, {@link ClientError},
+ * {@link ServerError}) surfaces the per-category visibility map or the error envelope; only one
+ * variant ever materialises per reply.
  *
  * @implNote
- * This implementation collapses WA Web's split parse-and-throw flow (the
- * {@code privacyParser} WAP parser plus the {@code ServerStatusCodeError} thrown by
- * {@code WAWebQueryPrivacySettingsJob.getPrivacy} on a {@code 4xx}/{@code 5xx} reply) into a
+ * This implementation collapses WA Web's split parse-and-throw flow (the {@code privacyParser} WAP
+ * parser plus the {@code ServerStatusCodeError} thrown by
+ * {@code WAWebQueryPrivacySettingsJob.getPrivacy} on a {@code 4xx} or {@code 5xx} reply) into a
  * single sealed hierarchy; an error reply is a typed value here rather than an exception.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryPrivacySettingsJob")
@@ -37,17 +36,15 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
     /**
      * Tries each {@link IqQueryPrivacySettingsResponse} variant in priority order and returns the
      * first that parses cleanly.
-     *
-     * @apiNote
-     * The dispatcher calls this immediately after receiving an inbound {@code <iq>} stanza whose
-     * id matches an outstanding {@link IqQueryPrivacySettingsRequest}; the empty
-     * {@link Optional} indicates the stanza did not match any documented schema (caller may want
-     * to log and drop).
+     * <p>
+     * The dispatcher calls this immediately after receiving an inbound {@code <iq>} stanza whose id
+     * matches an outstanding {@link IqQueryPrivacySettingsRequest}; the empty {@link Optional}
+     * indicates the stanza did not match any documented schema and the caller may log and drop it.
      *
      * @implNote
-     * This implementation tries {@link Success} first, then {@link ClientError}
-     * ({@code 4xx} envelope), then {@link ServerError} ({@code 5xx} envelope); the success
-     * parser performs the {@code <iq type="result">} validation via
+     * This implementation tries {@link Success} first, then {@link ClientError} (the {@code 4xx}
+     * envelope), then {@link ServerError} (the {@code 5xx} envelope); the success parser performs
+     * the {@code <iq type="result">} validation via
      * {@link SmaxIqResultResponseMixin#validate(Node, Node)} before reading children.
      *
      * @param node    the inbound IQ stanza; never {@code null}
@@ -74,30 +71,28 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
     /**
      * The {@code Success} reply variant; the relay returned a {@code <privacy>} envelope listing
      * every privacy category and its current value.
-     *
-     * @apiNote
-     * The {@link #categories()} map is the typed snapshot consumers should write to the local
-     * privacy store; an absent key means the relay did not return a value for that category (e.g.
-     * because the relay rejected it with {@code value="error"} which the parser silently drops).
+     * <p>
+     * The {@link #categories()} map is the typed snapshot consumers write to the local privacy
+     * store; an absent key means the relay did not return a value for that category (for example,
+     * because the relay rejected it with {@code value="error"}, which the parser silently drops).
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryPrivacySettingsJob")
     final class Success implements IqQueryPrivacySettingsResponse {
         /**
-         * The parsed per-category settings; never {@code null}. May be empty when the relay
-         * returned no {@code <category>} children.
+         * The parsed per-category settings; never {@code null}. May be empty when the relay returned
+         * no {@code <category>} children.
          */
         private final Map<IqQueryPrivacySettingsCategoryName, IqQueryPrivacySettingsVisibility> categories;
 
         /**
          * Constructs a {@code Success} reply.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link #of(Node, Node)}; this constructor is
-         * also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link #of(Node, Node)}; this constructor is also
+         * reachable for tests and synthetic fixtures.
          *
          * @implNote
-         * This implementation defensively copies {@code categories} via {@link Map#copyOf(Map)};
-         * the resulting instance is immutable and safe to publish.
+         * This implementation defensively copies {@code categories} via {@link Map#copyOf(Map)}; the
+         * resulting instance is immutable and safe to publish.
          *
          * @param categories the per-category settings; never {@code null}
          * @throws NullPointerException if {@code categories} is {@code null}
@@ -109,11 +104,10 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
 
         /**
          * Returns the parsed per-category settings.
-         *
-         * @apiNote
-         * Key into the map with the {@link IqQueryPrivacySettingsCategoryName} constants; a
-         * missing key means the relay either did not return a value or returned the
-         * {@code value="error"} sentinel which is silently dropped during parsing.
+         * <p>
+         * Keyed by the {@link IqQueryPrivacySettingsCategoryName} constants; a missing key means the
+         * relay either did not return a value or returned the {@code value="error"} sentinel, which
+         * is silently dropped during parsing.
          *
          * @return an unmodifiable map keyed by category; never {@code null}
          */
@@ -123,25 +117,23 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
 
         /**
          * Tries to parse a {@link Success} variant from the given inbound stanza.
-         *
-         * @apiNote
+         * <p>
          * The {@link Optional#empty()} return signals that the stanza is not a success envelope
-         * (either {@code type != "result"} or no {@code <privacy>} child); callers should fall
-         * through to {@link ClientError#of(Node, Node)} and {@link ServerError#of(Node, Node)}.
+         * (either {@code type != "result"} or no {@code <privacy>} child); callers fall through to
+         * {@link ClientError#of(Node, Node)} and {@link ServerError#of(Node, Node)}.
          *
          * @implNote
-         * This implementation iterates every {@code <category>} child, projects the
-         * {@code name} attribute via {@link IqQueryPrivacySettingsCategoryName#fromWire(String)}
-         * and the {@code value} attribute via
-         * {@link IqQueryPrivacySettingsVisibility#fromWire(String)}, and silently skips entries
-         * whose name or value cannot be resolved. WA Web's
-         * {@code WAWebPrivacySettings.*_WITH_ERROR} tables include an {@code error} marker that
-         * the parser logs but drops; Cobalt collapses that path into the silent skip.
+         * This implementation iterates every {@code <category>} child, projects the {@code name}
+         * attribute via {@link IqQueryPrivacySettingsCategoryName#fromWire(String)} and the
+         * {@code value} attribute via {@link IqQueryPrivacySettingsVisibility#fromWire(String)}, and
+         * silently skips entries whose name or value cannot be resolved. WA Web's
+         * {@code WAWebPrivacySettings.*_WITH_ERROR} tables include an {@code error} marker that the
+         * parser logs but drops; Cobalt collapses that path into the silent skip.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
-         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match
-         *         the success schema
+         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryPrivacySettingsJob",
                 exports = "privacyParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -194,8 +186,7 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation hashes the categories map consistently with
-         * {@link #equals(Object)}.
+         * This implementation hashes the categories map consistently with {@link #equals(Object)}.
          */
         @Override
         public int hashCode() {
@@ -206,8 +197,8 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation of the categories map; the
-         * format is not stable and must not be parsed.
+         * This implementation emits a debug-only representation of the categories map; the format is
+         * not stable and must not be parsed.
          */
         @Override
         public String toString() {
@@ -216,14 +207,13 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code ClientError} reply variant; the relay rejected the request with a {@code 4xx}
-     * error code.
-     *
-     * @apiNote
+     * The {@code ClientError} reply variant; the relay rejected the request with a {@code 4xx} error
+     * code.
+     * <p>
      * Surfaces the {@code <error code=... text=.../>} envelope as typed fields so the caller can
      * decide whether to retry, escalate, or surface to the UI; WA Web's
-     * {@code WAWebQueryPrivacySettingsJob.getPrivacy} throws a {@code ServerStatusCodeError} for
-     * the same payload.
+     * {@code WAWebQueryPrivacySettingsJob.getPrivacy} throws a {@code ServerStatusCodeError} for the
+     * same payload.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryPrivacySettingsJob")
     final class ClientError implements IqQueryPrivacySettingsResponse {
@@ -239,10 +229,9 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
 
         /**
          * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link #of(Node, Node)}; this constructor is
-         * also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link #of(Node, Node)}; this constructor is also
+         * reachable for tests and synthetic fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -272,10 +261,9 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
 
         /**
          * Tries to parse a {@link ClientError} variant from the given inbound stanza.
-         *
-         * @apiNote
-         * The {@link Optional#empty()} return signals that the stanza is not a {@code 4xx}
-         * error envelope; callers should fall through to {@link ServerError#of(Node, Node)}.
+         * <p>
+         * The {@link Optional#empty()} return signals that the stanza is not a {@code 4xx} error
+         * envelope; callers fall through to {@link ServerError#of(Node, Node)}.
          *
          * @implNote
          * This implementation delegates the envelope match to
@@ -284,8 +272,8 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match
-         *         the client-error schema
+         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match the
+         *         client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -329,8 +317,8 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation; the format is not stable and
-         * must not be parsed.
+         * This implementation emits a debug-only representation; the format is not stable and must
+         * not be parsed.
          */
         @Override
         public String toString() {
@@ -340,10 +328,9 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code ServerError} reply variant; the relay encountered a transient internal failure
-     * ({@code 5xx} error code).
-     *
-     * @apiNote
+     * The {@code ServerError} reply variant; the relay encountered a transient internal failure (a
+     * {@code 5xx} error code).
+     * <p>
      * Distinguished from {@link ClientError} so callers can choose a different retry policy;
      * transient failures normally warrant a backoff-and-retry, client errors normally do not.
      */
@@ -361,10 +348,9 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
 
         /**
          * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link #of(Node, Node)}; this constructor is
-         * also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link #of(Node, Node)}; this constructor is also
+         * reachable for tests and synthetic fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -402,8 +388,8 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match
-         *         the server-error schema
+         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match the
+         *         server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -447,8 +433,8 @@ public sealed interface IqQueryPrivacySettingsResponse extends IqOperation.Respo
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation; the format is not stable and
-         * must not be parsed.
+         * This implementation emits a debug-only representation; the format is not stable and must
+         * not be parsed.
          */
         @Override
         public String toString() {

@@ -9,23 +9,21 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import com.github.auties00.cobalt.util.RandomIdUtils;
 
 /**
- * Outbound {@code <iq xmlns="w:m" type="set">} stanza requesting the current media-server
- * connection configuration (auth token, host routes, retry budgets) the client should use
- * for uploads and downloads.
+ * Requests the current media-server connection configuration the client uses for uploads and
+ * downloads.
  *
- * @apiNote
- * Used by the media-upload and media-download pipelines to acquire (and periodically
- * refresh) the bearer token and host routes routed to the media CDN. WA Web invokes it from
- * {@code WAWebQueryMediaConnsBridge} with a soft TTL deadline; the bridge then re-issues the
- * query roughly five seconds before the {@code authTokenExpiry} the relay returns.
+ * <p>The request is an outbound {@code <iq xmlns="w:m" type="set">} stanza wrapping a single
+ * bare {@code <media_conn/>} child. The relay replies with the bearer token, host routes, and
+ * retry budgets routed to the media CDN, modelled by {@link IqQueryMediaConnsResponse}. The
+ * media-upload and media-download pipelines issue this request to acquire and periodically
+ * refresh that configuration, re-issuing it shortly before the token expiry the relay returns.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryMediaConnsJob")
 public final class IqQueryMediaConnsRequest implements IqOperation.Request {
     /**
      * Constructs a new query-media-conn request.
      *
-     * @apiNote
-     * The request carries no payload; the relay derives the response entirely from the
+     * <p>The request carries no payload; the relay derives the entire reply from the
      * authenticated session.
      */
     public IqQueryMediaConnsRequest() {
@@ -34,9 +32,9 @@ public final class IqQueryMediaConnsRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Produces a {@code <iq xmlns="w:m" type="set">} envelope addressed to
-     * {@link JidServer#user()} and wrapping a single bare {@code <media_conn/>} child.
+     * <p>Produces an {@code <iq xmlns="w:m" type="set">} envelope addressed to
+     * {@link JidServer#user()} and wrapping a single bare {@code <media_conn/>} child. A fresh
+     * stanza id is minted via {@link RandomIdUtils#newId()} on every call.
      *
      * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
      *         {@code <media_conn/>} payload
@@ -58,7 +56,13 @@ public final class IqQueryMediaConnsRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Indicates whether the given object is another request of this type.
+     *
+     * <p>Every {@link IqQueryMediaConnsRequest} is stateless and therefore interchangeable, so
+     * equality reduces to a runtime-class identity check.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a {@link IqQueryMediaConnsRequest}
      */
     @Override
     public boolean equals(Object obj) {
@@ -69,7 +73,9 @@ public final class IqQueryMediaConnsRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a constant hash consistent with the class-identity equality contract.
+     *
+     * @return the hash of the {@link IqQueryMediaConnsRequest} class
      */
     @Override
     public int hashCode() {
@@ -77,7 +83,9 @@ public final class IqQueryMediaConnsRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the canonical string form of this stateless request.
+     *
+     * @return the fixed string {@code "IqQueryMediaConnsRequest[]"}
      */
     @Override
     public String toString() {

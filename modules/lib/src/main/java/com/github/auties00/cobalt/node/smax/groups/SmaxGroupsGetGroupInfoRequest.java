@@ -13,15 +13,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="get" xmlns="w:g2" to="<groupJid>">} stanza that fetches a single group's
- * metadata projection, optionally probing the V4-invite-link add-request flow at the same time.
+ * Fetches a single group's metadata projection via an {@code <iq type="get" xmlns="w:g2">} stanza, optionally
+ * probing the V4-invite-link add-request flow at the same time.
  *
- * @apiNote
- * Drives the chat-info refresh and invite-link landing surfaces backed by
- * {@code WAWebGroupGetGroupInfoJob}, {@code WAWebGroupInviteV4Job}, and similar consumers. The optional
- * {@link #queryPhash()} lets the relay skip parts of the projection that have not changed since the caller's
- * last fetch; the optional add-request triple ({@link #addRequestExpiration()}, {@link #addRequestAdmin()},
- * {@link #addRequestCode()}) attaches the V4 invite landing probe used by {@code WAWebGroupInviteV4Job}.
+ * <p>The optional {@link #queryPhash()} lets the relay skip parts of the projection that have not changed since
+ * the caller's last fetch; the optional add-request triple ({@link #addRequestExpiration()},
+ * {@link #addRequestAdmin()}, {@link #addRequestCode()}) attaches the V4 invite-landing probe. Callers pair
+ * this request with {@link SmaxGroupsGetGroupInfoResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupInfoRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -31,39 +29,38 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupInfoRequestTypeMixin")
 public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Request {
     /**
-     * The group {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
+     * Holds the group {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
      */
     private final Jid groupJid;
 
     /**
-     * The optional dehydration-hash hint stamped on the inner {@code <query phash="...">} child; when
+     * Holds the optional dehydration-hash hint stamped on the inner {@code <query phash="...">} child; when
      * supplied, the relay can return a delta-only projection.
      */
     private final String queryPhash;
 
     /**
-     * The optional V4-invite-link {@code <add_request expiration="...">} attribute; non-null switches the
+     * Holds the optional V4-invite-link {@code <add_request expiration="...">} attribute; non-null switches the
      * request on the invite-landing probe.
      */
     private final Long addRequestExpiration;
 
     /**
-     * The optional V4-invite-link admin-targeted {@code <add_request admin="...">} recipient; mutually
+     * Holds the optional V4-invite-link admin-targeted {@code <add_request admin="...">} recipient; mutually
      * exclusive with {@link #addRequestCode}.
      */
     private final Jid addRequestAdmin;
 
     /**
-     * The optional V4-invite-link code-targeted {@code <add_request code="...">} string; mutually exclusive
-     * with {@link #addRequestAdmin}.
+     * Holds the optional V4-invite-link code-targeted {@code <add_request code="...">} string; mutually
+     * exclusive with {@link #addRequestAdmin}.
      */
     private final String addRequestCode;
 
     /**
      * Constructs a metadata-only request for the given group.
      *
-     * @apiNote
-     * Convenience constructor for callers that do not need the dehydration hint or the V4 invite-landing
+     * <p>Convenience constructor for callers that do not need the dehydration hint or the V4 invite-landing
      * probe; delegates to the full constructor with all optional parameters set to {@code null}.
      *
      * @param groupJid the group {@link Jid}; never {@code null}
@@ -76,9 +73,8 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     /**
      * Constructs a fully-parametrised request.
      *
-     * @apiNote
-     * Pass either {@code addRequestAdmin} or {@code addRequestCode} (not both) when {@code addRequestExpiration}
-     * is supplied; the relay rejects requests carrying both target attributes.
+     * <p>When {@code addRequestExpiration} is supplied, callers pass either {@code addRequestAdmin} or
+     * {@code addRequestCode} (not both); the relay rejects requests carrying both target attributes.
      *
      * @param groupJid             the group {@link Jid}; never {@code null}
      * @param queryPhash           the optional dehydration hash hint; may be {@code null}
@@ -108,8 +104,7 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     /**
      * Returns the optional dehydration hash.
      *
-     * @apiNote
-     * Empty means the request is for a full projection; a non-empty value lets the relay return a
+     * <p>Empty means the request is for a full projection; a non-empty value lets the relay return a
      * delta-only response.
      *
      * @return an {@link Optional} carrying the hash, or empty when the caller did not supply one
@@ -150,9 +145,9 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
      *
      * @implNote
      * This implementation stamps {@code phash} on the {@code <query/>} child when {@link #queryPhash()} is
-     * non-empty, nests an {@code <add_request/>} child carrying the supplied expiration / admin / code
-     * attributes when {@link #addRequestExpiration()} is non-empty, then wraps the result in the canonical
-     * {@code <iq xmlns="w:g2" type="get" to="<groupJid>">} envelope.
+     * non-empty, nests an {@code <add_request/>} child carrying the supplied expiration, admin, and code
+     * attributes when {@link #addRequestExpiration()} is non-empty, then wraps the result in the
+     * {@code <iq xmlns="w:g2" type="get">} envelope addressed to {@link #groupJid()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetGroupInfoRequest",
@@ -183,6 +178,12 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
                 .content(queryBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetGroupInfoRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -199,11 +200,21 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
                 && Objects.equals(this.addRequestCode, that.addRequestCode);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, queryPhash, addRequestExpiration, addRequestAdmin, addRequestCode);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGetGroupInfoRequest[groupJid=" + groupJid

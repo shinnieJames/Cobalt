@@ -15,42 +15,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Byte-identical KAT for {@link WamGlobalEncoder} against vectors
- * captured from {@code WAWebWamLibProtocol.writeGlobalAttribute}.
- *
- * @apiNote
- * Pins what each named global writer (for example
+ * Byte-identical known-answer test for {@link WamGlobalEncoder} against
+ * vectors captured from {@code WAWebWamLibProtocol.writeGlobalAttribute},
+ * exercising each named global writer (for example
  * {@link WamGlobalEncoder#writePlatform},
- * {@link WamGlobalEncoder#writeDeviceName}) emits for a captured
- * (fieldId, value) pair, and what the two generic boundary writers
+ * {@link WamGlobalEncoder#writeDeviceName}) on a captured (fieldId, value)
+ * pair and the two generic boundary writers
  * ({@link WamGlobalEncoder#writeNullGlobal},
- * {@link WamGlobalEncoder#writeDynamicGlobal}) emit for synthetic
- * boundary rows. Agreement here is the strongest possible validation
- * that Cobalt's globals table stays bit-aligned with
- * {@code WAWebWamGlobals}. Vectors live in
- * {@code fixtures/wam/wam-global-encoder.json} and pin snapshot
+ * {@link WamGlobalEncoder#writeDynamicGlobal}) on synthetic boundary rows.
+ *
+ * <p>Agreement here is the strongest validation that Cobalt's globals
+ * table stays bit-aligned with {@code WAWebWamGlobals}. Vectors live in
+ * {@code fixtures/wam/wam-global-encoder.json}, pinned to snapshot
  * revision {@code 1039260921}.
  */
 @DisplayName("WamGlobalEncoder KAT against live WhatsApp Web bundle")
 class WamGlobalEncoderKatTest {
-    /**
-     * The snapshot revision the KAT vectors were captured against;
-     * compared against the fixture header so revision drift fails
-     * loudly.
-     */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
-    /**
-     * The shared output buffer size, comfortable for the longest
-     * captured global value (the UUID-shaped tab id at ~38 bytes).
-     */
+    // Comfortable for the longest captured global value (UUID-shaped tab id at ~38 bytes).
     private static final int MAX_BUFFER = 1_024;
 
-    /**
-     * Returns one dynamic test per captured global vector.
-     *
-     * @return the test factory stream
-     */
     @TestFactory
     List<DynamicTest> globalBytesAgreeWithLiveBundle() {
         var fixture = WamFixtures.loadOracle("wam-global-encoder");
@@ -64,12 +49,6 @@ class WamGlobalEncoderKatTest {
         return tests;
     }
 
-    /**
-     * Encodes the given global via the matching Cobalt writer and
-     * asserts the produced bytes match the captured hex.
-     *
-     * @param vector the captured global descriptor
-     */
     private static void assertVectorAgrees(JSONObject vector) {
         var name = vector.getString("name");
         var fieldId = vector.getIntValue("fieldId");
@@ -88,25 +67,9 @@ class WamGlobalEncoderKatTest {
                 () -> "global bytes mismatch for " + name + " (fieldId=" + fieldId + ", type=" + type + ")");
     }
 
-    /**
-     * Dispatches the row to the matching named {@link WamGlobalEncoder}
-     * writer.
-     *
-     * @apiNote
-     * Rows whose name matches a documented {@link WamGlobalEncoder}
-     * helper exercise that helper directly (so a public-API
-     * regression on a single global fails the matching named row
-     * rather than the catch-all). Rows with synthetic boundary names
-     * (for example {@code null_tinyId}, {@code int_zero},
-     * {@code str_empty}) fall through to
-     * {@link #invokeBoundaryWriter(WamEventEncoder, int, String, Object)}.
-     *
-     * @param encoder     the destination encoder
-     * @param name        the captured row name
-     * @param fieldId     the captured field id
-     * @param type        the captured value type
-     * @param sampleValue the captured raw value
-     */
+    // Named rows exercise their matching WamGlobalEncoder helper directly so a
+    // single-global regression fails that named row, not the catch-all; synthetic
+    // boundary names (null_tinyId, int_zero, str_empty) fall through to invokeBoundaryWriter.
     private static void invokeWriter(WamEventEncoder encoder, String name, int fieldId, String type, Object sampleValue) {
         switch (name) {
             case "mnc" -> WamGlobalEncoder.writeMnc(((Number) sampleValue).longValue(), encoder);
@@ -160,18 +123,6 @@ class WamGlobalEncoderKatTest {
         }
     }
 
-    /**
-     * Dispatches a synthetic boundary row to the generic
-     * {@link WamGlobalEncoder#writeNullGlobal} or
-     * {@link WamGlobalEncoder#writeDynamicGlobal} entry points.
-     *
-     * @param encoder     the destination encoder
-     * @param fieldId     the captured field id
-     * @param type        the captured value type
-     * @param sampleValue the captured raw value
-     * @throws IllegalStateException if {@code type} is not one of
-     *                               the recognised boundary types
-     */
     private static void invokeBoundaryWriter(WamEventEncoder encoder, int fieldId, String type, Object sampleValue) {
         if ("null".equals(type) || sampleValue == null) {
             WamGlobalEncoder.writeNullGlobal(fieldId, encoder);

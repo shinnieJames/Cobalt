@@ -12,47 +12,39 @@ import com.github.auties00.cobalt.call.ActiveCall;
 import com.github.auties00.cobalt.call.CallEndReason;
 
 /**
- * Handles top-level inbound {@code <terminate>} stanzas.
+ * Handles top-level inbound bare {@code <terminate>} stanzas.
  *
- * <p>WA Web's call-end signal does not always arrive wrapped in a
- * {@code <call>} envelope. The server emits a bare
- * {@code <terminate call-id call-creator reason …/>} stanza when:
- * <ul>
- *   <li>another device of the same account accepted or rejected the
- *       call ({@code reason="accepted_elsewhere"});</li>
- *   <li>the server times out the offer;</li>
- *   <li>the peer's call infrastructure forcibly ends the call for
- *       any reason that doesn't fit a {@code <call><terminate>}
- *       envelope.</li>
- * </ul>
- *
- * <p>The receiver routes the event through the same {@link CallService}
- * peer-terminate path that {@link CallReceiver} uses for envelope-wrapped
- * terminates, so listener fan-out and registry cleanup converge.
+ * <p>The call-end signal does not always arrive wrapped in a {@code <call>} envelope. The server emits
+ * a bare {@code <terminate call-id call-creator reason .../>} stanza when another device of the same
+ * account accepted or rejected the call ({@code reason="accepted_elsewhere"}), when the server times
+ * out the offer, or when the peer's call infrastructure forcibly ends the call for any reason that
+ * does not fit a wrapped {@code <call><terminate>} payload. This handler routes the event through the
+ * same {@link CallService} peer-terminate path that {@link CallReceiver} uses for envelope-wrapped
+ * terminates, so listener fan-out and registry cleanup converge regardless of envelope shape.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleVoipCall")
 public final class CallTerminateReceiver implements SocketStream.Handler {
     /**
-     * Logger for parse traces.
+     * Logs parse traces for malformed terminate stanzas.
      */
     private static final System.Logger LOGGER = System.getLogger(CallTerminateReceiver.class.getName());
 
     /**
-     * The owning client used for store access + listener fan-out.
+     * Holds the owning client used for store access and listener fan-out.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The call engine — dispatches peer-side end transitions to the
-     * matching {@link ActiveCall}.
+     * Holds the call engine, which dispatches peer-side end transitions to the matching
+     * {@link ActiveCall}.
      */
     private final CallService engine;
 
     /**
-     * Constructs a new bare-terminate receiver.
+     * Constructs a bare-terminate receiver bound to its client and call engine.
      *
-     * @param whatsapp the owning client
-     * @param engine   the call engine
+     * @param whatsapp the owning client used for store access and listener fan-out
+     * @param engine   the call engine that dispatches peer-side end transitions
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -62,10 +54,14 @@ public final class CallTerminateReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Handles a bare {@code <terminate>} stanza by routing the
-     * peer-end transition through the engine and notifying listeners.
+     * {@inheritDoc}
      *
-     * @param node the inbound terminate stanza
+     * <p>Reads the {@code call-id} attribute and ignores the stanza when it is absent. Otherwise it
+     * resolves the end reason from {@code reason}, derives the ending party from {@code call-creator}
+     * (falling back to {@code from}), routes the peer-terminate transition through the engine, removes
+     * the call from the store, and notifies listeners.
+     *
+     * @param node the inbound bare {@code <terminate>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -88,13 +84,17 @@ public final class CallTerminateReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies every listener that the call has terminated, on a
-     * virtual thread so the socket stream isn't blocked.
+     * Notifies every registered listener that the call has terminated.
      *
-     * @param callId  the call identifier
-     * @param fromJid the JID of the party that ended the call, or
-     *                {@code null} when the server elided it
-     * @param wireReason the wire-level reason literal
+     * <p>The wire reason literal is parsed into a typed {@link CallEndReason} via
+     * {@link CallEndReason#fromWireValue(String)}; unrecognized or absent literals surface as
+     * {@link CallEndReason#UNKNOWN}. Each listener is invoked on its own virtual thread so the socket
+     * stream handler thread is not blocked.
+     *
+     * @param callId     the identifier of the call that ended
+     * @param fromJid    the JID of the party that ended the call, or {@code null} when the server
+     *                   elided it
+     * @param wireReason the wire-level reason literal, or {@code null}
      */
     private void notifyEnded(String callId, Jid fromJid, String wireReason) {
         var parsed = CallEndReason.fromWireValue(wireReason);

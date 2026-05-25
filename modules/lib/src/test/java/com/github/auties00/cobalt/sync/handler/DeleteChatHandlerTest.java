@@ -32,22 +32,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link DeleteChatHandler} adapter for
- * {@code WAWebDeleteChatSync}.
+ * Exercises the {@link DeleteChatHandler} adapter for the {@code deleteChat}
+ * app-state sync action across metadata, the SET happy path, the orphan and
+ * malformed branches, the REMOVE rejection, the four-way message-range
+ * conflict matrix, and the outbound builder helper.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code deleteChat} app-state
- * sync action across metadata, the SET happy path, the orphan and
- * malformed branches, the REMOVE rejection and the four-way
- * message-range conflict matrix.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so each test starts from a clean single-device state. Mutations are
- * built inline through {@link DeleteChatActionBuilder} and
- * {@link SyncActionMessageRangeBuilder} factories so the wire-shape of
- * the index matches WA Web verbatim.
+ * <p>Each test runs against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * via {@link TestWhatsAppClient}, so it starts from a clean single-device state.
+ * Mutations are built inline through {@link DeleteChatActionBuilder} and
+ * {@link SyncActionMessageRangeBuilder} so the wire shape of the index matches
+ * WA Web verbatim.
  */
 @DisplayName("DeleteChatHandler")
 class DeleteChatHandlerTest {

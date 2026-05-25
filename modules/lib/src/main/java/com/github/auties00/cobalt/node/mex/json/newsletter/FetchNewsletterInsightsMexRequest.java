@@ -19,53 +19,45 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Builds the MEX request that fetches admin analytics insights for a
- * newsletter.
+ * Builds the MEX request that fetches admin analytics insights for a newsletter.
  *
- * @apiNote
- * Drives the admin insights dashboard; the {@code metrics} list selects
- * which counters are pulled (views, reactions, forwards, follower growth)
- * and the relay returns a per-metric series plus a freshness timestamp.
+ * <p>Backs the admin insights dashboard. The {@code metrics} list selects which counters are pulled
+ * (views, reactions, forwards, follower growth) and the relay returns a per-metric series plus a
+ * freshness timestamp, parsed by {@link FetchNewsletterInsightsMexResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterInsightsJob")
 public final class FetchNewsletterInsightsMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexFetchNewsletterInsightsJobQuery.graphql} on the
-     * WhatsApp relay.
+     * Holds the compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterInsightsJobQuery.graphql} on the WhatsApp relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Sent as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9853618868050977";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this query.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterInsights";
 
     /**
-     * The newsletter Jid whose insights are being requested.
+     * Holds the newsletter Jid whose insights are being requested.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterInsightsJob", exports = "mexFetchNewsletterInsights",
             adaptation = WhatsAppAdaptation.DIRECT)
     private final String newsletterId;
 
     /**
-     * The list of metric identifiers to fetch values for.
+     * Holds the list of metric identifiers to fetch values for.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterInsightsJob", exports = "mexFetchNewsletterInsights",
             adaptation = WhatsAppAdaptation.DIRECT)
     private final List<String> metrics;
 
     /**
-     * Constructs a request fetching the supplied metrics for the given
-     * newsletter.
+     * Constructs a request fetching the supplied metrics for the given newsletter.
      *
-     * @apiNote
-     * Each metric identifier in {@code metrics} maps to one
-     * {@code WAWebNewsletterInsightUtils} counter on the server side.
+     * <p>Each metric identifier in {@code metrics} maps to one server-side insight counter.
      *
      * @param newsletterId the newsletter Jid
      * @param metrics      the metric identifiers to pull, may be {@code null}
@@ -80,8 +72,7 @@ public final class FetchNewsletterInsightsMexRequest implements MexOperation.Req
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns the value of {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -91,8 +82,7 @@ public final class FetchNewsletterInsightsMexRequest implements MexOperation.Req
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns the value of {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -100,19 +90,16 @@ public final class FetchNewsletterInsightsMexRequest implements MexOperation.Req
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the {@code {variables: {input: {newsletter_id, metrics}}}}
-     * payload; each scalar is omitted when its field is {@code null}.
+     * <p>Produces the {@code {variables: {input: {newsletter_id, metrics}}}} payload; each scalar is
+     * omitted when its field is {@code null}.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterInsightsJob", exports = "mexFetchNewsletterInsights",

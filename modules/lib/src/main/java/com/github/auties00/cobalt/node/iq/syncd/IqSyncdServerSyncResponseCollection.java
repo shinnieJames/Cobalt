@@ -11,25 +11,27 @@ import java.util.SequencedCollection;
  * A single {@code <collection/>} projection inside an inbound
  * {@link IqSyncdServerSyncResponse.Success} reply.
  *
- * @apiNote
- * Each entry carries the wire-derived
- * {@link IqSyncdServerSyncCollectionState state} (computed by the parser from the
- * {@code type}, {@code <error code>} and {@code has_more_patches} attributes), the
- * relay-issued {@code version}, plus the optional {@code <patches>} and
- * {@code <snapshot>} payloads. Apply the state-specific transition to drive the
- * sync loop: {@code SUCCESS*} arms apply the payloads, {@code CONFLICT*} arms
- * reconcile, and {@code ERROR_*} arms drop or schedule a retry.
+ * <p>Each entry carries the wire-derived {@link IqSyncdServerSyncCollectionState
+ * state} (computed by the parser from the {@code type}, {@code <error code>} and
+ * {@code has_more_patches} attributes), the relay-issued {@code version}, plus the
+ * optional {@code <patches>} and {@code <snapshot>} payloads. The state-specific
+ * transition drives the sync loop: {@code SUCCESS*} arms apply the payloads,
+ * {@code CONFLICT*} arms reconcile, and {@code ERROR_*} arms drop or schedule a
+ * retry.
  *
  * @implNote
  * This implementation surfaces both {@code <patches>} entries and the
  * {@code <snapshot>} body as raw byte arrays; the encrypted-patch decoding (LtHash
  * verification, per-mutation decryption) happens in the caller's apply pipeline
- * rather than at parse time.
+ * rather than at parse time. The {@code snapshot} bytes encode an
+ * {@code ExternalBlobReference} protobuf pointing at the snapshot blob in MMS, and
+ * the {@code patches} bytes encode raw {@code SyncdPatch} protobufs; both are
+ * decoded at a higher layer.
  */
 public final class IqSyncdServerSyncResponseCollection {
     /**
-     * Holds the collection name (one of the values in WA Web's
-     * {@code WASyncdConst.CollectionName}).
+     * Holds the collection name, one of the values in WA Web's
+     * {@code WASyncdConst.CollectionName}.
      */
     private final String name;
 
@@ -51,20 +53,13 @@ public final class IqSyncdServerSyncResponseCollection {
     private final List<byte[]> patches;
 
     /**
-     * Holds the encoded snapshot payload returned in the {@code <snapshot/>}
-     * child, or {@code null} when absent.
+     * Holds the encoded snapshot payload returned in the {@code <snapshot/>} child,
+     * or {@code null} when absent.
      */
     private final byte[] snapshot;
 
     /**
      * Constructs a new inbound collection projection.
-     *
-     * @apiNote
-     * The {@code snapshot} bytes encode an {@code ExternalBlobReference} protobuf
-     * that points at the actual snapshot blob in MMS; the caller dereferences it
-     * via {@code WAWebSyncdDecode.decodeExternalBlobReference}. The {@code patches}
-     * bytes encode raw {@code SyncdPatch} protobufs the caller decodes via
-     * {@code WAWebSyncdDecode.decodeSyncdPatch}.
      *
      * @param name     the collection name; never {@code null}
      * @param state    the wire-derived state; never {@code null}
@@ -133,6 +128,14 @@ public final class IqSyncdServerSyncResponseCollection {
         return Optional.ofNullable(snapshot);
     }
 
+    /**
+     * Compares this projection to another for equality across name, state, version,
+     * patches and snapshot bytes.
+     *
+     * @param obj the object to compare against, or {@code null}
+     * @return {@code true} when {@code obj} is an
+     *         {@link IqSyncdServerSyncResponseCollection} equal in every field
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -149,11 +152,24 @@ public final class IqSyncdServerSyncResponseCollection {
                 && Arrays.equals(this.snapshot, that.snapshot);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)} over name, state,
+     * version, patches and snapshot bytes.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(name, state, version, patches, Arrays.hashCode(snapshot));
     }
 
+    /**
+     * Returns a debugging representation that elides the patch and snapshot bytes to
+     * their counts and length.
+     *
+     * @return a string of the form
+     *         {@code IqSyncdServerSyncResponseCollection[name=..., state=..., version=..., patches=N, snapshot=byte[M]]}
+     */
     @Override
     public String toString() {
         return "IqSyncdServerSyncResponseCollection[name=" + name

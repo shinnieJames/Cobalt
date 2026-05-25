@@ -32,55 +32,63 @@ import java.nio.file.Path;
  * Decodes a source music or general-audio stream and re-encodes it as a
  * WhatsApp non-PTT audio attachment (AAC inside an MP4/M4A container).
  *
- * @apiNote
- * Drives the non-voice audio branch of the upload transcoder. Targets
- * 48 kHz stereo AAC at either {@value #AAC_BITRATE_STANDARD} bps
- * ({@code STANDARD} quality) or {@value #AAC_BITRATE_HD} bps
- * ({@code HD} quality). The output container is M4A (the {@code ipod}
- * muxer in libavformat) so the file plays directly on every WhatsApp
- * client without further re-encoding.
+ * <p>This is the non-voice audio branch of the upload transcoder. The output
+ * targets {@value #OUTPUT_SAMPLE_RATE} Hz stereo AAC at either
+ * {@value #AAC_BITRATE_STANDARD} bps for the
+ * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} preset or
+ * {@value #AAC_BITRATE_HD} bps for the
+ * {@link SettingsSyncAction.MediaQualitySetting#HD} preset. The container is
+ * M4A (the {@code ipod} muxer in libavformat) so the file plays directly on
+ * every WhatsApp client without further re-encoding. Embedded source metadata
+ * (ID3, FLAC tags) is not preserved; the upload protobuf carries its own
+ * caption and filename fields.
  *
  * @implNote
  * This implementation drives FFmpeg end-to-end: libavformat demux,
- * libswresample to {@code FLTP} 48 kHz stereo, the native FFmpeg AAC
- * encoder, libavformat M4A mux. Sources sampled above 48 kHz are
- * downsampled; sources below 48 kHz are upsampled by libswresample so the
- * encoder always sees a uniform input format. The pipeline does not
- * preserve embedded metadata (ID3, FLAC tags) because the upload protobuf
- * carries its own caption and filename fields.
+ * libswresample to {@code FLTP} {@value #OUTPUT_SAMPLE_RATE} Hz stereo, the
+ * native FFmpeg AAC encoder, libavformat M4A mux. Sources sampled above
+ * {@value #OUTPUT_SAMPLE_RATE} Hz are downsampled and sources below it are
+ * upsampled by libswresample so the encoder always sees a uniform input
+ * format.
  */
 public final class AudioPipeline {
     /**
-     * Sample rate of the encoded output in Hz.
+     * Holds the sample rate of the encoded output in Hz.
      */
     private static final int OUTPUT_SAMPLE_RATE = 48_000;
 
     /**
-     * Channel count of the encoded output (stereo).
+     * Holds the channel count of the encoded output (stereo).
      */
     private static final int OUTPUT_CHANNELS = 2;
 
     /**
-     * AAC bitrate for the {@code STANDARD} quality preset.
+     * Holds the AAC bitrate for the
+     * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} quality preset.
      */
     private static final int AAC_BITRATE_STANDARD = 128_000;
 
     /**
-     * AAC bitrate for the {@code HD} quality preset.
+     * Holds the AAC bitrate for the
+     * {@link SettingsSyncAction.MediaQualitySetting#HD} quality preset.
      */
     private static final int AAC_BITRATE_HD = 192_000;
 
     /**
-     * Default AAC frame size in samples; the native FFmpeg AAC encoder
-     * announces {@code 1024} via {@code AVCodecContext.frame_size} after
-     * {@code avcodec_open2}, so this is a deliberately defensive default
-     * for the unlikely case of a build that reports zero.
+     * Holds the fallback AAC frame size in samples per channel.
+     *
+     * @implNote
+     * This implementation uses {@code 1024} because the native FFmpeg AAC
+     * encoder announces that value via {@code AVCodecContext.frame_size} after
+     * {@code avcodec_open2}; it is a defensive default for the unlikely case of
+     * a build that reports zero.
      */
     private static final int DEFAULT_AAC_FRAME_SAMPLES = 1024;
 
     /**
-     * Constructs the pipeline; the parent
-     * {@link MediaTranscoderService} owns the single instance.
+     * Constructs the pipeline.
+     *
+     * <p>The parent {@link MediaTranscoderService} owns the single instance.
      */
     public AudioPipeline() {
     }
@@ -89,12 +97,15 @@ public final class AudioPipeline {
      * Transcodes the source audio, applies codec-derived metadata to
      * {@code provider}, and returns the encoded payload stream.
      *
-     * @apiNote
-     * Mutates the provider in place: when {@code provider} is an
-     * {@link AudioMessage} the {@code mimetype}, {@code mediaSize}, and
-     * {@code seconds} fields are populated; every other
-     * {@link MediaProvider} variant receives only the common
-     * {@code mediaSize} update.
+     * <p>Decodes the source, resamples it to {@value #OUTPUT_SAMPLE_RATE} Hz
+     * stereo, and encodes it as M4A at the bitrate selected by {@code quality}.
+     * The provider is mutated in place: when {@code provider} is an
+     * {@link AudioMessage} the {@link AudioMessage#setMimetype(String) mimetype},
+     * {@link MediaProvider#setMediaSize(long) mediaSize}, and
+     * {@link AudioMessage#setSeconds(Integer) seconds} fields are populated;
+     * every other {@link MediaProvider} variant receives only the common
+     * {@link MediaProvider#setMediaSize(long) mediaSize} update. The reported
+     * duration is clamped to a minimum of one second.
      *
      * @param provider the upload target; codec-derived fields are applied
      *                 to this instance
@@ -569,16 +580,16 @@ public final class AudioPipeline {
     }
 
     /**
-     * Calls the given {@code av_*_free} variant on a pointer slot if the
-     * pointer is non-NULL.
+     * Calls the given {@code av_*_free} variant on a pointer slot when the
+     * pointer is non-{@code NULL}.
      *
-     * @apiNote
-     * Wraps the standard FFmpeg pattern of allocating a single
-     * pointer-to-pointer slot in a confined arena, stuffing the pointer
-     * into it, and handing the slot to libav so libav can null the field
-     * out after free.
+     * <p>Wraps the standard FFmpeg ownership-release pattern: allocates a
+     * single pointer-to-pointer slot in a confined arena, stores {@code ptr}
+     * into it, and hands the slot to libav so libav can null the field out
+     * after the free. A {@code null} or {@code NULL} pointer is a no-op.
      *
-     * @param ptr   the pointer to free; ignored when {@code NULL}
+     * @param ptr   the pointer to free; ignored when {@code null} or
+     *              {@code NULL}
      * @param freer the libav free function accepting a pointer-to-pointer
      */
     private static void freePointer(MemorySegment ptr, FreePointer freer) {

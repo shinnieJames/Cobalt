@@ -8,7 +8,9 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.NavigableMap;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 import static com.github.auties00.cobalt.wam.binary.WamTags.*;
 
@@ -189,6 +191,45 @@ public abstract sealed class WamEventDecoder
      */
     public static boolean isLast(int header) {
         return ((header >>> 16) & LAST) != 0;
+    }
+
+    /**
+     * Reads a run of field entries into a map keyed by field identifier,
+     * decoding each value purely from its wire representation.
+     *
+     * <p>The semantic type of a field cannot be recovered from the wire
+     * (integers, booleans, timers, and enums share the integer forms), so
+     * each value is stored as the matching {@link WamWireValue}: a
+     * float64 becomes {@link WamWireValue.WamFloat}, a length-prefixed
+     * string becomes {@link WamWireValue.WamString}, and every integer form
+     * becomes {@link WamWireValue.WamInt}. Null-valued entries carry no
+     * payload and are omitted from the result. The returned map is sorted
+     * by field identifier so a subsequent {@link WamEventEncoder#writeEvent}
+     * emits fields in a deterministic order.
+     *
+     * @param decoder   the source decoder positioned at the first field
+     *                  header, must not be {@code null}
+     * @param hasFields {@code true} if at least one field follows the event
+     *                  marker; {@code false} for an empty event
+     * @return a sorted, concurrent map of field identifier to decoded value
+     */
+    public static NavigableMap<Integer, WamWireValue> readFields(WamEventDecoder decoder, boolean hasFields) {
+        var fields = new ConcurrentSkipListMap<Integer, WamWireValue>();
+        while (hasFields) {
+            var header = decoder.readHeader();
+            var fieldId = fieldIdOf(header);
+            WamWireValue value = switch (valueTypeOf(header)) {
+                case VALUE_NULL -> null;
+                case VALUE_FLOAT64 -> new WamWireValue.WamFloat(decoder.readFloat(header));
+                case VALUE_STR8, VALUE_STR16, VALUE_STR32 -> new WamWireValue.WamString(decoder.readString(header));
+                default -> new WamWireValue.WamInt(decoder.readInt(header));
+            };
+            if (value != null) {
+                fields.put(fieldId, value);
+            }
+            hasFields = !isLast(header);
+        }
+        return fields;
     }
 
     /**

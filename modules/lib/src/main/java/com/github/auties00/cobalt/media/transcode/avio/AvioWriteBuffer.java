@@ -20,40 +20,40 @@ import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 
 /**
- * AVIO bridge that lets libavformat mux output through Java upcalls.
+ * Bridges libavformat muxer output onto a Java sink through native upcalls.
  *
- * @apiNote
- * Two sealed variants cover every muxer shape Cobalt drives.
- * {@link HeapBuffer} backs the sink with a growing heap {@code byte[]} and
- * never registers a read or seek callback; it is the right fit for
- * append-only muxers whose output is small enough to live in heap (OGG
- * voice notes, single-packet image codecs not driven through libavformat).
- * {@link FileSystem} backs the sink with a {@link FileChannel} on a
- * temporary file and registers read + seek callbacks too, supporting
- * muxers that backseek during {@code av_write_trailer} (M4A {@code ipod}
- * trailer-atom rewrite, MP4 {@code +faststart} moov hoist). Construct
- * either through the static {@link #ofHeap(Arena)} /
- * {@link #ofFileSystem(Arena)} factories.
+ * <p>Two sealed variants cover the muxer shapes Cobalt drives. {@link HeapBuffer} accumulates output
+ * in a growing heap {@code byte[]} and registers no read or seek callback, which fits append-only
+ * muxers whose output is small enough to live in heap, such as OGG voice notes. {@link FileSystem}
+ * pipes output through a {@link FileChannel} on a temporary file and registers read and seek
+ * callbacks too, which supports muxers that backseek during {@code av_write_trailer}, such as the
+ * M4A {@code ipod} trailer-atom rewrite and the MP4 {@code +faststart} {@code moov} hoist. Instances
+ * are obtained through the {@link #ofHeap(Arena)} and {@link #ofFileSystem(Arena)} factories rather
+ * than constructed directly.
  *
- * @implNote
- * Read, write, and seek upcalls wrap the native AVIO buffer slice as a
- * direct {@link java.nio.ByteBuffer} via {@link MemorySegment#asByteBuffer()}
- * (for the file-backed variant) so disk and FFmpeg's native buffer
- * exchange bytes with one syscall and zero Java-heap intermediation. The
- * heap variant copies once from the native AVIO buffer into the backing
- * array, which is acceptable because its callers cap their output at
- * sub-MB. The parent class binds upcall stubs to {@code this}, so the
- * virtual dispatch of the abstract {@link #writePacket} / {@link #readPacket}
- * / {@link #seek} methods routes to the concrete variant at runtime. The
- * AVIO context is created with the read and seek slots set to
- * {@code NULL} when the variant is not seekable, so FFmpeg never invokes
- * the no-op defaults inherited from the parent.
+ * <p>The upcalls cannot propagate exceptions across the native boundary, so a sink I/O error is
+ * reported to libavformat as a negative status and stashed in {@link #lastError()}. The owning
+ * pipeline inspects {@link #lastError()} after FFmpeg returns and converts a non-null result into a
+ * {@link com.github.auties00.cobalt.exception.WhatsAppMediaException.Processing}.
+ *
+ * @implNote This implementation binds the upcall stubs to {@code this}, so the virtual dispatch of
+ * the abstract {@link #writePacket} and the overridable {@link #readPacket} and {@link #seek}
+ * routes each native call to the concrete variant at runtime. The file-backed variant wraps the
+ * native AVIO buffer slice as a direct {@link java.nio.ByteBuffer} via
+ * {@link MemorySegment#asByteBuffer()} so disk and FFmpeg's native buffer exchange bytes with one
+ * syscall and no Java-heap copy; the heap variant instead copies once from the native buffer into
+ * its backing array, which is acceptable because its callers cap their output at sub-megabyte
+ * sizes. The AVIO context is created with the read and seek slots set to {@code NULL} for a
+ * non-seekable variant, so libavformat never invokes the no-op defaults inherited from this class.
  */
 public sealed abstract class AvioWriteBuffer implements AutoCloseable
         permits AvioWriteBuffer.HeapBuffer, AvioWriteBuffer.FileSystem {
     /**
-     * Layout descriptor for the {@code read_packet} upcall:
-     * {@code int (*)(void *opaque, uint8_t *buf, int buf_size)}.
+     * Describes the {@code read_packet} upcall signature {@code int (*)(void *opaque, uint8_t *buf, int buf_size)}.
+     *
+     * <p>Returns a {@code JAVA_INT} byte count and takes the opaque pointer, the destination buffer
+     * pointer, and the buffer size, matching the function-pointer slot {@code avio_alloc_context}
+     * expects for reads.
      */
     private static final FunctionDescriptor READ_PACKET_DESCRIPTOR = FunctionDescriptor.of(
             ValueLayout.JAVA_INT,
@@ -62,8 +62,11 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
             ValueLayout.JAVA_INT);
 
     /**
-     * Layout descriptor for the {@code write_packet} upcall:
-     * {@code int (*)(void *opaque, const uint8_t *buf, int buf_size)}.
+     * Describes the {@code write_packet} upcall signature {@code int (*)(void *opaque, const uint8_t *buf, int buf_size)}.
+     *
+     * <p>Returns a {@code JAVA_INT} byte count and takes the opaque pointer, the source buffer
+     * pointer, and the buffer size, matching the function-pointer slot {@code avio_alloc_context}
+     * expects for writes.
      */
     private static final FunctionDescriptor WRITE_PACKET_DESCRIPTOR = FunctionDescriptor.of(
             ValueLayout.JAVA_INT,
@@ -72,8 +75,11 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
             ValueLayout.JAVA_INT);
 
     /**
-     * Layout descriptor for the {@code seek} upcall:
-     * {@code int64_t (*)(void *opaque, int64_t offset, int whence)}.
+     * Describes the {@code seek} upcall signature {@code int64_t (*)(void *opaque, int64_t offset, int whence)}.
+     *
+     * <p>Returns a {@code JAVA_LONG} position and takes the opaque pointer, the target offset, and
+     * the whence selector, matching the function-pointer slot {@code avio_alloc_context} expects for
+     * seeks.
      */
     private static final FunctionDescriptor SEEK_DESCRIPTOR = FunctionDescriptor.of(
             ValueLayout.JAVA_LONG,
@@ -82,71 +88,77 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
             ValueLayout.JAVA_INT);
 
     /**
-     * {@code SEEK_SET}: set the position to {@code offset}.
+     * Holds the POSIX {@code SEEK_SET} whence, which sets the position to {@code offset}.
      */
     private static final int SEEK_SET = 0;
 
     /**
-     * {@code SEEK_CUR}: add {@code offset} to the current position.
+     * Holds the POSIX {@code SEEK_CUR} whence, which adds {@code offset} to the current position.
      */
     private static final int SEEK_CUR = 1;
 
     /**
-     * {@code SEEK_END}: set the position to {@code size + offset}.
+     * Holds the POSIX {@code SEEK_END} whence, which sets the position to {@code size + offset}.
      */
     private static final int SEEK_END = 2;
 
     /**
-     * {@code AVSEEK_SIZE} flag from {@code libavformat/avio.h}: report
-     * the underlying size rather than performing an actual seek.
+     * Holds the {@code AVSEEK_SIZE} flag, which requests the underlying size instead of a seek.
+     *
+     * @implNote This implementation uses {@code 0x10000}, the value defined for {@code AVSEEK_SIZE}
+     * in {@code libavformat/avio.h}. libavformat ORs the flag into the whence word, so the seek
+     * upcall masks the low byte off before matching a POSIX whence.
      */
     private static final int AVSEEK_SIZE = 0x10000;
 
     /**
-     * Default size of the AVIO buffer in bytes.
+     * Holds the default AVIO buffer size in bytes.
+     *
+     * @implNote This implementation uses {@code 4096}, the buffer size FFmpeg's own custom-IO
+     * example programs allocate.
      */
     public static final int DEFAULT_BUFFER_SIZE = 4096;
 
     /**
-     * Native buffer handed to {@code avio_alloc_context}.
+     * Holds the native buffer handed to {@code avio_alloc_context} as the AVIO write buffer.
      */
     protected final MemorySegment avioBuffer;
 
     /**
-     * AVIOContext pointer; set on the owning {@code AVFormatContext} via
-     * {@code AVFormatContext.pb}.
+     * Holds the AVIOContext pointer, which the owning pipeline installs on its {@code AVFormatContext}
+     * through the {@code AVFormatContext.pb} field.
      */
     protected final MemorySegment ioContext;
 
     /**
-     * Last {@link IOException} thrown from the underlying sink, if any.
+     * Holds the last {@link IOException} thrown from the underlying sink, or {@code null} when none
+     * occurred.
+     *
+     * <p>Declared {@code volatile} because the upcall stub may run on whichever thread libavformat
+     * drives the muxer from, while the owning pipeline reads the field after the FFmpeg call
+     * returns.
      */
     protected volatile IOException lastError;
 
     /**
-     * Guards against double-close.
+     * Guards against a second {@link #close()} freeing the AVIO context twice.
      */
     private boolean closed;
 
     /**
-     * Initialises the AVIO context, binding the {@code write_packet}
-     * upcall stub to {@link #writePacket} and (when {@code seekable} is
-     * {@code true}) the {@code read_packet} and {@code seek} stubs to
-     * {@link #readPacket} and {@link #seek}.
+     * Initialises the AVIO context for a subclass, binding the upcall stubs to {@code this}.
      *
-     * @apiNote
-     * Subclass-only constructor invoked by {@link HeapBuffer} and
-     * {@link FileSystem}. The bound upcall stubs dispatch through the
-     * subclass's overrides so the abstract write path resolves to the
-     * concrete implementation at native-call time. The AVIO context is
-     * created with {@code read_packet} and {@code seek} set to
-     * {@code NULL} when {@code seekable} is {@code false}, so libavformat
-     * never invokes those upcalls for muxers that do not seek.
+     * <p>Allocates the native AVIO buffer and binds the {@code write_packet} stub to
+     * {@link #writePacket}. When {@code seekable} is {@code true} it also binds the
+     * {@code read_packet} and {@code seek} stubs to {@link #readPacket} and {@link #seek};
+     * otherwise those AVIO context slots are left {@code NULL} so libavformat never invokes them.
+     * The bound stubs dispatch through the subclass overrides, so each native call resolves to the
+     * concrete variant. On any failure after the buffer is allocated but before the context is
+     * created, the buffer is freed so no native memory leaks.
      *
      * @param arena      the arena confining the upcall stubs
-     * @param bufferSize the AVIO buffer size in bytes; must be positive
-     * @param seekable   {@code true} when {@link #readPacket} and
-     *                   {@link #seek} should be registered alongside
+     * @param bufferSize the AVIO buffer size in bytes, which must be positive
+     * @param seekable   {@code true} to register {@link #readPacket} and {@link #seek} alongside
      *                   {@link #writePacket}
      */
     private AvioWriteBuffer(Arena arena, int bufferSize, boolean seekable) {
@@ -198,12 +210,10 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * Returns a fresh heap-backed write bridge with the default AVIO
-     * buffer size.
+     * Returns a heap-backed write bridge using {@link #DEFAULT_BUFFER_SIZE}.
      *
-     * @apiNote
-     * Used by pipelines whose output fits comfortably in heap and is
-     * produced by an append-only muxer (OGG voice notes).
+     * <p>Suits pipelines whose output fits comfortably in heap and is produced by an append-only
+     * muxer, such as OGG voice notes.
      *
      * @param arena the arena confining the upcall stubs
      * @return the heap-backed bridge
@@ -213,11 +223,10 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * Returns a fresh heap-backed write bridge with an explicit AVIO
-     * buffer size.
+     * Returns a heap-backed write bridge with an explicit AVIO buffer size.
      *
      * @param arena      the arena confining the upcall stubs
-     * @param bufferSize the AVIO buffer size in bytes; must be positive
+     * @param bufferSize the AVIO buffer size in bytes, which must be positive
      * @return the heap-backed bridge
      */
     public static HeapBuffer ofHeap(Arena arena, int bufferSize) {
@@ -225,12 +234,10 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * Returns a fresh file-backed write bridge with the default AVIO
-     * buffer size, backed by a freshly-created temp file.
+     * Returns a file-backed write bridge using {@link #DEFAULT_BUFFER_SIZE}.
      *
-     * @apiNote
-     * Used by pipelines whose muxer backseeks (M4A {@code ipod},
-     * MP4 {@code +faststart}) or whose output is too large to live in
+     * <p>Creates a fresh temporary file to back the sink. Suits pipelines whose muxer backseeks,
+     * such as M4A {@code ipod} and MP4 {@code +faststart}, or whose output is too large to live in
      * heap.
      *
      * @param arena the arena confining the upcall stubs
@@ -242,11 +249,14 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * Returns a fresh file-backed write bridge with an explicit AVIO
-     * buffer size.
+     * Returns a file-backed write bridge with an explicit AVIO buffer size.
+     *
+     * <p>Creates a temporary file and opens it for read and write before constructing the bridge. On
+     * any failure after the file is created, the channel is closed and the file is deleted so no
+     * temp file leaks.
      *
      * @param arena      the arena confining the upcall stubs
-     * @param bufferSize the AVIO buffer size in bytes; must be positive
+     * @param bufferSize the AVIO buffer size in bytes, which must be positive
      * @return the file-backed bridge
      * @throws IOException if the temp file cannot be created or opened
      */
@@ -281,54 +291,75 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * Returns the last {@link IOException} thrown from the underlying
-     * sink, if any.
+     * Returns the last {@link IOException} thrown from the underlying sink, or {@code null}.
      *
-     * @apiNote
-     * The upcalls cannot throw across the native boundary, so a sink
-     * I/O error is reported to FFmpeg as a negative status and stashed
-     * here. Pipelines must inspect this value after FFmpeg returns and
-     * convert a non-null result into a
+     * <p>Because the upcalls cannot throw across the native boundary, a sink I/O error is reported
+     * to libavformat as a negative status and stashed here. The owning pipeline inspects this value
+     * after FFmpeg returns and converts a non-null result into a
      * {@link com.github.auties00.cobalt.exception.WhatsAppMediaException.Processing}.
      *
-     * @return the last sink exception, or {@code null} if none
+     * @return the last sink exception, or {@code null} if none occurred
      */
     public final IOException lastError() {
         return lastError;
     }
 
     /**
-     * libavformat write upcall; implementations route the supplied
-     * native bytes to their backing sink.
+     * Routes the libavformat-supplied native bytes to the subclass sink.
      *
-     * @param opaque  unused
-     * @param buf     source buffer
-     * @param bufSize bytes to write
-     * @return the number of bytes written, or a negative
-     *         {@code AVERROR_*} on failure
+     * <p>libavformat invokes this through the {@code write_packet} upcall stub whenever it flushes
+     * muxer output.
+     *
+     * @implSpec An implementation writes the {@code bufSize} bytes at {@code buf} to its backing
+     * sink and returns the number of bytes accepted, or a negative {@code AVERROR_*} status on
+     * failure. An implementation must not propagate an exception across the native boundary; it
+     * stashes a sink {@link IOException} in {@link #lastError} and reports a negative status
+     * instead.
+     *
+     * @param opaque  the opaque pointer, unused
+     * @param buf     the source buffer
+     * @param bufSize the number of bytes to write
+     * @return the number of bytes written, or a negative {@code AVERROR_*} on failure
      */
     abstract int writePacket(MemorySegment opaque, MemorySegment buf, int bufSize);
 
     /**
-     * libavformat read upcall; non-seekable implementations inherit the
-     * default which immediately reports end-of-input.
+     * Reads bytes back from the sink in response to a libavformat read; non-seekable variants
+     * report end-of-input.
      *
-     * @param opaque  unused
-     * @param buf     destination buffer
-     * @param bufSize maximum bytes to copy
-     * @return {@link Ffmpeg#AVERROR_EOF()} for the default implementation
+     * <p>libavformat invokes this through the {@code read_packet} upcall stub only for a seekable
+     * variant whose AVIO context registered the read slot. The default implementation immediately
+     * reports end-of-input and exists so the non-seekable variant never needs to override it.
+     *
+     * @implSpec A seekable variant reads up to {@code bufSize} bytes from its sink into {@code buf}
+     * and returns the byte count, or {@code AVERROR_EOF} on end-of-input or I/O error. The default
+     * returns {@code AVERROR_EOF} and is never reached for a non-seekable variant because its read
+     * slot is left {@code NULL}.
+     *
+     * @param opaque  the opaque pointer, unused
+     * @param buf     the destination buffer
+     * @param bufSize the maximum number of bytes to copy
+     * @return {@code AVERROR_EOF} for the default implementation
      */
     int readPacket(MemorySegment opaque, MemorySegment buf, int bufSize) {
         return Ffmpeg.AVERROR_EOF();
     }
 
     /**
-     * libavformat seek upcall; non-seekable implementations inherit the
-     * default which reports failure.
+     * Repositions the sink in response to a libavformat seek; non-seekable variants report failure.
      *
-     * @param opaque unused
-     * @param offset target offset
-     * @param whence seek mode
+     * <p>libavformat invokes this through the {@code seek} upcall stub only for a seekable variant
+     * whose AVIO context registered the seek slot. The default implementation reports failure and
+     * exists so the non-seekable variant never needs to override it.
+     *
+     * @implSpec A seekable variant interprets {@code whence} as a POSIX whence, or returns the sink
+     * size when the {@link #AVSEEK_SIZE} flag is set, and returns the new absolute position or
+     * {@code -1} on failure. The default returns {@code -1} and is never reached for a non-seekable
+     * variant because its seek slot is left {@code NULL}.
+     *
+     * @param opaque the opaque pointer, unused
+     * @param offset the target offset
+     * @param whence the seek mode
      * @return {@code -1} for the default implementation
      */
     long seek(MemorySegment opaque, long offset, int whence) {
@@ -336,9 +367,13 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * Releases the AVIO context, frees the backing native buffer, and
-     * (for the file-backed variant) closes the channel and deletes the
-     * temp file when not previously detached.
+     * Releases the AVIO context, frees the backing native buffer, and releases subclass storage.
+     *
+     * <p>Frees the AVIO buffer pointer through {@code av_freep} and the AVIO context through
+     * {@code avio_context_free}, reading the live buffer pointer back from the context because
+     * libavformat may have grown or replaced the original allocation, then invokes
+     * {@link #releaseBackingStorage()}. The call is idempotent: a second invocation returns without
+     * touching native memory.
      */
     @Override
     public final void close() {
@@ -365,41 +400,39 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     /**
      * Releases any type-specific backing storage held by the subclass.
      *
-     * @apiNote
-     * Hook invoked by {@link #close()} after the AVIO context is freed.
-     * {@link HeapBuffer} has nothing to release; {@link FileSystem}
-     * closes its channel and deletes its temp file when not previously
-     * detached via {@link FileSystem#release()}.
+     * <p>Invoked by {@link #close()} after the AVIO context is freed. The default does nothing
+     * because {@link HeapBuffer} has no native storage to release.
+     *
+     * @implSpec {@link FileSystem} overrides this to close its channel and delete its temp file
+     * unless ownership was previously transferred via {@link FileSystem#release()}; an override must
+     * tolerate being called after a successful {@link FileSystem#release()}.
      */
     protected void releaseBackingStorage() {
     }
 
     /**
-     * A heap-backed write bridge that accumulates muxer output in a
-     * growing {@code byte[]}.
+     * Accumulates muxer output in a growing heap {@code byte[]}.
      *
-     * @apiNote
-     * Suitable for append-only muxers (OGG) whose total output is small
-     * enough to fit comfortably in heap. The accumulated bytes are
-     * exposed through {@link #toByteArray()} once the caller has invoked
-     * {@code av_write_trailer}. Construct through
-     * {@link AvioWriteBuffer#ofHeap(Arena)}.
+     * <p>Suits append-only muxers such as OGG whose total output fits comfortably in heap. The
+     * accumulated bytes are exposed through {@link #toByteArray()} once the caller has invoked
+     * {@code av_write_trailer}. Instances are obtained through {@link AvioWriteBuffer#ofHeap(Arena)}.
      */
     public static final class HeapBuffer extends AvioWriteBuffer {
         /**
-         * Initial backing buffer capacity in bytes.
+         * Holds the initial backing buffer capacity in bytes.
+         *
+         * @implNote This implementation uses {@code 16 * 1024}, a starting size large enough that
+         * sub-megabyte voice-note output rarely needs more than a few geometric doublings.
          */
         private static final int INITIAL_BACKING_CAPACITY = 16 * 1024;
 
         /**
-         * Backing buffer that holds every byte the muxer writes; grows
-         * geometrically.
+         * Holds every byte the muxer has written, growing geometrically as needed.
          */
         private byte[] backing = new byte[INITIAL_BACKING_CAPACITY];
 
         /**
-         * Logical size of the accumulated output in bytes; never
-         * decreases.
+         * Holds the logical size of the accumulated output in bytes, which never decreases.
          */
         private int size;
 
@@ -407,22 +440,18 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
          * Constructs the heap-backed bridge.
          *
          * @param arena      the arena confining the upcall stubs
-         * @param bufferSize the AVIO buffer size in bytes; must be
-         *                   positive
+         * @param bufferSize the AVIO buffer size in bytes, which must be positive
          */
         private HeapBuffer(Arena arena, int bufferSize) {
             super(arena, bufferSize, false);
         }
 
         /**
-         * Returns the bytes accumulated by the muxer so far as a fresh
-         * array sized exactly to the logical end of the output.
+         * Returns the bytes the muxer has accumulated so far as a fresh, exactly-sized array.
          *
-         * @apiNote
-         * Callers usually invoke this after {@code av_write_trailer}.
-         * Subsequent muxer writes append to the same internal buffer; a
-         * second call returns a snapshot that includes the trailing
-         * bytes.
+         * <p>Callers usually invoke this after {@code av_write_trailer}. Because subsequent muxer
+         * writes append to the same internal buffer, a later call returns a snapshot that includes
+         * the trailing bytes.
          *
          * @return a fresh array of every accumulated byte
          */
@@ -433,9 +462,8 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * Copies the native AVIO bytes into the heap backing array,
-         * growing the array geometrically on demand.
+         * @implNote This implementation copies the native AVIO bytes into the heap backing array,
+         * growing it geometrically on demand. A non-positive {@code bufSize} is accepted as a no-op.
          */
         @Override
         @SuppressWarnings("unused")
@@ -451,10 +479,12 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         }
 
         /**
-         * Grows {@link #backing} so it can hold at least {@code required}
-         * bytes.
+         * Grows {@link #backing} so it can hold at least {@code required} bytes.
          *
-         * @param required the new minimum capacity
+         * <p>Returns without reallocating when the current array already satisfies the request;
+         * otherwise doubles the capacity until it does and copies the accumulated bytes across.
+         *
+         * @param required the new minimum capacity in bytes
          */
         private void ensureCapacity(int required) {
             if (required <= backing.length) {
@@ -471,49 +501,41 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
     }
 
     /**
-     * A file-backed write bridge that pipes muxer output through a
-     * {@link FileChannel} on a temp file.
+     * Pipes muxer output through a {@link FileChannel} on a temporary file.
      *
-     * @apiNote
-     * Suitable for muxers that backseek during {@code av_write_trailer}
-     * (M4A {@code ipod}, MP4 {@code +faststart}). The bridge owns the
-     * underlying temp file; on {@link #close()} the file is deleted
-     * unless ownership was transferred via {@link #release()}. After a
-     * successful mux the pipeline calls {@link #release()} to detach the
-     * path and wraps it in a {@code MediaPayload.OfPath} the upload
-     * layer can stream from. Construct through
-     * {@link AvioWriteBuffer#ofFileSystem(Arena)}.
+     * <p>Suits muxers that backseek during {@code av_write_trailer}, such as M4A {@code ipod} and
+     * MP4 {@code +faststart}. The bridge owns the temp file: {@link #close()} deletes it unless
+     * ownership was transferred via {@link #release()}. After a successful mux the owning pipeline
+     * calls {@link #release()} to detach the path and stream the file from the upload layer.
+     * Instances are obtained through {@link AvioWriteBuffer#ofFileSystem(Arena)}.
      */
     public static final class FileSystem extends AvioWriteBuffer {
         /**
-         * Prefix for the temp file name.
+         * Holds the prefix for the temp file name.
          */
         private static final String TEMP_FILE_PREFIX = "cobalt-mux-";
 
         /**
-         * Suffix for the temp file name.
+         * Holds the suffix for the temp file name.
          */
         private static final String TEMP_FILE_SUFFIX = ".tmp";
 
         /**
-         * The temp file backing this bridge. Nulled by
-         * {@link #release()} once ownership is transferred to the
-         * caller.
+         * Holds the temp file backing this bridge, or {@code null} once {@link #release()} has
+         * transferred ownership to the caller.
          */
         private Path path;
 
         /**
-         * The open file channel used for read, write, and seek.
+         * Holds the open file channel used for read, write, and seek.
          */
         private final FileChannel channel;
 
         /**
-         * Constructs the file-backed bridge with a pre-validated temp
-         * file and open channel.
+         * Constructs the file-backed bridge with a pre-validated temp file and open channel.
          *
          * @param arena      the arena confining the upcall stubs
-         * @param bufferSize the AVIO buffer size in bytes; must be
-         *                   positive
+         * @param bufferSize the AVIO buffer size in bytes, which must be positive
          * @param path       the temp file
          * @param channel    the open file channel
          */
@@ -524,19 +546,16 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         }
 
         /**
-         * Detaches the temp file from this bridge's cleanup, returning
-         * its path to the caller.
+         * Detaches the temp file from this bridge's cleanup and returns its path to the caller.
          *
-         * @apiNote
-         * Invoked by the pipeline after {@code av_write_trailer}
-         * completes successfully. Closes the file channel after forcing
-         * pending writes to disk, then returns the path; the caller is
-         * responsible for deleting the file. A subsequent
-         * {@link #close()} will free the FFmpeg-side AVIO context but
-         * will not touch the file.
+         * <p>Invoked by the owning pipeline after {@code av_write_trailer} completes successfully.
+         * Forces pending writes to disk, closes the channel, clears the bridge's reference to the
+         * path, and returns it; the caller then owns the file and is responsible for deleting it. A
+         * subsequent {@link #close()} frees the AVIO context but does not touch the file.
          *
          * @return the temp file path
-         * @throws IOException if the channel cannot be flushed or closed
+         * @throws IllegalStateException if the file has already been released
+         * @throws IOException           if the channel cannot be flushed or closed
          */
         public Path release() throws IOException {
             if (path == null) {
@@ -552,10 +571,11 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * Hands the native AVIO buffer slice to the channel as a direct
-         * {@link java.nio.ByteBuffer} so muxer bytes land on disk with
-         * no Java-heap copy.
+         * @implNote This implementation hands the native AVIO buffer slice to the channel as a
+         * direct {@link java.nio.ByteBuffer} so muxer bytes land on disk with no Java-heap copy,
+         * looping until the slice is drained or a short write stalls. A non-positive {@code bufSize}
+         * is accepted as a no-op. A sink {@link IOException} is stashed in {@link #lastError} and
+         * reported as {@code AVERROR_EOF}.
          */
         @Override
         @SuppressWarnings("unused")
@@ -584,11 +604,12 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * Required by the MP4 muxer's {@code +faststart} path: the
-         * muxer seeks to position 0 and reads the entire payload back
-         * so it can rewrite the file with the {@code moov} atom at the
-         * front.
+         * @implNote This implementation reinterprets {@code buf} as a direct
+         * {@link java.nio.ByteBuffer} and reads from the channel into it. The MP4 muxer's
+         * {@code +faststart} path requires it: the muxer seeks to position 0 and reads the entire
+         * payload back so it can rewrite the file with the {@code moov} atom at the front. A
+         * sink {@link IOException} is stashed in {@link #lastError} and reported as
+         * {@code AVERROR_EOF}.
          */
         @Override
         @SuppressWarnings("unused")
@@ -607,11 +628,13 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * Reports the channel size when {@link AvioWriteBuffer#AVSEEK_SIZE}
-         * is set; otherwise interprets {@code whence} as a POSIX seek
-         * mode and delegates to {@link FileChannel#position}. Off-bounds
-         * seeks return {@code -1}.
+         * @implNote This implementation reports the channel size when
+         * {@link AvioWriteBuffer#AVSEEK_SIZE} is set; otherwise it masks the low byte of
+         * {@code whence}, resolves the target absolute position against
+         * {@link AvioWriteBuffer#SEEK_SET}, {@link AvioWriteBuffer#SEEK_CUR}, or
+         * {@link AvioWriteBuffer#SEEK_END}, rejects a negative or unrecognised target by returning
+         * {@code -1}, and applies the position through {@link FileChannel#position(long)}. A sink
+         * {@link IOException} is stashed in {@link #lastError} and reported as {@code -1}.
          */
         @Override
         @SuppressWarnings("unused")
@@ -641,9 +664,9 @@ public sealed abstract class AvioWriteBuffer implements AutoCloseable
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * Closes the channel and deletes the temp file when
-         * {@link #release()} has not transferred ownership.
+         * @implNote This implementation closes the channel and deletes the temp file, but only when
+         * {@link #release()} has not already transferred ownership; otherwise it returns without
+         * touching the file the caller now owns.
          */
         @Override
         protected void releaseBackingStorage() {

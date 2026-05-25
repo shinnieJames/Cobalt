@@ -5,19 +5,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import java.util.Objects;
 
 /**
- * The {@code (id, type)} pair carried on the CTWA native-ad
- * upload-media stanzas.
- *
- * @apiNote
- * Used both for the outbound primary {@code <media/>} child and for
- * each of the 0..10 {@code <media_list/>} children built by
- * {@link SmaxUploadAdMediaRequest#toNode()}, and for the matching
- * inbound echoes parsed by
+ * The {@code (id, type)} pair carried on the CTWA native-ad upload-media stanzas.
+ * Backs both the outbound primary {@code <media/>} child and each of the {@code 0..10} {@code <media_list/>}
+ * children built by {@link SmaxUploadAdMediaRequest#toNode()}, and the matching inbound echoes parsed by
  * {@link SmaxUploadAdMediaResponse.Success#of(com.github.auties00.cobalt.node.Node, com.github.auties00.cobalt.node.Node)}.
- * The {@code id} is the relay-allocated media identifier produced by
- * a prior upload; the {@code type} classifies the asset as
- * {@link SmaxUploadAdMediaMediaType#IMAGE} or
- * {@link SmaxUploadAdMediaMediaType#VIDEO}.
+ * The {@code id} is the relay-allocated media identifier produced by a prior upload; the {@code type}
+ * classifies the asset as {@link SmaxUploadAdMediaMediaType#IMAGE} or {@link SmaxUploadAdMediaMediaType#VIDEO}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaNativeAdUploadAdMediaRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess")
@@ -35,13 +28,7 @@ public final class SmaxUploadAdMediaMediaEntry {
     /**
      * Constructs a new entry from the supplied identifier and type.
      *
-     * @apiNote
-     * Called by both the application code building a
-     * {@link SmaxUploadAdMediaRequest} and the response parser in
-     * {@link SmaxUploadAdMediaResponse.Success}.
-     *
-     * @param id   the relay-allocated media identifier; never
-     *             {@code null}
+     * @param id   the relay-allocated media identifier; never {@code null}
      * @param type the asset kind; never {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
@@ -52,10 +39,7 @@ public final class SmaxUploadAdMediaMediaEntry {
 
     /**
      * Returns the relay-allocated media identifier.
-     *
-     * @apiNote
-     * Surfaces as the {@code id} attribute on the corresponding
-     * {@code <media/>} or {@code <media_list/>} child.
+     * Surfaces as the {@code id} attribute on the corresponding {@code <media/>} or {@code <media_list/>} child.
      *
      * @return the identifier; never {@code null}
      */
@@ -65,11 +49,8 @@ public final class SmaxUploadAdMediaMediaEntry {
 
     /**
      * Returns the asset kind classifier.
-     *
-     * @apiNote
-     * Surfaces as the {@code type} attribute on the corresponding
-     * {@code <media/>} or {@code <media_list/>} child via
-     * {@link SmaxUploadAdMediaMediaType#wire()}.
+     * Surfaces as the {@code type} attribute on the corresponding {@code <media/>} or {@code <media_list/>}
+     * child via {@link SmaxUploadAdMediaMediaType#wire()}.
      *
      * @return the type; never {@code null}
      */
@@ -77,6 +58,13 @@ public final class SmaxUploadAdMediaMediaEntry {
         return type;
     }
 
+    /**
+     * Compares this entry with another object for equality.
+     * Two entries are equal when both the {@code id} and the {@code type} match.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an entry with the same {@code id} and {@code type}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -89,11 +77,21 @@ public final class SmaxUploadAdMediaMediaEntry {
         return Objects.equals(this.id, that.id) && this.type == that.type;
     }
 
+    /**
+     * Returns a hash code derived from the {@code id} and the {@code type}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(id, type);
     }
 
+    /**
+     * Returns a debug representation listing the {@code id} and the {@code type}.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxUploadAdMediaMediaEntry[id=" + id + ", type=" + type + ']';

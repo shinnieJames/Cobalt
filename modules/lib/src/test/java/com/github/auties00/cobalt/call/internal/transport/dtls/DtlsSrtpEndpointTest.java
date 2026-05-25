@@ -19,22 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Round-trip tests for {@link DtlsSrtpEndpoint}: drives a complete
- * DTLS-SRTP handshake between a CLIENT-role and SERVER-role endpoint
- * over a {@link LoopbackTransport} pair, verifies that both sides
- * derive {@link SrtpEndpoint}s primed with matching keying material,
- * and exercises the full SRTP round-trip on top.
+ * Round-trip coverage for {@link DtlsSrtpEndpoint}: drives a complete DTLS-SRTP handshake between a
+ * client-role and a server-role endpoint over a {@link LoopbackTransport} pair, verifies that both
+ * sides derive {@link SrtpEndpoint}s primed with matching keying material, and exercises the SRTP
+ * round-trip on top. Also covers fingerprint validation and {@link DtlsCertificate} generation.
  */
 public class DtlsSrtpEndpointTest {
 
-    /**
-     * Generates self-signed certs for both peers, exchanges
-     * fingerprints, drives the handshake on two threads, and
-     * verifies the resulting SRTP endpoints can encrypt/decrypt
-     * each other's packets.
-     *
-     * @throws Exception on any handshake or transport failure
-     */
     @Test
     public void clientServerHandshakeProducesInteroperableSrtpEndpoints() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -62,7 +53,6 @@ public class DtlsSrtpEndpointTest {
         assertNotNull(clientSrtp);
         assertNotNull(serverSrtp);
 
-        // Round-trip an RTP packet through the negotiated SRTP keys.
         try (clientSrtp; serverSrtp) {
             var rtp = makeRtpPacket(0xCAFEBABE, 1, 1, "dtls-srtp ok".getBytes());
             var encrypted = clientSrtp.protectRtp(rtp);
@@ -71,7 +61,6 @@ public class DtlsSrtpEndpointTest {
             var decrypted = serverSrtp.unprotectRtp(encrypted);
             assertArrayEquals(rtp, decrypted);
 
-            // Reverse direction
             var rtp2 = makeRtpPacket(0xDEADBEEF, 2, 2, "and back".getBytes());
             var encrypted2 = serverSrtp.protectRtp(rtp2);
             var decrypted2 = clientSrtp.unprotectRtp(encrypted2);
@@ -79,17 +68,13 @@ public class DtlsSrtpEndpointTest {
         }
     }
 
-    /**
-     * The handshake must reject a peer whose fingerprint doesn't
-     * match the one advertised via signaling.
-     */
     @Test
     public void mismatchedFingerprintFailsHandshake() {
         var clientCert = DtlsCertificate.generate();
         var serverCert = DtlsCertificate.generate();
         var pair = LoopbackTransport.pair();
 
-        // Tamper with the fingerprint the client expects
+        // Flip one bit so the client expects a fingerprint that will not match the server cert.
         var wrongFingerprint = serverCert.sha256Fingerprint();
         wrongFingerprint[0] ^= 0x01;
 
@@ -103,17 +88,12 @@ public class DtlsSrtpEndpointTest {
             try { return server.handshake(); } catch (IOException e) { throw new RuntimeException(e); }
         });
 
-        // At least one side must fail. Most likely the client fails first
-        // (it validates the server cert during the handshake).
+        // At least one side must fail; the client usually fails first as it validates the server cert.
         var clientFailed = awaitFailure(clientFuture);
         var serverFailed = awaitFailure(serverFuture);
         assertTrue(clientFailed || serverFailed, "expected at least one side to fail the handshake");
     }
 
-    /**
-     * The constructor rejects fingerprints that aren't 32 bytes
-     * (SHA-256 size).
-     */
     @Test
     public void rejectsWrongFingerprintLength() {
         var cert = DtlsCertificate.generate();
@@ -124,9 +104,6 @@ public class DtlsSrtpEndpointTest {
                 () -> DtlsSrtpEndpoint.server(cert, new byte[33], pair[1]));
     }
 
-    /**
-     * Cert generation produces unique certs each call.
-     */
     @Test
     public void generatedCertsAreUnique() {
         var a = DtlsCertificate.generate();
@@ -135,10 +112,6 @@ public class DtlsSrtpEndpointTest {
         assertEquals(32, a.sha256Fingerprint().length);
     }
 
-    /**
-     * Fingerprint hex string is 95 chars (32 bytes × 2 hex + 31
-     * colons), upper-case, colon-separated.
-     */
     @Test
     public void fingerprintHexFormat() {
         var cert = DtlsCertificate.generate();
@@ -148,14 +121,6 @@ public class DtlsSrtpEndpointTest {
                 "unexpected format: " + hex);
     }
 
-    /**
-     * Awaits a {@link CompletableFuture} that's expected to fail and
-     * returns true iff it did.
-     *
-     * @param fut the future to wait on
-     * @return {@code true} if the future completed exceptionally
-     *         within 15s
-     */
     private static boolean awaitFailure(CompletableFuture<?> fut) {
         try {
             fut.get(15, TimeUnit.SECONDS);
@@ -165,15 +130,6 @@ public class DtlsSrtpEndpointTest {
         }
     }
 
-    /**
-     * Builds a minimal RTP packet (V=2, P=0, X=0, CC=0, M=0, PT=0).
-     *
-     * @param ssrc    the SSRC to embed
-     * @param seq     the sequence number
-     * @param ts      the RTP timestamp
-     * @param payload the payload bytes
-     * @return the RTP packet
-     */
     private static byte[] makeRtpPacket(int ssrc, int seq, int ts, byte[] payload) {
         var pkt = new byte[12 + payload.length];
         pkt[0] = (byte) 0x80;
@@ -192,12 +148,6 @@ public class DtlsSrtpEndpointTest {
         return pkt;
     }
 
-    /**
-     * Hex-encodes a byte array.
-     *
-     * @param b the bytes
-     * @return the lower-case hex string
-     */
     private static String toHex(byte[] b) {
         var sb = new StringBuilder(b.length * 2);
         for (var x : b) sb.append(String.format("%02x", x & 0xFF));

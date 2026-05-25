@@ -10,43 +10,35 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Holds the compile-time constants and pure lookup helpers that
- * WhatsApp Business clients use to render and classify the built-in
- * chat labels.
+ * Holds the compile-time constants and pure lookup helpers that WhatsApp
+ * Business clients use to render and classify the built-in chat labels.
  *
- * @apiNote
- * Consume this when a Cobalt embedder reads or writes Business-tier
- * label metadata: the two colour palettes are the swatch sets the
- * mobile clients paint label chips with; the predefined-id and
- * display-name constants are the eight built-in labels every
- * Business account ships with; the custom-label subtype strings are
- * the canonical wire form WhatsApp uses on the CTWA telemetry
- * channel; the {@link #LABEL_NAME_MAX_LENGTH} ceiling is what the
- * mobile clients enforce on user-typed names. The three mapping
- * helpers are the same name-to-id, subtype-to-CTWA, and id-to-name
- * lookups WA Web's label-editing action and customer-management
- * automations consume.
+ * <p>The two colour palettes are the swatch sets the mobile clients paint label
+ * chips with; the predefined-id and display-name constants are the eight
+ * built-in labels every Business account ships with; the custom-label subtype
+ * strings are the canonical wire form WhatsApp uses on the CTWA telemetry
+ * channel; {@link #LABEL_NAME_MAX_LENGTH} is the name-length ceiling the mobile
+ * clients enforce. The three mapping helpers are the name-to-id, subtype-to-CTWA,
+ * and id-to-name lookups that label-editing and customer-management flows
+ * consume.
  *
  * @implNote
  * This implementation exposes the colour palettes as
- * {@link List#copyOf(java.util.Collection)}-equivalent unmodifiable
- * lists, mirroring the {@code Object.freeze} immutability WhatsApp
- * Web applies to the underlying arrays; the lookup helpers return
- * {@link OptionalInt} and {@link Optional} where WhatsApp Web
- * returns {@code undefined}-or-value.
+ * {@link List#copyOf(java.util.Collection)}-equivalent unmodifiable lists,
+ * mirroring the {@code Object.freeze} immutability WhatsApp Web applies to the
+ * underlying arrays; the lookup helpers return {@link OptionalInt} and
+ * {@link Optional} where WhatsApp Web returns {@code undefined}-or-value.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelConstants")
 public final class BusinessLabelConstants {
     /**
-     * The ordered palette of twenty hex colour swatches the
-     * Android WhatsApp client uses to paint chat labels.
+     * The ordered palette of twenty hex colour swatches the Android WhatsApp
+     * client uses to paint chat labels.
      *
-     * @apiNote
-     * Index into this list with the
-     * {@link com.github.auties00.cobalt.model.preference.Label}'s
-     * stored palette slot so the same numeric value always
-     * resolves to the same visual colour the Android client would
-     * have painted.
+     * <p>Indexing into this list with a
+     * {@link com.github.auties00.cobalt.model.preference.Label}'s stored palette
+     * slot resolves the same numeric value to the same visual colour the
+     * Android client would have painted.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "ANDROID_LABEL_COLOR_PALETTE",
@@ -59,15 +51,13 @@ public final class BusinessLabelConstants {
     );
 
     /**
-     * The ordered palette of twenty hex colour swatches the iPhone
-     * WhatsApp client uses to paint chat labels.
+     * The ordered palette of twenty hex colour swatches the iPhone WhatsApp
+     * client uses to paint chat labels.
      *
-     * @apiNote
-     * Index into this list with the
-     * {@link com.github.auties00.cobalt.model.preference.Label}'s
-     * stored palette slot so the same numeric value always
-     * resolves to the same visual colour the iPhone client would
-     * have painted.
+     * <p>Indexing into this list with a
+     * {@link com.github.auties00.cobalt.model.preference.Label}'s stored palette
+     * slot resolves the same numeric value to the same visual colour the iPhone
+     * client would have painted.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "IPHONE_LABEL_COLOR_PALETTE",
@@ -80,14 +70,11 @@ public final class BusinessLabelConstants {
     );
 
     /**
-     * The predefined-id integer assigned to the "New customer"
-     * label.
+     * The predefined-id integer assigned to the "New customer" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "New customer"
-     * built-in label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "New customer" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -95,14 +82,11 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_NEW_CUSTOMER = 1;
 
     /**
-     * The predefined-id integer assigned to the "New order"
-     * label.
+     * The predefined-id integer assigned to the "New order" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "New order" built-in
-     * label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "New order" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -110,14 +94,11 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_NEW_ORDER = 2;
 
     /**
-     * The predefined-id integer assigned to the "Pending payment"
-     * label.
+     * The predefined-id integer assigned to the "Pending payment" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "Pending payment"
-     * built-in label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "Pending payment" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -127,11 +108,9 @@ public final class BusinessLabelConstants {
     /**
      * The predefined-id integer assigned to the "Paid" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "Paid" built-in
-     * label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "Paid" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -139,14 +118,11 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_PAID = 4;
 
     /**
-     * The predefined-id integer assigned to the "Order complete"
-     * label.
+     * The predefined-id integer assigned to the "Order complete" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "Order complete"
-     * built-in label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "Order complete" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -154,14 +130,11 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_ORDER_COMPLETE = 5;
 
     /**
-     * The predefined-id integer assigned to the "Important"
-     * label.
+     * The predefined-id integer assigned to the "Important" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "Important"
-     * built-in label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "Important" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -169,14 +142,11 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_IMPORTANT = 6;
 
     /**
-     * The predefined-id integer assigned to the "Follow up"
-     * label.
+     * The predefined-id integer assigned to the "Follow up" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "Follow up"
-     * built-in label.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "Follow up" built-in label.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -186,12 +156,10 @@ public final class BusinessLabelConstants {
     /**
      * The predefined-id integer assigned to the "Lead" label.
      *
-     * @apiNote
-     * Match this value against the {@code predefinedId} on a
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * synced from the server to identify the "Lead" built-in
-     * label. The customer-manager "apply lead label" automation
-     * keys off this identifier.
+     * <p>Matching this value against the {@code predefinedId} on a
+     * {@link com.github.auties00.cobalt.model.preference.Label} synced from the
+     * server identifies the "Lead" built-in label; the customer-manager
+     * "apply lead label" automation keys off this identifier.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -199,14 +167,13 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_LEAD = 8;
 
     /**
-     * The predefined-id integer reserved for the "Delivery-Order:
-     * new order" derived label.
+     * The predefined-id integer reserved for the "Delivery-Order: new order"
+     * derived label.
      *
-     * @apiNote
-     * The Delivery-Order surface in WA Web synthesises this
-     * derived id alongside its parent {@link #PREDEFINED_LABEL_ID_NEW_ORDER};
-     * {@link #mapPredefinedIdToLabelName(int)} folds it back onto
-     * the parent display name so the UI shows a single chip.
+     * <p>The Delivery-Order surface synthesises this derived id alongside its
+     * parent {@link #PREDEFINED_LABEL_ID_NEW_ORDER};
+     * {@link #mapPredefinedIdToLabelName(int)} folds it back onto the parent
+     * display name so the UI shows a single chip.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -214,14 +181,13 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_DO_NEW_ORDER = 9;
 
     /**
-     * The predefined-id integer reserved for the "Delivery-Order:
-     * lead" derived label.
+     * The predefined-id integer reserved for the "Delivery-Order: lead" derived
+     * label.
      *
-     * @apiNote
-     * The Delivery-Order surface in WA Web synthesises this
-     * derived id alongside its parent {@link #PREDEFINED_LABEL_ID_LEAD};
-     * {@link #mapPredefinedIdToLabelName(int)} folds it back onto
-     * the parent display name so the UI shows a single chip.
+     * <p>The Delivery-Order surface synthesises this derived id alongside its
+     * parent {@link #PREDEFINED_LABEL_ID_LEAD};
+     * {@link #mapPredefinedIdToLabelName(int)} folds it back onto the parent
+     * display name so the UI shows a single chip.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_IDS",
@@ -229,13 +195,11 @@ public final class BusinessLabelConstants {
     public static final int PREDEFINED_LABEL_ID_DO_LEAD = 10;
 
     /**
-     * The user-visible display name of the "New customer"
-     * predefined label.
+     * The user-visible display name of the "New customer" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -243,13 +207,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_NEW_CUSTOMER = "New customer";
 
     /**
-     * The user-visible display name of the "New order" predefined
-     * label.
+     * The user-visible display name of the "New order" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -257,13 +219,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_NEW_ORDER = "New order";
 
     /**
-     * The user-visible display name of the "Pending payment"
-     * predefined label.
+     * The user-visible display name of the "Pending payment" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -271,13 +231,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_PENDING_PAYMENT = "Pending payment";
 
     /**
-     * The user-visible display name of the "Paid" predefined
-     * label.
+     * The user-visible display name of the "Paid" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -285,13 +243,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_PAID = "Paid";
 
     /**
-     * The user-visible display name of the "Order complete"
-     * predefined label.
+     * The user-visible display name of the "Order complete" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -299,13 +255,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_ORDER_COMPLETE = "Order complete";
 
     /**
-     * The user-visible display name of the "Important" predefined
-     * label.
+     * The user-visible display name of the "Important" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -313,13 +267,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_IMPORTANT = "Important";
 
     /**
-     * The user-visible display name of the "Follow up" predefined
-     * label.
+     * The user-visible display name of the "Follow up" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -327,13 +279,11 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_FOLLOW_UP = "Follow up";
 
     /**
-     * The user-visible display name of the "Lead" predefined
-     * label.
+     * The user-visible display name of the "Lead" predefined label.
      *
-     * @apiNote
-     * Use this as the {@code labelName} input to
-     * {@link #mapLabelNameToPredefinedId(String)} when matching
-     * server-side label additions back to the built-in id.
+     * <p>Serves as the {@code labelName} input to
+     * {@link #mapLabelNameToPredefinedId(String)} when matching server-side
+     * label additions back to the built-in id.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "PREDEFINED_LABEL_NAMES",
@@ -341,111 +291,84 @@ public final class BusinessLabelConstants {
     public static final String PREDEFINED_LABEL_NAME_LEAD = "Lead";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "New customer" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "New customer" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_NEW_CUSTOMER = "new_customer";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "New order" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "New order" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_NEW_ORDER = "new_order";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "Pending payment" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "Pending payment" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_PENDING_PAYMENT = "pending_payment";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "Paid" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "Paid" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_PAID = "paid";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "Order complete" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "Order complete" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_ORDER_COMPLETE = "order_complete";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "Important" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "Important" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_IMPORTANT = "important";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "Follow up" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "Follow up" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_FOLLOW_UP = "follow_up";
 
     /**
-     * The canonical subtype string WhatsApp transmits on the wire
-     * for the "Lead" custom-label subtype.
+     * The canonical subtype string WhatsApp transmits on the wire for the
+     * "Lead" custom-label subtype.
      *
-     * @apiNote
-     * Feed this to
-     * {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
-     * translating a sync mutation into the corresponding CTWA
-     * telemetry enum.
+     * <p>Feeds {@link #mapCustomLabelSubtypeToCTWALabelType(String)} when
+     * translating a sync mutation into the corresponding CTWA telemetry enum.
      */
     static final String CUSTOM_LABEL_SUBTYPE_LEAD = "lead";
 
     /**
-     * The maximum number of characters a user may type into a
-     * label name.
+     * The maximum number of characters a user may type into a label name.
      *
-     * @apiNote
-     * Validate user-entered names against this ceiling before
-     * constructing a
-     * {@link com.github.auties00.cobalt.model.preference.Label};
-     * WhatsApp enforces the limit client-side so that labels
-     * always fit on the chat-list card.
+     * <p>User-entered names are validated against this ceiling before a
+     * {@link com.github.auties00.cobalt.model.preference.Label} is constructed;
+     * WhatsApp enforces the limit client-side so labels always fit on the
+     * chat-list card.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "LABEL_NAME_MAX_LENGTH",
@@ -455,39 +378,35 @@ public final class BusinessLabelConstants {
     /**
      * Prevents instantiation of this utility class.
      *
-     * @apiNote
-     * The class is a pure constants-and-helpers holder; instances
-     * carry no state.
+     * <p>The class is a pure constants-and-helpers holder; instances carry no
+     * state.
+     *
+     * @throws AssertionError always
      */
     private BusinessLabelConstants() {
         throw new AssertionError("BusinessLabelConstants is not instantiable");
     }
 
     /**
-     * Returns the predefined-label identifier associated with the
-     * given user-visible label name when that name matches one of
-     * the eight predefined display strings WhatsApp ships.
+     * Returns the predefined-label identifier associated with the given
+     * user-visible label name when that name matches one of the eight predefined
+     * display strings WhatsApp ships.
      *
-     * @apiNote
-     * Use this when handling a label-add action from the server
-     * (the {@code WAWebBizLabelEditingAction} flow): if the name
-     * matches one of the eight built-ins, the returned id should
-     * be stored on the
-     * {@link com.github.auties00.cobalt.model.preference.Label}
-     * so subsequent renders pick up the built-in styling. Returns
-     * empty for any custom user-defined name, including
-     * {@code null}.
+     * <p>When handling a label-add action from the server, a name matching one
+     * of the eight built-ins yields the id to store on the
+     * {@link com.github.auties00.cobalt.model.preference.Label} so subsequent
+     * renders pick up the built-in styling. Any custom user-defined name,
+     * including {@code null}, returns empty.
      *
      * @implNote
-     * This implementation matches case-sensitively against the
-     * exact display strings; it does not mirror the case-folding
-     * the JS export performs against the locale-translated names,
-     * since Cobalt holds only the canonical English strings.
+     * This implementation matches case-sensitively against the exact display
+     * strings; it does not mirror the case-folding the JS export performs
+     * against the locale-translated names, since Cobalt holds only the canonical
+     * English strings.
      *
      * @param labelName the user-visible label name to resolve
-     * @return the predefined identifier of the matching built-in
-     *         label, or empty when {@code labelName} is not a
-     *         predefined display name
+     * @return the predefined identifier of the matching built-in label, or empty
+     *         when {@code labelName} is not a predefined display name
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "mapLabelNameToPredefinedId",
@@ -510,22 +429,19 @@ public final class BusinessLabelConstants {
     }
 
     /**
-     * Returns the {@link CtwaLabelType} that corresponds to the
-     * given custom-label subtype string used on the
-     * Click-to-WhatsApp ads telemetry channel.
+     * Returns the {@link CtwaLabelType} that corresponds to the given
+     * custom-label subtype string used on the Click-to-WhatsApp ads telemetry
+     * channel.
      *
-     * @apiNote
-     * Use this when emitting a CTWA WAM event for a custom-label
-     * subtype received from the server. Unknown subtype strings
-     * fold back to {@link CtwaLabelType#LEAD} so the CTWA sink
-     * always receives a valid value.
+     * <p>Translates a custom-label subtype received from the server into the
+     * enum carried on a CTWA WAM event. A {@code null} or unrecognised subtype
+     * folds back to {@link CtwaLabelType#LEAD} so the CTWA sink always receives a
+     * valid value.
      *
-     * @param subtype the custom-label subtype string, typically
-     *                sourced from a server-side sync, may be
-     *                {@code null}
-     * @return the matching {@link CtwaLabelType}, or
-     *         {@link CtwaLabelType#LEAD} when {@code subtype} is
-     *         {@code null} or unrecognised
+     * @param subtype the custom-label subtype string, typically sourced from a
+     *                server-side sync, may be {@code null}
+     * @return the matching {@link CtwaLabelType}, or {@link CtwaLabelType#LEAD}
+     *         when {@code subtype} is {@code null} or unrecognised
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "mapCustomLabelSubtypeToCTWALabelType",
@@ -547,24 +463,19 @@ public final class BusinessLabelConstants {
     }
 
     /**
-     * Returns the user-visible display name for the given
-     * predefined label identifier.
+     * Returns the user-visible display name for the given predefined label
+     * identifier.
      *
-     * @apiNote
-     * Use this when rendering a label chip from a server-synced
-     * {@link com.github.auties00.cobalt.model.preference.Label}.
-     * Accepts the eight primary predefined ids
-     * ({@link #PREDEFINED_LABEL_ID_NEW_CUSTOMER} through
-     * {@link #PREDEFINED_LABEL_ID_LEAD}) and the two derived
-     * Delivery-Order identifiers, which fold back onto the
-     * corresponding primary names so the UI shows a single chip.
+     * <p>Resolves the label chip text from a server-synced
+     * {@link com.github.auties00.cobalt.model.preference.Label}. The eight
+     * primary predefined ids ({@link #PREDEFINED_LABEL_ID_NEW_CUSTOMER} through
+     * {@link #PREDEFINED_LABEL_ID_LEAD}) and the two derived Delivery-Order
+     * identifiers are accepted; the derived ids fold back onto the corresponding
+     * primary names so the UI shows a single chip.
      *
-     * @param predefinedId the predefined label identifier to
-     *                     resolve
-     * @return the display name associated with
-     *         {@code predefinedId}, or empty when
-     *         {@code predefinedId} is not a known predefined
-     *         label id
+     * @param predefinedId the predefined label identifier to resolve
+     * @return the display name associated with {@code predefinedId}, or empty
+     *         when {@code predefinedId} is not a known predefined label id
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelConstants",
             exports = "mapPredefinedIdToLabelName",

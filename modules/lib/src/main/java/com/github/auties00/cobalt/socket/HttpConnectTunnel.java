@@ -11,15 +11,13 @@ import java.nio.charset.StandardCharsets;
  * Establishes an HTTP {@code CONNECT} tunnel on an already-connected
  * {@link Socket}.
  *
- * @apiNote
- * Used when the WhatsApp connection must traverse an HTTP proxy and
- * the proxy hop is plain or already TLS-wrapped by the caller. The
+ * <p>This holder is used when the WhatsApp connection must traverse an HTTP
+ * proxy and the proxy hop is plain or already TLS-wrapped by the caller. The
  * JDK's {@code Socket(Proxy)} constructor rejects
- * {@link java.net.Proxy.Type#HTTP} (only {@code SOCKS} and
- * {@code DIRECT} are accepted), and {@link java.net.http.HttpClient}
- * cannot be plugged into a raw socket transport, so every form factor
- * that needs HTTP-proxy tunnelling negotiates the {@code CONNECT}
- * itself.
+ * {@link java.net.Proxy.Type#HTTP} (only {@code SOCKS} and {@code DIRECT}
+ * are accepted), and {@link java.net.http.HttpClient} cannot be plugged into
+ * a raw socket transport, so every form factor that needs HTTP-proxy
+ * tunnelling negotiates the {@code CONNECT} itself.
  *
  * @implNote
  * This implementation keeps the parser deliberately minimal: it
@@ -71,13 +69,12 @@ final class HttpConnectTunnel {
      * Issues an HTTP {@code CONNECT} request over {@code socket} for
      * the given target endpoint and consumes the response.
      *
-     * @apiNote
-     * The {@code socket} parameter is typed as {@link Socket} so the
-     * same method covers both a plain socket (Mobile path) and an
-     * {@link javax.net.ssl.SSLSocket} already wrapping a connection to
-     * a {@link WhatsAppProxy.Http.Secure} proxy. On success the
-     * socket's input stream is positioned past the response header
-     * block and ready for the next protocol layer.
+     * <p>The {@code socket} parameter is typed as {@link Socket} so the same
+     * method covers both a plain socket (Mobile path) and an
+     * {@link javax.net.ssl.SSLSocket} already wrapping a connection to a
+     * {@link WhatsAppProxy.Http.Secure} proxy. On success the socket's input
+     * stream is positioned past the response header block and ready for the
+     * next protocol layer.
      *
      * @param socket     the already-connected proxy socket
      * @param targetHost the host the tunnel is meant to reach
@@ -124,8 +121,7 @@ final class HttpConnectTunnel {
      * Appends an HTTP authority of the form {@code host:port} to
      * {@code sb}, bracketing the host if it is an IPv6 literal.
      *
-     * @apiNote
-     * Detects IPv6 by the presence of a colon and the absence of a
+     * <p>IPv6 is detected by the presence of a colon and the absence of a
      * leading bracket; an already-bracketed literal is passed through
      * verbatim.
      *
@@ -262,10 +258,9 @@ final class HttpConnectTunnel {
      * Builds an {@link IOException} carrying the buffered raw
      * response bytes up to the point of detection.
      *
-     * @apiNote
-     * Embedding the buffered response in the exception message is the
-     * fastest path to diagnosing misbehaving proxies, which often
-     * return HTML error pages rather than RFC-compliant status lines.
+     * <p>Embedding the buffered response in the exception message is the
+     * fastest path to diagnosing misbehaving proxies, which often return
+     * HTML error pages rather than RFC-compliant status lines.
      *
      * @param buffer the response buffer
      * @param filled the number of bytes currently in {@code buffer}

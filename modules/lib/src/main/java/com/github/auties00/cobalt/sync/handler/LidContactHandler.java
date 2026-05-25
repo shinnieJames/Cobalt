@@ -23,39 +23,25 @@ import java.util.logging.Logger;
  * Applies the {@code lid_contact} app-state sync action that propagates
  * username-discovered contacts whose canonical identity is a LID JID.
  *
- * @apiNote
- * Drives the username-based contact discovery flow: when the primary
- * device adds, edits or removes a contact via {@code @username}
- * lookup the resulting record fans out across the
- * {@link SyncPatchType#CRITICAL_UNBLOCK_LOW} collection so companion
- * devices see the same address-book entry. The mutation index keys each
- * entry by the LID JID, formatted as
+ * <p>The record fans out across the {@link SyncPatchType#CRITICAL_UNBLOCK_LOW}
+ * collection so companion devices see the same address-book entry. The
+ * mutation index keys each entry by the LID JID, formatted as
  * {@snippet :
  *     ["lid_contact", lidJid]
  * }
  * The handler is gated by the
- * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} A/B prop; while
- * the prop is off, every mutation is reported as
- * {@link MutationApplicationResult#unsupported()} regardless of
- * payload, exactly mirroring WA Web.
+ * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} A/B prop; while the prop
+ * is off, every mutation is reported as
+ * {@link MutationApplicationResult#unsupported()} regardless of payload.
  *
  * @implNote
  * This implementation persists the contact directly through
- * {@link com.github.auties00.cobalt.store.WhatsAppStore} rather than
- * through WA Web's
- * {@code WAWebApiContact.createOrMergeAddressBookContacts /
- * setNotAddressBookContacts} batched flow, and stores the username on
- * the contact record so a later remove can recognise it as a
- * username-added contact without consulting an external table. After a
- * successful set, any orphan
- * {@link UserStatusMuteAction} mutations keyed by the same LID JID are
- * replayed via {@link UserStatusMuteHandler} and removed from the
- * orphan store on success, mirroring WA Web's
- * {@code WAWebSyncdOrphan.checkOrphanUserStatusMutes(h.map(...))}
- * post-batch hook. The
- * {@code WAWebSetUsernameJob.setUsernamesJob} job, the
- * {@code clearStatusForRemovedContact} RPC and the contact-collection
- * {@code bulkAddContactToCollection} fire-and-forget are not modelled.
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} and stores the
+ * username on the contact record so a later remove can recognise it as a
+ * username-added contact. After a successful set, any orphan
+ * {@link UserStatusMuteAction} mutations keyed by the same LID JID are replayed
+ * via {@link UserStatusMuteHandler} and pruned from the orphan store on
+ * success.
  */
 @WhatsAppWebModule(moduleName = "WAWebLidContactSync")
 public final class LidContactHandler implements WebAppStateActionHandler {
@@ -66,37 +52,25 @@ public final class LidContactHandler implements WebAppStateActionHandler {
     private static final Logger LOGGER = Logger.getLogger(LidContactHandler.class.getName());
 
     /**
-     * The {@link ABPropsService} consulted before every mutation to
-     * gate the handler on
-     * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE}.
+     * The {@link ABPropsService} consulted before every mutation to gate the
+     * handler on {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE}.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * The {@link UserStatusMuteHandler} replayed against any orphan
-     * mutation that was waiting for this LID contact to materialise.
+     * The {@link UserStatusMuteHandler} replayed against any orphan mutation
+     * that was waiting for this LID contact to materialise.
      */
     private final UserStatusMuteHandler userStatusMuteHandler;
 
     /**
-     * Constructs a {@link LidContactHandler} bound to the given
-     * dependencies.
+     * Constructs a {@link LidContactHandler} bound to the given dependencies.
      *
-     * @apiNote
-     * The handler must consult
-     * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} on every
-     * mutation rather than caching the value, so server-side prop
-     * flips reach the next incoming sync without restarting the
-     * client; the
-     * {@link UserStatusMuteHandler} is held as a constructor
-     * dependency so the orphan-replay loop does not depend on a
-     * service-locator.
-     *
-     * @param abPropsService        the A/B-props service consulted on
-     *                              every mutation
+     * @param abPropsService        the A/B-props service consulted on every
+     *                              mutation
      * @param userStatusMuteHandler the handler replayed against orphan
-     *                              user-status-mute mutations on a
-     *                              successful set
+     *                              user-status-mute mutations on a successful
+     *                              set
      */
     @WhatsAppWebExport(moduleName = "WAWebLidContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public LidContactHandler(ABPropsService abPropsService, UserStatusMuteHandler userStatusMuteHandler) {
@@ -134,24 +108,20 @@ public final class LidContactHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Reads {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} first and
+     * short-circuits as {@link MutationApplicationResult#unsupported()} when the
+     * flag is off; a missing index slot or non-LID JID is reported as malformed.
+     * A {@code SET} upserts the contact, normalises the username by stripping a
+     * leading {@code "@"}, marks it as added-by-username when a non-empty
+     * username is present, and replays orphan status mutes for the LID JID. A
+     * {@code REMOVE} clears the contact's fields only when it was added by
+     * username. Any other operation is reported as unsupported.
+     *
      * @implNote
-     * This implementation reads the
-     * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} flag first
-     * and short-circuits the mutation as
-     * {@link MutationApplicationResult#unsupported()} when the flag is
-     * off, mirroring WA Web's gating that returns the same state for
-     * every entry in the batch. A non-LID JID is rejected as
-     * {@link MutationApplicationResult#malformed()} matching WA Web's
-     * {@code !a.isLid()} branch. On a {@link SyncdOperation#SET} the
-     * username is normalised by stripping a leading {@code "@"} so
-     * downstream lookups can match the bare username, and the
-     * {@code addedByUsername} flag is set when a non-empty username is
-     * present so a later
-     * {@link SyncdOperation#REMOVE} can recognise the contact as a
-     * username-added entry. Per Cobalt's pluggable error model
-     * exceptions propagate to the orchestrator instead of being
-     * caught inline as
-     * {@link SyncActionState#FAILED}.
+     * This implementation re-reads the A/B prop on every mutation rather than
+     * caching it, so a server-side prop flip reaches the next incoming sync
+     * without restarting the client. Per Cobalt's pluggable error model,
+     * exceptions propagate to the orchestrator instead of being caught inline.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLidContactSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -218,31 +188,24 @@ public final class LidContactHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Replays orphan {@link UserStatusMuteAction} mutations keyed by the
-     * given LID JID and prunes the ones that succeed.
+     * Replays orphan {@link UserStatusMuteAction} mutations keyed by the given
+     * LID JID and prunes the ones that succeed.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebSyncdOrphan.checkOrphanUserStatusMutes(h.map(...))}
-     * post-batch hook: when a LID contact materialises, any earlier
-     * mute mutation that referenced the contact while it was unknown
-     * is given a second chance.
+     * <p>Iterates the orphan entries returned by
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findOrphanMutationsByModel(SyncPatchType, String)},
+     * rebuilds a {@link DecryptedMutation.Trusted} for each, calls
+     * {@link UserStatusMuteHandler#applyMutation(WhatsAppClient, DecryptedMutation.Trusted)},
+     * and removes only the entries that returned {@link SyncActionState#SUCCESS}
+     * so the next sync can retry the rest.
      *
      * @implNote
-     * This implementation iterates the orphan entries returned by
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findOrphanMutationsByModel(SyncPatchType, String)},
-     * rebuilds a {@link DecryptedMutation.Trusted} for each, calls the
-     * stored {@link UserStatusMuteHandler#applyMutation}, and removes
-     * only the entries that returned
-     * {@link SyncActionState#SUCCESS}. Failures are kept so the next
-     * sync can retry. Unexpected exceptions are caught and logged at
-     * {@link java.util.logging.Level#WARNING} because the surrounding
-     * mutation has already mutated the store and must not roll back.
+     * This implementation catches and logs unexpected exceptions at
+     * {@link java.util.logging.Level#WARNING} because the surrounding mutation
+     * has already mutated the store and must not roll back.
      *
-     * @param client       the {@link WhatsAppClient} whose orphan store
-     *                     is consulted
-     * @param lidJidString the LID JID string keying the orphan
-     *                     mutations
+     * @param client       the {@link WhatsAppClient} whose orphan store is
+     *                     consulted
+     * @param lidJidString the LID JID string keying the orphan mutations
      */
     private void retryOrphanStatusMutes(WhatsAppClient client, String lidJidString) {
         try {

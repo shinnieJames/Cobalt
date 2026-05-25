@@ -5,37 +5,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One {@code (businessJid, tag)} pair fanned out into a {@code <profile/>}
- * child of an {@link IqQueryBusinessProfileRequest}.
+ * Models one {@code (businessJid, tag)} pair fanned out into a {@code <profile/>} child of an {@link IqQueryBusinessProfileRequest}.
  *
- * @apiNote
- * Use this entry to name one merchant in a fan-out business-profile fetch
- * and optionally to attach the version tag the relay previously returned
- * for that merchant; when the supplied tag matches the cached version the
- * relay echoes a header-only acknowledgement instead of the full profile
- * body so chat openers and the merchant directory can refresh many
- * merchants in one round-trip.
+ * <p>An entry names one merchant in a fan-out business-profile fetch and optionally attaches the
+ * version tag the relay previously returned for that merchant. When the supplied tag matches the
+ * cached version, the relay echoes a header-only acknowledgement instead of the full profile body,
+ * so chat openers and the merchant directory can refresh many merchants in one round-trip.
  */
 public final class IqQueryBusinessProfileRequestEntry {
     /**
-     * The merchant JID stamped into the {@code jid} attribute of the
-     * {@code <profile/>} child.
+     * Holds the merchant JID stamped into the {@code jid} attribute of the {@code <profile/>} child.
      */
     private final Jid businessJid;
 
     /**
-     * The optional version tag stamped into the {@code tag} attribute of
-     * the {@code <profile/>} child.
+     * Holds the optional version tag stamped into the {@code tag} attribute of the {@code <profile/>} child.
      */
     private final Integer tag;
 
     /**
-     * Constructs an entry.
+     * Constructs an entry over the given merchant JID and optional version tag.
      *
-     * @apiNote
-     * Pass the merchant JID together with the previously echoed version
-     * tag to enable the relay's conditional-fetch path; pass a
-     * {@code null} tag to force the full profile body to be returned.
+     * <p>A non-{@code null} tag enables the relay's conditional-fetch path; a {@code null} tag
+     * forces the full profile body to be returned.
      *
      * @param businessJid the merchant JID; never {@code null}
      * @param tag         the optional version tag; may be {@code null}
@@ -47,12 +39,10 @@ public final class IqQueryBusinessProfileRequestEntry {
     }
 
     /**
-     * Returns the merchant JID.
+     * Returns the merchant JID the fan-out names.
      *
-     * @apiNote
-     * Use this getter to read back the merchant JID the fan-out will
-     * name; the relay routes it verbatim into the {@code jid} attribute
-     * of the resulting {@code <profile/>} child.
+     * <p>The relay routes it verbatim into the {@code jid} attribute of the resulting
+     * {@code <profile/>} child.
      *
      * @return the merchant JID; never {@code null}
      */
@@ -61,12 +51,10 @@ public final class IqQueryBusinessProfileRequestEntry {
     }
 
     /**
-     * Returns the optional version tag.
+     * Returns the cached version tag the entry carries.
      *
-     * @apiNote
-     * Use this getter to read back the cached version tag the entry
-     * carries; an empty {@link Optional} means the request forces the
-     * relay to return the full profile body for this merchant.
+     * <p>An empty {@link Optional} means the request forces the relay to return the full profile
+     * body for this merchant.
      *
      * @return an {@link Optional} carrying the tag
      */
@@ -74,9 +62,6 @@ public final class IqQueryBusinessProfileRequestEntry {
         return Optional.ofNullable(tag);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -90,17 +75,11 @@ public final class IqQueryBusinessProfileRequestEntry {
                 && Objects.equals(this.tag, that.tag);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int hashCode() {
         return Objects.hash(businessJid, tag);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String toString() {
         return "IqQueryBusinessProfileRequestEntry[businessJid=" + businessJid

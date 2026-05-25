@@ -2,6 +2,8 @@ import wabtInit from "wabt";
 import type {
     WasmAnalysis,
     WasmCustomSection,
+    WasmDataSegment,
+    WasmElementSegment,
     WasmExportEntry,
     WasmFunctionEntry,
     WasmGlobalEntry,
@@ -11,6 +13,8 @@ import type {
     WasmTableEntry,
     WasmTypeEntry,
 } from "../types/wasm.js";
+import { BinaryReader } from "./wasm-binary-reader.js";
+import { decodeConstExpr } from "./wasm-decoder.js";
 
 let wabtInstance: Awaited<ReturnType<typeof wabtInit>> | null = null;
 
@@ -40,121 +44,12 @@ const SECTION = {
   DATA_COUNT: 12,
 } as const;
 
-const VAL_TYPE_NAMES: Record<number, string> = {
-  0x7f: "i32",
-  0x7e: "i64",
-  0x7d: "f32",
-  0x7c: "f64",
-  0x7b: "v128",
-  0x70: "funcref",
-  0x6f: "externref",
-};
-
 const EXTERNAL_KIND: Record<number, WasmExportEntry["kind"]> = {
   0: "function",
   1: "table",
   2: "memory",
   3: "global",
 };
-
-class BinaryReader {
-  public pos = 0;
-  private view: DataView;
-  private bytes: Uint8Array;
-
-  constructor(buffer: Buffer | Uint8Array) {
-    this.bytes =
-      buffer instanceof Buffer ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength) : buffer;
-    this.view = new DataView(this.bytes.buffer, this.bytes.byteOffset, this.bytes.byteLength);
-  }
-
-  get length(): number {
-    return this.bytes.length;
-  }
-
-  readByte(): number {
-    return this.bytes[this.pos++];
-  }
-
-  readU32Leb(): number {
-    let result = 0;
-    let shift = 0;
-    let byte: number;
-    do {
-      byte = this.bytes[this.pos++];
-      result |= (byte & 0x7f) << shift;
-      shift += 7;
-    } while (byte & 0x80);
-    return result >>> 0;
-  }
-
-  readI32Leb(): number {
-    let result = 0;
-    let shift = 0;
-    let byte: number;
-    do {
-      byte = this.bytes[this.pos++];
-      result |= (byte & 0x7f) << shift;
-      shift += 7;
-    } while (byte & 0x80);
-    if (shift < 32 && byte & 0x40) result |= -(1 << shift);
-    return result;
-  }
-
-  readI64Leb(): bigint {
-    let result = 0n;
-    let shift = 0n;
-    let byte: number;
-    do {
-      byte = this.bytes[this.pos++];
-      result |= BigInt(byte & 0x7f) << shift;
-      shift += 7n;
-    } while (byte & 0x80);
-    if (shift < 64n && byte & 0x40) result |= -(1n << shift);
-    return result;
-  }
-
-  readF32(): number {
-    const val = this.view.getFloat32(this.pos, true);
-    this.pos += 4;
-    return val;
-  }
-
-  readF64(): number {
-    const val = this.view.getFloat64(this.pos, true);
-    this.pos += 8;
-    return val;
-  }
-
-  readU32Fixed(): number {
-    const val = this.view.getUint32(this.pos, true);
-    this.pos += 4;
-    return val;
-  }
-
-  readName(): string {
-    const len = this.readU32Leb();
-    const bytes = this.bytes.slice(this.pos, this.pos + len);
-    this.pos += len;
-    return new TextDecoder().decode(bytes);
-  }
-
-  readValType(): string {
-    const byte = this.readByte();
-    return VAL_TYPE_NAMES[byte] ?? `unknown(0x${byte.toString(16)})`;
-  }
-
-  readVec<T>(reader: () => T): T[] {
-    const count = this.readU32Leb();
-    const result: T[] = [];
-    for (let i = 0; i < count; i++) result.push(reader());
-    return result;
-  }
-
-  skip(n: number): void {
-    this.pos += n;
-  }
-}
 
 interface RawSection {
   id: number;
@@ -203,20 +98,79 @@ function readGlobalType(r: BinaryReader): { valueType: string; mutable: boolean 
 }
 
 function skipInitExpr(r: BinaryReader): void {
-  while (r.pos < r.length) {
-    const opcode = r.readByte();
-    if (opcode === 0x0b) return;
-    switch (opcode) {
-      case 0x41: r.readI32Leb(); break;
-      case 0x42: r.readI64Leb(); break;
-      case 0x43: r.readF32(); break;
-      case 0x44: r.readF64(); break;
-      case 0x23: r.readU32Leb(); break;
-      case 0xd0: r.readByte(); break;
-      case 0xd2: r.readU32Leb(); break;
-      default: break;
+  decodeConstExpr(r);
+}
+
+/**
+ * Parses the element section into structured segments. Handles all eight flag
+ * encodings: the funcidx-vector forms (flags 0-3) and the expression forms
+ * (flags 4-7), resolving each active segment's constant offset and the function
+ * indices it installs ({@code -1} for a {@code ref.null} hole).
+ */
+function parseElementSection(r: BinaryReader, section: RawSection): WasmElementSegment[] {
+  r.pos = section.contentOffset;
+  return r.readVec(() => {
+    const flags = r.readU32Leb();
+    const active = (flags & 0x01) === 0;
+    const explicitTable = (flags & 0x02) !== 0;
+    const usesExpr = (flags & 0x04) !== 0;
+    const declared = !active && explicitTable; // flags 3 and 7
+
+    let tableIndex = 0;
+    let offset: number | null = null;
+
+    if (active) {
+      if (explicitTable) tableIndex = r.readU32Leb(); // flags 2, 6
+      const off = decodeConstExpr(r);
+      offset = off.kind === "i32" ? off.value : null;
     }
-  }
+
+    // An elemkind/reftype byte precedes the items for every form whose low two
+    // bits are non-zero; flags 0 and 4 (implicit funcref) omit it.
+    if ((flags & 0x03) !== 0) r.readByte();
+
+    const funcIndices: number[] = [];
+    const count = r.readU32Leb();
+    for (let i = 0; i < count; i++) {
+      if (usesExpr) {
+        const item = decodeConstExpr(r);
+        funcIndices.push(item.kind === "ref.func" ? item.index : -1);
+      } else {
+        funcIndices.push(r.readU32Leb());
+      }
+    }
+
+    const mode: WasmElementSegment["mode"] = active ? "active" : declared ? "declared" : "passive";
+    return { mode, tableIndex, offset, funcIndices };
+  });
+}
+
+/**
+ * Parses the data section into descriptors (no bytes inlined). Records each
+ * segment's mode, target memory, resolved constant base address for active
+ * segments, byte length, and the absolute file offset of its bytes so the raw
+ * content can be fetched on demand.
+ */
+function parseDataSection(r: BinaryReader, section: RawSection): WasmDataSegment[] {
+  r.pos = section.contentOffset;
+  return r.readVec(() => {
+    const flags = r.readU32Leb();
+    const passive = flags === 1;
+    let memoryIndex = 0;
+    let offset: number | null = null;
+
+    if (!passive) {
+      if (flags === 2) memoryIndex = r.readU32Leb();
+      const off = decodeConstExpr(r);
+      offset = off.kind === "i32" ? off.value : null;
+    }
+
+    const byteLength = r.readU32Leb();
+    const fileOffset = r.pos;
+    r.skip(byteLength);
+
+    return { mode: passive ? "passive" : "active", memoryIndex, offset, byteLength, fileOffset };
+  });
 }
 
 function parseTypeSection(r: BinaryReader, section: RawSection): WasmTypeEntry[] {
@@ -421,6 +375,8 @@ export function analyzeWasm(name: string, binary: Buffer | Uint8Array): WasmAnal
   let globals: WasmGlobalEntry[] = [];
   let exports: WasmExportEntry[] = [];
   let functions: WasmFunctionEntry[] = [];
+  let elements: WasmElementSegment[] = [];
+  let dataSegments: WasmDataSegment[] = [];
   let startFunction: number | undefined;
   const customSections: WasmCustomSection[] = [];
   let functionNames = new Map<number, string>();
@@ -498,6 +454,12 @@ export function analyzeWasm(name: string, binary: Buffer | Uint8Array): WasmAnal
       case SECTION.START:
         startFunction = parseStartSection(r, section);
         break;
+      case SECTION.ELEMENT:
+        elements = parseElementSection(r, section);
+        break;
+      case SECTION.DATA:
+        dataSegments = parseDataSection(r, section);
+        break;
     }
   }
 
@@ -534,6 +496,8 @@ export function analyzeWasm(name: string, binary: Buffer | Uint8Array): WasmAnal
     customSections,
     sectionSizes,
     totalSize: binary.length,
+    elements,
+    dataSegments,
   };
 }
 

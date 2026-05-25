@@ -14,33 +14,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
- * {@link SmaxWaffleWFPingRequest}.
+ * Models the sealed family of inbound replies to a {@link SmaxWaffleWFPingRequest}.
  *
- * @apiNote
- * Mirrors WA Web's three documented {@code WFPing} reply shapes: a
- * {@link Success} carrying the relay-chosen next-ping cadence
- * (consumed by {@code WAWebAccountLinkingAPI.ping} to call
- * {@code updatePingInterval}), a {@link ClientError} for malformed,
- * unauthorised, or unknown-fbid requests, and a {@link ServerError}
- * for transient relay failures.
+ * <p>The Waffle relay answers a WFPing request with exactly one of three reply shapes, each
+ * captured by a permitted variant. {@link Success} carries the relay-chosen next-ping cadence and
+ * lets the account-linking scheduler reschedule the following ping; the relay may lower or raise the
+ * cadence to throttle individual clients. {@link ClientError} represents a rejection with a code
+ * below {@code 500} (malformed, unauthorised, or unknown-state requests). {@link ServerError}
+ * represents a transient relay-side failure with a code at or above {@code 500}. The three variants
+ * partition the response space, so an inbound stanza matches at most one of them.
  */
 public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         permits SmaxWaffleWFPingResponse.Success, SmaxWaffleWFPingResponse.ClientError, SmaxWaffleWFPingResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxWaffleWFPingResponse} variant in priority
-     * order and returns the first that parses cleanly.
+     * Tries each {@link SmaxWaffleWFPingResponse} variant in priority order and returns the first
+     * that parses cleanly.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code sendWFPingRPC} dispatch: the incoming
-     * stanza is offered to the {@link Success} parser first, then the
-     * {@link ClientError} parser, then the {@link ServerError} parser.
+     * <p>The inbound stanza is offered to the {@link Success} parser first, then the
+     * {@link ClientError} parser, then the {@link ServerError} parser. The first parser that matches
+     * wins; when none matches, the result is empty.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty
-     *         when none of the three parsers matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when none of the three
+     *         parsers matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxWaffleWFPingRPC",
@@ -60,30 +58,25 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant: the relay accepted the ping
-     * and surfaced the next-ping cadence.
+     * Represents the success reply variant, where the relay accepted the ping and surfaced the
+     * next-ping cadence.
      *
-     * @apiNote
-     * Consumed by {@code WAWebAccountLinkingAPI.ping}, which feeds
-     * {@link #pingInterval()} to {@code updatePingInterval} so the
-     * Waffle scheduler reschedules the next ping; the relay can lower
-     * or raise the cadence to throttle individual clients.
+     * <p>The carried {@link #pingInterval()} is the seconds-between-pings cadence the relay chose
+     * for this client. The account-linking scheduler reads this value to reschedule the next ping,
+     * which lets the relay throttle individual clients by lowering or raising the cadence.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleWFPingResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleIQResultResponseMixin")
     final class Success implements SmaxWaffleWFPingResponse {
         /**
-         * The relay-chosen seconds-between-pings cadence.
+         * Holds the relay-chosen seconds-between-pings cadence.
          */
         private final int pingInterval;
 
         /**
-         * Constructs a new success projection.
+         * Constructs a new success projection from the relay-chosen cadence.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * <p>Invoked by {@link #of(Node, Node)} once the envelope shape has been validated.
          *
          * @param pingInterval the relay-chosen cadence in seconds
          */
@@ -101,23 +94,20 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the inbound
-         * stanza.
+         * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope check
-         * fails or when the {@code <ping_interval/>} child is missing
-         * or non-numeric.
+         * <p>Returns {@link Optional#empty()} when the envelope check fails or when the
+         * {@code ping_interval} child is missing or non-numeric; otherwise returns a {@link Success}
+         * carrying the parsed cadence.
          *
          * @implNote
-         * This implementation parses {@code ping_interval} content as
-         * an ASCII integer via {@link Integer#parseInt(String)}; WA Web
-         * uses its typed {@code contentInt} parser.
+         * This implementation parses the {@code ping_interval} content as an ASCII integer via
+         * {@link Integer#parseInt(String)} and treats a {@link NumberFormatException} as a no-match
+         * rather than propagating it.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleWFPingResponseSuccess",
                 exports = "parseWFPingResponseSuccess",
@@ -147,8 +137,7 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns whether the given object is a {@link Success} with
-         * an equal ping cadence.
+         * Returns whether the given object is a {@link Success} with an equal ping cadence.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both cadences match
@@ -187,40 +176,33 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant: the relay rejected the
-     * ping with a code below {@code 500}.
+     * Represents the client-error reply variant, where the relay rejected the ping with a code
+     * below {@code 500}.
      *
-     * @apiNote
-     * Surfaces malformed-request, unauthorised, and unknown-state
-     * rejections from the Waffle backend. {@code WAWebAccountLinkingAPI.ping}
-     * routes the error name through
-     * {@code WAWebWaffleIQErrorHandler.handleCommonWaffleIQError} and
-     * may schedule a nonce-refresh retry when the handler returns
-     * {@code request_nonce}.
+     * <p>This variant surfaces malformed-request, unauthorised, and unknown-state rejections from
+     * the Waffle backend. Callers route {@link #errorCode()} and {@link #errorText()} through their
+     * Waffle IQ error handling, which may schedule a nonce-refresh retry for the relevant rejection
+     * names.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleWFPingResponseError")
     final class ClientError implements SmaxWaffleWFPingResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the optional human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a new client-error reply from a code and optional text.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * <p>Invoked by {@link #of(Node, Node)} once the envelope shape has been validated.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -239,26 +221,22 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * which only matches codes below {@code 500}.
+         * <p>The envelope and code-range check are delegated to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which matches only codes
+         * below {@code 500}. Returns {@link Optional#empty()} when that check does not match.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleWFPingResponseError",
                 exports = "parseWFPingResponseError",
@@ -272,8 +250,7 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns whether the given object is a {@link ClientError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ClientError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -293,8 +270,7 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -314,37 +290,32 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant: the relay rejected the
-     * ping with a code of {@code 500} or above.
+     * Represents the server-error reply variant, where the relay rejected the ping with a code at or
+     * above {@code 500}.
      *
-     * @apiNote
-     * Indicates a transient relay-side failure. The error name is
-     * still surfaced through {@code WAWebWaffleIQErrorHandler} for
-     * telemetry consistency with {@link ClientError}.
+     * <p>This variant indicates a transient relay-side failure. Its {@link #errorCode()} and
+     * {@link #errorText()} are surfaced through the same Waffle IQ error handling as
+     * {@link ClientError} for telemetry consistency.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleWFPingResponseError")
     final class ServerError implements SmaxWaffleWFPingResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the optional human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a new server-error reply from a code and optional text.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * <p>Invoked by {@link #of(Node, Node)} once the envelope shape has been validated.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -363,26 +334,22 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which only matches codes at or above {@code 500}.
+         * <p>The envelope and code-range check are delegated to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which matches only codes at
+         * or above {@code 500}. Returns {@link Optional#empty()} when that check does not match.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleWFPingResponseError",
                 exports = "parseWFPingResponseError",
@@ -396,8 +363,7 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns whether the given object is a {@link ServerError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ServerError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -417,8 +383,7 @@ public sealed interface SmaxWaffleWFPingResponse extends SmaxOperation.Response
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {

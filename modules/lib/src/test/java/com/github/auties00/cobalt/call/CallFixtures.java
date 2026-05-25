@@ -19,34 +19,25 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Loads call-package fixtures captured from live WhatsApp Web sessions and
- * exposes them to JUnit tests.
+ * Static test helper that loads call-package fixtures captured from live
+ * WhatsApp Web sessions and reconstructs them as Cobalt {@link Node} trees
+ * for the {@code com.github.auties00.cobalt.call} test suite.
  *
- * <p>Each captured flow is recorded from up to three roles —
- * {@code caller} (business session), {@code callee} (primary session), and
- * {@code third} (history-sync session, only for group flows) — driven by
- * {@code src/test/resources/fixtures/call/generate.mjs}.
+ * <p>Each captured flow is recorded from up to three roles: {@code caller}
+ * (business session), {@code callee} (primary session), and {@code third}
+ * (history-sync session, only for group flows), driven by
+ * {@code src/test/resources/fixtures/call/generate.mjs}. Fixtures live under
+ * {@code src/test/resources/fixtures/call/} as {@code <flow>.<role>.jsonl}
+ * (captured stanza events in capture order) paired with
+ * {@code <flow>.<role>.expected.json} (the eval-side result and auto-hook
+ * state snapshot), plus companion {@code .ack.jsonl} and
+ * {@code .terminate.jsonl} streams.
  *
- * <p>Fixture layout under {@code src/test/resources/fixtures/call/}:
- * <ul>
- *   <li>{@code <prefix>/<flow>.<role>.jsonl} — captured call-stanza events
- *       in capture order;</li>
- *   <li>{@code <prefix>/<flow>.<role>.ack.jsonl} — companion stream of
- *       {@code <ack class="call" type="…">} stanzas emitted alongside
- *       receipts;</li>
- *   <li>{@code <prefix>/<flow>.<role>.terminate.jsonl} — bare
- *       {@code <terminate>} payloads captured outside the {@code <call>}
- *       envelope (auto-emitted by the server on timeout);</li>
- *   <li>{@code <prefix>/<flow>.<role>.expected.json} — the eval-side
- *       result + auto-hook state snapshot from the capture script.</li>
- * </ul>
- *
- * <p>The {@link Node} tree-walking decoder is structurally identical to
+ * <p>The tree-walking decoder mirrors
  * {@link com.github.auties00.cobalt.message.MessageFixtures#buildNodeFromEvent};
  * only the {@link #FIXTURE_ROOT} differs. JID-attribute normalisation
- * additionally handles {@code domainType=2}, which the capture surfaces
- * for the {@code <call to="…@call">} envelope shape used by group
- * offers.
+ * additionally handles {@code domainType=2}, the {@code @call} envelope
+ * server used by group offers.
  */
 public final class CallFixtures {
     /**
@@ -66,7 +57,7 @@ public final class CallFixtures {
      * capture order.
      *
      * @param topic the fixture topic, e.g. {@code "1to1/audio-accept.caller"}
-     *              — without the {@code .jsonl} extension
+     *              (without the {@code .jsonl} extension)
      * @return the list of {@code event} sub-objects, each shaped like the
      *         output of the MCP stanza logger
      * @throws UncheckedIOException if the fixture is missing or malformed
@@ -159,7 +150,7 @@ public final class CallFixtures {
 
     /**
      * Returns the first captured {@code <call><X .../></call>} event whose
-     * inner-payload tag (offer, accept, reject, …) matches {@code childTag}
+     * inner-payload tag (offer, accept, reject, ...) matches {@code childTag}
      * and whose direction matches {@code direction} ({@code "in"},
      * {@code "out"}, or {@code null} for either).
      *
@@ -241,11 +232,11 @@ public final class CallFixtures {
      * Flattens a captured attribute value into the string form
      * {@link NodeBuilder#attribute(String, String)} expects.
      *
-     * <p>The MCP stanza logger captures WAWap's internal Jid wrappers in
-     * three shapes:
+     * <p>The MCP stanza logger captures WA Web's internal Jid wrappers in
+     * two shapes:
      * <ul>
-     *   <li><b>Server JID</b> — {@code {"$1": {"type", "user", "server"}}};</li>
-     *   <li><b>Device JID</b> — {@code {"$1": {"type", "user", "device", "domainType"}}}.
+     *   <li><b>Server JID</b>: {@code {"$1": {"type", "user", "server"}}};</li>
+     *   <li><b>Device JID</b>: {@code {"$1": {"type", "user", "device", "domainType"}}}.
      *       {@code domainType=0} maps to {@code @s.whatsapp.net},
      *       {@code domainType=1} to {@code @lid}, {@code domainType=2} to
      *       {@code @call} (the call-envelope server used by group offers).</li>

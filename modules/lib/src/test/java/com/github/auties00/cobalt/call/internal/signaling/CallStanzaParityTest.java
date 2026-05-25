@@ -13,33 +13,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.auties00.cobalt.call.CallEndReason;
 
 /**
- * Wire-shape parity tests for {@link CallStanza}, anchored to {@code <call>}
- * stanzas captured from live WhatsApp Web sessions under
- * {@code fixtures/call/}.
+ * Wire-shape parity tests for {@link CallStanza}, anchored to {@code <call>} stanzas captured from
+ * live WhatsApp Web sessions under {@code fixtures/call/}. Each test loads a captured outgoing-side or
+ * incoming-side stanza from a {@code .jsonl} fixture via {@link CallFixtures#loadCallEventWithChild},
+ * then asserts that its payload shape (attributes, child topology) matches what {@link CallStanza}
+ * builds for the same logical event.
  *
- * <p>Each test:
- * <ol>
- *   <li>Loads a captured outgoing-side or incoming-side stanza from a
- *       {@code .jsonl} fixture via {@link CallFixtures#loadCallEventWithChild}.</li>
- *   <li>Asserts the captured stanza's payload shape (attributes, child
- *       topology) matches what {@link CallStanza} would build for the
- *       same logical event.</li>
- * </ol>
- *
- * <p>The wire-byte-equal builder side is exercised by constructing the
- * Cobalt stanza with the same call-id / call-creator the capture used,
- * then comparing structural attributes — full byte-for-byte equality is
- * not feasible because the {@code id} attribute on the outer
- * {@code <call>} is assigned by {@code WAWap.generateId} at dispatch
- * time and is irrelevant to the orchestrator's wire-shape invariants.
- *
- * <p>Tests are marked {@link CallFixtures#isAvailable(String)}-guarded so
- * they skip cleanly when the corpus regenerates without that topic.
+ * <p>The builder side is exercised by constructing the Cobalt stanza with the same call-id and
+ * call-creator the capture used, then comparing structural attributes; full byte-for-byte equality is
+ * not feasible because the {@code id} attribute on the outer {@code <call>} is assigned by
+ * {@code WAWap.generateId} at dispatch time and is irrelevant to the wire-shape invariants. Tests are
+ * guarded with {@link CallFixtures#isAvailable(String)} so they skip cleanly when the corpus
+ * regenerates without that topic.
  */
 @DisplayName("CallStanza live wire oracle")
 class CallStanzaParityTest {
-
-    // -------- offer (1:1) --------------------------------------------------
 
     @Test
     @DisplayName("offer (1:1 audio): outer <call><offer> + <audio enc=opus rate=8000> + <audio rate=16000>")
@@ -63,8 +51,6 @@ class CallStanzaParityTest {
                 "offer must advertise both Opus 8kHz and 16kHz, got " + rates);
     }
 
-    // -------- preaccept ----------------------------------------------------
-
     @Test
     @DisplayName("preaccept: outgoing <call><preaccept call-id call-creator/></call> on the callee side")
     void preacceptShape() {
@@ -85,8 +71,6 @@ class CallStanzaParityTest {
         assertEquals(callCreator, builtPreaccept.getAttributeAsJid("call-creator", null));
     }
 
-    // -------- accept -------------------------------------------------------
-
     @Test
     @DisplayName("accept (1:1 audio): outgoing <call><accept> from callee")
     void accept1to1Shape() {
@@ -105,8 +89,6 @@ class CallStanzaParityTest {
         assertEquals(callCreator, builtAccept.getAttributeAsJid("call-creator", null));
     }
 
-    // -------- reject -------------------------------------------------------
-
     @Test
     @DisplayName("reject (1:1 audio): outgoing <call><reject> from callee")
     void rejectShape() {
@@ -124,8 +106,6 @@ class CallStanzaParityTest {
         assertEquals(callId, builtReject.getAttributeAsString("call-id").orElseThrow());
         assertEquals(callCreator, builtReject.getAttributeAsJid("call-creator", null));
     }
-
-    // -------- terminate ----------------------------------------------------
 
     @Test
     @DisplayName("terminate: <terminate reason call-id call-creator/>")
@@ -150,8 +130,6 @@ class CallStanzaParityTest {
         assertEquals(canonicalReason.wireValue(), builtTerminate.getAttributeAsString("reason").orElseThrow());
     }
 
-    // -------- mute (mute_v2) ----------------------------------------------
-
     @Test
     @DisplayName("mute_v2: <mute_v2 call-id call-creator mute-state=\"0|1\"/>")
     void muteShape() {
@@ -172,13 +150,11 @@ class CallStanzaParityTest {
         assertEquals(muteState, builtInner.getAttributeAsString("mute-state").orElseThrow());
     }
 
-    // -------- video_state --------------------------------------------------
-
     @Test
     @DisplayName("video_state: receive-side-only — WA Web never emits, Cobalt builder reachable only for mobile peers")
     void videoStateShape() {
         // Verified by literal search across the WA Web bundle: the string
-        // "video_state" appears in only ONE non-WAWapDict location —
+        // "video_state" appears in only ONE non-WAWapDict location:
         // WAWebVoipSignalingEnums.TYPE_NAME[15], i.e. the enum dictionary
         // entry. No JS code path constructs a <call><video_state/> stanza
         // for dispatch. WA Web's receive side does handle inbound
@@ -187,14 +163,12 @@ class CallStanzaParityTest {
         //
         // Implication: Cobalt's CallStanza.videoState(...) is reachable
         // only when Cobalt itself is the emitter to a mobile / desktop
-        // peer. Parity against WA Web captures is therefore impossible
-        // — there is no web-emitted reference stanza to compare against.
+        // peer. Parity against WA Web captures is therefore impossible:
+        // there is no web-emitted reference stanza to compare against.
         // The builder's wire shape was originally derived from the
         // receive-side parser in WAWebHandleVoipCall and matches the
         // attributes Cobalt's CallReceiver expects to see.
     }
-
-    // -------- ringing ------------------------------------------------------
 
     @Test
     @DisplayName("ringing: TODO — capture corpus has no client-emitted <ringing>")
@@ -206,8 +180,6 @@ class CallStanzaParityTest {
         // "wait-and-ring-then-answer" flow, replace this with a real shape
         // assertion modeled on `preacceptShape`.
     }
-
-    // -------- group_update (add / remove) ---------------------------------
 
     @Test
     @DisplayName("group_update add: receive-side-only — same posture as videoStateShape")
@@ -228,7 +200,7 @@ class CallStanzaParityTest {
     @Test
     @DisplayName("group_update remove: same posture as groupUpdateAddShape")
     void groupUpdateRemoveShape() {
-        // See groupUpdateAddShape — web client doesn't emit; the
+        // See groupUpdateAddShape; web client doesn't emit; the
         // builder's wire shape was derived from the receive-side parser.
     }
 }

@@ -24,94 +24,121 @@ import com.github.auties00.cobalt.call.session.VoiceCallOptions;
 import com.github.auties00.cobalt.call.session.GroupCallParticipant;
 
 /**
- * The M5 group-call media session — outbound side is one local
- * audio track (our mic, encoded to Opus) sent up to the SFU; inbound
- * side is N audio streams (one per other participant), each
- * forwarded by the SFU on a distinct SSRC, demultiplexed back to
- * per-peer {@link GroupCallParticipant} listeners.
+ * Drives the media plane of a many-to-many group call over a single SFU-relayed transport.
  *
- * <p>Differences from the 1:1 {@link VoiceCallSession}:
+ * <p>The outbound side carries one local audio track: the local microphone, encoded to Opus by an
+ * {@link AudioPipeline} and sent up to the SFU on the local SSRC supplied by {@link VoiceCallOptions}.
+ * The inbound side carries one audio stream per remote participant, each forwarded by the SFU on a
+ * distinct SSRC and demultiplexed back to a per-peer {@link GroupCallParticipant} listener. There is
+ * no server-side mixing: every participant's audio arrives as a separate stream and the application
+ * is responsible for mixing the decoded frames it receives.
+ *
+ * <p>This session differs from the one-to-one {@link VoiceCallSession} in four ways:
  *
  * <ul>
- *   <li><b>One sender, many receivers</b> — instead of a single
- *       remote audio source on the call, each participant's audio
- *       is routed to a per-peer consumer.</li>
- *   <li><b>Per-participant decoder</b> — each peer's SSRC has its
- *       own {@link OpusDecoder} so the SFU's forwarded streams
- *       don't trample each other's PLC state.</li>
- *   <li><b>Outbound preprocessing</b> — uses the same
- *       {@link AudioPipeline} as 1:1 but reading from the call's
- *       {@link ActiveCall#localAudioSink} only; the AEC's far-end
- *       reference is the application's mix of all decoded
- *       participants (the application is responsible for mixing —
- *       we don't do server-side mixing in M5).</li>
- *   <li><b>Group SSRC management</b> — participants come and go via
- *       {@link #addParticipant} / {@link #removeParticipant}
- *       wired from the group-call signaling layer.</li>
+ *   <li>One sender, many receivers. A single {@link RtpSender} feeds the SFU, which re-broadcasts to
+ *       every participant; inbound audio is routed to a per-peer consumer rather than to a single
+ *       remote audio source.</li>
+ *   <li>Per-participant decoder. Each peer's SSRC owns its own {@link OpusDecoder} so the SFU's
+ *       forwarded streams do not corrupt each other's packet-loss-concealment state.</li>
+ *   <li>Outbound preprocessing reads only from {@link ActiveCall#localAudioSink()}; the application's
+ *       mix of all decoded participants is what feeds the echo canceller's far-end reference.</li>
+ *   <li>Group SSRC management. Participants join and leave through {@link #addParticipant} and
+ *       {@link #removeParticipant}, driven by the group-call signaling layer above this session.</li>
  * </ul>
  *
- * <p>For the M5 scope, the local audio capture is wired through the
- * {@link ActiveCall#localAudioSink}; group-specific signaling
- * (invite, remove, group-state changes) lives in the call layer
- * above this session.
+ * <p>This session does not speak group-call signaling. Invite, remove, and group-state changes live
+ * in the call layer above it, which feeds this session a connected {@link DatagramTransport} and the
+ * peer or SFU DTLS fingerprint.
  */
 public final class GroupCallSession implements AutoCloseable {
     /**
-     * The active call.
+     * The active call whose media ports drive this session.
      */
     private final ActiveCall call;
 
     /**
-     * Configuration.
+     * The per-call configuration supplying the local SSRC, the Opus payload type, and the audio
+     * pipeline options; never mutated after construction.
      */
     private final VoiceCallOptions options;
 
     /**
-     * The DTLS-SRTP driver. The local SSRC and Opus PT come from
-     * {@code options}; participants share the SFU-assigned receive
-     * SSRCs.
+     * The DTLS-SRTP handshake driver that owns the underlying {@link DatagramTransport} and derives
+     * the SRTP keys shared by the outbound sender and every per-participant receiver.
+     *
+     * <p>The local SSRC and Opus payload type come from {@link #options}; each participant supplies
+     * its own SFU-assigned receive SSRC through {@link GroupCallParticipant#audioSsrc()}.
      */
     private final DtlsSrtpDriver dtls;
 
     /**
-     * Outbound RTP sender, sized for one local audio track.
+     * The outbound RTP sender for the single local audio track, instantiated once the handshake
+     * completes; {@code null} until then.
      */
     private RtpSender sender;
 
     /**
-     * The audio pipeline. Drives mic frames → Opus → outbound RTP.
+     * The audio pipeline that drives microphone frames through Opus encoding into outbound RTP,
+     * instantiated once the handshake completes; {@code null} until then.
      */
     private AudioPipeline audio;
 
     /**
-     * Per-peer subscriber state keyed on SSRC. The SFU forwards
-     * each peer's audio with a distinct SSRC; we look up the right
-     * subscriber on inbound.
+     * The per-peer subscriber state, keyed on the participant's receive SSRC.
+     *
+     * <p>The SFU forwards each peer's audio with a distinct SSRC, so inbound SRTP is demultiplexed by
+     * reading the SSRC from the packet header and looking up the matching {@link Subscriber}.
      */
     private final ConcurrentHashMap<Integer, Subscriber> subscribers = new ConcurrentHashMap<>();
 
     /**
-     * Whether {@link #start()} has been called.
+     * Whether {@link #start()} has been called, guarding against a second handshake.
      */
     private volatile boolean started;
 
     /**
-     * Whether {@link #close()} has been called.
+     * Whether {@link #close()} has been called, after which media delivery and participant changes
+     * are suppressed.
      */
     private volatile boolean closed;
 
     /**
-     * Per-participant subscriber bundle — owns the
-     * {@link RtpReceiver} that filters on the participant's SSRC,
-     * a per-peer {@link OpusDecoder} so PLC state is independent,
-     * and the application's audio listener.
+     * Bundles the per-participant state required to receive and decode one forwarded audio stream.
+     *
+     * <p>Each subscriber owns the {@link RtpReceiver} that filters on the participant's SSRC, a
+     * dedicated {@link OpusDecoder} so packet-loss-concealment state is independent of other peers,
+     * and the application listener carried on the {@link GroupCallParticipant}.
      */
     private static final class Subscriber {
+        /**
+         * The participant this subscriber receives audio for, carrying its JID, SSRC, and listener.
+         */
         final GroupCallParticipant participant;
+
+        /**
+         * The RTP receiver filtering inbound SRTP on the participant's SSRC.
+         */
         final RtpReceiver receiver;
+
+        /**
+         * The decoder dedicated to this participant so its concealment state stays isolated.
+         */
         final OpusDecoder decoder;
+
+        /**
+         * The per-channel sample count of one decoded frame, taken from the audio options.
+         */
         final int frameSize;
 
+        /**
+         * Constructs a subscriber bundle for one participant.
+         *
+         * @param participant the participant whose stream this subscriber receives
+         * @param receiver    the RTP receiver filtering on the participant's SSRC
+         * @param decoder     the decoder dedicated to this participant
+         * @param frameSize   the per-channel sample count of one decoded frame
+         */
         Subscriber(GroupCallParticipant participant, RtpReceiver receiver,
                    OpusDecoder decoder, int frameSize) {
             this.participant = participant;
@@ -122,17 +149,19 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Constructs a new session.
+     * Constructs a group-call session bound to the given call and transport.
      *
-     * @param call                    the active call
-     * @param transport               the connected datagram path
-     * @param role                    DTLS role
-     * @param localCert               local DTLS cert
-     * @param expectedPeerFingerprint the peer/SFU fingerprint
-     * @param options                 voice options (the local SSRC
-     *                                + opus PT; remote SSRC is
-     *                                ignored — participants supply
-     *                                their own)
+     * <p>The remote SSRC carried by {@code options} is ignored: participants supply their own receive
+     * SSRCs when they join through {@link #addParticipant}.
+     *
+     * @param call                    the active call whose media ports drive the session
+     * @param transport               the connected datagram path to the SFU
+     * @param role                    the DTLS role to play in the handshake
+     * @param localCert               the local DTLS certificate
+     * @param expectedPeerFingerprint the expected SFU certificate fingerprint
+     * @param options                 the per-call configuration; supplies the local SSRC and Opus
+     *                                payload type, with the remote SSRC ignored
+     * @throws NullPointerException if any argument is {@code null}
      */
     public GroupCallSession(ActiveCall call, DatagramTransport transport,
                             SrtpRole role, DtlsCertificate localCert,
@@ -146,34 +175,40 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Returns the underlying call.
+     * Returns the active call this session drives.
      *
-     * @return the call
+     * @return the active call
      */
     public ActiveCall call() {
         return call;
     }
 
     /**
-     * Returns whether the DTLS handshake has completed.
+     * Returns whether the handshake has completed and the media plane is wired.
      *
-     * @return {@code true} if connected
+     * <p>This reports {@code true} once both the audio pipeline and the outbound sender have been
+     * instantiated by the completer thread, which happens only after the DTLS handshake succeeds.
+     *
+     * @return {@code true} if media is flowing
      */
     public boolean connected() {
         return audio != null && sender != null;
     }
 
     /**
-     * Returns the JIDs of the currently-subscribed participants.
+     * Returns a snapshot of the receive SSRCs of the currently-subscribed participants.
      *
-     * @return the participant JID set
+     * @return an immutable copy of the subscribed SSRC set
      */
     public Set<Integer> subscribedSsrcs() {
         return Set.copyOf(subscribers.keySet());
     }
 
     /**
-     * Spawns the handshake thread + media wiring. Idempotent.
+     * Starts the DTLS handshake and spawns the completer thread that wires the outbound media plane.
+     *
+     * <p>The handshake runs on a virtual thread; this method returns immediately. Calling it more
+     * than once, or after {@link #close()}, is a no-op.
      */
     public synchronized void start() {
         if (started || closed) {
@@ -187,13 +222,20 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Blocks until the handshake completes and the local mic
-     * pipeline is wired.
+     * Blocks until the handshake completes and the local microphone pipeline is wired, or fails.
      *
-     * @param timeout maximum wait
-     * @param unit    unit
-     * @throws IOException          if the handshake failed
-     * @throws InterruptedException if interrupted
+     * <p>This first waits for the DTLS handshake, then polls until the completer thread has
+     * instantiated the audio pipeline. It throws if the session is closed before wiring finishes or
+     * if wiring does not complete within the given budget.
+     *
+     * @param timeout the maximum time to wait
+     * @param unit    the unit of {@code timeout}
+     * @throws IOException          if the handshake failed, the session closed early, or wiring timed
+     *                              out
+     * @throws InterruptedException if the calling thread is interrupted while waiting
+     * @implNote This implementation polls the {@code audio} field every 5 ms after the handshake
+     * completes because the completer thread wires the pipeline asynchronously; the same {@code unit}
+     * budget bounds both the handshake wait and the wiring poll.
      */
     public void awaitConnected(long timeout, TimeUnit unit) throws IOException, InterruptedException {
         dtls.awaitHandshake(timeout, unit);
@@ -211,11 +253,14 @@ public final class GroupCallSession implements AutoCloseable {
 
     /**
      * Subscribes to a participant's forwarded audio stream.
-     * Idempotent for the given SSRC — calling twice with the same
-     * {@code participant.audioSsrc()} replaces the listener.
      *
-     * @param participant the new participant
-     * @throws IllegalStateException if the session is closed
+     * <p>This requires the DTLS handshake to have completed so the SRTP endpoint is available, and is
+     * idempotent for a given SSRC: subscribing again with the same {@link GroupCallParticipant#audioSsrc()}
+     * closes the previous decoder and replaces the subscriber so the latest listener wins.
+     *
+     * @param participant the participant to subscribe to
+     * @throws NullPointerException  if {@code participant} is {@code null}
+     * @throws IllegalStateException if the session is closed or the handshake has not completed
      */
     public synchronized void addParticipant(GroupCallParticipant participant) {
         Objects.requireNonNull(participant, "participant cannot be null");
@@ -238,10 +283,13 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Removes a participant — closes its decoder and stops
-     * delivering frames to the listener.
+     * Removes the participant with the given JID, closing its decoder and stopping frame delivery.
      *
-     * @param jid the participant's JID
+     * <p>The first subscriber whose participant matches {@code jid} is removed; if none matches, this
+     * is a no-op.
+     *
+     * @param jid the JID of the participant to remove
+     * @throws NullPointerException if {@code jid} is {@code null}
      */
     public synchronized void removeParticipant(Jid jid) {
         Objects.requireNonNull(jid, "jid cannot be null");
@@ -265,7 +313,10 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Tears down the session. Idempotent.
+     * Tears down the session, closing every subscriber decoder, the audio pipeline, and the DTLS
+     * driver (which closes the transport).
+     *
+     * <p>Calling this more than once is a no-op.
      */
     @Override
     public synchronized void close() {
@@ -294,8 +345,16 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Body of the completer thread — awaits the handshake, then
-     * builds the outbound sender + audio pipeline.
+     * Runs on the completer thread: awaits the handshake and then builds the outbound sender and
+     * audio pipeline.
+     *
+     * <p>On handshake failure the session is closed and the call is hung up. On success, and only if
+     * the session is still open, this installs the outbound sender, registers the inbound SRTP
+     * handler, and starts the audio pipeline; if the pipeline fails to start, the session is closed.
+     *
+     * @implNote This implementation bounds the handshake wait at 30 seconds, matching the call layer's
+     * setup timeout, and any failure path hangs the call up so the application observes the ended
+     * state.
      */
     private void completeAfterHandshake() {
         SrtpEndpoint srtp;
@@ -332,11 +391,14 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Builds a {@link Subscriber} for the given participant.
+     * Builds a {@link Subscriber} bundle for the given participant.
+     *
+     * <p>The receiver filters on the participant's SSRC and the Opus payload type, dispatching each
+     * inbound payload to {@link #deliverFromPeer}; the decoder is dedicated to this participant.
      *
      * @param srtp        the negotiated SRTP endpoint
-     * @param participant the participant
-     * @return the subscriber
+     * @param participant the participant to build the subscriber for
+     * @return the constructed subscriber
      */
     private Subscriber buildSubscriber(SrtpEndpoint srtp, GroupCallParticipant participant) {
         var decoder = new OpusDecoder(options.audio().sampleRate(), options.audio().channels());
@@ -347,13 +409,16 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Decodes an inbound RTP payload from the given participant and
-     * forwards the resulting {@link AudioFrame} to the registered
-     * consumer. Missing markers (PLC triggers) are passed through
-     * Opus's built-in concealment.
+     * Decodes one inbound RTP payload from a participant and forwards the resulting {@link AudioFrame}
+     * to its listener.
      *
-     * @param participant the source peer
-     * @param decoder     the per-peer decoder
+     * <p>A missing marker on the inbound emission drives the decoder's packet-loss concealment instead
+     * of decoding bytes. Empty decoder output and decode failures are dropped silently, and any
+     * exception thrown by the listener is swallowed so one misbehaving consumer cannot stall the media
+     * plane.
+     *
+     * @param participant the source participant
+     * @param decoder     the participant's dedicated decoder
      * @param inbound     the receiver's emission
      */
     private void deliverFromPeer(GroupCallParticipant participant, OpusDecoder decoder,
@@ -381,10 +446,16 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Demultiplex inbound SRTP by SSRC: looks up the right
-     * subscriber and routes the packet through its receiver.
+     * Demultiplexes one inbound SRTP packet by SSRC and routes it to the matching subscriber.
      *
-     * @param packet the protected bytes
+     * <p>Packets shorter than the RTP header are dropped. The SSRC is read from the clear header,
+     * the matching {@link Subscriber} is looked up, and the packet is handed to its receiver before
+     * draining the jitter buffer; packets with an unknown SSRC are ignored.
+     *
+     * @param packet the SRTP-protected bytes
+     * @implNote This implementation reads the SSRC from bytes 8 through 11 of the RTP header, which is
+     * in clear under SRTP, so the right subscriber is selected before any AES-CM decryption cost; the
+     * 12-byte guard is the minimum RTP header length.
      */
     private void onProtectedSrtp(byte[] packet) {
         if (packet.length < 12) {
@@ -401,11 +472,13 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Forwards each encoded outbound Opus frame to the single
-     * outbound RTP sender — the SFU re-broadcasts to every
-     * participant.
+     * Forwards one encoded outbound Opus frame to the single RTP sender, which the SFU re-broadcasts
+     * to every participant.
      *
-     * @param packet the encoded packet
+     * <p>If the sender is not yet wired the frame is dropped, and any send failure is swallowed so a
+     * transient transport error does not stop the pipeline.
+     *
+     * @param packet the encoded outbound packet
      */
     private void onEncodedOutbound(OpusPacket packet) {
         var s = sender;
@@ -419,10 +492,9 @@ public final class GroupCallSession implements AutoCloseable {
     }
 
     /**
-     * Returns the negotiated SRTP endpoint, or {@code null} until
-     * the handshake completes.
+     * Returns the negotiated SRTP endpoint, or {@code null} until the handshake completes.
      *
-     * @return the endpoint, or {@code null}
+     * @return the SRTP endpoint, or {@code null} if the handshake has not completed
      */
     public SrtpEndpoint srtpEndpoint() {
         return dtls.srtpEndpoint();

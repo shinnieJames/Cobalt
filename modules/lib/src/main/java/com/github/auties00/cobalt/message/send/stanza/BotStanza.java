@@ -20,47 +20,38 @@ import java.security.GeneralSecurityException;
 import java.util.Objects;
 
 /**
- * Builds the optional {@code <bot>} child of an outgoing {@code <message>}
- * stanza, both in its encrypted-fanout form and its metadata-only form.
- *
- * @apiNote
- * Two surfaces share the {@code <bot>} node: (a) the encrypted-fanout form
- * {@code <bot><to jid="...@bot"><enc .../></to></bot>} delivers a
- * separately encrypted copy of the body to a Meta AI bot device or to the
- * original bot for a feedback message; (b) the metadata-only form
- * {@code <bot type="..." local_automated_type="..." client_thread_id="..." />}
- * carries routing attributes for AI thread bookkeeping, business-bot
- * classification, and the user's AI-mode selection. {@link ChatFanoutStanza}
- * composes the two forms as siblings; this class produces the one or two
- * nodes.
+ * Builds the optional {@code <bot>} child of an outgoing {@code <message>} stanza, both in its encrypted-fanout form and
+ * its metadata-only form.
+ * <p>
+ * Two surfaces share the {@code <bot>} node. The encrypted-fanout form
+ * {@code <bot><to jid="...@bot"><enc .../></to></bot>} delivers a separately encrypted copy of the body to a Meta AI bot
+ * device or to the original bot for a feedback message. The metadata-only form
+ * {@code <bot type="..." local_automated_type="..." client_thread_id="..." />} carries routing attributes for AI thread
+ * bookkeeping, business-bot classification, and the user's AI-mode selection. {@link ChatFanoutStanza} composes the two
+ * forms as siblings; this class produces the one or two nodes.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 @WhatsAppWebModule(moduleName = "WAWebSendGroupSkmsgJob")
 public final class BotStanza {
     /**
-     * The {@link System.Logger} used for bot encryption diagnostics.
+     * Logs bot encryption diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(BotStanza.class.getName());
 
     /**
-     * The {@link MessageEncryption} used to encrypt the bot body for the bot
-     * device.
+     * Encrypts the bot body for the bot device.
      */
     private final MessageEncryption encryption;
 
     /**
-     * The {@link BotProtobufTransform} applied to the message body before
-     * bot-targeted encryption.
+     * Transforms the message body before bot-targeted encryption.
      */
     private final BotProtobufTransform protobufTransform;
 
     /**
-     * Constructs a builder backed by the given encryption and bot transform
-     * services.
-     *
-     * @apiNote
-     * Constructed once per client and reused; the bot body is recomputed per
-     * send.
+     * Constructs a builder backed by the given encryption and bot transform services.
+     * <p>
+     * The bot body is recomputed per send, so the instance is reusable across sends.
      *
      * @param encryption        the {@link MessageEncryption} service
      * @param protobufTransform the {@link BotProtobufTransform} service
@@ -73,20 +64,15 @@ public final class BotStanza {
 
     /**
      * Builds the encrypted {@code <bot>} node for a 1:1 fanout send.
+     * <p>
+     * Emitted whenever the chat targets a bot directly (chat JID ends in {@code @bot}) or the message is a bot-feedback
+     * {@link ProtocolMessage} whose original key identifies a bot sender. Returns {@code null} when no bot is involved or
+     * when encryption fails.
      *
-     * @apiNote
-     * Emitted whenever the chat targets a bot directly (chat JID ends in
-     * {@code @bot}) or the message is a bot-feedback {@link ProtocolMessage}
-     * whose original key identifies a bot sender. Returns {@code null} when
-     * no bot is involved or when encryption fails.
-     *
-     * @implNote
-     * This implementation derives a bot-scoped message secret via
-     * {@link BotMessageSecret#derive(byte[])}, applies the CAPI / FBID / bot
-     * protobuf transforms in order, encrypts the result for the resolved bot
-     * device with {@link MessageEncryption#encryptForDevice(Jid, byte[])},
-     * and wraps the ciphertext in {@code <bot><to jid="..."><enc .../></to></bot>}.
-     * The {@code type="feedback"} outer attribute is set only for bot
+     * @implNote This implementation derives a bot-scoped message secret via {@link BotMessageSecret#derive(byte[])},
+     * applies the CAPI, FBID, and bot protobuf transforms in order, encrypts the result for the resolved bot device with
+     * {@link MessageEncryption#encryptForDevice(Jid, byte[])}, and wraps the ciphertext in
+     * {@code <bot><to jid="..."><enc .../></to></bot>}. The {@code type="feedback"} outer attribute is set only for bot
      * feedback messages.
      *
      * @param messageInfo the outgoing {@link ChatMessageInfo}
@@ -152,32 +138,22 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the metadata-only {@code <bot>} node carrying the bot-routing
-     * attributes that the server uses for AI thread bookkeeping and
-     * analytics.
-     *
-     * @apiNote
-     * Mirrors the {@code ve} composition inside
-     * {@code WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza}.
-     * Attributes are: {@code type} (one of {@code "prompt"},
-     * {@code "command"}, {@code "request_welcome"}, or {@code "feedback"}),
-     * {@code local_automated_type} (the business-bot class:
-     * {@code "1p_partial"} for first-party partial integrations,
-     * {@code "3p_full"} for third-party full integrations),
-     * {@code client_thread_id} (the AI conversation thread id),
-     * {@code mode_selection} (the user-selected AI mode label, e.g.
-     * {@code "default"} or {@code "think_hard"}), {@code mode_selected} (a
-     * dynamic-mode override string). Returns {@code null} when no attribute
-     * applies so {@link ChatFanoutStanza} can suppress the empty node.
+     * Builds the metadata-only {@code <bot>} node carrying the bot-routing attributes that the server uses for AI thread
+     * bookkeeping and analytics.
+     * <p>
+     * The {@code type} attribute is one of {@code "prompt"}, {@code "command"}, {@code "request_welcome"}, or
+     * {@code "feedback"}. The {@code local_automated_type} attribute carries the business-bot class
+     * ({@code "1p_partial"} for first-party partial integrations, {@code "3p_full"} for third-party full integrations).
+     * The {@code client_thread_id} attribute carries the AI conversation thread id. The {@code mode_selection} attribute
+     * carries the user-selected AI mode label such as {@code "default"} or {@code "think_hard"}, and
+     * {@code mode_selected} carries a dynamic-mode override string. Returns {@code null} when no attribute applies so
+     * {@link ChatFanoutStanza} can suppress the empty node.
      *
      * @param botMsgBodyType the bot message body type, or {@code null}
-     * @param bizBotType     the business-bot classification, or
-     *                       {@code null}
+     * @param bizBotType     the business-bot classification, or {@code null}
      * @param clientThreadId the AI conversation thread id, or {@code null}
-     * @param modeSelection  the user-selected AI mode label, or
-     *                       {@code null}
-     * @param modeSelected   the dynamic mode override string, or
-     *                       {@code null}
+     * @param modeSelection  the user-selected AI mode label, or {@code null}
+     * @param modeSelected   the dynamic mode override string, or {@code null}
      * @return the {@code <bot>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
@@ -205,18 +181,13 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the metadata-only {@code <bot>} node without the AI mode
-     * selection attributes.
-     *
-     * @apiNote
-     * Convenience overload for senders that do not run the AI mode selector
-     * surface; delegates to
-     * {@link #buildMetadata(String, String, String, String, String)} with
-     * the last two arguments {@code null}.
+     * Builds the metadata-only {@code <bot>} node without the AI mode selection attributes.
+     * <p>
+     * Delegates to {@link #buildMetadata(String, String, String, String, String)} with the last two arguments
+     * {@code null}, for senders that do not run the AI mode selector surface.
      *
      * @param botMsgBodyType the bot message body type, or {@code null}
-     * @param bizBotType     the business-bot classification, or
-     *                       {@code null}
+     * @param bizBotType     the business-bot classification, or {@code null}
      * @param clientThreadId the AI conversation thread id, or {@code null}
      * @return the {@code <bot>} {@link Node}, or {@code null}
      */
@@ -231,27 +202,17 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the encrypted {@code <bot>} node for a group SKMSG send into
-     * an open-bot group.
+     * Builds the encrypted {@code <bot>} node for a group SKMSG send into an open-bot group.
+     * <p>
+     * When the group has the open Meta AI bot enabled, a separately encrypted copy of the body is sent to the Meta AI
+     * FBID bot account in addition to the SKMSG-encrypted group payload. Returns {@code null} when {@code isOpenBotGroup}
+     * is {@code false} or when bot encryption fails.
      *
-     * @apiNote
-     * Mirrors the {@code L(e, t, n)} bot fanout helper in
-     * {@code WAWebSendGroupSkmsgJob}: when the group has the open Meta AI
-     * bot enabled, a separately encrypted copy of the body is sent to the
-     * Meta AI FBID bot account in addition to the SKMSG-encrypted group
-     * payload. Returns {@code null} when {@code isOpenBotGroup} is
-     * {@code false} or when bot encryption fails.
-     *
-     * @implNote
-     * This implementation always targets {@link Jid#metaAiBotAccount()};
-     * the WA Web counterpart resolves the same FBID via
-     * {@code WAWebBotUtils.META_BOT_FBID_WID}. The CAPI transform is run
-     * before the generic bot transform because the open-bot path delivers
-     * the message into a multi-user thread.
+     * @implNote This implementation always targets {@link Jid#metaAiBotAccount()}. The CAPI transform runs before the
+     * generic bot transform because the open-bot path delivers the message into a multi-user thread.
      *
      * @param messageInfo    the outgoing {@link ChatMessageInfo}
-     * @param isOpenBotGroup whether the group has the open Meta AI bot
-     *                       enabled
+     * @param isOpenBotGroup whether the group has the open Meta AI bot enabled
      * @return the {@code <bot>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
@@ -308,20 +269,15 @@ public final class BotStanza {
     }
 
     /**
-     * Resolves the bot device {@link Jid} that should receive the encrypted
-     * bot body for this send.
-     *
-     * @apiNote
-     * Two cases are recognised: the chat itself is a bot account (chat JID
-     * server is {@code "bot"}) or the message is a bot-feedback protocol
-     * message whose original {@link MessageKey#senderJid()} identifies a
-     * bot. Anything else returns {@code null}, suppressing the
-     * {@code <bot>} child.
+     * Resolves the bot device {@link Jid} that should receive the encrypted bot body for this send.
+     * <p>
+     * Two cases are recognised: the chat itself is a bot account (the chat JID server is {@code "bot"}), or the message
+     * is a bot-feedback protocol message whose original {@link MessageKey#senderJid()} identifies a bot. Anything else
+     * returns {@code null}, suppressing the {@code <bot>} child.
      *
      * @param messageInfo the outgoing {@link ChatMessageInfo}
      * @param chatJid     the recipient chat {@link Jid}
-     * @return the bot device {@link Jid}, or {@code null} when no bot is
-     *         involved
+     * @return the bot device {@link Jid}, or {@code null} when no bot is involved
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -342,17 +298,13 @@ public final class BotStanza {
     }
 
     /**
-     * Returns whether the outgoing message is a bot-feedback
-     * {@link ProtocolMessage}.
-     *
-     * @apiNote
-     * Bot feedback rewires the {@code <bot>} child to address the original
-     * bot rather than the chat target, and forces {@code type="feedback"}
-     * on the wrapping node.
+     * Returns whether the outgoing message is a bot-feedback {@link ProtocolMessage}.
+     * <p>
+     * Bot feedback rewires the {@code <bot>} child to address the original bot rather than the chat target, and forces
+     * {@code type="feedback"} on the wrapping node.
      *
      * @param messageInfo the outgoing {@link ChatMessageInfo}
-     * @return {@code true} when the wrapped content is a
-     *         {@link ProtocolMessage.Type#BOT_FEEDBACK_MESSAGE}
+     * @return {@code true} when the wrapped content is a {@link ProtocolMessage.Type#BOT_FEEDBACK_MESSAGE}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgGetters", exports = "getIsBotFeedbackMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -363,16 +315,12 @@ public final class BotStanza {
 
     /**
      * Returns whether the given {@link Jid} identifies an FBID bot account.
+     * <p>
+     * The FBID bot family lives under the dedicated {@code @bot} JID server, as opposed to Meta AI's legacy PN-form bot
+     * under {@code @c.us}.
      *
-     * @apiNote
-     * The FBID bot family lives under the dedicated {@code @bot} JID server
-     * (as opposed to Meta AI's legacy PN-form bot under {@code @c.us}).
-     *
-     * @implNote
-     * This implementation matches WA Web's
-     * {@code Wid.prototype.isFbidBot}: a JID qualifies when its server is
-     * {@code "bot"} and the device id is either absent or zero (the primary
-     * device). The user component is not inspected.
+     * @implNote This implementation qualifies a JID when its server is {@code "bot"} and the device id is either absent
+     * or zero (the primary device); the user component is not inspected.
      *
      * @param jid the {@link Jid} to test
      * @return {@code true} when the JID is an FBID bot

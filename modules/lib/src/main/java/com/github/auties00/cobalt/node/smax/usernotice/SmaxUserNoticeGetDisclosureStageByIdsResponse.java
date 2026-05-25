@@ -15,41 +15,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants for
- * {@link SmaxUserNoticeGetDisclosureStageByIdsRequest}.
+ * Closes the inbound reply variants for {@link SmaxUserNoticeGetDisclosureStageByIdsRequest}.
  *
- * @apiNote
- * Mirrors WA Web's {@code WASmaxUserNoticeGetDisclosureStageByIdsRPC}
- * dispatch: {@link ClientSuccess} (per-disclosure stage entries),
- * {@link ClientError} (the relay rejected the request as malformed),
- * {@link ServerError} (transient relay-side failure or rate limit). WA
- * Web's {@code WAWebBizBroadcastTos} uses the success branch to check
- * whether the biz-broadcast disclosure has progressed to
- * {@code SOFT_OPT_IN} or {@code ACCEPTED}.
+ * <p>The reply is one of three documented variants: {@link ClientSuccess} carries one
+ * {@link ClientSuccess.DisclosureStageNotice} per polled disclosure, {@link ClientError} signals
+ * that the relay rejected the request as malformed, and {@link ServerError} signals a transient
+ * relay-side failure or rate limit. The static {@link #of(Node, Node)} factory lifts an inbound
+ * stanza into the matching variant; the success branch lets a caller check whether a polled
+ * disclosure has progressed in its acceptance lifecycle.
  */
 public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends SmaxOperation.Response
         permits SmaxUserNoticeGetDisclosureStageByIdsResponse.ClientSuccess, SmaxUserNoticeGetDisclosureStageByIdsResponse.ClientError, SmaxUserNoticeGetDisclosureStageByIdsResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxUserNoticeGetDisclosureStageByIdsResponse}
-     * variant in priority order and returns the first that parses
-     * cleanly.
+     * Tries each {@link SmaxUserNoticeGetDisclosureStageByIdsResponse} variant in priority order and
+     * returns the first that parses cleanly.
      *
-     * @apiNote
-     * The dispatcher entry point used by Cobalt's SMAX layer to lift an
-     * inbound stanza into the sealed disjunction. An empty result
-     * indicates a protocol violation.
+     * <p>This is the dispatcher entry point that lifts an inbound stanza into the sealed
+     * disjunction. An empty result indicates a protocol violation: the stanza matched none of the
+     * documented variants.
      *
      * @implNote
-     * This implementation tries {@link ClientSuccess}, then
-     * {@link ClientError}, then {@link ServerError}, mirroring the WA
-     * Web call order.
+     * This implementation tries {@link ClientSuccess}, then {@link ClientError}, then
+     * {@link ServerError}, in that order.
      *
      * @param node    the inbound IQ stanza
-     * @param request the original outbound stanza, used to validate
-     *                echoed identifiers
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} on no-match
+     * @param request the original outbound stanza, used to validate echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         variant matches
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxUserNoticeGetDisclosureStageByIdsRPC",
@@ -70,29 +63,26 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
     }
 
     /**
-     * The {@code ClientSuccess} reply variant.
+     * Carries one {@link DisclosureStageNotice} per polled disclosure on a successful reply.
      *
-     * @apiNote
-     * Carries one {@link DisclosureStageNotice} per polled disclosure,
-     * in the same order the relay produced them.
+     * <p>This is the success variant of {@link SmaxUserNoticeGetDisclosureStageByIdsResponse}. The
+     * entries appear in the order the relay produced them, and a caller matches each id with the
+     * corresponding query and dispatches on the stage.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseClientSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeIQResultResponseMixin")
     final class ClientSuccess implements SmaxUserNoticeGetDisclosureStageByIdsResponse {
         /**
-         * The list of stage entries returned by the relay.
+         * Holds the stage entries returned by the relay.
          */
         private final List<DisclosureStageNotice> notices;
 
         /**
-         * Constructs a {@code ClientSuccess} reply.
+         * Constructs a successful reply wrapping the given per-disclosure stage entries.
          *
-         * @apiNote
-         * Used by {@link #of(Node, Node)} after envelope validation; the
-         * list is defensively copied.
+         * <p>The list is defensively copied; a {@code null} argument yields an empty list.
          *
-         * @param notices the per-disclosure stage entries; defaults to
-         *                an empty list when {@code null}
+         * @param notices the per-disclosure stage entries, or {@code null} for none
          */
         public ClientSuccess(List<DisclosureStageNotice> notices) {
             this.notices = List.copyOf(Objects.requireNonNullElse(notices, List.of()));
@@ -101,37 +91,33 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * Returns the list of stage entries.
          *
-         * @apiNote
-         * Each entry carries the per-disclosure {@code (id, t, stage)}
-         * triple plus optional version/type metadata; embedders match
-         * the id with the corresponding query and dispatch on the
-         * stage.
+         * <p>Each entry carries the per-disclosure {@code (id, t, stage)} triple plus optional
+         * version and type metadata; a caller matches the id with the corresponding query and
+         * dispatches on the stage. The returned {@link List} is unmodifiable.
          *
-         * @return an unmodifiable {@link List} of
-         *         {@link DisclosureStageNotice}
+         * @return an unmodifiable {@link List} of {@link DisclosureStageNotice}
          */
         public List<DisclosureStageNotice> notices() {
             return notices;
         }
 
         /**
-         * Tries to parse a {@link ClientSuccess} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientSuccess} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope fails the
-         * standard {@code <iq type="result">} validation or when any
-         * {@code <notice>} child fails per-entry parsing.
+         * <p>Returns {@link Optional#empty()} when the envelope fails the standard
+         * {@code <iq type="result">} validation or when any {@code <notice>} child fails per-entry
+         * parsing.
          *
          * @implNote
-         * This implementation walks every {@code <notice>} child via
-         * {@link DisclosureStageNotice#of(Node)}; any failed entry
-         * aborts the whole parse so the dispatcher can try the error
-         * branches.
+         * This implementation validates the envelope via
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, then walks every
+         * {@code <notice>} child via {@link DisclosureStageNotice#of(Node)}; any failed entry
+         * aborts the whole parse so the dispatcher can fall through to the error branches.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} on
+         *         no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseClientSuccess",
                 exports = "parseGetDisclosureStageByIdsResponseClientSuccess",
@@ -154,8 +140,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation compares the notices list.
+         * <p>Two successful replies are equal when they carry equal notice lists.
          */
         @Override
         public boolean equals(Object obj) {
@@ -172,8 +157,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation hashes the notices list.
+         * <p>The hash is derived from the notice list.
          */
         @Override
         public int hashCode() {
@@ -183,9 +167,8 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * <p>Renders the type name and the notice list in the record-like form shared across the
+         * {@code Smax} response family.
          */
         @Override
         public String toString() {
@@ -193,59 +176,52 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         }
 
         /**
-         * A single {@code <notice>} entry projecting the per-disclosure
-         * stage marker carried in the reply.
+         * Projects a single {@code <notice>} entry carrying the per-disclosure stage marker.
          *
-         * @apiNote
-         * Unlike
-         * {@link SmaxUserNoticeGetDisclosuresResponse.ClientSuccess.DisclosureNotice},
-         * the {@code version} and {@code type} attributes are optional;
-         * the StageByIds RPC only commits to surfacing the
-         * {@code (id, t, stage)} triple.
+         * <p>Unlike
+         * {@link SmaxUserNoticeGetDisclosuresResponse.ClientSuccess.DisclosureNotice}, the
+         * {@code version} and {@code type} attributes are optional here; this RPC only commits to
+         * surfacing the {@code (id, t, stage)} triple, exposing version and type through
+         * {@link Optional}-returning accessors when the relay includes them.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeStageMixin")
         public static final class DisclosureStageNotice {
             /**
-             * The relay-side timestamp ({@code t} attribute, in
-             * seconds since the UNIX epoch).
+             * Holds the relay-side timestamp, in seconds since the UNIX epoch, taken from the
+             * {@code t} attribute.
              */
             private final long timestampSeconds;
 
             /**
-             * The optional notice version ({@code version} attribute,
-             * at least one when present).
+             * Holds the optional notice version from the {@code version} attribute, at least one
+             * when present and {@code null} when absent.
              */
             private final Integer version;
 
             /**
-             * The optional notice type ({@code type} attribute,
-             * non-negative when present).
+             * Holds the optional notice type from the {@code type} attribute, non-negative when
+             * present and {@code null} when absent.
              */
             private final Integer type;
 
             /**
-             * The disclosure id from
-             * {@code WASmaxInUserNoticeStageMixin}.
+             * Holds the disclosure id from the {@code id} attribute.
              */
             private final long noticeId;
 
             /**
-             * The current stage in the {@code [0, 1000]} range.
+             * Holds the current acceptance stage in the {@code [0, 1000]} range.
              */
             private final int stage;
 
             /**
-             * Constructs a disclosure-stage notice.
+             * Constructs a disclosure-stage notice from its parsed attributes.
              *
-             * @apiNote
-             * Used by {@link #of(Node)} after the {@code <notice>}
-             * element passes every per-field check.
-             *
-             * @param timestampSeconds the relay-side timestamp
-             * @param version          the optional notice version
-             * @param type             the optional notice type
+             * @param timestampSeconds the relay-side timestamp in seconds since the UNIX epoch
+             * @param version          the optional notice version, or {@code null} when absent
+             * @param type             the optional notice type, or {@code null} when absent
              * @param noticeId         the disclosure id
-             * @param stage            the current stage
+             * @param stage            the current acceptance stage
              */
             public DisclosureStageNotice(long timestampSeconds, Integer version, Integer type,
                                          long noticeId, int stage) {
@@ -259,10 +235,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * Returns the relay-side timestamp.
              *
-             * @apiNote
-             * Surfaced for audit and freshness checks.
-             *
-             * @return the timestamp in seconds
+             * @return the timestamp in seconds since the UNIX epoch
              */
             public long timestampSeconds() {
                 return timestampSeconds;
@@ -271,12 +244,11 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * Returns the optional notice version.
              *
-             * @apiNote
-             * Distinguishes successive revisions of the same disclosure
-             * when surfaced; absent on entries that carry only the
-             * stage triple.
+             * <p>The version distinguishes successive revisions of the same disclosure when
+             * surfaced; it is absent on entries that carry only the stage triple.
              *
-             * @return an {@link Optional} carrying the version
+             * @return an {@link Optional} carrying the version, or {@link Optional#empty()} when
+             *         absent
              */
             public Optional<Integer> version() {
                 return Optional.ofNullable(version);
@@ -285,12 +257,10 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * Returns the optional notice type.
              *
-             * @apiNote
-             * Identifies the disclosure category as defined by
-             * {@code WAWebPDFNTypes}; absent on entries that carry only
-             * the stage triple.
+             * <p>The type identifies the disclosure category when surfaced; it is absent on entries
+             * that carry only the stage triple.
              *
-             * @return an {@link Optional} carrying the type
+             * @return an {@link Optional} carrying the type, or {@link Optional#empty()} when absent
              */
             public Optional<Integer> type() {
                 return Optional.ofNullable(type);
@@ -299,25 +269,21 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * Returns the disclosure id.
              *
-             * @apiNote
-             * Matches the {@code disclosureId} of the corresponding
-             * outbound {@code <get_disclosure_stage_by_id>} query.
+             * <p>The id matches the {@code disclosureId} of the corresponding outbound
+             * {@link SmaxUserNoticeGetDisclosureStageByIdsRequest.DisclosureStageQuery}.
              *
-             * @return the id
+             * @return the disclosure id
              */
             public long noticeId() {
                 return noticeId;
             }
 
             /**
-             * Returns the current stage.
+             * Returns the current acceptance stage.
              *
-             * @apiNote
-             * Compare against the
-             * {@code WAWebPDFNTypes.DISCLOSURE_STAGE} entries
-             * ({@code SOFT_OPT_IN}, {@code ACCEPTED}, etc.) to decide
-             * whether the user has dismissed or accepted the
-             * disclosure.
+             * <p>The stage reflects where the disclosure sits in the acceptance lifecycle (such as
+             * soft-opt-in or accepted) and is used to decide whether the user has dismissed or
+             * accepted it.
              *
              * @return the stage in the {@code [0, 1000]} range
              */
@@ -326,25 +292,22 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             }
 
             /**
-             * Tries to parse a stage notice from the given
-             * {@code <notice>} child.
+             * Tries to parse a stage notice from the given {@code <notice>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any sub-tree missing
-             * a required attribute or carrying an out-of-range value.
+             * <p>Returns {@link Optional#empty()} for any sub-tree missing a required attribute or
+             * carrying an out-of-range value.
              *
              * @implNote
-             * This implementation enforces the WA Web range contracts:
-             * version at least 1 when present, type non-negative when
-             * present, stage within {@code [0, 1000]}. An attribute
-             * that is present but out of range aborts the parse, while
-             * a missing optional attribute leaves the corresponding
-             * {@link Optional} empty.
+             * This implementation enforces the range contracts: version at least {@code 1} when
+             * present, type non-negative when present, and stage within {@code [0, 1000]}. An
+             * attribute that is present but out of range aborts the parse, while a missing optional
+             * attribute leaves the corresponding {@link Optional} empty. The {@code 1000} ceiling
+             * and the per-attribute floors mirror the values the relay enforces on the wire.
              *
              * @param node the {@code <notice>} child
-             * @return an {@link Optional} carrying the parsed entry
-             * @throws NullPointerException if {@code node} is
-             *                              {@code null}
+             * @return an {@link Optional} carrying the parsed entry, or {@link Optional#empty()} on
+             *         no-match
+             * @throws NullPointerException if {@code node} is {@code null}
              */
             @WhatsAppWebExport(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseClientSuccess",
                     exports = "parseGetDisclosureStageByIdsResponseClientSuccessNotice",
@@ -387,8 +350,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * {@inheritDoc}
              *
-             * @implNote
-             * This implementation compares every carried field.
+             * <p>Two notices are equal when the timestamp, version, type, id, and stage all match.
              */
             @Override
             public boolean equals(Object obj) {
@@ -409,9 +371,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * {@inheritDoc}
              *
-             * @implNote
-             * This implementation hashes every carried field via
-             * {@link Objects#hash(Object...)}.
+             * <p>The hash is derived from the timestamp, version, type, id, and stage.
              */
             @Override
             public int hashCode() {
@@ -421,9 +381,8 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
             /**
              * {@inheritDoc}
              *
-             * @implNote
-             * This implementation mirrors the record-like rendering
-             * used across the {@code Smax*} response family.
+             * <p>Renders every carried field in the record-like form shared across the {@code Smax}
+             * response family.
              */
             @Override
             public String toString() {
@@ -438,37 +397,29 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * Carries a client-side rejection of the stage-by-ids request.
      *
-     * @apiNote
-     * The relay rejected the request as malformed (always
-     * {@code 400 bad-request}); embedders typically log and skip the
-     * affected disclosure poll.
+     * <p>This is the error variant raised when the relay rejected the request as malformed (always
+     * {@code 400 bad-request}); a caller typically logs the failure and skips the affected poll.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseClientError")
     @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeIQErrorBadRequestMixin")
     final class ClientError implements SmaxUserNoticeGetDisclosureStageByIdsResponse {
         /**
-         * The numeric error code (always {@code 400} in practice).
+         * Holds the numeric error code, always {@code 400} in practice.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text (typically
-         * {@code "bad-request"}).
+         * Holds the human-readable error text, typically {@code "bad-request"}.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
+         * Constructs a client-error reply from a parsed error code and text.
          *
-         * @apiNote
-         * Used by {@link #of(Node, Node)} after the
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * envelope check succeeds.
-         *
-         * @param errorCode the error code
-         * @param errorText the optional text
+         * @param errorCode the numeric error code
+         * @param errorText the human-readable error text, or {@code null} when absent
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -478,9 +429,8 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * Below {@code 500}; embedders typically map the code into a
-         * client-facing exception.
+         * <p>The code is below {@code 500}; a caller typically maps it into a client-facing
+         * exception.
          *
          * @return the error code
          */
@@ -491,31 +441,28 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * Returns the optional human-readable error text.
          *
-         * @apiNote
-         * Useful for logging and as the exception message.
+         * <p>The text is useful for logging and as the exception message.
          *
-         * @return an {@link Optional} carrying the text
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when absent
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the stanza is not a
-         * well-formed client-error envelope.
+         * <p>Returns {@link Optional#empty()} when the stanza is not a well-formed client-error
+         * envelope.
          *
          * @implNote
-         * This implementation delegates the envelope and code-range
-         * checks to
+         * This implementation delegates the envelope and code-range checks to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} on
+         *         no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseClientError",
                 exports = "parseGetDisclosureStageByIdsResponseClientError",
@@ -531,8 +478,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation compares both the code and the text.
+         * <p>Two client errors are equal when both the code and the text match.
          */
         @Override
         public boolean equals(Object obj) {
@@ -549,9 +495,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation hashes both fields via
-         * {@link Objects#hash(Object...)}.
+         * <p>The hash is derived from the code and the text.
          */
         @Override
         public int hashCode() {
@@ -561,9 +505,8 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * <p>Renders the code and text in the record-like form shared across the {@code Smax}
+         * response family.
          */
         @Override
         public String toString() {
@@ -573,39 +516,34 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * Carries a transient relay-side failure of the stage-by-ids request.
      *
-     * @apiNote
-     * The relay encountered an internal failure or rate-limited the
-     * caller; embedders should retry with backoff. The user-notice
-     * domain folds both genuine {@code 5xx} codes and the
-     * {@code 429 rate-overlimit} throttle into this branch, matching
-     * {@code WAWebBizBroadcastTos}'s use of the soft-opt-in poll inside
+     * <p>This is the error variant raised when the relay encountered an internal failure or
+     * rate-limited the caller; a caller should retry with backoff. Both genuine {@code 5xx} codes
+     * and the {@code 429 rate-overlimit} throttle land here, which suits callers that poll inside
      * an exponential-backoff loop.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseServerError")
     @WhatsAppWebModule(moduleName = "WASmaxInUserNoticeUserNoticeServerError")
     final class ServerError implements SmaxUserNoticeGetDisclosureStageByIdsResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * Holds the human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a server-error reply from a parsed error code and text.
          *
-         * @apiNote
-         * Used by {@link #of(Node, Node)} after the envelope check
-         * succeeds; both genuine {@code [500, ...]} codes and the
-         * {@code 429 rate-overlimit} fallback land here.
+         * <p>Both genuine codes at or above {@code 500} and the {@code 429 rate-overlimit} fallback
+         * land here.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional text
+         * @param errorText the human-readable error text, or {@code null} when absent
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -615,10 +553,8 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * Either a genuine {@code 5xx} from the server-error mixin or
-         * the {@code 429} rate-overlimit code surfaced through the
-         * client-error helper.
+         * <p>The code is either a genuine {@code 5xx} from the server-error path or the
+         * {@code 429} rate-overlimit code surfaced through the client-error path.
          *
          * @return the error code
          */
@@ -629,36 +565,32 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * Returns the optional human-readable error text.
          *
-         * @apiNote
-         * Useful for logging and as the exception message.
+         * <p>The text is useful for logging and as the exception message.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the stanza is not a
-         * well-formed server-error envelope and does not carry the
-         * {@code 429 rate-overlimit} client-error pair.
+         * <p>Returns {@link Optional#empty()} when the stanza is not a well-formed server-error
+         * envelope and does not carry the {@code 429 rate-overlimit} client-error pair.
          *
          * @implNote
          * This implementation first delegates to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
-         * the user-notice domain folds {@code 429 rate-overlimit} into
-         * the {@code ServerError} disjunction, so a second pass through
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * picks up that one code when the primary helper declines.
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}; the user-notice domain
+         * folds {@code 429 rate-overlimit} into the server-error disjunction, so a second pass
+         * through {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} picks up that one
+         * code when the primary helper declines.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} on
+         *         no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInUserNoticeGetDisclosureStageByIdsResponseServerError",
                 exports = "parseGetDisclosureStageByIdsResponseServerError",
@@ -678,8 +610,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation compares both the code and the text.
+         * <p>Two server errors are equal when both the code and the text match.
          */
         @Override
         public boolean equals(Object obj) {
@@ -696,9 +627,7 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation hashes both fields via
-         * {@link Objects#hash(Object...)}.
+         * <p>The hash is derived from the code and the text.
          */
         @Override
         public int hashCode() {
@@ -708,9 +637,8 @@ public sealed interface SmaxUserNoticeGetDisclosureStageByIdsResponse extends Sm
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * <p>Renders the code and text in the record-like form shared across the {@code Smax}
+         * response family.
          */
         @Override
         public String toString() {

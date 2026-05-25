@@ -5,196 +5,194 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
- * Mirrors {@code WAWebVoipSignalingEnums.TYPE} — the discriminator for every
- * payload that can ride inside a {@code <call>} stanza on the wire.
+ * Enumerates every payload that can ride inside a call stanza on the wire.
  *
- * <p>The enum constants intentionally carry both the integer ordinal used by
- * the native VoIP backend ({@link #index()}) and the lower-case wire tag used
- * inside the stanza envelope ({@link #wireTag()}). Cobalt does not implement
- * the WebRTC media plane, so most of these payloads are observed-only on
- * inbound traffic; the senders implemented in {@link CallSender} cover the
- * subset that is meaningful at the signalling layer alone.
+ * <p>Each constant binds two coordinates: the integer ordinal the native VoIP backend assigns to the
+ * payload ({@link #index()}) and the lower-case stanza tag that identifies the payload inside the call
+ * envelope ({@link #wireTag()}). Because Cobalt does not implement the WebRTC media plane, most of
+ * these payloads are observed only on inbound traffic; the stanza builders in {@link CallStanza} cover
+ * the subset that is meaningful at the signalling layer alone, and {@link CallReceiver} parses the
+ * remainder for acknowledgement.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipSignalingEnums")
 public enum CallSignalingType {
     /**
-     * Sentinel used by the native parser when the payload tag does not match
-     * any other variant.
+     * Represents the sentinel the native parser uses when the payload tag matches no other constant.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     NONE(0, "none"),
 
     /**
-     * Initial offer that announces a 1:1 or group call to the peer(s).
+     * Represents the initial offer that announces a one-to-one or group call to the peers.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     OFFER(1, "offer"),
 
     /**
-     * Server-side acknowledgement that an offer reached the peer's relay.
+     * Represents the server-side acknowledgement that an offer reached the peer's relay.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     OFFER_RECEIPT(2, "offer_receipt"),
 
     /**
-     * Callee accepted the call.
+     * Represents the callee accepting the call.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     ACCEPT(3, "accept"),
 
     /**
-     * Callee declined the call.
+     * Represents the callee declining the call.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     REJECT(4, "reject"),
 
     /**
-     * Either side hung up. Carries a {@code reason} attribute parsed by
-     * {@link CallReceiver}.
+     * Represents either side hanging up.
+     *
+     * <p>The payload carries a {@code reason} attribute that {@link CallReceiver} parses.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     TERMINATE(5, "terminate"),
 
     /**
-     * Transport-level relay metadata exchange.
+     * Represents a transport-level relay metadata exchange.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     TRANSPORT(6, "transport"),
 
     /**
-     * Server ack for an offer this device sent.
+     * Represents the server acknowledgement for an offer this device sent.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     OFFER_ACK(7, "offer_ack"),
 
     /**
-     * Negative ack for an offer (typically because the peer was busy or
-     * unreachable).
+     * Represents the negative acknowledgement for an offer, typically because the peer was busy or
+     * unreachable.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     OFFER_NACK(8, "offer_nack"),
 
     /**
-     * Periodic relay-latency probe used to elect the lowest-latency relay.
+     * Represents a periodic relay-latency probe used to elect the lowest-latency relay.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     RELAY_LATENCY(9, "relaylatency"),
 
     /**
-     * Concludes relay election by selecting one of the probed relays.
+     * Represents the conclusion of relay election by selecting one of the probed relays.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     RELAY_ELECTION(10, "relayelection"),
 
     /**
-     * Connection interruption (network change, peer suspend).
+     * Represents a connection interruption such as a network change or a peer suspend.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     INTERRUPTION(11, "interruption"),
 
     /**
-     * Mute / unmute toggle. The wire tag is {@code mute_v2} on the current
-     * WhatsApp Web snapshot — verified against the
-     * {@code fixtures/call/1to1/mute-toggle.*.jsonl} corpus where every
-     * captured stanza is {@code <call><mute_v2 call-id call-creator
-     * mute-state="0|1"/></call>}.
+     * Represents a mute or unmute toggle.
+     *
+     * @implNote This implementation binds the wire tag {@code mute_v2}, the tag emitted by the current
+     * WhatsApp Web snapshot, rather than the legacy {@code mute} tag; the captured
+     * {@code fixtures/call/1to1/mute-toggle.*.jsonl} corpus carries the payload as
+     * {@code <mute_v2 call-id call-creator mute-state="0|1"/>}.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     MUTE(12, "mute_v2"),
 
     /**
-     * Pre-acceptance signal — the callee's device is alerting but the user
-     * has not picked up yet.
+     * Represents a pre-acceptance signal: the callee's device is alerting but the user has not picked
+     * up yet.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     PREACCEPT(13, "preaccept"),
 
     /**
-     * Server ack for the {@link #ACCEPT} signal.
+     * Represents the server acknowledgement for the {@link #ACCEPT} signal.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     ACCEPT_RECEIPT(14, "accept_receipt"),
 
     /**
-     * Video on/off announcement during a call.
+     * Represents a video on or off announcement during a call.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     VIDEO_STATE(15, "video_state"),
 
     /**
-     * Generic event announcement (reaction, screen-share, etc).
+     * Represents a generic event announcement such as a reaction or a screen-share notice.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     NOTIFY(16, "notify"),
 
     /**
-     * Group-info exchange between participants.
+     * Represents a group-info exchange between participants.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     GROUP_INFO(17, "group_info"),
 
     /**
-     * Group-call key re-exchange.
+     * Represents a group-call key re-exchange.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     ENC_REKEY(18, "enc_rekey"),
 
     /**
-     * Per-participant peer state update.
+     * Represents a per-participant peer state update.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     PEER_STATE(19, "peer_state"),
 
     /**
-     * Server ack for the {@link #VIDEO_STATE} signal.
+     * Represents the server acknowledgement for the {@link #VIDEO_STATE} signal.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     VIDEO_STATE_ACK(20, "video_state_ack"),
 
     /**
-     * Flow-control signal used by the relay.
+     * Represents a flow-control signal used by the relay.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     FLOW_CONTROL(21, "flow_control"),
 
     /**
-     * Web-client-specific marker.
+     * Represents a web-client-specific marker.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     WEB_CLIENT(22, "web_client"),
 
     /**
-     * Server ack for the secondary {@code accept} on group calls.
+     * Represents the server acknowledgement for the secondary {@code accept} on group calls.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     ACCEPT_ACK(23, "accept_ack"),
 
     /**
-     * Group-membership update during an in-progress group call.
+     * Represents a group-membership update during an in-progress group call.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     GROUP_UPDATE(24, "group_update"),
 
     /**
-     * Server-initiated notice that an offer arrived while the device was
-     * offline.
+     * Represents a server-initiated notice that an offer arrived while the device was offline.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "TYPE", adaptation = WhatsAppAdaptation.DIRECT)
     OFFER_NOTICE(25, "offer_notice");
 
     /**
-     * Holds the integer ordinal used by the native VoIP backend.
+     * Holds the integer ordinal the native VoIP backend assigns to this payload.
      */
     private final int index;
 
     /**
-     * Holds the lower-case stanza tag used on the wire.
+     * Holds the lower-case stanza tag that identifies this payload on the wire.
      */
     private final String wireTag;
 
     /**
-     * Constructs a new {@code CallSignalingType} with the given native
-     * ordinal and wire tag.
+     * Constructs a constant bound to its native ordinal and wire tag.
      *
      * @param index   the native VoIP backend ordinal
      * @param wireTag the lower-case stanza tag used on the wire
@@ -205,7 +203,7 @@ public enum CallSignalingType {
     }
 
     /**
-     * Returns the integer ordinal used by the native VoIP backend.
+     * Returns the integer ordinal the native VoIP backend assigns to this payload.
      *
      * @return the native ordinal
      */
@@ -214,7 +212,7 @@ public enum CallSignalingType {
     }
 
     /**
-     * Returns the lower-case stanza tag used on the wire.
+     * Returns the lower-case stanza tag that identifies this payload on the wire.
      *
      * @return the wire tag
      */

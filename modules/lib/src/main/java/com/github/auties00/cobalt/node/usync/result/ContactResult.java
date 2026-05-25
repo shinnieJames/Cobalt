@@ -6,47 +6,41 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Success result of the {@code WAWebUsyncContact.contactParser} parser.
+ * Holds the success result of the contact USync parser.
  *
- * @apiNote
- * Surfaced by USync queries that include
- * {@code UsyncQuery.withContactProtocol(...)}. WA Web callers include
- * {@code WAWebContactImportContactVerifier} (the address-book sync that
- * decides which numbers are on WhatsApp), {@code WAWebContactSyncUtils}
- * (delta sync), {@code WAWebQueryExistsJob} (the "does this number exist"
- * check), and {@code WAWebDebugUsync} (developer tooling). The
- * {@link #type()} attribute carries the discovery answer:
- * {@code "in"} means registered, {@code "out"} means not registered, and
- * {@code "none"} means unknown. The {@link #username()} accessor surfaces the
- * peer's claimed username when the request asked for it, and {@link #content()}
- * carries the canonical phone number the relay echoes back inside the
- * {@code <contact>} element.
+ * Surfaced by USync queries that request the contact protocol, such as the
+ * address-book sync that decides which numbers are on WhatsApp, the delta
+ * sync, the "does this number exist" check, and developer tooling. The
+ * {@link #type()} attribute carries the discovery answer: {@code "in"} means
+ * registered, {@code "out"} means not registered, and {@code "none"} means
+ * unknown. The {@link #username()} accessor surfaces the peer's claimed
+ * username when the request asked for it, and {@link #content()} carries the
+ * canonical phone number the relay echoes back inside the {@code <contact>}
+ * element.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncContact")
 public final class ContactResult implements UsyncProtocolResponse {
     /**
-     * The {@code type} attribute on the {@code <contact>} response.
+     * Holds the {@code type} attribute on the {@code <contact>} response.
      */
     private final String type;
 
     /**
-     * The {@code username} attribute, or {@code null} when the attribute is
-     * absent.
+     * Holds the {@code username} attribute.
+     *
+     * Is {@code null} when the attribute is absent.
      */
     private final String username;
 
     /**
-     * The inline text content of the {@code <contact>} child, or {@code null}
-     * when the element had no content.
+     * Holds the inline text content of the {@code <contact>} child.
+     *
+     * Is {@code null} when the element had no content.
      */
     private final String content;
 
     /**
      * Creates a new contact result.
-     *
-     * @apiNote
-     * Instantiated by the contact parser; embedders do not call this
-     * directly.
      *
      * @param type     the {@code type} attribute; must not be {@code null}
      * @param username the {@code username} attribute, or {@code null} when
@@ -62,10 +56,9 @@ public final class ContactResult implements UsyncProtocolResponse {
     /**
      * Returns the {@code type} attribute.
      *
-     * @apiNote
-     * Discovery verdict: {@code "in"} when the peer is on WhatsApp,
-     * {@code "out"} when the peer is not, {@code "none"} when the relay
-     * cannot tell.
+     * Carries the discovery verdict: {@code "in"} when the peer is on
+     * WhatsApp, {@code "out"} when the peer is not, {@code "none"} when the
+     * relay cannot tell.
      *
      * @return the type, never {@code null}
      */
@@ -76,7 +69,6 @@ public final class ContactResult implements UsyncProtocolResponse {
     /**
      * Returns the {@code username} attribute, when present.
      *
-     * @apiNote
      * Set on contact requests addressed by username; the relay echoes the
      * canonical username back so callers can verify the lookup.
      *
@@ -87,10 +79,8 @@ public final class ContactResult implements UsyncProtocolResponse {
     }
 
     /**
-     * Returns the inline content of the {@code <contact>} child, when
-     * present.
+     * Returns the inline content of the {@code <contact>} child, when present.
      *
-     * @apiNote
      * Typically the canonical phone number echoed back by the relay; absent
      * when the request was addressed by username or by JID.
      *

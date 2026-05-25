@@ -4,15 +4,19 @@ package com.github.auties00.cobalt.exception;
  * Thrown when a USync device-list query against the WhatsApp servers
  * returns an error.
  *
+ * USync is the request Cobalt issues before sending a message to learn the
+ * set of devices that belong to each recipient. The server can reject the
+ * request as a whole (a batch-wide failure that blocks the entire send) or
+ * report a per-device issue inside an otherwise successful response (a
+ * partial failure that still lets other recipients be addressed). The
+ * {@code fatal} flag passed to the constructor mirrors that distinction
+ * and is reflected in {@link #isFatal()}; the server-reported error code is
+ * available through {@link #errorCode()}.
+ *
  * @apiNote
- * USync is the request Cobalt issues before sending a message to learn
- * the set of devices that belong to each recipient (the call site is
- * equivalent to WA Web's {@code WAWebMexUsync} pipeline). The server can
- * reject the request as a whole (a batch-wide failure that blocks the
- * entire send) or report a per-device issue inside an otherwise
- * successful response (a partial failure that lets other recipients
- * still be addressed). The {@code fatal} flag passed to the constructor
- * mirrors that distinction and is reflected in {@link #isFatal()}.
+ * Inspect {@link #isFatal()} to tell a batch-wide rejection from a partial
+ * one: a non-fatal instance leaves the rest of the USync response usable,
+ * so the send can proceed to the recipients that resolved.
  */
 public final class WhatsAppDeviceSyncException extends WhatsAppException {
     /**
@@ -43,10 +47,12 @@ public final class WhatsAppDeviceSyncException extends WhatsAppException {
     /**
      * Returns the numeric error code returned by the USync server.
      *
+     * The code is the value the server reported for this failure, copied
+     * verbatim at construction time.
+     *
      * @apiNote
-     * The code is taken verbatim from the {@code code} attribute of the
-     * USync error stanza and can be used to disambiguate the server-side
-     * failure mode.
+     * Use it to disambiguate the server-side failure mode beyond the
+     * coarse {@link #isFatal()} distinction.
      *
      * @return the error code
      */

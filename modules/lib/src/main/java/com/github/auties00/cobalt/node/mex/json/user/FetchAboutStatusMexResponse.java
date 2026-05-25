@@ -18,20 +18,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Decoded reply to the about-status fetch query.
+ * Decodes the reply to the about-status fetch query.
  *
- * @apiNote Consume after dispatching {@link FetchAboutStatusMexRequest}.
- * Each {@link Item} corresponds to a {@code xwa2_users_updates_since}
- * entry; WA Web takes the head of {@link Item#updates()} and projects its
- * {@code text} as the user's current about-status. Empty {@link #items()}
- * indicates the relay returned no rows for any requested user.
+ * <p>Each {@link Item} corresponds to one {@code xwa2_users_updates_since} entry. The head of
+ * {@link Item#updates()} is the user's current about-status; older entries form the history surfaced
+ * by the profile screen. An empty {@link #items()} indicates the relay returned no rows for any
+ * requested user. Consume this type after dispatching {@link FetchAboutStatusMexRequest}.
  *
  * @see FetchAboutStatusMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchAboutStatusJob")
 public final class FetchAboutStatusMexResponse implements MexOperation.Response.Json {
     /**
-     * The decoded {@code xwa2_users_updates_since} array, one entry per user.
+     * Holds the decoded {@code xwa2_users_updates_since} array, one entry per user.
      */
     private final List<Item> items;
 
@@ -47,14 +46,12 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
     /**
      * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @apiNote Pass the IQ node received in reply to a stanza dispatched
-     * with {@link FetchAboutStatusMexRequest#toNode()}. The reply is empty
-     * when the IQ does not carry a {@code <result>} child or when its
-     * payload bytes are absent or unreadable JSON.
+     * <p>The reply is empty when the IQ does not carry a {@code <result>} child or when its payload
+     * bytes are absent or unreadable JSON. Pass the IQ node received in reply to a stanza dispatched
+     * with {@link FetchAboutStatusMexRequest#toNode()}.
      *
      * @param node the IQ reply stanza
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload is missing or malformed
+     * @return the decoded reply, or {@link Optional#empty()} when the payload is missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAboutStatusJob", exports = "mexGetAbout",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -67,9 +64,8 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
     /**
      * Returns the decoded {@code xwa2_users_updates_since} entries.
      *
-     * @apiNote The list reflects the order the relay returned, which mirrors
-     * the order of the queried users. An empty list indicates the relay
-     * accepted the query but had no rows to return.
+     * <p>The list reflects the order the relay returned, which mirrors the order of the queried
+     * users. An empty list indicates the relay accepted the query but had no rows to return.
      *
      * @return the per-user records; may be empty, never {@code null}
      */
@@ -78,26 +74,22 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
     }
 
     /**
-     * A single {@code xwa2_users_updates_since} entry wrapping the update
-     * history for one user.
+     * Wraps the about-status update history for one user.
      *
-     * @apiNote WA Web's
-     * {@link FetchAboutStatusMexResponse.Item.Updates}
-     * head ({@code updates[0].text}) is the user's current about-status;
-     * older entries form the history surfaced by the profile screen.
+     * <p>The head of {@link #updates()} is the user's current about-status; older entries form the
+     * history surfaced by the profile screen.
      */
     public static final class Item {
         /**
-         * The decoded {@code updates} array carrying the history entries
-         * for this user, head-first.
+         * Holds the decoded {@code updates} array carrying the history entries for this user,
+         * head-first.
          */
         private final List<Updates> updates;
 
         /**
          * Wraps a pre-parsed list of update entries.
          *
-         * @param updates the update entries returned by the relay for this
-         *                user
+         * @param updates the update entries returned by the relay for this user
          */
         private Item(List<Updates> updates) {
             this.updates = updates;
@@ -106,8 +98,8 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
         /**
          * Returns the decoded update entries for this user.
          *
-         * @apiNote The head entry is the current about-status; subsequent
-         * entries are historical updates ordered most-recent-first.
+         * <p>The head entry is the current about-status; subsequent entries are historical updates
+         * ordered most-recent-first.
          *
          * @return the update entries; may be empty, never {@code null}
          */
@@ -116,15 +108,11 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
         }
 
         /**
-         * A single about-status revision exposing only the text payload.
-         *
-         * @apiNote WA Web reads the {@code text} field of
-         * {@code updates[0]} to compute the {@code status} on the result
-         * passed to {@code WAWebGetAboutQueryJob} callers.
+         * Wraps a single about-status revision, exposing only its text payload.
          */
         public static final class Updates {
             /**
-             * The {@code text} field of this revision, possibly {@code null}.
+             * Holds the {@code text} field of this revision, possibly {@code null}.
              */
             private final String text;
 
@@ -140,9 +128,8 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
             /**
              * Returns the about-status text recorded by this revision.
              *
-             * @return the text wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the text wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+             *         relay omitted the field
              */
             public Optional<String> text() {
                 return Optional.ofNullable(text);
@@ -151,13 +138,12 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
             /**
              * Decodes a single revision from a {@link JSONObject}.
              *
-             * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
-             * {@code updates} array of a {@link Item}; not part of the
-             * public API.
+             * <p>Invoked by {@link #ofArray(JSONArray)} while walking the {@code updates} array of an
+             * {@link Item}.
              *
              * @param obj the JSON object to decode, possibly {@code null}
-             * @return the decoded revision, or {@link Optional#empty()}
-             *         when {@code obj} is {@code null}
+             * @return the decoded revision, or {@link Optional#empty()} when {@code obj} is
+             *         {@code null}
              */
             static Optional<Updates> of(JSONObject obj) {
                 if (obj == null) {
@@ -169,15 +155,13 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Decodes the {@code updates} array of a {@link Item}.
+             * Decodes the {@code updates} array of an {@link Item}.
              *
-             * @apiNote Used by {@link Item#of(JSONObject)} to project the
-             * array nested inside each user record; not part of the public
-             * API.
+             * <p>Invoked by {@link Item#of(JSONObject)} to project the array nested inside each user
+             * record.
              *
              * @param arr the JSON array to decode, possibly {@code null}
-             * @return the decoded revisions in source order; empty when
-             *         {@code arr} is {@code null}
+             * @return the decoded revisions in source order; empty when {@code arr} is {@code null}
              */
             static List<Updates> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -195,13 +179,11 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
         /**
          * Decodes a single user record from a {@link JSONObject}.
          *
-         * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
-         * {@code xwa2_users_updates_since} array; not part of the public
-         * API.
+         * <p>Invoked by {@link #ofArray(JSONArray)} while walking the
+         * {@code xwa2_users_updates_since} array.
          *
          * @param obj the JSON object to decode, possibly {@code null}
-         * @return the decoded record, or {@link Optional#empty()} when
-         *         {@code obj} is {@code null}
+         * @return the decoded record, or {@link Optional#empty()} when {@code obj} is {@code null}
          */
         static Optional<Item> of(JSONObject obj) {
             if (obj == null) {
@@ -213,16 +195,13 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Decodes the {@code xwa2_users_updates_since} array of the MEX
-         * payload.
+         * Decodes the {@code xwa2_users_updates_since} array of the MEX payload.
          *
-         * @apiNote Used by the package-level decoder to project the array
-         * nested under {@code data} of the {@code <result>} payload; not
-         * part of the public API.
+         * <p>Invoked by {@link FetchAboutStatusMexResponse#of(byte[])} to project the array nested
+         * under {@code data} of the {@code <result>} payload.
          *
          * @param arr the JSON array to decode, possibly {@code null}
-         * @return the decoded records in source order; empty when
-         *         {@code arr} is {@code null}
+         * @return the decoded records in source order; empty when {@code arr} is {@code null}
          */
         static List<Item> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -240,15 +219,13 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
     /**
      * Decodes the {@code <result>} payload bytes into a {@link FetchAboutStatusMexResponse}.
      *
-     * @implNote This implementation projects {@code data.xwa2_users_updates_since};
-     * a missing {@code data} envelope or root array yields
-     * {@link Optional#empty()}. A present-but-empty array yields a response
-     * carrying an empty {@link #items()} list.
+     * <p>The payload is projected from {@code data.xwa2_users_updates_since}. A missing {@code data}
+     * envelope or root array yields {@link Optional#empty()}; a present-but-empty array yields a
+     * response carrying an empty {@link #items()} list.
      *
      * @param json the raw {@code <result>} payload bytes
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload does not parse as a JSON object or lacks the
-     *         {@code data} envelope
+     * @return the decoded reply, or {@link Optional#empty()} when the payload does not parse as a
+     *         JSON object or lacks the {@code data} envelope
      */
     private static Optional<FetchAboutStatusMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

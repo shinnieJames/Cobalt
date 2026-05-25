@@ -14,27 +14,22 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * USync {@code text_status} protocol descriptor.
+ * Describes the USync {@code text_status} protocol.
  *
- * @apiNote
- * Asks the relay for each peer's modern text-status payload (text, emoji,
- * ephemeral lifetime, last-update timestamp); used by the contact-sync
- * pipeline when {@code WAWebTextStatusGatingUtils.receiveTextStatusEnabled()}
- * is on.
+ * This descriptor asks the relay for each peer's modern text-status payload
+ * (text, emoji, ephemeral lifetime, last-update timestamp). The descriptor is
+ * stateless and carries no per-user request payload; pair it with any
+ * {@link UsyncUser} that carries an addressing slot.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncTextStatus")
 public final class UsyncTextStatusProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "text_status";
 
     /**
-     * Builds a default text-status-protocol descriptor.
-     *
-     * @apiNote
-     * The descriptor is stateless; pair it with any {@link UsyncUser} that
-     * carries an addressing slot.
+     * Creates a text-status-protocol descriptor.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncTextStatus",
             exports = "USyncTextStatusProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -55,8 +50,7 @@ public final class UsyncTextStatusProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits an empty {@code <text_status/>} element,
-     * matching the JS {@code wap("text_status", null)} shape.
+     * This implementation emits an empty {@code <text_status/>} element.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncTextStatus",
@@ -69,10 +63,8 @@ public final class UsyncTextStatusProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation always returns {@link Optional#empty()} because
-     * the text-status protocol has no per-user payload on the request side,
-     * matching the JS {@code null} return in
-     * {@code USyncTextStatusProtocol.getUserElement}.
+     * This implementation always returns {@link Optional#empty()} because the
+     * text-status protocol has no per-user payload on the request side.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncTextStatus",
@@ -84,12 +76,11 @@ public final class UsyncTextStatusProtocol implements UsyncProtocol {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation parses the {@code text} attribute, the
-     * {@code content} attribute of the optional {@code <emoji>} child, the
-     * {@code ephemeral_duration_sec} attribute (boxed into a
-     * {@link Duration}), and the {@code last_update_time} attribute as a
-     * raw string, matching the JS {@code textStatusParser} field set.
+     * This override parses the {@code text} attribute, the {@code content}
+     * attribute of the optional {@code <emoji>} child, the
+     * {@code ephemeral_duration_sec} attribute (boxed into a {@link Duration}),
+     * and the {@code last_update_time} attribute as a raw string into a
+     * {@link TextStatusResult}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncTextStatus",

@@ -28,29 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link PrivacySettingChannelsPersonalisedRecommendationHandler}
- * against the protobuf-only
- * {@code "setting_channels_personalised_recommendation_optout"} action
- * shape.
- *
- * @apiNote
- * Verifies the Cobalt forward-looking implementation: WA Web ships
- * the protobuf in {@code WAWebProtobufSyncAction.pb} (action index
- * 64, mapped to {@code REGULAR}) but no
- * {@code WAWebPrivacySettingChannelsPersonalisedRecommendationSync}
- * handler module exists. The Cobalt handler accepts only
- * {@link SyncdOperation#SET},
- * persists the resolved
- * {@code isUserOptedOut} boolean via
- * {@link WhatsAppStore#setChannelsPersonalisedRecommendationOptOut},
- * and rejects a wrong-typed value as
- * {@link SyncActionState#MALFORMED}.
- *
- * @implNote
- * This implementation drives the handler via the private-constructor
- * singleton
- * {@link PrivacySettingChannelsPersonalisedRecommendationHandler#INSTANCE}
- * because the constructor is not callable from outside the package.
+ * Covers {@link PrivacySettingChannelsPersonalisedRecommendationHandler}, which accepts
+ * only {@link SyncdOperation#SET}, persists the resolved {@code isUserOptedOut} boolean
+ * via {@link WhatsAppStore#setChannelsPersonalisedRecommendationOptOut}, rejects a
+ * wrong-typed value as {@link SyncActionState#MALFORMED}, reports
+ * {@link SyncActionState#UNSUPPORTED} for {@link SyncdOperation#REMOVE}, and resolves
+ * conflicts by timestamp. The handler is driven through its package-private singleton
+ * {@link PrivacySettingChannelsPersonalisedRecommendationHandler#INSTANCE}.
  */
 @DisplayName("PrivacySettingChannelsPersonalisedRecommendationHandler")
 class PrivacySettingChannelsPersonalisedRecommendationHandlerTest {

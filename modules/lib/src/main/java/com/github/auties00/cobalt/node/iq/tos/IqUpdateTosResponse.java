@@ -11,36 +11,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Models the sealed family of inbound reply variants produced by the relay in response to an
  * {@link IqUpdateTosRequest}.
  *
- * @apiNote
- * Switch on the returned variant to discriminate the relay outcome: a {@link Success}
- * is a bare acknowledgement (WA Web uses a no-op parser, the relay echoes no
- * payload), a {@link ClientError} surfaces a relay rejection, and a
- * {@link ServerError} surfaces a transient relay failure WA Web retries via
- * exponential backoff.
+ * <p>Callers discriminate the relay outcome by switching on the returned variant. A {@link Success}
+ * is a bare acknowledgement that carries no payload and confirms the acceptance was recorded. A
+ * {@link ClientError} surfaces a relay rejection, and a {@link ServerError} surfaces a transient
+ * relay failure that WhatsApp Web retries via exponential backoff.
+ *
+ * @implNote The {@link Success} parser is a no-op envelope check because WhatsApp Web builds its
+ *           parser from {@code WAWebNoop}; the error variants reuse the standard SMAX server-error
+ *           envelope.
  */
 public sealed interface IqUpdateTosResponse extends IqOperation.Response
         permits IqUpdateTosResponse.Success, IqUpdateTosResponse.ClientError, IqUpdateTosResponse.ServerError {
 
     /**
-     * Parses the inbound stanza into the first matching {@link IqUpdateTosResponse}
-     * variant.
+     * Parses the inbound stanza into the first matching {@link IqUpdateTosResponse} variant.
      *
-     * @apiNote
-     * Try this once per inbound reply; the priority ordering (success, then
-     * client-error, then server-error) matches the wire shape and never returns
-     * ambiguous matches.
+     * <p>The priority ordering (success, then client-error, then server-error) matches the wire
+     * shape so the variants are mutually exclusive and the match is never ambiguous.
      *
-     * @implNote
-     * This implementation calls each variant's {@code of(node, request)} in turn
-     * and returns the first present result.
-     *
+     * @implNote This implementation calls each variant's {@code of(node, request)} in turn and
+     *           returns the first present result.
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty when no
-     *         documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant
+     *         matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
@@ -60,12 +57,11 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
     }
 
     /**
-     * Success variant. The relay recorded the acknowledgement and echoed only the
-     * IQ envelope.
+     * Models the success variant in which the relay recorded the acknowledgement and echoed only
+     * the IQ envelope.
      *
-     * @apiNote
-     * Carries no payload; the caller treats a present {@link Success} as
-     * confirmation that the server has recorded the bound notice ids as accepted.
+     * <p>A present {@link Success} confirms that the server has recorded the bound notice ids as
+     * accepted. The variant carries no payload.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class Success implements IqUpdateTosResponse {
@@ -76,17 +72,16 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
         }
 
         /**
-         * Parses the inbound stanza into a {@link Success} variant when it
-         * matches the success schema.
+         * Parses the inbound stanza into a {@link Success} variant when it matches the success
+         * schema.
          *
-         * @apiNote
-         * Returns empty when the SMAX result-envelope check fails; never reads
-         * past the envelope.
+         * <p>Returns empty when the SMAX result-envelope check fails; the parser never reads past
+         * the envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "updateTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -97,6 +92,14 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
             return Optional.of(new Success());
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>All {@link Success} instances are equal because the variant carries no state.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success}, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -105,11 +108,21 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a constant hash code shared by all {@link Success} instances.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Success.class.hashCode();
         }
 
+        /**
+         * Returns a debug string for this stateless variant.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqUpdateTosResponse.Success[]";
@@ -117,13 +130,11 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
     }
 
     /**
-     * Client-error variant. The relay rejected the acknowledgement with a
+     * Models the client-error variant in which the relay rejected the acknowledgement with a
      * {@code 4xx} code.
      *
-     * @apiNote
-     * Typically signals a malformed envelope or an unauthorised caller; WA Web's
-     * {@code TosManager.maybeUpdateServer} treats any non-500 code as fatal
-     * (stops retrying).
+     * <p>This typically signals a malformed envelope or an unauthorised caller. WhatsApp Web's
+     * update path treats any non-500 code as fatal and stops retrying.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class ClientError implements IqUpdateTosResponse {
@@ -133,7 +144,7 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -160,25 +171,23 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ClientError} variant when it
-         * matches the standard SMAX client-error envelope.
+         * Parses the inbound stanza into a {@link ClientError} variant when it matches the standard
+         * SMAX client-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails. Envelope parsing is delegated to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "updateTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -190,6 +199,15 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two client errors are equal when they carry the same code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with an equal code and
+         *         text, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -203,11 +221,21 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqUpdateTosResponse.ClientError[errorCode=" + errorCode
@@ -216,13 +244,12 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
     }
 
     /**
-     * Server-error variant. The relay encountered a transient internal failure
+     * Models the server-error variant in which the relay encountered a transient internal failure
      * processing the acknowledgement.
      *
-     * @apiNote
-     * WA Web's {@code TosManager.maybeUpdateServer} specifically retries the
-     * {@code 500} arm via exponential backoff (max five retries, {@code 1s -> 16s}
-     * base); replicate this if a tight retry policy is required.
+     * <p>WhatsApp Web retries the {@code 500} arm via exponential backoff (up to five retries, with
+     * a base growing from 1 second to 16 seconds). A caller that needs a tight retry policy can
+     * replicate this.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class ServerError implements IqUpdateTosResponse {
@@ -232,7 +259,7 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -259,25 +286,23 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ServerError} variant when it
-         * matches the standard SMAX server-error envelope.
+         * Parses the inbound stanza into a {@link ServerError} variant when it matches the standard
+         * SMAX server-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails. Envelope parsing is delegated to
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "updateTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -289,6 +314,15 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two server errors are equal when they carry the same code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with an equal code and
+         *         text, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -302,11 +336,21 @@ public sealed interface IqUpdateTosResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqUpdateTosResponse.ServerError[errorCode=" + errorCode

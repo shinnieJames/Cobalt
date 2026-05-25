@@ -9,45 +9,37 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
  * Applies the {@code private_processing_setting} app-state action that
- * distributes the user's private-processing preference across linked
- * devices.
+ * distributes the user's private-processing preference across linked devices.
  *
- * @apiNote
- * Persists a single
- * {@link PrivateProcessingSettingAction.PrivateProcessingStatus} value
- * (one of {@code UNDEFINED}, {@code ENABLED}, {@code DISABLED}) on
+ * <p>Persists a single
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus} value (one of
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#UNDEFINED},
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#ENABLED},
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#DISABLED}) on
  * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
- * private-processing toggle stays consistent across paired devices.
- * Only {@link SyncdOperation#SET} is accepted; any other operation is
- * reported as {@link MutationApplicationResult#unsupported()} and a
- * missing or unparseable enum as
- * {@link MutationApplicationResult#malformed()}.
+ * private-processing toggle stays consistent across paired devices. Only
+ * {@link SyncdOperation#SET} is accepted; any other operation is reported as
+ * {@link MutationApplicationResult#unsupported()} and a missing or unparseable
+ * enum as {@link MutationApplicationResult#malformed()}.
  *
  * @implNote
  * This implementation has no WA Web counterpart: the
- * {@code SyncActionValue.PrivateProcessingSettingAction} protobuf
- * (action index 74) is declared in
- * {@code WAWebProtobufSyncAction.pb} but no
- * {@code WAWebPrivateProcessingSettingSync} module ships and the
- * action is absent from
- * {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web
- * silently drops any incoming mutation. The
- * {@link SyncPatchType#REGULAR_HIGH} collection is inferred from
- * sibling preference-style handlers; the version and apply path are
- * inferred from the protobuf shape (single mandatory enum).
+ * {@code SyncActionValue.PrivateProcessingSettingAction} protobuf (action
+ * index 74) is declared in {@code WAWebProtobufSyncAction.pb} but no
+ * {@code WAWebPrivateProcessingSettingSync} module ships and the action is
+ * absent from {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web
+ * silently drops any incoming mutation. The {@link SyncPatchType#REGULAR_HIGH}
+ * collection is inferred from sibling preference-style handlers; the version
+ * and apply path are inferred from the protobuf shape (single mandatory enum).
  */
 public final class PrivateProcessingSettingHandler implements WebAppStateActionHandler {
 
     /**
      * Constructs the private processing setting sync handler.
      *
-     * @apiNote
-     * Used by the sync handler registry; consumers should never need to
-     * call this constructor directly.
-     *
      * @implNote
-     * This implementation is stateless; the handler holds no
-     * AB-prop / store / WAM dependency.
+     * This implementation is stateless; the handler holds no AB-prop / store /
+     * WAM dependency.
      */
     public PrivateProcessingSettingHandler() {
 
@@ -65,10 +57,9 @@ public final class PrivateProcessingSettingHandler implements WebAppStateActionH
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns {@link SyncPatchType#REGULAR_HIGH}
-     * as a forward-looking default; sibling preference-style handlers
-     * use the same collection and no WA Web handler module exists to
-     * consult.
+     * This implementation returns {@link SyncPatchType#REGULAR_HIGH} as a
+     * forward-looking default; sibling preference-style handlers use the same
+     * collection and no WA Web handler module exists to consult.
      */
     @Override
     public SyncPatchType collectionName() {
@@ -87,12 +78,12 @@ public final class PrivateProcessingSettingHandler implements WebAppStateActionH
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation accepts only {@link SyncdOperation#SET}: the
-     * action carries a single mandatory enum and there is no semantic
-     * for {@code REMOVE}. A missing or empty
-     * {@link PrivateProcessingSettingAction#privateProcessingStatus()}
-     * is rejected as {@link MutationApplicationResult#malformed()}; on
-     * success the resolved enum is written via
+     * This implementation accepts only {@link SyncdOperation#SET}: the action
+     * carries a single mandatory enum and there is no semantic for
+     * {@code REMOVE}. A missing or empty
+     * {@link PrivateProcessingSettingAction#privateProcessingStatus()} is
+     * rejected as {@link MutationApplicationResult#malformed()}; on success the
+     * resolved enum is written via
      * {@code WhatsAppStore.setPrivateProcessingStatus}.
      */
     @Override

@@ -13,59 +13,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code smax_id=138} IQ that submits feedback labels for a previously rated
- * support-bot message to the {@code fb:thrift_iq} relay.
+ * Submits feedback labels for a previously rated support-bot message as an outbound
+ * {@code smax_id=138} IQ to the {@code fb:thrift_iq} relay.
  *
- * @apiNote
- * Drives the support-bot message-rating surface invoked by WA Web's
- * {@code WAWebSendSupportBotFeedbackActions}; the labels enumerate the kinds of feedback the
- * user selected (one to ten entries) and pair with the rated message id.
+ * <p>The labels enumerate the kinds of feedback the user selected (one to ten entries) and are
+ * paired with the rated message id. The relay's reply is parsed by
+ * {@link SmaxSendFeedbackResponse}.
  *
  * @implNote
- * This implementation flattens the WA Web mixin chain
- * ({@code WASmaxOutSupportMessageFeedbackHackBaseIQSetRequestMixin} over
- * {@code WASmaxOutSupportMessageFeedbackBaseIQSetRequestMixin}) into a single
- * {@link NodeBuilder} that pins {@code xmlns="fb:thrift_iq"}, {@code smax_id=138},
- * {@code to=Jid.userServer()} and {@code type="set"}; the {@code REPEATED_CHILD(feedback, 1, 10)}
- * cap is enforced in the constructor (WA Web enforces it at marshalling time).
+ * This implementation flattens the WA Web mixin chain into a single {@link NodeBuilder} that pins
+ * {@code xmlns="fb:thrift_iq"}, {@code smax_id=138}, {@code to=Jid.userServer()} and
+ * {@code type="set"}; the one-to-ten cap is enforced in the constructor.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSupportMessageFeedbackSendFeedbackRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutSupportMessageFeedbackHackBaseIQSetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutSupportMessageFeedbackBaseIQSetRequestMixin")
 public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
     /**
-     * The optional {@code from} JID forwarded verbatim into the IQ envelope.
+     * Holds the optional {@code from} JID forwarded into the IQ envelope.
      *
-     * @apiNote
-     * Set this only when the dispatcher needs to attribute the feedback to a non-default
-     * identity; WA Web's {@code WAWebSendSupportBotFeedbackActions} leaves it unset.
+     * <p>{@code null} lets the relay infer the sender from the connection.
      */
     private final Jid iqFrom;
 
     /**
-     * The id of the rated message.
-     *
-     * @apiNote
-     * Routed into {@code <message id="..."/>} via WA Web's {@code STANZA_ID} marshaller.
+     * Holds the id of the rated message, routed into {@code <message id="..."/>}.
      */
     private final String messageId;
 
     /**
-     * The non-empty list of feedback-kind labels (one to ten entries).
-     *
-     * @apiNote
-     * Each entry is materialised as a {@code <feedback kind="..."/>} child under
-     * {@code <feedback_list>}; the labels themselves are server-side enum values surfaced by
-     * the support-bot UI.
+     * Holds the non-empty list of feedback-kind labels (one to ten entries), each materialised as
+     * a {@code <feedback kind="..."/>} child under {@code <feedback_list>}.
      */
     private final List<String> feedbackKinds;
 
     /**
      * Constructs a feedback request.
      *
-     * @apiNote
-     * Typically invoked by a UI handler after the user submits a message-rating form; supply
-     * {@code iqFrom == null} to let the relay infer the sender from the connection.
+     * <p>Supply {@code iqFrom == null} to let the relay infer the sender from the connection.
      *
      * @param iqFrom        the optional sender JID; may be {@code null}
      * @param messageId     the rated message id; never {@code null}
@@ -87,10 +72,9 @@ public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional {@code from} JID.
+     * Returns the optional {@code from} JID forwarded into the IQ envelope.
      *
-     * @apiNote
-     * Empty when the dispatcher wants the relay to infer the sender from the connection.
+     * <p>Empty when the relay is left to infer the sender from the connection.
      *
      * @return an {@link Optional} carrying the sender JID, or empty when omitted
      */
@@ -99,10 +83,7 @@ public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the rated message id.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message id>}.
+     * Returns the rated message id routed into {@code <message id>}.
      *
      * @return the message id; never {@code null}
      */
@@ -111,11 +92,9 @@ public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the feedback-kind labels.
+     * Returns the feedback-kind labels materialised as {@code <feedback kind>} children.
      *
-     * @apiNote
-     * Surfaces the labels materialised as {@code <feedback kind>} children; the list is
-     * unmodifiable and contains 1..10 entries.
+     * <p>The list is unmodifiable and contains one to ten entries.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -126,15 +105,15 @@ public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Emits the outbound feedback IQ ready for {@link com.github.auties00.cobalt.node.smax}
-     * dispatch.
+     * <p>Emits the {@code <iq>} envelope carrying the {@code <message>} child and the
+     * {@code <feedback_list>} of per-kind {@code <feedback>} children.
      *
      * @implNote
-     * This implementation builds the {@code <message>} child, materialises each feedback kind
-     * as a separate {@code <feedback kind="..."/>} node under {@code <feedback_list>}, and
-     * forwards {@link #iqFrom} into the envelope's {@code from} attribute (the
-     * {@link NodeBuilder#attribute} call accepts a {@code null} JID).
+     * This implementation materialises each feedback kind as a separate
+     * {@code <feedback kind="..."/>} node and forwards {@link #iqFrom} into the envelope's
+     * {@code from} attribute through
+     * {@link NodeBuilder#attribute(String, com.github.auties00.cobalt.model.jid.JidProvider)},
+     * which accepts a {@code null} JID.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSupportMessageFeedbackSendFeedbackRequest",
@@ -164,6 +143,12 @@ public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
                 .content(List.of(messageNode, feedbackListNode));
     }
 
+    /**
+     * Compares this request to another for value equality across all fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxSendFeedbackRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -178,11 +163,21 @@ public final class SmaxSendFeedbackRequest implements SmaxOperation.Request {
                 && Objects.equals(this.feedbackKinds, that.feedbackKinds);
     }
 
+    /**
+     * Returns a hash code derived from all fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(iqFrom, messageId, feedbackKinds);
     }
 
+    /**
+     * Returns a debug string listing every field.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxSendFeedbackRequest[iqFrom=" + iqFrom

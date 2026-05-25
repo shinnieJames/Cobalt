@@ -14,12 +14,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsSetPropertyRequest}.
+ * Models the sealed reply family for a {@link SmaxGroupsSetPropertyRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsSetPropertyRPC}.
- * {@link Success} echoes back the set of toggles the relay actually applied, decomposed into typed accessors
- * that mirror the request's flag set; callers compare the echoed flags against the requested flags to detect
- * partially honoured mutations.
+ * <p>The three permitted variants are {@link Success}, {@link ClientError}, and {@link ServerError}.
+ * {@link Success} echoes back the set of toggles the relay actually applied, decomposed into typed accessors that
+ * mirror the request's flag set; callers compare the echoed flags against the requested flags to detect partially
+ * honoured mutations.
  */
 public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Response
         permits SmaxGroupsSetPropertyResponse.Success, SmaxGroupsSetPropertyResponse.ClientError, SmaxGroupsSetPropertyResponse.ServerError {
@@ -28,11 +28,11 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
      * Dispatches the inbound IQ across each {@link SmaxGroupsSetPropertyResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsSetPropertyRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the caller so
+     * it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsSetPropertyRequest} stanza, used to validate echoed
@@ -57,13 +57,13 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The reply variant emitted when the relay accepted the property mutation.
+     * Represents the reply variant emitted when the relay accepted the property mutation.
      *
-     * @apiNote Each requested toggle is echoed back as a sibling child under the IQ envelope; the typed
-     * accessors below report which children were echoed. The {@code <ephemeral/>} echo is decomposed into its
-     * {@code expiration} and {@code trigger} attributes, and the {@code <membership_approval_mode/>} echo is
-     * exposed as the raw {@code group_join_mode} string. Callers compare each echoed flag against the requested
-     * flag to detect partially honoured mutations.
+     * <p>Each requested toggle is echoed back as a sibling child under the IQ envelope; the typed accessors below
+     * report which children were echoed. The {@code <ephemeral/>} echo is decomposed into its {@code expiration}
+     * and {@code trigger} attributes, and the {@code <membership_approval_mode/>} echo is exposed as the raw
+     * {@code group_join_mode} string. Callers compare each echoed flag against the requested flag to detect
+     * partially honoured mutations.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetPropertyResponseSuccess")
     final class Success implements SmaxGroupsSetPropertyResponse {
@@ -350,10 +350,10 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseSetPropertyResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request; each documented toggle is captured via a presence check on
-         * the corresponding child, and the {@code <ephemeral/>} and {@code <membership_approval_mode/>}
-         * children additionally extract their attributes.
+         * <p>The IQ must be a valid {@code type="result"} echo of {@code request}, validated through
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}; each documented toggle is captured via a
+         * presence check on the corresponding child, and the {@code <ephemeral/>} and
+         * {@code <membership_approval_mode/>} children additionally extract their attributes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -487,8 +487,8 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed (conflicting toggles,
-     * empty payload), unauthorised, or referencing a non-existent group.
+     * Represents the reply variant emitted when the relay rejected the request envelope as malformed (conflicting
+     * toggles, empty payload), unauthorised, or referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetPropertyResponseClientError")
     final class ClientError implements SmaxGroupsSetPropertyResponse {
@@ -534,8 +534,9 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -593,7 +594,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Represents the reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetPropertyResponseServerError")
     final class ServerError implements SmaxGroupsSetPropertyResponse {
@@ -639,8 +640,9 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

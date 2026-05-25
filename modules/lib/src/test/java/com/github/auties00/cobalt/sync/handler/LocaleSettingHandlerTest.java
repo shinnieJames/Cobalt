@@ -26,24 +26,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link LocaleSettingHandler} adapter for
- * {@code WAWebLocaleSettingSync}.
+ * Covers the {@link LocaleSettingHandler} for the {@code setting_locale}
+ * app-state sync action: metadata, the SET happy path that persists the new
+ * locale, the malformed-value branch, the null-locale {@code SKIPPED} branch,
+ * the REMOVE rejection and timestamp-based conflict resolution.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code setting_locale}
- * app-state sync action across metadata, the SET happy path that
- * persists the new locale, the malformed-value branch, the
- * null-locale {@code SKIPPED} branch, the REMOVE rejection and the
- * inherited timestamp-based conflict resolution.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#locale()}
- * read-back can be asserted directly. The Windows-Electron
- * short-circuit that WA Web takes is intentionally not modelled in
- * production, so it is also absent here.
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#locale()} read-back can
+ * be asserted directly.
  */
 @DisplayName("LocaleSettingHandler")
 class LocaleSettingHandlerTest {

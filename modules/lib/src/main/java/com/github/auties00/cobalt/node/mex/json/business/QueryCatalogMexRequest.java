@@ -15,69 +15,87 @@ import java.io.UncheckedIOException;
  * Outbound MEX request that fetches the products of a WhatsApp Business
  * catalog.
  *
- * @apiNote Drives the catalog browser surface for business products. A
- * catalog is the flat storefront attached to a business JID; the response
+ * <p>A catalog is the flat storefront attached to a business JID; the response
  * carries the contained products together with their core metadata (name,
- * description, currency, price, image URLs). WA Web's
- * {@code WAWebQueryCatalog.default} routes between two named functions on
- * the same compiled document depending on whether the caller is the catalog
- * owner ({@code queryCatalogGraphQLByOwner}) or a guest browser
- * ({@code queryCatalogGraphQLByGuest}); Cobalt issues the single query and
- * lets the relay disambiguate. Callers are
- * {@code WAWebBizProductCatalogBridge.queryCatalog} and the
- * {@code WAWebBusinessProfileCollection} prefetch path.
+ * description, currency, price, image URLs). The matching decoder is
+ * {@link QueryCatalogMexResponse}.
  *
- * @implNote This implementation omits the WA Web {@code checkmark_collection_id}
- * variable (Cobalt does not surface the WhatsApp shop checkmark UI), the
- * {@code variant_info_fields}, {@code variant_thumbnail_height} and
- * {@code variant_thumbnail_width} variables (variant info is not projected
- * onto the Cobalt domain model), the {@code direct_connection_encrypted_info}
- * variable (Cobalt does not implement the business direct-connection retry
- * loop), and the {@code catalog_session_id} variable; all of those are sent
- * as explicit {@code null} so the relay accepts the document shape.
+ * @implNote This implementation issues a single query and lets the relay
+ * disambiguate between the owner and guest browse paths that WA Web routes
+ * with two named functions on the same compiled document. It omits the WA Web
+ * {@code checkmark_collection_id} variable (Cobalt does not surface the
+ * WhatsApp shop checkmark UI), the {@code variant_info_fields},
+ * {@code variant_thumbnail_height} and {@code variant_thumbnail_width}
+ * variables (variant info is not projected onto the Cobalt domain model), the
+ * {@code direct_connection_encrypted_info} variable (Cobalt does not implement
+ * the business direct-connection retry loop), and the
+ * {@code catalog_session_id} variable; all of those are sent as explicit
+ * {@code null} so the relay accepts the document shape.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalog")
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalogQuery.graphql")
 public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
+     * Holds the compiled GraphQL query identifier for the
      * {@code WAWebQueryCatalogQuery} document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebQueryCatalogQuery.graphql}. The relay maps this id to its
-     * persisted operation; the GraphQL text is never sent on the wire.
+     * <p>The relay maps this id to its persisted operation; the GraphQL text
+     * is never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryCatalogQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9916553288394782";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     * Holds the GraphQL operation name reported when this query is dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
-     * and error metrics; Cobalt keeps the name on the request for embedders
-     * mirroring WA Web's telemetry surface.
+     * <p>WA Web's MEX perf tracker uses this name to tag the query in latency
+     * and error metrics; Cobalt keeps it on the request for embedders
+     * mirroring that telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryCatalog", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "queryCatalog";
 
+    /**
+     * Holds the target business JID owning the catalog.
+     */
     private final String catalogJid;
+
+    /**
+     * Holds the page size, the maximum number of products returned per page.
+     */
     private final int limit;
+
+    /**
+     * Holds the requested image width in pixels used when the relay rewrites
+     * image URLs.
+     */
     private final int width;
+
+    /**
+     * Holds the requested image height in pixels used when the relay rewrites
+     * image URLs.
+     */
     private final int height;
+
+    /**
+     * Holds the pagination cursor returned by a previous page, or {@code null}
+     * for the first page.
+     */
     private final String afterCursor;
+
+    /**
+     * Holds whether the request opts into the WhatsApp shop source surface.
+     */
     private final boolean allowShopSource;
 
     /**
      * Creates a new catalog query request with the WA Web default
      * {@code allowShopSource=false}.
      *
-     * @apiNote Convenience overload for the common browse path. Equivalent to
-     * the six-argument constructor with {@code allowShopSource=false},
-     * matching how {@code WAWebBizProductCatalogBridge.queryCatalog} is
-     * invoked when the caller does not opt into the WhatsApp shop source.
+     * <p>Convenience overload for the common browse path; equivalent to the
+     * six-argument constructor with {@code allowShopSource=false}.
      *
      * @param catalogJid  the target business JID owning the catalog
      * @param limit       the page size (maximum number of products returned
@@ -95,8 +113,8 @@ public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
     /**
      * Creates a new catalog query request.
      *
-     * @apiNote Use this constructor when the caller needs to set
-     * {@code allowShopSource} explicitly. The value is wire-serialised as the
+     * <p>Use this constructor when the caller needs to set
+     * {@code allowShopSource} explicitly; the value is wire-serialised as the
      * WA Web enum literal {@code "ALLOWSHOPSOURCE_TRUE"} or
      * {@code "ALLOWSHOPSOURCE_FALSE"}.
      *

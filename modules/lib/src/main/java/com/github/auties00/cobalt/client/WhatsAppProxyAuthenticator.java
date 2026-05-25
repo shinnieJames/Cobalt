@@ -7,14 +7,12 @@ import java.util.Objects;
 /**
  * The authentication strategy used by a {@link WhatsAppProxy}.
  *
- * @apiNote
- * The socket stack negotiates these credentials with the proxy before
- * the TLS and Noise tunnel to the WhatsApp server is established.
- * Three families are supported: HTTP {@code CONNECT} proxies produce
- * a {@code Proxy-Authorization} header via {@link Http}; SOCKS4
- * proxies carry a plain user ID via {@link Socks.V4}; SOCKS5 proxies
- * participate in a method-specific sub-negotiation via
- * {@link Socks.V5}.
+ * <p>Three families are supported: HTTP {@code CONNECT} proxies produce a
+ * {@code Proxy-Authorization} header via {@link Http}; SOCKS4 proxies carry
+ * a plain user ID via {@link Socks.V4}; SOCKS5 proxies participate in a
+ * method-specific sub-negotiation via {@link Socks.V5}. The socket stack
+ * negotiates these credentials with the proxy before the TLS and Noise
+ * tunnel to the WhatsApp server is established.
  *
  * @see WhatsAppProxy
  */
@@ -23,21 +21,20 @@ public sealed interface WhatsAppProxyAuthenticator {
     /**
      * Authentication strategy for HTTP {@code CONNECT} proxies.
      *
-     * @apiNote
-     * Implementations produce the value of the
+     * <p>Implementations produce the value of the
      * {@code Proxy-Authorization} header that is appended to the
      * {@code CONNECT} request issued to the proxy.
      */
     sealed interface Http extends WhatsAppProxyAuthenticator {
 
         /**
-         * Computes the value to send in the
-         * {@code Proxy-Authorization} header.
+         * Computes the value to send in the {@code Proxy-Authorization}
+         * header.
          *
-         * @apiNote
+         * @implSpec
          * Called once per connect attempt during the proxy handshake;
-         * implementations that mint short-lived tokens should compute
-         * fresh values on every call.
+         * implementations that mint short-lived tokens compute a fresh value
+         * on every call.
          *
          * @return the header value to be sent in the
          *         {@code Proxy-Authorization} field
@@ -47,25 +44,21 @@ public sealed interface WhatsAppProxyAuthenticator {
         /**
          * HTTP Basic authentication as defined by RFC 7617.
          *
-         * @apiNote
-         * The username and password are concatenated with a colon
+         * <p>The username and password are concatenated with a colon
          * separator, UTF-8 encoded, and Base64 encoded to produce the
-         * {@code Proxy-Authorization: Basic <credentials>} value.
+         * {@code Proxy-Authorization: Basic <credentials>} value. A
+         * {@code null} password is normalised to the empty string so callers
+         * may always invoke {@link #authorization()} without a null guard.
          *
          * @param username the username, must not be {@code null}
-         * @param password the password; {@code null} is treated as the
-         *                 empty string
+         * @param password the password; {@code null} is treated as the empty
+         *                 string
          */
         record Basic(String username, String password) implements Http {
 
             /**
-             * Validates the canonical components.
-             *
-             * @apiNote
-             * Rejects a {@code null} username and normalises a
-             * {@code null} password to the empty string so callers can
-             * always invoke {@link #authorization()} without a null
-             * guard.
+             * Rejects a {@code null} username and normalises a {@code null}
+             * password to the empty string.
              *
              * @throws NullPointerException if {@code username} is
              *                              {@code null}
@@ -81,8 +74,8 @@ public sealed interface WhatsAppProxyAuthenticator {
              * {@inheritDoc}
              *
              * @implNote
-             * This implementation builds {@code Basic <credentials>}
-             * with credentials {@code Base64(UTF-8(username + ":" + password))}
+             * This implementation builds {@code Basic <credentials>} with
+             * credentials {@code Base64(UTF-8(username + ":" + password))}
              * per RFC 7617; padding characters are preserved.
              */
             @Override
@@ -97,22 +90,20 @@ public sealed interface WhatsAppProxyAuthenticator {
     /**
      * Authentication strategy for the SOCKS family of proxies.
      *
-     * @apiNote
-     * Two variants are supported: SOCKS4 (and its 4a extension) carries
-     * a bare user ID via {@link V4}; SOCKS5 negotiates an authentication
-     * method code during the initial handshake and may run a
-     * method-specific sub-negotiation via {@link V5}.
+     * <p>Two variants are supported: SOCKS4 (and its 4a extension) carries a
+     * bare user ID via {@link V4}; SOCKS5 negotiates an authentication
+     * method code during the initial handshake and may run a method-specific
+     * sub-negotiation via {@link V5}.
      */
     sealed interface Socks extends WhatsAppProxyAuthenticator {
 
         /**
          * SOCKS4 user ID authentication.
          *
-         * @apiNote
-         * The user ID is serialised as a null-terminated ISO 8859-1
-         * string and embedded into the SOCKS4 connect request. SOCKS4
-         * does not actually authenticate the request; the identifier
-         * is informational for the proxy logs.
+         * <p>The user ID is serialised as a null-terminated ISO 8859-1
+         * string and embedded into the SOCKS4 connect request. SOCKS4 does
+         * not actually authenticate the request; the identifier is
+         * informational for the proxy logs.
          *
          * @param userId the user identifier sent during the SOCKS4
          *               handshake, must not be {@code null}
@@ -120,10 +111,9 @@ public sealed interface WhatsAppProxyAuthenticator {
         record V4(String userId) implements Socks {
 
             /**
-             * Validates the canonical components.
+             * Rejects a {@code null} user identifier.
              *
-             * @throws NullPointerException if {@code userId} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code userId} is {@code null}
              */
             public V4 {
                 Objects.requireNonNull(userId, "userId");
@@ -131,13 +121,11 @@ public sealed interface WhatsAppProxyAuthenticator {
         }
 
         /**
-         * Authentication strategy for SOCKS5 proxies as defined by
-         * RFC 1928.
+         * Authentication strategy for SOCKS5 proxies as defined by RFC 1928.
          *
-         * @apiNote
-         * Implementations advertise a SOCKS5 method number via
-         * {@link #methodId()} during the initial method negotiation
-         * and then handle any method-specific sub-negotiation.
+         * <p>Implementations advertise a SOCKS5 method number via
+         * {@link #methodId()} during the initial method negotiation and then
+         * handle any method-specific sub-negotiation.
          */
         sealed interface V5 extends Socks {
 
@@ -145,10 +133,9 @@ public sealed interface WhatsAppProxyAuthenticator {
              * Returns the SOCKS5 method identifier announced by this
              * authenticator during method negotiation.
              *
-             * @apiNote
-             * Common values are {@code 0x00} for no authentication and
-             * {@code 0x02} for the username and password
-             * sub-negotiation defined by RFC 1929.
+             * <p>Common values are {@code 0x00} for no authentication and
+             * {@code 0x02} for the username and password sub-negotiation
+             * defined by RFC 1929.
              *
              * @return the SOCKS5 method identifier
              */
@@ -158,53 +145,45 @@ public sealed interface WhatsAppProxyAuthenticator {
              * SOCKS5 username and password authentication, method
              * {@code 0x02} as defined by RFC 1929.
              *
-             * @apiNote
-             * Both fields are ISO 8859-1 encoded and capped at 255
-             * bytes each by the wire format. A {@code null} password
-             * is tolerated and treated as the empty string to match
-             * common proxy deployments that only enforce the username.
+             * <p>Both fields are ISO 8859-1 encoded and capped at 255 bytes
+             * each by the wire format. A {@code null} password is tolerated
+             * and treated as the empty string to match common proxy
+             * deployments that only enforce the username.
              *
-             * @param username the username, must not be {@code null}
-             *                 and must be at most 255 ISO 8859-1 bytes
-             * @param password the password, may be {@code null}
-             *                 (treated as the empty string) and, when
-             *                 non-null, must be at most 255 ISO 8859-1
-             *                 bytes
+             * @param username the username, must not be {@code null} and
+             *                 must be at most 255 ISO 8859-1 bytes
+             * @param password the password, may be {@code null} (treated as
+             *                 the empty string) and, when non-null, must be
+             *                 at most 255 ISO 8859-1 bytes
              */
             record UserPassword(String username, String password) implements V5 {
 
                 /**
-                 * The SOCKS5 method identifier for the username and
-                 * password sub-negotiation defined by RFC 1929.
+                 * The SOCKS5 method identifier for the username and password
+                 * sub-negotiation defined by RFC 1929.
                  */
                 private static final int METHOD_ID = 0x02;
 
                 /**
-                 * The maximum number of ISO 8859-1 bytes allowed in
-                 * either field by the RFC 1929 wire format.
+                 * The maximum number of ISO 8859-1 bytes allowed in either
+                 * field by the RFC 1929 wire format.
                  */
                 private static final int MAX_LENGTH = 255;
 
                 /**
-                 * Constructs a new {@code UserPassword} authenticator.
+                 * Constructs a new {@code UserPassword} authenticator,
+                 * validating both fields against the 255-byte RFC 1929
+                 * wire-format cap.
                  *
-                 * @apiNote
-                 * Both fields are validated against the 255-byte
-                 * RFC 1929 wire-format cap before the record is
-                 * created.
-                 *
-                 * @param username the username, must not be
-                 *                 {@code null} and must fit in 255
-                 *                 ISO 8859-1 bytes
-                 * @param password the password, may be {@code null}
-                 *                 (treated as empty) and, when
-                 *                 non-null, must fit in 255 ISO
-                 *                 8859-1 bytes
-                 * @throws NullPointerException     if {@code username}
-                 *                                  is {@code null}
-                 * @throws IllegalArgumentException if either field
-                 *                                  exceeds 255 ISO
-                 *                                  8859-1 bytes
+                 * @param username the username, must not be {@code null} and
+                 *                 must fit in 255 ISO 8859-1 bytes
+                 * @param password the password, may be {@code null} (treated
+                 *                 as empty) and, when non-null, must fit in
+                 *                 255 ISO 8859-1 bytes
+                 * @throws NullPointerException     if {@code username} is
+                 *                                  {@code null}
+                 * @throws IllegalArgumentException if either field exceeds
+                 *                                  255 ISO 8859-1 bytes
                  */
                 public UserPassword(String username, String password) {
                     Objects.requireNonNull(username, "username");

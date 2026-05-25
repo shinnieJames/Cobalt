@@ -27,32 +27,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link MuteChatHandler} against the mute / unmute mutation
- * shapes WA Web emits via {@code WAWebMuteChatSync.applyMutations}.
- *
- * @apiNote
- * Verifies that the Cobalt handler matches WA Web's per-mutation
- * classification: {@code SET} with a future {@code muteEndTimestamp}
- * stamps the chat mute, {@code SET} with {@code muted=false} clears
- * it, an unknown chat JID surfaces as
- * {@link SyncActionState#ORPHAN}
- * with {@code modelType="Chat"}, a wrong-typed value or missing
- * end-timestamp surfaces as
- * {@link SyncActionState#MALFORMED},
- * an empty chat JID at {@code indexParts[1]} surfaces as
- * {@link SyncActionState#MALFORMED},
- * and {@link SyncdOperation#REMOVE}
- * surfaces as
+ * Covers {@link MuteChatHandler} mute and unmute classification: a SET with a future
+ * {@code muteEndTimestamp} stamps the chat mute, a SET with {@code muted=false} clears it, an
+ * unknown chat JID surfaces as {@link SyncActionState#ORPHAN} with {@code modelType="Chat"}, a
+ * wrong-typed value or missing end-timestamp and an empty chat JID at {@code indexParts[1]} surface
+ * as {@link SyncActionState#MALFORMED}, and {@link SyncdOperation#REMOVE} surfaces as
  * {@link SyncActionState#UNSUPPORTED}.
  *
- * @implNote
- * This implementation builds mutations directly via the
- * {@code muteMutation} helper rather than going through the
- * outgoing-mutation factory; the handler's class-level javadoc
- * documents the WA Web counterpart in detail. The
- * {@code MuteChatMutationFactory} smoke check uses
- * {@code muteEndSeconds=0} so that no AB-prop is consulted (the
- * group / mention-everyone branch is dead for user JIDs).
+ * <p>Inbound mutations are built directly via the {@code muteMutation} helper. The
+ * {@link MuteChatMutationFactory} smoke check uses {@code muteEndSeconds=0} so no AB-prop is
+ * consulted; the group / mention-everyone branch is dead for user JIDs.
  */
 @DisplayName("MuteChatHandler")
 class MuteChatHandlerTest {
@@ -267,7 +251,6 @@ class MuteChatHandlerTest {
         @Test
         @DisplayName("unmute via generateMuteMutation emits a SET mutation with muted=false")
         void unmuteEmitsMutedFalse() {
-            // Note: the AB-prop branch never executes for user JIDs, so abPropsService is not consulted.
             var pending = factory.generateMuteMutation(client, PEER, 0L, null);
 
             var trusted = pending.mutation();

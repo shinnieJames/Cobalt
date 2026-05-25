@@ -29,26 +29,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link MarketingMessageBroadcastHandler} adapter for
- * {@code WAWebPremiumMessageBroadcastSync}.
- *
- * @apiNote
- * Verifies parity with WA Web for the
- * {@code marketingMessageBroadcast} app-state sync action across
- * metadata, the SET happy path that records the
- * (premium template, sent message) association, the orphan branch
- * when the referenced template is unknown, the malformed-input
- * fallbacks, the REMOVE rejection and the inherited timestamp-based
+ * Covers {@link MarketingMessageBroadcastHandler}: metadata, the SET happy path that records the
+ * (premium template, sent message) association, the orphan branch when the referenced template is
+ * unknown, the malformed-input fallbacks, the REMOVE rejection and the inherited timestamp-based
  * conflict resolution.
  *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#findMarketingMessage(String)} read-back can
- * be asserted directly. Premium templates are pre-seeded through
- * {@link MarketingMessageBuilder} so the orphan branch can be
- * verified independently.
+ * <p>The handler runs against an in-memory {@link DeviceFixtures#temporaryStore} via
+ * {@link TestWhatsAppClient} so the {@link WhatsAppStore#findMarketingMessage(String)} read-back
+ * can be asserted directly. Premium templates are pre-seeded through {@link MarketingMessageBuilder}
+ * so the orphan branch can be verified independently.
  */
 @DisplayName("MarketingMessageBroadcastHandler")
 class MarketingMessageBroadcastHandlerTest {
@@ -66,29 +55,8 @@ class MarketingMessageBroadcastHandlerTest {
         handler = new MarketingMessageBroadcastHandler();
     }
 
-    /**
-     * Builds a {@link DecryptedMutation.Trusted} carrying the given
-     * broadcast action with explicit control over both index slots.
-     *
-     * @apiNote
-     * Used by every test to centralise mutation construction; the
-     * nullable index slots and nullable {@code action} let the
-     * malformed-index and malformed-value paths be exercised without
-     * re-implementing the envelope.
-     *
-     * @param indexPremiumId the premium template id placed in
-     *                       {@code indexParts[1]}, may be
-     *                       {@code null}
-     * @param indexMessageId the sent message id placed in
-     *                       {@code indexParts[2]}, may be
-     *                       {@code null}
-     * @param action         the broadcast action payload, may be
-     *                       {@code null}
-     * @param operation      the {@link SyncdOperation} to wrap
-     * @param ts             the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} with the requested
-     *         shape
-     */
+    // Nullable index slots and a nullable action let the malformed-index and malformed-value
+    // paths be exercised without re-implementing the envelope.
     private DecryptedMutation.Trusted buildMutation(String indexPremiumId, String indexMessageId,
                                                     MarketingMessageBroadcastAction action,
                                                     SyncdOperation operation, Instant ts) {

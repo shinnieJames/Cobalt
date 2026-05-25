@@ -1,94 +1,100 @@
 package com.github.auties00.cobalt.call.internal.signaling;
 
 import com.github.auties00.cobalt.call.CallState;
+import com.github.auties00.cobalt.client.WhatsAppClientListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
- * The transient mid-call states a peer can advertise via the
- * {@code <call><peer_state>} stanza. Used by
- * {@code WhatsAppClientListener.onCallPeerStateChanged} so listeners
- * can switch on a typed enum instead of comparing wire-string
- * literals.
+ * Enumerates the transient mid-call states a peer can advertise through a call peer-state payload.
  *
- * <p>Wire value comes off the {@code state} attribute on the
- * {@code <peer_state>} payload.
+ * <p>Each constant other than {@link #UNKNOWN} maps to one literal carried by the {@code state}
+ * attribute of an inbound {@code peer_state} payload. The receive side parses that literal into one of
+ * these constants via {@link #fromWireValue(String)} and surfaces it to
+ * {@link WhatsAppClientListener#onCallPeerStateChanged}, so listeners switch on a typed value rather
+ * than comparing wire strings. Any literal that does not match a known constant resolves to
+ * {@link #UNKNOWN}, whose {@link #wireValue()} is {@code null}.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipSignalingEnums")
 public enum CallPeerState {
     /**
-     * The peer's transport has come up and media is flowing — the
-     * counterpart of the local-side {@link CallState#ACTIVE}.
+     * Indicates that the peer's transport has come up and media is flowing.
+     *
+     * <p>This is the peer-side counterpart of the local {@link CallState#ACTIVE} state.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "PEER_STATE", adaptation = WhatsAppAdaptation.DIRECT)
     CONNECTED("connected"),
 
     /**
-     * The peer's transport has dropped and they're attempting to
-     * re-establish — typically a network blip on the peer side.
+     * Indicates that the peer's transport has dropped and the peer is attempting to re-establish it.
+     *
+     * <p>This typically reflects a network blip on the peer side rather than a deliberate action.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "PEER_STATE", adaptation = WhatsAppAdaptation.DIRECT)
     RECONNECTING("reconnecting"),
 
     /**
-     * The peer is busy in another call (received during the
-     * {@link CallState#RINGING} window before they accept).
+     * Indicates that the peer is busy in another call.
+     *
+     * <p>This is received during the {@link CallState#RINGING} window, before the peer accepts.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "PEER_STATE", adaptation = WhatsAppAdaptation.DIRECT)
     BUSY("busy"),
 
     /**
-     * The peer has placed the call on hold.
+     * Indicates that the peer has placed the call on hold.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "PEER_STATE", adaptation = WhatsAppAdaptation.DIRECT)
     HOLD("hold"),
 
     /**
-     * The peer has resumed from hold.
+     * Indicates that the peer has resumed the call from hold.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSignalingEnums", exports = "PEER_STATE", adaptation = WhatsAppAdaptation.DIRECT)
     RESUMED("resumed"),
 
     /**
-     * Fallback for wire values not in this enum — the receiver
-     * surfaces the original literal via {@link #wireValue()} so
-     * callers can still inspect it.
+     * Represents any wire value not covered by another constant.
+     *
+     * <p>The receive side maps unrecognized literals here; the original literal is not retained, so
+     * {@link #wireValue()} returns {@code null} for this constant.
      */
     UNKNOWN(null);
 
     /**
-     * Holds the literal from the wire {@code state} attribute, or
-     * {@code null} for {@link #UNKNOWN}.
+     * Holds the literal carried by the wire {@code state} attribute, or {@code null} for
+     * {@link #UNKNOWN}.
      */
     private final String wireValue;
 
     /**
-     * Constructs a new state with its wire-value mapping.
+     * Constructs a constant bound to its wire-level {@code state} literal.
      *
-     * @param wireValue the literal from the {@code state} attribute
+     * @param wireValue the literal carried by the {@code state} attribute, or {@code null} for
+     *                  {@link #UNKNOWN}
      */
     CallPeerState(String wireValue) {
         this.wireValue = wireValue;
     }
 
     /**
-     * Returns the wire-level {@code state} literal that maps to this
-     * enum value, or {@code null} for {@link #UNKNOWN}.
+     * Returns the wire-level {@code state} literal that maps to this constant.
      *
-     * @return the wire literal
+     * @return the wire literal, or {@code null} for {@link #UNKNOWN}
      */
     public String wireValue() {
         return wireValue;
     }
 
     /**
-     * Maps a wire-level {@code state} attribute to its
-     * {@link CallPeerState}, or {@link #UNKNOWN} if the literal is
-     * not recognised.
+     * Maps a wire-level {@code state} attribute to its constant.
+     *
+     * <p>A {@code null} argument and any literal that does not match a known constant both resolve to
+     * {@link #UNKNOWN}, so the result is never {@code null}.
      *
      * @param wire the wire string, or {@code null}
-     * @return the matching enum, never {@code null}
+     * @return the matching constant, or {@link #UNKNOWN} when unrecognized; never {@code null}
      */
     public static CallPeerState fromWireValue(String wire) {
         if (wire == null) {

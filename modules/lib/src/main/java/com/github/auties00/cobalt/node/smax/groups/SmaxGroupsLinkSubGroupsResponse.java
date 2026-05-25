@@ -17,11 +17,9 @@ import java.util.Optional;
 /**
  * The sealed reply family for a {@link SmaxGroupsLinkSubGroupsRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
- * cases: {@link Success} carries per-group result rows where each row records whether the link succeeded plus any
- * participants that could not be transferred, the two error variants surface the relay's reason codes. The
- * {@code WAWebGroupCommunityJob.sendLinkSubgroups} caller in WA Web folds the per-group outcomes into the
- * {@code linkedGroupJids}/{@code failedGroups}/{@code failedParticipantJids} triple used by the community admin UI.
+ * <p>The three variants split the relay's response into distinct cases: {@link Success} carries per-group result
+ * rows where each row records whether the link succeeded plus any participants that could not be transferred, and
+ * {@link ClientError}/{@link ServerError} surface the relay's reason codes.
  */
 public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Response
         permits SmaxGroupsLinkSubGroupsResponse.Success, SmaxGroupsLinkSubGroupsResponse.ClientError, SmaxGroupsLinkSubGroupsResponse.ServerError {
@@ -30,8 +28,7 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
      * Dispatches the inbound IQ across each {@link SmaxGroupsLinkSubGroupsResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsLinkSubGroupsRPC}:
-     * {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     * <p>Tries {@link Success} first, then {@link ClientError}, then {@link ServerError}.
      *
      * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
      * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
@@ -61,9 +58,8 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
     /**
      * The reply variant emitted when the relay processed every link request and returned a per-group result row.
      *
-     * @apiNote Surfaces as the {@code LinkSubGroupsResponseSuccess} case in {@code WAWebGroupCommunityJob}: a row
-     * with a non-empty {@link LinkedGroup#participantErrors()} list indicates participants whose privacy settings
-     * forbade the implicit transfer into the sub-group.
+     * <p>A row with a non-empty {@link LinkedGroup#participantErrors()} list indicates participants whose privacy
+     * settings forbade the implicit transfer into the sub-group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsLinkSubGroupsResponseSuccess")
     final class Success implements SmaxGroupsLinkSubGroupsResponse {
@@ -95,7 +91,7 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxIqResultResponseMixin#validate(Node, Node)} for envelope validation, then
+         * <p>Delegates to {@link SmaxIqResultResponseMixin#validate(Node, Node)} for envelope validation, then
          * matches the {@code <links><link link_type="sub_group">...</link></links>} payload. Returns empty when any
          * {@code <participant/>} entry is missing the {@code jid} or {@code error} attribute.
          *
@@ -189,9 +185,8 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
         /**
          * Per-group result row inside a {@link Success}.
          *
-         * @apiNote The {@link #participantErrors()} list is non-empty only when one or more participants could not be
-         * transferred into the sub-group; WA Web folds these into the {@code failedParticipantJids} list passed back
-         * to the community admin UI.
+         * <p>The {@link #participantErrors()} list is non-empty only when one or more participants could not be
+         * transferred into the sub-group.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsLinkSubGroupsResponseSuccess")
         public static final class LinkedGroup {
@@ -297,8 +292,8 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
             /**
              * Per-participant error row inside a {@link LinkedGroup}.
              *
-             * @apiNote The {@link #error()} attribute is always {@code "403"} in current relay schemas: it indicates
-             * the participant could not be transferred to the sub-group because their privacy settings forbid the
+             * <p>The {@link #error()} attribute is always {@code "403"} in current relay schemas: it indicates the
+             * participant could not be transferred to the sub-group because their privacy settings forbid the
              * implicit community-driven group add.
              */
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsLinkSubGroupsResponseSuccess")
@@ -390,8 +385,8 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
      * The reply variant emitted when the relay rejected the link batch as malformed, unauthorised, or referencing a
      * non-existent parent or sub-group pair.
      *
-     * @apiNote Surfaces as the {@code LinkSubGroupsResponseClientError} case in {@code WAWebGroupCommunityJob}, which
-     * logs the {@link #errorCode()} as the HTTP-style status passed back to the community admin "Manage groups" UI.
+     * <p>WA Web logs the {@link #errorCode()} as the HTTP-style status passed back to the community admin "Manage
+     * groups" UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsLinkSubGroupsResponseClientError")
     final class ClientError implements SmaxGroupsLinkSubGroupsResponse {
@@ -437,8 +432,8 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -498,8 +493,7 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
     /**
      * The reply variant emitted on transient relay-side failure.
      *
-     * @apiNote Surfaces as the {@code LinkSubGroupsResponseServerError} case in {@code WAWebGroupCommunityJob}, where
-     * it is logged at the same severity as {@link ClientError} but typically signals retry-eligible relay outages
+     * <p>Logged at the same severity as {@link ClientError} but typically signals retry-eligible relay outages
      * rather than caller error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsLinkSubGroupsResponseServerError")
@@ -546,8 +540,8 @@ public sealed interface SmaxGroupsLinkSubGroupsResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

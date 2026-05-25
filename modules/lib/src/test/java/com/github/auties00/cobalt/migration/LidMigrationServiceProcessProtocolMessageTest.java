@@ -22,20 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LidMigrationService#processProtocolMessage(com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayload)}.
- *
- * @apiNote
- * Pins every observable side effect of the primary-device
- * mapping-sync ingestion: state-machine gating, primary cache
- * population, mapping-sync timeout cancellation, per-contact LID
- * mirroring, and the auto-start of
- * {@link LidMigrationService#executeMigration()}.
- *
- * @implNote
- * This implementation uses isolated harnesses through
- * {@link MigrationFixtures#temporaryStore(Jid, Jid)} with an
- * AB-prop seed that disables the peer-sync timeout so the tests
- * are not racey.
+ * Covers {@link LidMigrationService#processProtocolMessage(com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayload)}:
+ * every observable side effect of the primary-device mapping-sync ingestion, including
+ * state-machine gating, primary cache population, mapping-sync timeout cancellation, per-contact
+ * LID mirroring, and the auto-start of {@link LidMigrationService#executeMigration()}. Each case
+ * runs against an isolated store with an AB-prop seed that disables the peer-sync timeout so the
+ * tests are not racey.
  */
 @DisplayName("LidMigrationService.processProtocolMessage")
 class LidMigrationServiceProcessProtocolMessageTest {
@@ -46,20 +38,8 @@ class LidMigrationServiceProcessProtocolMessageTest {
     private static final Jid PEER_LID = Jid.of("258252122116273@lid");
     private static final Jid PEER_LID_LATEST = Jid.of("999999999999999@lid");
 
-    /**
-     * Bundles the test client and the service under test.
-     *
-     * @param client  the test client harness
-     * @param service the service under test
-     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
-    /**
-     * Builds a fresh harness wired with the supplied AB props.
-     *
-     * @param props the AB-props seed driving the service
-     * @return a fresh {@link Harness}
-     */
     private static Harness build(TestABPropsService props) {
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
         var client = TestWhatsAppClient.create().withStore(store);
@@ -68,42 +48,20 @@ class LidMigrationServiceProcessProtocolMessageTest {
         return new Harness(client, service);
     }
 
-    /**
-     * Returns the AB-prop seed shared by the happy-path tests, with
-     * the peer-sync timeout disabled and compatibility enabled.
-     *
-     * @apiNote
-     * A non-zero peer-sync timeout would arm a scheduled task whose
-     * firing time races the test thread; setting it to zero
-     * disables scheduling entirely (matches WA Web's
-     * {@code shouldScheduleTimeoutForMissingPeerMessage} early
-     * return).
-     *
-     * @return the default {@link TestABPropsService}
-     */
     private static TestABPropsService defaultProps() {
+        // A zero peer-sync timeout disables the scheduled timeout task that would otherwise race the
+        // test thread; a non-zero value arms it.
         return TestABPropsService.builder()
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_PEER_SYNC_TIMEOUT_IN_SECONDS, 0L)
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_COMPATIBLE, true)
                 .build();
     }
 
-    /**
-     * Drives the service from
-     * {@link LidMigrationState#NOT_STARTED} to
-     * {@link LidMigrationState#WAITING_MAPPINGS} so a subsequent
-     * {@code processProtocolMessage} can advance further.
-     *
-     * @param service the service to advance
-     */
     private static void advanceToWaitingMappings(LidMigrationService service) {
         service.initialize();
         service.enableMigration();
     }
 
-    /**
-     * Verifies that null payload -> state=FAILED + FailedToParseMappings surfaced through handleFailure.
-     */
     @Test
     @DisplayName("null payload -> state=FAILED + FailedToParseMappings surfaced through handleFailure")
     void nullPayload() {
@@ -118,9 +76,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertInstanceOf(WhatsAppLidMigrationException.FailedToParseMappings.class, failures.getFirst());
     }
 
-    /**
-     * Verifies that payload while in NOT_STARTED is ignored.
-     */
     @Test
     @DisplayName("payload while in NOT_STARTED is ignored")
     void ignoredFromNotStarted() {
@@ -134,9 +89,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
-    /**
-     * Verifies that payload while in READY is ignored.
-     */
     @Test
     @DisplayName("payload while in READY is ignored")
     void ignoredFromReady() {
@@ -159,9 +111,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
                 "post-terminal delivery does not surface any new failure");
     }
 
-    /**
-     * Verifies that empty mappings -> state advances to COMPLETE via auto-start, chatDbMigrationTimestamp cleared.
-     */
     @Test
     @DisplayName("empty mappings -> state advances to COMPLETE via auto-start, chatDbMigrationTimestamp cleared")
     void emptyMappings() {
@@ -178,9 +127,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
-    /**
-     * Verifies that typical mappings -> caches populated, contact LID mirrored, mapping registered.
-     */
     @Test
     @DisplayName("typical mappings -> caches populated, contact LID mirrored, mapping registered")
     void typicalMappings() {
@@ -209,9 +155,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(PEER_LID, h.client.store().findLidByPhone(PEER_PN).orElseThrow());
     }
 
-    /**
-     * Verifies that mapping without latestLid: only the assigned LID is cached, no latest entry.
-     */
     @Test
     @DisplayName("mapping without latestLid: only the assigned LID is cached, no latest entry")
     void mappingWithoutLatestLid() {
@@ -242,9 +185,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
                 "without latestLid, the ctwa promotion path does not fire");
     }
 
-    /**
-     * Verifies that payload.chatDbMigrationTimestamp present -> recorded as effective sync timestamp.
-     */
     @Test
     @DisplayName("payload.chatDbMigrationTimestamp present -> recorded as effective sync timestamp")
     void chatDbTimestampPresent() {
@@ -270,9 +210,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(LidMigrationState.COMPLETE, h.service.state());
     }
 
-    /**
-     * Verifies that after successful delivery, processProtocolMessage in COMPLETE is a no-op.
-     */
     @Test
     @DisplayName("after successful delivery, processProtocolMessage in COMPLETE is a no-op")
     void deliveryAfterCompleteIsNoOp() {
@@ -291,9 +228,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(LidMigrationState.COMPLETE, h.service.state());
     }
 
-    /**
-     * Verifies that mappings list containing a null entry is tolerated (processSingleMapping no-ops on null).
-     */
     @Test
     @DisplayName("mappings list containing a null entry is tolerated (processSingleMapping no-ops on null)")
     void mappingsListWithNullEntry() {
@@ -320,9 +254,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(PEER_LID, h.service.lookupLid(PEER_PN).orElseThrow());
     }
 
-    /**
-     * Verifies that processProtocolMessage's outer catch surfaces unexpected Throwables as FailedToParseMappings.
-     */
     @Test
     @DisplayName("processProtocolMessage's outer catch surfaces unexpected Throwables as FailedToParseMappings")
     void throwableInProcessingSurfacesAsFailedToParse() {
@@ -347,9 +278,6 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
-    /**
-     * Verifies that LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false at executeMigration -> IncompatibleClient surfaces.
-     */
     @Test
     @DisplayName("LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false at executeMigration -> IncompatibleClient surfaces")
     void incompatibleClient() {

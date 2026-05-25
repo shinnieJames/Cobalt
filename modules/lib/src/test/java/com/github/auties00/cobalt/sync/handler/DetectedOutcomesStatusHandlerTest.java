@@ -26,21 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link DetectedOutcomesStatusHandler} adapter for
- * {@code WAWebDetectedOutcomesStatusSync}.
+ * Exercises the {@link DetectedOutcomesStatusHandler} adapter for the
+ * {@code detected_outcomes_status_action} app-state sync action across metadata,
+ * the SET happy path, the malformed-value branch, the REMOVE rejection, the
+ * inherited timestamp-based conflict resolution, and the default batch dispatch.
  *
- * @apiNote
- * Verifies parity with WA Web for the
- * {@code detectedOutcomeStatus} app-state sync action across
- * metadata, the SET happy path, the malformed-value branch, the
- * REMOVE rejection and the inherited timestamp-based conflict
- * resolution.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so each test starts from a clean single-device state and the
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#detectedOutcomesEnabled()}
+ * <p>Each test runs against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * via {@link TestWhatsAppClient}, so it starts from a clean single-device state and
+ * the {@link com.github.auties00.cobalt.store.WhatsAppStore#detectedOutcomesEnabled()}
  * read-back can be asserted directly.
  */
 @DisplayName("DetectedOutcomesStatusHandler")

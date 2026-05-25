@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call.filter;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -7,13 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link PixelFormats}.
+ * Covers {@link PixelFormats} conversions into I420: RGBA, BGR24, and NV12 inputs each yield a frame
+ * whose plane byte count matches the I420 layout, and malformed inputs (wrong buffer length, odd or
+ * non-positive dimensions) are rejected.
  */
 class PixelFormatsTest {
-    /**
-     * RGBA → I420 produces a frame of the right byte count.
-     */
     @Test
+    @DisplayName("RGBA -> I420 produces a frame of the right byte count")
     void rgbaToI420Sizes() {
         int w = 4, h = 4;
         var rgba = new byte[w * h * 4];
@@ -26,10 +27,8 @@ class PixelFormatsTest {
         assertEquals(expected, frame.yuvI420().length);
     }
 
-    /**
-     * BGR24 → I420 produces a frame of the right byte count.
-     */
     @Test
+    @DisplayName("BGR24 -> I420 produces a frame of the right byte count")
     void bgr24ToI420Sizes() {
         int w = 4, h = 4;
         var bgr = new byte[w * h * 3];
@@ -38,10 +37,8 @@ class PixelFormatsTest {
         assertEquals(expected, frame.yuvI420().length);
     }
 
-    /**
-     * NV12 → I420 produces a frame of the right byte count.
-     */
     @Test
+    @DisplayName("NV12 -> I420 produces a frame of the right byte count")
     void nv12ToI420Sizes() {
         int w = 4, h = 4;
         var ySize = w * h;
@@ -51,10 +48,8 @@ class PixelFormatsTest {
         assertEquals(ySize + 2 * uvSize, frame.yuvI420().length);
     }
 
-    /**
-     * Wrong-length input is rejected.
-     */
     @Test
+    @DisplayName("Wrong-length input is rejected")
     void rejectsWrongLength() {
         assertThrows(IllegalArgumentException.class,
                 () -> PixelFormats.rgbaToI420(new byte[10], 4, 4, 0L));
@@ -64,10 +59,8 @@ class PixelFormatsTest {
                 () -> PixelFormats.nv12ToI420(new byte[10], 4, 4, 0L));
     }
 
-    /**
-     * Odd or non-positive dimensions are rejected.
-     */
     @Test
+    @DisplayName("Odd or non-positive dimensions are rejected")
     void rejectsBadDimensions() {
         assertThrows(IllegalArgumentException.class,
                 () -> PixelFormats.rgbaToI420(new byte[3], 3, 4, 0L));

@@ -17,28 +17,23 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that record whether a Business agent has opened a chat.
  *
- * @apiNote
- * Drives the team-inbox "agent has read this chat" signal that
- * {@code WAWebBizChatAssignmentOpenedAction} surfaces: when an agent opens
- * (or closes) an assigned chat, the resulting mutation is pushed via
- * {@link com.github.auties00.cobalt.sync.WebAppStateService} so the
- * primary device and other agent devices see the same open state. The
- * factory is the outgoing-mutation counterpart of
+ * <p>When an agent opens (or closes) an assigned chat, the resulting mutation
+ * is pushed via
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches} so the
+ * primary device and other agent devices see the same open state. This factory
+ * builds the outgoing mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.ChatAssignmentOpenedStatusHandler}.
  *
  * @implNote
  * This implementation accepts only a single triple per call, unlike WA Web's
- * batched {@code createChatOpenedMutations(list)}; Cobalt callers loop at
- * their own level when several open-state transitions must be flushed
- * together.
+ * batched form; Cobalt callers loop at their own level when several open-state
+ * transitions must be flushed together.
  */
 public final class ChatAssignmentOpenedStatusMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public ChatAssignmentOpenedStatusMutationFactory() {
 
@@ -47,21 +42,19 @@ public final class ChatAssignmentOpenedStatusMutationFactory {
     /**
      * Returns a SET mutation that records whether the given agent has the chat open.
      *
-     * @apiNote
-     * The mutation index follows
+     * <p>The mutation index follows
      * {@snippet :
      *     ["agentChatAssignmentOpenedStatus", chatJid.toString(), agentId]
      * }
-     * and the {@link ChatAssignmentOpenedStatusAction} sub-message carries
-     * the {@code chatOpened} flag. The composite index allows multiple
-     * agents to record open state for the same chat independently.
+     * and the {@link ChatAssignmentOpenedStatusAction} sub-message carries the
+     * {@code chatOpened} flag. The composite index allows multiple agents to
+     * record open state for the same chat independently. The receive-side
+     * handler orphans the mutation if the underlying chat-assignment row does
+     * not yet exist in the agent collection.
      *
      * @implNote
      * This implementation pins the action version through
-     * {@link ChatAssignmentOpenedStatusAction#ACTION_VERSION}, which is the
-     * shared {@code CHAT_ASSIGNMENT_SYNC_VERSION} constant; the receive-side
-     * handler orphans the mutation if the underlying chat-assignment row
-     * does not yet exist in the agent collection.
+     * {@link ChatAssignmentOpenedStatusAction#ACTION_VERSION}.
      *
      * @param chatJid    the chat {@link Jid} whose open state is being recorded
      * @param agentId    the identifier of the agent whose state changed

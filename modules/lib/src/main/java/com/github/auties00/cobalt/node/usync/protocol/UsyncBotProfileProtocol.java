@@ -15,35 +15,30 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * USync {@code bot} protocol descriptor.
+ * Describes the USync {@code bot} protocol.
  *
- * @apiNote
- * Asks the relay for each peer's bot profile metadata (display name,
- * description, prompts, slash-commands, creator block, persona id). Used by
- * {@code WAWebRequestBotProfiles.requestBotProfiles}; pair each
- * {@link UsyncUser} with a persona id through
- * {@link UsyncUser#withPersonaId(String)} when the bot exposes multiple
- * personas.
+ * This descriptor asks the relay for each peer's bot profile metadata
+ * (display name, description, prompts, slash-commands, creator block, persona
+ * id). The descriptor itself is stateless; per-user state, specifically the
+ * persona id set through {@link UsyncUser#withPersonaId(String)}, lives on
+ * each {@link UsyncUser} so a single instance can be paired with users that
+ * target different personas of a multi-persona bot.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncBotProfile")
 public final class UsyncBotProfileProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "bot";
 
     /**
-     * Wire-protocol version emitted on the {@code v} attribute of the inner
-     * {@code <profile/>} query element.
+     * Holds the wire-protocol version emitted on the {@code v} attribute of
+     * the inner {@code <profile/>} query element.
      */
     public static final String PROFILE_VERSION = "1";
 
     /**
-     * Builds a default bot-profile-protocol descriptor.
-     *
-     * @apiNote
-     * The descriptor is stateless; per-user state lives on each
-     * {@link UsyncUser} (specifically the persona id).
+     * Creates a bot-profile-protocol descriptor.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
             exports = "USyncBotProfileProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -65,8 +60,7 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation wraps a versioned {@code <profile v="1"/>} child
-     * inside the {@code <bot>} element, matching the JS
-     * {@code wap("bot", null, wap("profile", {v: "1"}))} shape.
+     * inside the {@code <bot>} element.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -87,10 +81,8 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
      * @implNote
      * This implementation always attaches a per-user {@code <bot>} child
      * carrying an inner {@code <profile/>} with the optional
-     * {@code persona_id} attribute, matching the JS
-     * {@code USyncBotProfileProtocol.getUserElement} shape (the JS path
-     * returns the same wrap unconditionally, whether or not a persona id
-     * is set).
+     * {@code persona_id} attribute; the wrap is emitted unconditionally
+     * whether or not a persona id is set.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -107,14 +99,16 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     /**
      * {@inheritDoc}
      *
+     * This override reads every optional sub-element of the {@code <profile>}
+     * child (name, attributes, description, category, default flag, prompts,
+     * persona id, commands block with its description header, meta-created
+     * flag, creator block, posing-as-professional type) and projects them
+     * into the typed {@link BotProfileResult} record.
+     *
      * @implNote
-     * This implementation reads every optional sub-element the JS
-     * {@code botProfileParser} reads (name, attributes, description,
-     * category, default flag, prompts, persona id, commands block with its
-     * description header, meta-created flag, creator block,
-     * posing-as-professional type) and projects them into the typed
-     * {@link BotProfileResult} record. Missing nodes fall back to empty
-     * strings or {@code null} per the JS optional-chaining defaults.
+     * This implementation lets missing nodes fall back to empty strings or to
+     * {@code null}, matching the optional-chaining defaults of the source
+     * parser.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -160,9 +154,8 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
      * Reads a node's inline text content, falling back when the node is
      * absent or empty.
      *
-     * @apiNote
-     * Used by the bot-profile parser to mirror the JS
-     * {@code (node?.contentString()) ?? default} pattern in one place.
+     * Used by the bot-profile parser to coalesce a missing or empty child
+     * into a single default value in one place.
      *
      * @param node         the node to read
      * @param defaultValue the value to return when the node is {@code null}
@@ -177,10 +170,8 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
      * Parses the optional {@code <prompts>} child into a list of typed
      * {@link BotProfileResult.Prompt} entries.
      *
-     * @apiNote
-     * Each prompt carries an {@code <emoji>} and a {@code <text>}; both
-     * fall back to the empty string when absent, matching the JS
-     * coalescing in {@code parsePrompts}.
+     * Each prompt carries an {@code <emoji>} and a {@code <text>}; both fall
+     * back to the empty string when absent.
      *
      * @param promptsChild the optional {@code <prompts>} child
      * @return the parsed prompts, never {@code null}
@@ -203,7 +194,6 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
      * {@link BotProfileResult.Command} entries plus the block's descriptive
      * header.
      *
-     * @apiNote
      * The header lives on a {@code <description>} sibling of the
      * {@code <command>} entries, not inside each command.
      *
@@ -229,10 +219,8 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
      * Maps the {@code type} attribute on the {@code <posing_as_professional>}
      * child to its typed enum value.
      *
-     * @apiNote
-     * Returns {@link BotProfileResult.PosingAsProfessional#UNKNOWN} for any
-     * value other than {@code "yes"} or {@code "no"}, matching the JS
-     * fall-through default.
+     * Any value other than {@code "yes"} or {@code "no"} resolves to
+     * {@link BotProfileResult.PosingAsProfessional#UNKNOWN}.
      *
      * @param wire the wire literal
      * @return the matching enum value
@@ -246,11 +234,10 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Pair of the parsed command list and its descriptive header.
+     * Pairs the parsed command list with its descriptive header.
      *
-     * @apiNote
-     * Internal carrier returned by {@link #parseCommands(Optional)}; kept
-     * private because callers always destructure both values together.
+     * Returned by {@link #parseCommands(Optional)} and kept private because
+     * callers always destructure both values together.
      *
      * @param commands            the parsed command list
      * @param commandsDescription the free-form header above the list

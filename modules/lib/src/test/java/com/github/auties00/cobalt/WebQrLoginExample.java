@@ -6,6 +6,12 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 
+/**
+ * Runnable example that logs a Web client in by printing a QR code to the terminal, then registers
+ * listeners that report sync progress (contacts, chats, newsletters, history, app-state actions)
+ * and send a message to a named chat once chats arrive; run it as a single-file program through the
+ * launcher protocol.
+ */
 void main() throws IOException {
     WhatsAppClient.builder()
             .webClient(WhatsAppStoreFactory.temporary())

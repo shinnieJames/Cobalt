@@ -13,31 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises the outgoing-mutation wire shape produced by
- * {@link LockChatMutationFactory}.
- *
- * @apiNote
- * Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.LockChatHandler} whose
- * incoming-side coverage lives in {@code LockChatHandlerTest}; the
- * parity target is {@code WAWebLockChatSync.getChatLockMutation}, whose
- * value shape carries only the {@code locked} flag.
- *
- * @implNote
- * This implementation rebuilds the {@code lockChatAction} value from the
- * oracle's {@code locked} flag and {@code timestampSeconds} field rather
- * than calling the factory directly, so the parity check exercises the
- * protobuf encoding rather than the index-string formatting; the
- * companion archive and pin mutations emitted by
+ * Verifies that the {@code lockChatAction} value encodes byte-for-byte against the captured WhatsApp
+ * Web encode oracle under {@code handler/lock-chat/encode}. The value is rebuilt from the oracle's
+ * {@code locked} flag and {@code timestampSeconds} field rather than via
+ * {@link LockChatMutationFactory} directly, so the parity check exercises the protobuf encoding
+ * rather than index-string formatting; the companion archive and pin mutations emitted by
  * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, com.github.auties00.cobalt.model.jid.Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}
- * are covered by their own factory tests.
+ * are covered by their own factory tests. The test skips when the oracle fixture is absent.
  */
 @DisplayName("LockChatMutationFactory")
 class LockChatMutationFactoryTest {
-    /**
-     * Verifies that the encoded {@link SyncActionValueSpec} bytes match
-     * the captured WA Web oracle when the fixture is present.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
     void byteParityWithOracle() {

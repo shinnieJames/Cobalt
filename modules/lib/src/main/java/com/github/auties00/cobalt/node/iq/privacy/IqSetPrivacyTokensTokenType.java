@@ -5,11 +5,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 /**
  * Closed set of token-type discriminators recognised by the relay on the legacy
  * {@code <iq xmlns="privacy" type="set"><tokens>} surface.
- *
- * @apiNote
- * Use when constructing an {@link IqSetPrivacyTokensRequest}. The token-type discriminator selects
- * which class of pre-shared privacy token the relay should mint and register against the supplied
- * peer JID.
+ * <p>
+ * The token-type discriminator selects which class of pre-shared privacy token the relay mints and
+ * registers against the supplied peer JID; it is set when constructing an
+ * {@link IqSetPrivacyTokensRequest}.
  *
  * @implNote
  * This implementation mirrors the {@code TokenType} enum exported by
@@ -19,13 +18,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 public enum IqSetPrivacyTokensTokenType {
     /**
      * The {@code trusted_contact} token type.
-     *
-     * @apiNote
-     * Issues a trusted-contact (TC) token for the supplied peer. WA Web's caller
+     * <p>
+     * Issues a trusted-contact token for the supplied peer. WA Web's caller
      * {@code WAWebSendTcTokenChatAction.sendTcToken} mints one of these on the first reply to a
      * peer and again whenever the peer's device identity changes
-     * ({@code WAWebSendTcTokenWhenDeviceIdentityChange}), and the token gates downstream
-     * call/messages reputation features that depend on cross-device trust pinning.
+     * ({@code WAWebSendTcTokenWhenDeviceIdentityChange}); the token gates downstream
+     * call and messages reputation features that depend on cross-device trust pinning.
      */
     TRUSTED_CONTACT("trusted_contact");
 
@@ -37,9 +35,6 @@ public enum IqSetPrivacyTokensTokenType {
     /**
      * Constructs a token-type constant from its wire token.
      *
-     * @apiNote
-     * Constructor is package-private as enum constants are the only producers.
-     *
      * @param wire the wire token; never {@code null}
      */
     IqSetPrivacyTokensTokenType(String wire) {
@@ -48,9 +43,8 @@ public enum IqSetPrivacyTokensTokenType {
 
     /**
      * Returns the wire token for this token type.
-     *
-     * @apiNote
-     * Use when serialising a {@code <token type=...>} attribute on an
+     * <p>
+     * Used when serialising a {@code <token type=...>} attribute on an
      * {@link IqSetPrivacyTokensRequest}.
      *
      * @return the wire token; never {@code null}

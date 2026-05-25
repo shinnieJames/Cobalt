@@ -34,113 +34,138 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Decodes a source video and re-encodes it as a WhatsApp-compatible MP4
- * with H.264 video and AAC audio, plus an in-band JPEG thumbnail.
+ * Decodes a source video and re-encodes it as a WhatsApp-compatible MP4 with H.264 video and AAC
+ * audio, plus an in-band JPEG thumbnail.
  *
- * @apiNote
- * Drives the video branch of the upload transcoder. Targets H.264
- * baseline level 3.1 (so the result plays on every WhatsApp client
- * without falling back to software decode) and AAC stereo audio at
- * 48 kHz. The output MP4 is muxed with {@code +faststart} so the moov
- * atom lands at the head of the file and playback can begin before the
- * full download completes.
+ * <p>The video branch of the upload transcoder targets H.264 baseline level 3.1 so the result
+ * plays on every WhatsApp client without falling back to software decode, and AAC stereo audio at
+ * {@value #AUDIO_SAMPLE_RATE} Hz. The output MP4 is muxed with {@code +faststart} so the moov atom
+ * lands at the head of the file and playback can begin before the full download completes.
  *
- * @implNote
- * This implementation drives FFmpeg end-to-end: libavformat demux of both
- * the video and audio streams, libavfilter for the
- * {@code scale} chain on the video path, libswresample for the audio
- * resample, libopenh264 for H.264 encoding, the native FFmpeg AAC encoder,
- * and the libavformat MP4 muxer with {@code +faststart}. The thumbnail is
- * the first decoded video frame run through the same {@code mjpeg} encoder
- * {@link ImagePipeline} uses.
+ * @implNote This implementation drives FFmpeg end-to-end: libavformat demux of both the video and
+ * audio streams, libavfilter for the {@code scale} chain on the video path, libswresample for the
+ * audio resample, libopenh264 for H.264 encoding, the native FFmpeg AAC encoder, and the
+ * libavformat MP4 muxer with {@code +faststart}. The thumbnail is the first decoded video frame run
+ * through the same {@code mjpeg} encoder {@link ImagePipeline} uses, with baseline level 3.1 chosen
+ * because higher H.264 levels are not universally hardware-decodable across WhatsApp's client
+ * matrix.
  */
 public final class VideoPipeline {
     /**
-     * Maximum vertical resolution for the {@code STANDARD} quality
-     * preset.
+     * Holds the maximum vertical resolution in pixels for the
+     * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} quality preset.
+     *
+     * <p>A source taller than this value is downscaled to this height with the width adjusted to
+     * preserve the aspect ratio; the {@link SettingsSyncAction.MediaQualitySetting#HD} preset
+     * applies no height cap.
      */
     private static final int MAX_HEIGHT_STANDARD = 720;
 
     /**
-     * Video bitrate for the {@code STANDARD} quality preset in bits per
-     * second.
+     * Holds the target H.264 bitrate in bits per second for the
+     * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} quality preset.
      */
     private static final long VIDEO_BITRATE_STANDARD = 1_000_000;
 
     /**
-     * Video bitrate for the {@code HD} quality preset in bits per second.
+     * Holds the target H.264 bitrate in bits per second for the
+     * {@link SettingsSyncAction.MediaQualitySetting#HD} quality preset.
      */
     private static final long VIDEO_BITRATE_HD = 3_000_000;
 
     /**
-     * Audio bitrate for the {@code STANDARD} quality preset in bits per
-     * second.
+     * Holds the target AAC bitrate in bits per second for the
+     * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} quality preset.
      */
     private static final long AUDIO_BITRATE_STANDARD = 128_000;
 
     /**
-     * Audio bitrate for the {@code HD} quality preset in bits per second.
+     * Holds the target AAC bitrate in bits per second for the
+     * {@link SettingsSyncAction.MediaQualitySetting#HD} quality preset.
      */
     private static final long AUDIO_BITRATE_HD = 192_000;
 
     /**
-     * Audio sample rate of the encoded output in Hz.
+     * Holds the audio sample rate in Hz of the encoded output.
+     *
+     * <p>The audio resampler converts every source stream to this rate regardless of its native
+     * sample rate.
      */
     private static final int AUDIO_SAMPLE_RATE = 48_000;
 
     /**
-     * Audio channel count of the encoded output (stereo).
+     * Holds the audio channel count of the encoded output, fixed to stereo.
+     *
+     * <p>The audio resampler downmixes or upmixes the source layout to this channel count.
      */
     private static final int AUDIO_CHANNELS = 2;
 
     /**
-     * Maximum edge in pixels for the video thumbnail.
+     * Holds the maximum edge length in pixels for the video thumbnail.
+     *
+     * <p>The thumbnail's longest dimension is scaled down to this value while preserving the aspect
+     * ratio; a thumbnail already within this bound is left at its source dimensions.
      */
     private static final int VIDEO_THUMB_MAX_EDGE = 480;
 
     /**
-     * MJPEG qscale for the thumbnail.
+     * Holds the MJPEG quantization scale applied when encoding the thumbnail.
+     *
+     * @implNote This implementation multiplies the qscale by {@code FF_QP2LAMBDA} before setting it
+     * as the encoder's global quality, matching the lambda-domain quality contract of the FFmpeg
+     * MJPEG encoder.
      */
     private static final int THUMB_QSCALE = 4;
 
     /**
-     * {@code AVFMT_GLOBALHEADER} flag value from
-     * {@code libavformat/avformat.h}.
+     * Holds the {@code AVFMT_GLOBALHEADER} output-format flag.
+     *
+     * <p>When the muxer reports this flag the encoders must emit their extradata in the file header
+     * rather than inline, so the global-header codec flag is set on each encoder context.
+     *
+     * @implNote This implementation hardcodes {@code 0x40} from {@code libavformat/avformat.h}; the
+     * jextract bindings do not expose this constant as a generated accessor.
      */
     private static final int AVFMT_GLOBALHEADER = 0x40;
 
     /**
-     * AAC frame size in samples; the native FFmpeg AAC encoder uses
-     * {@code 1024}.
+     * Holds the fallback AAC frame size in samples used before the encoder reports its own.
+     *
+     * <p>The native FFmpeg AAC encoder produces frames of this size, so this value seeds the
+     * encoder input frame until {@code openAudioEncoder} replaces it with the encoder-reported size
+     * when that is positive.
+     *
+     * @implNote This implementation uses {@code 1024}, the fixed frame size of the native FFmpeg AAC
+     * encoder.
      */
     private static final int DEFAULT_AAC_FRAME_SAMPLES = 1024;
 
     /**
-     * Constructs the pipeline; the parent
-     * {@link MediaTranscoderService} owns the single instance.
+     * Constructs the pipeline.
+     *
+     * <p>The parent {@link MediaTranscoderService} owns the single instance and dispatches every
+     * video upload through it.
      */
     public VideoPipeline() {
     }
 
     /**
-     * Transcodes the source video, applies codec-derived metadata to
-     * {@code provider}, and returns the encoded payload stream.
+     * Transcodes the source video, applies codec-derived metadata to {@code provider}, and returns
+     * the encoded payload stream.
      *
-     * @apiNote
-     * Mutates the provider in place: when {@code provider} is a
-     * {@link VideoMessage} the {@code mimetype}, {@code mediaSize},
-     * {@code width}, {@code height}, {@code seconds}, and
-     * {@code jpegThumbnail} fields are populated; every other
-     * {@link MediaProvider} variant receives only the common
-     * {@code mediaSize} update.
+     * <p>The {@code provider} is mutated in place: when it is a {@link VideoMessage} its mimetype,
+     * media size, width, height, duration in seconds, and JPEG thumbnail are populated from the
+     * encoded output; every other {@link MediaProvider} variant receives only the common media-size
+     * update via {@link MediaProvider#setMediaSize(long)}. The {@code source} channel is read but
+     * not closed by this method. The {@code quality} preset selects the video and audio bitrates and
+     * whether the height cap applies.
      *
-     * @param provider the upload target; codec-derived fields are applied
-     *                 to this instance
-     * @param source   the raw video channel; not closed by this method
-     * @param quality  the quality preset; selects video and audio bitrate
+     * @param provider the upload target; codec-derived fields are applied to this instance
+     * @param source   the raw video channel, which is not closed by this method
+     * @param quality  the quality preset selecting video and audio bitrate
      * @return the encoded MP4 payload
-     * @throws WhatsAppMediaException.Processing if any stage of the
-     *         demux/decode/encode/mux pipeline fails
+     * @throws WhatsAppMediaException.Processing if any stage of the demux, decode, encode, or mux
+     *         pipeline fails
      */
     public MediaPayload run(MediaProvider provider, SeekableByteChannel source,
                             SettingsSyncAction.MediaQualitySetting quality)
@@ -155,199 +180,216 @@ public final class VideoPipeline {
     }
 
     /**
-     * One-shot state for a single transcode invocation. Holds every
-     * libav* resource that needs cleanup on completion or failure.
+     * Holds the one-shot state for a single transcode invocation, including every libav resource
+     * that needs cleanup on completion or failure.
      *
-     * @apiNote
-     * Lives only for the duration of {@link #execute()}. The shared
-     * {@link Arena} is owned by the caller; this run owns every FFmpeg
-     * pointer it allocates and releases them in {@link #cleanup()} on
-     * every exit path.
+     * <p>An instance lives only for the duration of {@link #execute(MediaProvider)}. The shared
+     * {@link Arena} is owned by the caller; this run owns every FFmpeg pointer it allocates and
+     * releases them in {@link #cleanup()} on every exit path, whether the transcode succeeds or
+     * throws.
      */
     private static final class Run {
         /**
-         * Shared arena for AVIO bridges and transient FFmpeg arguments.
+         * Holds the shared arena backing the AVIO bridges and every transient FFmpeg argument
+         * allocated during the run.
          */
         final Arena arena;
 
         /**
-         * Source channel.
+         * Holds the raw source video channel that the demuxer reads from.
          */
         final SeekableByteChannel sourceChannel;
 
         /**
-         * Whether the {@code HD} quality preset is in effect.
+         * Indicates whether the {@link SettingsSyncAction.MediaQualitySetting#HD} quality preset is
+         * in effect for this run.
          */
         final boolean hd;
 
         /**
-         * Target H.264 bitrate in bits per second.
+         * Holds the target H.264 bitrate in bits per second selected from the quality preset.
          */
         final long videoBitrate;
 
         /**
-         * Target AAC bitrate in bits per second.
+         * Holds the target AAC bitrate in bits per second selected from the quality preset.
          */
         final long audioBitrate;
 
         /**
-         * Demuxer AVIO bridge.
+         * Holds the AVIO bridge that feeds the source channel to the demuxer.
          */
         AvioReadBuffer inputBridge;
 
         /**
-         * Muxer AVIO bridge.
+         * Holds the AVIO bridge that drains the muxer to a temporary file.
          */
         AvioWriteBuffer.FileSystem outputBridge;
 
         /**
-         * Open input demuxer.
+         * Holds the open input demuxer context, or {@link MemorySegment#NULL} before it is opened.
          */
         MemorySegment inFmtCtx = MemorySegment.NULL;
 
         /**
-         * Open output muxer.
+         * Holds the open output muxer context, or {@link MemorySegment#NULL} before it is opened.
          */
         MemorySegment outFmtCtx = MemorySegment.NULL;
 
         /**
-         * Open video decoder.
+         * Holds the open video decoder context, or {@link MemorySegment#NULL} before it is opened.
          */
         MemorySegment videoDecCtx = MemorySegment.NULL;
 
         /**
-         * Open audio decoder (or {@code NULL} when the source has no
-         * audio stream).
+         * Holds the open audio decoder context, or {@link MemorySegment#NULL} when the source has no
+         * audio stream.
          */
         MemorySegment audioDecCtx = MemorySegment.NULL;
 
         /**
-         * Open H.264 encoder.
+         * Holds the open H.264 encoder context, or {@link MemorySegment#NULL} before it is opened.
          */
         MemorySegment videoEncCtx = MemorySegment.NULL;
 
         /**
-         * Open AAC encoder (or {@code NULL} when the source has no audio).
+         * Holds the open AAC encoder context, or {@link MemorySegment#NULL} when the source has no
+         * audio stream.
          */
         MemorySegment audioEncCtx = MemorySegment.NULL;
 
         /**
-         * Scale filter graph.
+         * Holds the scale filter graph applied to every decoded video frame.
          */
         MemorySegment filterGraph = MemorySegment.NULL;
 
         /**
-         * Buffer source filter context inside {@link #filterGraph}.
+         * Holds the buffer source filter context inside {@link #filterGraph} that decoded frames are
+         * pushed into.
          */
         MemorySegment filterSrcCtx = MemorySegment.NULL;
 
         /**
-         * Buffer sink filter context inside {@link #filterGraph}.
+         * Holds the buffer sink filter context inside {@link #filterGraph} that scaled frames are
+         * pulled from.
          */
         MemorySegment filterSinkCtx = MemorySegment.NULL;
 
         /**
-         * Audio resampler.
+         * Holds the audio resampler context, or {@link MemorySegment#NULL} when the source has no
+         * audio stream.
          */
         MemorySegment swr = MemorySegment.NULL;
 
         /**
-         * Reusable demuxer packet.
+         * Holds the reusable packet that the demuxer reads each source packet into.
          */
         MemorySegment demuxPacket = MemorySegment.NULL;
 
         /**
-         * Reusable decoder output frame.
+         * Holds the reusable frame that each decoder writes its decoded output into.
          */
         MemorySegment decFrame = MemorySegment.NULL;
 
         /**
-         * Reusable filter graph output frame.
+         * Holds the reusable frame that the filter graph writes its scaled output into.
          */
         MemorySegment filterFrame = MemorySegment.NULL;
 
         /**
-         * Reusable encoder input frame (audio path).
+         * Holds the reusable AAC encoder input frame that resampled samples are copied into.
          */
         MemorySegment audioEncFrame = MemorySegment.NULL;
 
         /**
-         * Reusable encoder output packet.
+         * Holds the reusable packet that each encoder writes its encoded output into.
          */
         MemorySegment encPacket = MemorySegment.NULL;
 
         /**
-         * Index of the picked video stream in the input.
+         * Holds the index of the picked video stream in the input.
          */
         int videoStreamIndex = -1;
 
         /**
-         * Index of the picked audio stream in the input, or {@code -1}
-         * when none.
+         * Holds the index of the picked audio stream in the input, or {@code -1} when the source has
+         * no audio stream.
          */
         int audioStreamIndex = -1;
 
         /**
-         * Output stream index for the muxed video stream.
+         * Holds the output stream index of the muxed video stream.
          */
         int videoOutIndex = -1;
 
         /**
-         * Output stream index for the muxed audio stream, or {@code -1}
-         * when no audio is present.
+         * Holds the output stream index of the muxed audio stream, or {@code -1} when no audio is
+         * present.
          */
         int audioOutIndex = -1;
 
         /**
-         * The first decoded and scaled video frame, retained for the
-         * thumbnail pass.
+         * Holds a reference to the first decoded and scaled video frame, retained for the thumbnail
+         * pass.
+         *
+         * <p>It remains {@link MemorySegment#NULL} until the first frame clears the filter graph;
+         * when the source decodes no frame at all it stays {@link MemorySegment#NULL} and no
+         * thumbnail is produced.
          */
         MemorySegment thumbnailFrame = MemorySegment.NULL;
 
         /**
-         * Encoded width in pixels.
+         * Holds the encoded video width in pixels after the resolution policy is applied.
          */
         int encodedWidth;
 
         /**
-         * Encoded height in pixels.
+         * Holds the encoded video height in pixels after the resolution policy is applied.
          */
         int encodedHeight;
 
         /**
-         * Encoder PTS for the video stream.
+         * Holds the monotonically increasing presentation timestamp assigned to each encoded video
+         * frame.
          */
         long videoPts;
 
         /**
-         * Encoder PTS for the audio stream.
+         * Holds the running presentation timestamp, in samples, assigned to each encoded audio
+         * frame.
          */
         long audioPts;
 
         /**
-         * Source video frame rate numerator (defaulted to 30 when the
-         * source is malformed).
+         * Holds the source video frame rate numerator.
+         *
+         * @implNote This implementation defaults to {@code 30} so a malformed or absent source
+         * frame rate still yields a usable encoder time base.
          */
         int frameRateNum = 30;
 
         /**
-         * Source video frame rate denominator.
+         * Holds the source video frame rate denominator.
          */
         int frameRateDen = 1;
 
         /**
-         * AAC frame size; resolved from the encoder after open.
+         * Holds the AAC frame size in samples.
+         *
+         * <p>It is seeded with {@link #DEFAULT_AAC_FRAME_SAMPLES} and replaced with the encoder's
+         * reported frame size once the AAC encoder is opened and reports a positive value.
          */
         int aacFrameSize = DEFAULT_AAC_FRAME_SAMPLES;
 
         /**
-         * Constructs the run state.
+         * Constructs the run state from the caller-supplied arena, source, and resolved bitrates.
          *
-         * @param arena         the shared arena
-         * @param sourceChannel the source channel
-         * @param hd            whether the HD preset is in effect
-         * @param videoBitrate  the target H.264 bitrate
-         * @param audioBitrate  the target AAC bitrate
+         * @param arena         the shared arena that backs every allocation made during the run
+         * @param sourceChannel the source video channel
+         * @param hd            whether the {@link SettingsSyncAction.MediaQualitySetting#HD} preset
+         *                      is in effect
+         * @param videoBitrate  the target H.264 bitrate in bits per second
+         * @param audioBitrate  the target AAC bitrate in bits per second
          */
         Run(Arena arena, SeekableByteChannel sourceChannel, boolean hd,
             long videoBitrate, long audioBitrate) {
@@ -359,13 +401,19 @@ public final class VideoPipeline {
         }
 
         /**
-         * Runs the full transcode, applies the codec-derived metadata to
-         * {@code provider}, and returns the encoded payload stream.
+         * Runs the full transcode, applies the codec-derived metadata to {@code provider}, and
+         * returns the encoded payload stream.
          *
-         * @param provider the upload target that receives the metadata
-         *                 updates
+         * <p>The pipeline opens the input, output, encoders, filter graph, and resampler, writes the
+         * MP4 header, runs the transcode loop, flushes the encoders, and writes the trailer. On a
+         * successful run the output length and a {@link VideoMessage}'s dimensions, duration, and
+         * thumbnail are applied to {@code provider}; on any failure the partially written output
+         * file is deleted. Every libav resource is released through {@link #cleanup()} on both the
+         * success and failure paths.
+         *
+         * @param provider the upload target that receives the metadata updates
          * @return the encoded MP4 payload
-         * @throws WhatsAppMediaException.Processing if any stage fails
+         * @throws WhatsAppMediaException.Processing if any stage of the pipeline fails
          */
         MediaPayload execute(MediaProvider provider) throws WhatsAppMediaException.Processing {
             var success = false;
@@ -422,8 +470,17 @@ public final class VideoPipeline {
         }
 
         /**
-         * Opens the input demuxer and picks the first video and audio
-         * streams.
+         * Opens the input demuxer, picks the first video and audio streams, and opens their
+         * decoders.
+         *
+         * <p>The demuxer reads through the {@link AvioReadBuffer} bridge rather than a file path.
+         * The first video stream is mandatory; its absence is a processing failure. The first audio
+         * stream is optional and, when present, its decoder is opened too. The source average frame
+         * rate is captured for the encoder time base when it is well-formed, otherwise the defaults
+         * in {@link #frameRateNum} and {@link #frameRateDen} are kept.
+         *
+         * @throws WhatsAppMediaException.Processing if the demuxer cannot be opened, stream info
+         *         cannot be found, the source has no video stream, or a decoder cannot be opened
          */
         void openInput() throws WhatsAppMediaException.Processing {
             inputBridge = new AvioReadBuffer(arena, sourceChannel);
@@ -459,10 +516,15 @@ public final class VideoPipeline {
         }
 
         /**
-         * Opens a libavcodec decoder for the given stream.
+         * Opens a libavcodec decoder matching the codec parameters of the given input stream.
          *
-         * @param stream the input stream pointer
+         * <p>The decoder is looked up by the stream's codec id, allocated, populated from the
+         * stream's codec parameters, and opened.
+         *
+         * @param stream the input stream pointer whose codec parameters drive decoder selection
          * @return the open decoder context
+         * @throws WhatsAppMediaException.Processing if no decoder is found or the decoder cannot be
+         *         allocated, configured, or opened
          */
         MemorySegment openDecoder(MemorySegment stream) throws WhatsAppMediaException.Processing {
             var params = AVStream.codecpar(stream);
@@ -479,7 +541,15 @@ public final class VideoPipeline {
         }
 
         /**
-         * Allocates the MP4 output context with {@code +faststart} set.
+         * Allocates the MP4 output muxer wired to the file-system AVIO bridge with {@code +faststart}
+         * set.
+         *
+         * <p>The muxer writes through the {@link AvioWriteBuffer.FileSystem} bridge rather than a
+         * file path. The {@code movflags=+faststart} option is set on the muxer's private data when
+         * that private data is present, so the moov atom is relocated to the head of the file.
+         *
+         * @throws WhatsAppMediaException.Processing if the output bridge cannot be opened or the
+         *         output context cannot be allocated or configured
          */
         void openOutput() throws WhatsAppMediaException.Processing {
             try {
@@ -505,7 +575,24 @@ public final class VideoPipeline {
         }
 
         /**
-         * Configures and opens the H.264 encoder via libopenh264.
+         * Configures and opens the H.264 encoder via libopenh264 and registers its output stream.
+         *
+         * <p>The encoded dimensions are derived from the source dimensions according to the active
+         * quality preset and stored in {@link #encodedWidth} and {@link #encodedHeight}. The encoder
+         * is configured for {@code yuv420p}, the selected bitrate, the source-derived frame rate and
+         * time base, baseline profile, and level 3.1, then opened and attached as a new output
+         * stream whose index is recorded in {@link #videoOutIndex}.
+         *
+         * @implNote This implementation applies a resolution policy: the
+         * {@link SettingsSyncAction.MediaQualitySetting#HD} preset keeps the source dimensions
+         * rounded to even values, while the {@link SettingsSyncAction.MediaQualitySetting#STANDARD}
+         * preset caps the height at {@link #MAX_HEIGHT_STANDARD} and rescales the width to preserve
+         * the aspect ratio. Both dimensions are forced even via {@link #roundEven(int)} because
+         * {@code yuv420p} chroma subsampling requires even width and height. The global-header codec
+         * flag is set only when the muxer reports {@link #AVFMT_GLOBALHEADER}.
+         *
+         * @throws WhatsAppMediaException.Processing if the encoder is not found or cannot be
+         *         allocated, configured, opened, or attached as an output stream
          */
         void openVideoEncoder() throws WhatsAppMediaException.Processing {
             var srcW = AVCodecContext.width(videoDecCtx);
@@ -561,7 +648,16 @@ public final class VideoPipeline {
         }
 
         /**
-         * Configures and opens the native FFmpeg AAC encoder.
+         * Configures and opens the native FFmpeg AAC encoder and registers its output stream.
+         *
+         * <p>The encoder is configured for {@link #AUDIO_SAMPLE_RATE} Hz, planar float samples, the
+         * selected bitrate, and the default {@link #AUDIO_CHANNELS}-channel layout, then opened. Its
+         * reported frame size, when positive, replaces {@link #aacFrameSize}. The encoder is
+         * attached as a new output stream whose index is recorded in {@link #audioOutIndex}. The
+         * global-header codec flag is set only when the muxer reports {@link #AVFMT_GLOBALHEADER}.
+         *
+         * @throws WhatsAppMediaException.Processing if the encoder is not found or cannot be
+         *         allocated, configured, opened, or attached as an output stream
          */
         void openAudioEncoder() throws WhatsAppMediaException.Processing {
             var encoder = FFmpegError.requireNonNull("avcodec_find_encoder(AAC)",
@@ -597,8 +693,19 @@ public final class VideoPipeline {
         }
 
         /**
-         * Builds the scale filter graph driving every decoded video
-         * frame to the encoded dimensions and {@code yuv420p}.
+         * Builds the scale filter graph that drives every decoded video frame to the encoded
+         * dimensions and {@code yuv420p}.
+         *
+         * <p>The graph wires a buffer source configured from the decoder's dimensions, pixel format,
+         * and time base through a {@code scale} plus {@code format=yuv420p} chain to a buffer sink.
+         * The source and sink filter contexts are recorded in {@link #filterSrcCtx} and
+         * {@link #filterSinkCtx}.
+         *
+         * @implNote This implementation uses the {@code bicubic} scaler flag, which trades speed for
+         * higher resampling quality on the downscale path.
+         *
+         * @throws WhatsAppMediaException.Processing if the graph cannot be allocated, the buffer
+         *         filters cannot be created, or the chain cannot be parsed or configured
          */
         void buildFilterGraph() throws WhatsAppMediaException.Processing {
             filterGraph = FFmpegError.requireNonNull("avfilter_graph_alloc",
@@ -658,7 +765,14 @@ public final class VideoPipeline {
         }
 
         /**
-         * Sets up the audio resampler.
+         * Sets up the audio resampler that converts the decoded audio to the encoder's format.
+         *
+         * <p>The resampler is configured to convert from the audio decoder's channel layout, sample
+         * format, and sample rate to the default {@link #AUDIO_CHANNELS}-channel layout, planar
+         * float samples, and {@link #AUDIO_SAMPLE_RATE} Hz, then initialized.
+         *
+         * @throws WhatsAppMediaException.Processing if the resampler cannot be allocated, configured,
+         *         or initialized
          */
         void openResampler() throws WhatsAppMediaException.Processing {
             var swrPp = arena.allocate(ValueLayout.ADDRESS);
@@ -677,7 +791,16 @@ public final class VideoPipeline {
         }
 
         /**
-         * Writes the MP4 file header.
+         * Allocates the reusable packets and frames and writes the MP4 file header.
+         *
+         * <p>The demuxer packet, decoder frame, filter frame, and encoder packet are allocated for
+         * reuse across the transcode loop. When the source has audio the AAC encoder input frame is
+         * allocated and configured for planar float samples, the default channel layout,
+         * {@link #AUDIO_SAMPLE_RATE} Hz, and {@link #aacFrameSize} samples, with its sample buffer
+         * reserved. The MP4 header is then written.
+         *
+         * @throws WhatsAppMediaException.Processing if any packet or frame cannot be allocated, the
+         *         audio frame buffer cannot be reserved, or the header cannot be written
          */
         void writeHeader() throws WhatsAppMediaException.Processing {
             demuxPacket = FFmpegError.requireNonNull("av_packet_alloc(demux)",
@@ -705,7 +828,16 @@ public final class VideoPipeline {
         }
 
         /**
-         * Main demux + decode + encode + mux loop.
+         * Runs the main demux, decode, encode, and mux loop until the source is exhausted.
+         *
+         * <p>Each iteration reads one source packet and routes it to the matching decoder; packets
+         * belonging to neither the picked video nor the picked audio stream are dropped. When the
+         * demuxer reaches end of input both decoders are flushed with a {@code NULL} packet and the
+         * loop terminates. After each read both decoders are drained so produced frames flow through
+         * the filter graph, resampler, and encoders to the muxer.
+         *
+         * @throws WhatsAppMediaException.Processing if a packet cannot be sent to a decoder for a
+         *         reason other than back-pressure, or any downstream drain fails
          */
         void transcodeLoop() throws WhatsAppMediaException.Processing {
             var eof = false;
@@ -748,8 +880,18 @@ public final class VideoPipeline {
         }
 
         /**
-         * Drains every frame the video decoder has produced and routes
-         * each through the filter graph and encoder.
+         * Drains every frame the video decoder has produced and routes each through the filter graph
+         * and encoder.
+         *
+         * <p>Each decoded frame is pushed into the filter graph and every scaled frame the sink
+         * yields is assigned a monotonically increasing presentation timestamp and sent to the H.264
+         * encoder. The first scaled frame is additionally retained in {@link #thumbnailFrame} for the
+         * later thumbnail pass. The method returns when the decoder reports back-pressure or end of
+         * stream.
+         *
+         * @throws WhatsAppMediaException.Processing if a frame cannot be received from the decoder,
+         *         added to the filter graph, or pulled from the sink for a reason other than
+         *         back-pressure or end of stream
          */
         void drainVideoDecoder() throws WhatsAppMediaException.Processing {
             while (true) {
@@ -787,8 +929,15 @@ public final class VideoPipeline {
         }
 
         /**
-         * Drains every frame the audio decoder has produced and routes
-         * each through the resampler and AAC encoder.
+         * Drains every frame the audio decoder has produced and routes each through the resampler
+         * and AAC encoder.
+         *
+         * <p>Each decoded audio frame is resampled and encoded. The method returns when the decoder
+         * reports back-pressure or end of stream.
+         *
+         * @throws WhatsAppMediaException.Processing if a frame cannot be received from the decoder
+         *         for a reason other than back-pressure or end of stream, or the resample or encode
+         *         fails
          */
         void drainAudioDecoder() throws WhatsAppMediaException.Processing {
             while (true) {
@@ -806,10 +955,15 @@ public final class VideoPipeline {
         }
 
         /**
-         * Resamples one decoded audio frame and dispatches every full
-         * AAC frame to the encoder.
+         * Resamples one decoded audio frame and dispatches the produced samples to the AAC encoder.
          *
-         * @param inFrame the decoded source frame
+         * <p>A per-channel planar output buffer sized to {@link #aacFrameSize} samples is allocated
+         * and filled by the resampler; when the conversion yields any samples they are written to the
+         * encoder input frame and dispatched.
+         *
+         * @param inFrame the decoded source frame to resample
+         * @throws WhatsAppMediaException.Processing if the resample fails or the produced samples
+         *         cannot be encoded
          */
         void resampleAndEncodeAudio(MemorySegment inFrame) throws WhatsAppMediaException.Processing {
             var outBufSamples = aacFrameSize;
@@ -828,11 +982,18 @@ public final class VideoPipeline {
         }
 
         /**
-         * Copies resampled samples into the AAC encoder frame and dispatches it.
+         * Copies resampled samples into the AAC encoder frame, advances the audio timestamp, and
+         * dispatches the frame to the encoder.
          *
-         * @param outDataPtrs per-channel data pointer table
-         * @param samples     number of produced samples per channel
-         * @param channels    channel count
+         * <p>The encoder input frame is resized to the produced sample count, stamped with the
+         * running {@link #audioPts}, made writable, and filled by copying each channel's planar data.
+         * The audio timestamp is then advanced by the sample count and the frame is encoded.
+         *
+         * @param outDataPtrs the per-channel data pointer table holding the resampled samples
+         * @param samples     the number of produced samples per channel
+         * @param channels    the channel count
+         * @throws WhatsAppMediaException.Processing if the frame cannot be made writable or the
+         *         encode fails
          */
         void writeAudioFrame(MemorySegment outDataPtrs, int samples, int channels)
                 throws WhatsAppMediaException.Processing {
@@ -853,12 +1014,19 @@ public final class VideoPipeline {
         }
 
         /**
-         * Sends one frame to the encoder and drains every produced
-         * packet to the muxer.
+         * Sends one frame to the encoder and drains every produced packet to the muxer.
          *
-         * @param encCtx     the encoder
-         * @param frame      the frame, or {@code NULL} for end-of-stream
-         * @param outIndex   the muxer stream index to tag packets with
+         * <p>Each produced packet is tagged with the output stream index, has its timestamps
+         * rescaled to the muxer stream's time base, and is interleaved-written to the muxer. The
+         * method returns when the encoder reports back-pressure or end of stream. Passing
+         * {@link MemorySegment#NULL} as the frame flushes the encoder.
+         *
+         * @param encCtx   the encoder context
+         * @param frame    the frame to encode, or {@link MemorySegment#NULL} to flush the encoder
+         * @param outIndex the muxer stream index to tag produced packets with
+         * @throws WhatsAppMediaException.Processing if the frame cannot be sent, a packet cannot be
+         *         received for a reason other than back-pressure or end of stream, or a packet cannot
+         *         be written
          */
         void pushFrameAndDrain(MemorySegment encCtx, MemorySegment frame, int outIndex)
                 throws WhatsAppMediaException.Processing {
@@ -888,11 +1056,12 @@ public final class VideoPipeline {
         }
 
         /**
-         * Rescales the packet timestamps from the encoder's time base to
-         * the muxer stream's time base.
+         * Rescales the current encoder packet's timestamps from the encoder time base to the muxer
+         * stream's time base.
          *
-         * @param encCtx   the encoder context
-         * @param outIndex the muxer stream index
+         * @param encCtx   the encoder context whose time base the packet timestamps start in
+         * @param outIndex the muxer stream index whose time base the packet timestamps are rescaled
+         *                 to
          */
         void rescalePacketTimestamps(MemorySegment encCtx, int outIndex) {
             var stream = AVFormatContext.streams(outFmtCtx)
@@ -903,7 +1072,13 @@ public final class VideoPipeline {
         }
 
         /**
-         * Flushes both encoders by sending a {@code NULL} frame.
+         * Flushes both encoders by sending a {@link MemorySegment#NULL} frame to each.
+         *
+         * <p>The video encoder is always flushed; the audio encoder is flushed only when the source
+         * has an audio stream. Flushing drains any buffered packets to the muxer.
+         *
+         * @throws WhatsAppMediaException.Processing if either encoder cannot be flushed or its
+         *         trailing packets cannot be written
          */
         void flushEncoders() throws WhatsAppMediaException.Processing {
             pushFrameAndDrain(videoEncCtx, MemorySegment.NULL, videoOutIndex);
@@ -913,10 +1088,18 @@ public final class VideoPipeline {
         }
 
         /**
-         * Encodes the saved first video frame as an MJPEG thumbnail.
+         * Encodes the retained first video frame as an MJPEG thumbnail.
          *
-         * @return the encoded JPEG bytes, or {@code null} when no frame
-         *         was ever decoded
+         * <p>The thumbnail is downscaled so its longest edge is at most {@link #VIDEO_THUMB_MAX_EDGE}
+         * pixels while preserving the aspect ratio; a frame already within that bound keeps its
+         * dimensions. Both dimensions are forced even via {@link #roundEven(int)}. The scaled frame
+         * is encoded with the {@code mjpeg} encoder and the bytes are passed through
+         * {@link JpegCleaner#clean(byte[])}. When no frame was ever decoded the method returns
+         * {@code null}.
+         *
+         * @return the cleaned JPEG bytes, or {@code null} when no frame was ever decoded
+         * @throws WhatsAppMediaException.Processing if the thumbnail cannot be scaled, encoded, or
+         *         cleaned
          */
         byte[] encodeThumbnail() throws WhatsAppMediaException.Processing {
             if (thumbnailFrame == MemorySegment.NULL) {
@@ -945,12 +1128,24 @@ public final class VideoPipeline {
         }
 
         /**
-         * Runs a one-shot scale filter graph for the thumbnail.
+         * Runs a one-shot scale filter graph that resizes the thumbnail source frame.
          *
-         * @param srcFrame the source frame
-         * @param dstW     target width
-         * @param dstH     target height
-         * @return the scaled frame (caller frees)
+         * <p>A throwaway filter graph wires a buffer source configured from the source frame through
+         * a {@code scale} plus {@code format=yuvj420p} chain to a buffer sink, pushes the source
+         * frame, and pulls one scaled frame. The graph is freed before returning; the returned frame
+         * is owned by the caller, which must free it. On a sink error the partially allocated output
+         * frame is freed before the failure is reported.
+         *
+         * @implNote This implementation targets {@code yuvj420p} rather than {@code yuv420p} because
+         * the JPEG encoder expects the full-range JPEG color space, and uses the {@code bicubic}
+         * scaler flag for higher resampling quality.
+         *
+         * @param srcFrame the source frame to scale
+         * @param dstW     the target width in pixels
+         * @param dstH     the target height in pixels
+         * @return the scaled frame, owned by the caller
+         * @throws WhatsAppMediaException.Processing if the graph cannot be built or configured or no
+         *         scaled frame can be pulled from the sink
          */
         MemorySegment scaleThumbnail(MemorySegment srcFrame, int dstW, int dstH)
                 throws WhatsAppMediaException.Processing {
@@ -1028,13 +1223,24 @@ public final class VideoPipeline {
         }
 
         /**
-         * Encodes a single MJPEG-ready frame and returns the encoded
-         * packet bytes.
+         * Encodes a single {@code yuvj420p} frame with the {@code mjpeg} encoder and returns the
+         * encoded packet bytes.
          *
-         * @param frame  the input frame
-         * @param w      frame width
-         * @param h      frame height
+         * <p>A throwaway MJPEG encoder is configured for the given dimensions, {@code yuvj420p}, and
+         * a fixed-quality qscale, then opened. The frame is sent followed by an end-of-stream
+         * {@code NULL} frame, one packet is received, and its bytes are copied out. The encoder and
+         * packet are freed before returning.
+         *
+         * @implNote This implementation derives the global quality from {@link #THUMB_QSCALE}
+         * multiplied by {@code FF_QP2LAMBDA} under the {@code AV_CODEC_FLAG_QSCALE} flag, the
+         * lambda-domain encoding the FFmpeg MJPEG encoder expects.
+         *
+         * @param frame the input frame to encode
+         * @param w     the frame width in pixels
+         * @param h     the frame height in pixels
          * @return the encoded JPEG bytes
+         * @throws WhatsAppMediaException.Processing if the encoder cannot be found, allocated,
+         *         opened, fed, or drained
          */
         byte[] encodeMjpeg(MemorySegment frame, int w, int h)
                 throws WhatsAppMediaException.Processing {
@@ -1091,8 +1297,14 @@ public final class VideoPipeline {
         /**
          * Computes the encoded duration in whole seconds.
          *
-         * @return the duration, with a one-second floor when the source
-         *         is too short to round to a whole second
+         * <p>The demuxer's reported duration is used when positive; otherwise the duration is derived
+         * from the encoded video presentation timestamp and frame rate. The result is floored at one
+         * second so a source too short to round to a whole second still reports a usable duration.
+         *
+         * @implNote This implementation reads the demuxer duration in {@code AV_TIME_BASE} units of
+         * {@code 1_000_000} per second, the FFmpeg convention for {@code AVFormatContext.duration}.
+         *
+         * @return the duration in whole seconds, with a one-second floor
          */
         int computeDurationSeconds() {
             var durTb = AVFormatContext.duration(inFmtCtx);
@@ -1106,7 +1318,12 @@ public final class VideoPipeline {
         }
 
         /**
-         * Releases every libav* resource owned by the run.
+         * Releases every libav resource owned by the run, tolerating partially initialized state.
+         *
+         * <p>Frames, packets, the filter graph, the resampler, the encoders, the decoders, the
+         * muxer and demuxer contexts, and the AVIO bridges are each freed only when they were
+         * allocated, so this method is safe to call on any exit path including a failure during
+         * setup. It is invoked from the {@code finally} block of {@link #execute(MediaProvider)}.
          */
         void cleanup() {
             freeFrame(thumbnailFrame);
@@ -1141,12 +1358,15 @@ public final class VideoPipeline {
     }
 
     /**
-     * Returns the index of the first stream of the given media type, or
-     * {@code -1} when none.
+     * Returns the index of the first stream of the given media type in the demuxer, or {@code -1}
+     * when no such stream is present.
      *
-     * @param formatCtx the open demuxer
-     * @param mediaType the {@code AVMEDIA_TYPE_*} value
-     * @return the stream index or {@code -1}
+     * <p>Streams are scanned in their declared order and the first whose codec type matches is
+     * returned, so this method realizes the pipeline's first-stream selection policy.
+     *
+     * @param formatCtx the open demuxer to scan
+     * @param mediaType the {@code AVMEDIA_TYPE_*} value to match
+     * @return the index of the first matching stream, or {@code -1} when none matches
      */
     private static int pickStream(MemorySegment formatCtx, int mediaType) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -1163,11 +1383,12 @@ public final class VideoPipeline {
     }
 
     /**
-     * Returns the i-th stream pointer from a demuxer.
+     * Returns the stream pointer at the given index in the demuxer, reinterpreted to the
+     * {@code AVStream} layout.
      *
-     * @param formatCtx the open demuxer
-     * @param index     the zero-based index
-     * @return the stream pointer
+     * @param formatCtx the open demuxer to read from
+     * @param index     the zero-based stream index
+     * @return the stream pointer at the index
      */
     private static MemorySegment streamPointer(MemorySegment formatCtx, int index) {
         return AVFormatContext.streams(formatCtx)
@@ -1176,9 +1397,9 @@ public final class VideoPipeline {
     }
 
     /**
-     * Frees an {@link AVFrame}, tolerating {@code NULL}.
+     * Frees an {@link AVFrame} pointer, tolerating {@code null} and {@link MemorySegment#NULL}.
      *
-     * @param frame the frame
+     * @param frame the frame pointer to free, ignored when {@code null} or {@link MemorySegment#NULL}
      */
     private static void freeFrame(MemorySegment frame) {
         if (frame == null || frame == MemorySegment.NULL) {
@@ -1192,11 +1413,15 @@ public final class VideoPipeline {
     }
 
     /**
-     * Calls a libav free function on a pointer slot if the pointer is
-     * non-{@code NULL}.
+     * Calls a libav free function on a pointer slot when the pointer is non-{@code null} and
+     * non-{@link MemorySegment#NULL}.
      *
-     * @param ptr   the pointer
-     * @param freer the libav free function
+     * <p>The pointer is written into a freshly allocated pointer-to-pointer slot and the supplied
+     * {@link FreePointer} is invoked on that slot, matching the libav convention of passing the
+     * address of the pointer so the callee can clear it.
+     *
+     * @param ptr   the pointer to free, ignored when {@code null} or {@link MemorySegment#NULL}
+     * @param freer the libav free function to invoke on the pointer slot
      */
     private static void freePointer(MemorySegment ptr, FreePointer freer) {
         if (ptr == null || ptr == MemorySegment.NULL) {
@@ -1210,10 +1435,14 @@ public final class VideoPipeline {
     }
 
     /**
-     * Rounds a value down to the nearest even integer, floored at 2.
+     * Rounds a value down to the nearest even integer and floors the result at {@code 2}.
      *
-     * @param value the value
-     * @return the rounded value
+     * @implNote This implementation clears the low bit to round down to even and clamps the result
+     * to at least {@code 2} because the {@code yuv420p} and {@code yuvj420p} pixel formats require
+     * even, non-zero width and height.
+     *
+     * @param value the value to round
+     * @return the value rounded down to even, never below {@code 2}
      */
     private static int roundEven(int value) {
         var rounded = value - (value & 1);
@@ -1221,14 +1450,18 @@ public final class VideoPipeline {
     }
 
     /**
-     * Functional handle to one of libav's pointer-slot free functions.
+     * Abstracts one of libav's pointer-slot free functions so {@link #freePointer(MemorySegment,
+     * FreePointer)} can release any libav resource through a single helper.
      */
     @FunctionalInterface
     private interface FreePointer {
         /**
-         * Calls the libav free function.
+         * Calls the underlying libav free function on the given pointer-to-pointer slot.
          *
-         * @param pp pointer-to-pointer slot
+         * @implSpec Implementations must invoke a libav free function that accepts the address of a
+         * pointer and may clear the pointed-to value.
+         *
+         * @param pp the pointer-to-pointer slot holding the resource to free
          */
         void free(MemorySegment pp);
     }

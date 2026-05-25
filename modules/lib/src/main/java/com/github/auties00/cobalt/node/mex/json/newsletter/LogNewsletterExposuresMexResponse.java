@@ -16,16 +16,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the log-newsletter-exposures mutation built
- * by {@link LogNewsletterExposuresMexRequest}.
+ * Parses the MEX response of the log-newsletter-exposures mutation built by
+ * {@link LogNewsletterExposuresMexRequest}.
  *
- * @apiNote
- * Acts as a presence marker: WA Web's
- * {@code WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures}
- * discards the returned envelope without reading any field, so Cobalt
- * exposes no getters and surfaces a marker instance only to signal that
- * the {@code data.xwa2_newsletter_log_exposures} root was present in the
- * relay's reply.
+ * <p>Acts as a presence marker: the relay's reply carries no field of interest, so this type
+ * exposes no getters and a marker instance signals only that the
+ * {@code data.xwa2_newsletter_log_exposures} root was present in the reply.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexLogNewsletterExposuresJob")
 public final class LogNewsletterExposuresMexResponse implements MexOperation.Response.Json {
@@ -33,10 +29,8 @@ public final class LogNewsletterExposuresMexResponse implements MexOperation.Res
     /**
      * Constructs the marker response.
      *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}. The marker carries no state because the relay's
-     * reply has no fields of interest.
+     * <p>Invoked only by the static parser; external callers obtain instances via {@link #of(Node)}.
+     * The marker carries no state because the relay's reply has no fields of interest.
      */
     private LogNewsletterExposuresMexResponse() {
     }
@@ -44,15 +38,12 @@ public final class LogNewsletterExposuresMexResponse implements MexOperation.Res
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_log_exposures} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_log_exposures} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the marker response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the marker response, or empty when the node does not carry a well-formed result payload
      */
     public static Optional<LogNewsletterExposuresMexResponse> of(Node node) {
         return node.getChild("result")
@@ -61,21 +52,16 @@ public final class LogNewsletterExposuresMexResponse implements MexOperation.Res
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload; callers should not
-     * hold raw JSON bytes.
+     * <p>Invoked only by the public {@link #of(Node)} overload.
      *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception, mirroring the defensive null-checks in WA Web's caller.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the marker response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_log_exposures} root
+     * @return the marker response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_log_exposures} root
      */
     private static Optional<LogNewsletterExposuresMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

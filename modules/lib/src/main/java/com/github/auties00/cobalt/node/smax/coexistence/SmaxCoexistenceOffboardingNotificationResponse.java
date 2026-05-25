@@ -11,19 +11,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of
- * {@code <notification type="hosted"><offboarding/></notification>}.
+ * Holds the inbound projection of {@code <notification type="hosted"><offboarding/></notification>}.
  *
- * @apiNote
- * Surfaced by WA Web's {@code WAWebHandleHostedNotification} pipeline
- * when the relay tears down a third-party-coexistence link (the
- * {@code AI from Meta}, {@code automation} provider, or
- * {@code business_platform} surface stops handling messages on behalf
- * of the user); WA Web pivots on the {@code product_surface} attribute
- * to fire
- * {@code WAWebCTWADetectedOutcomeOnboardingStatusNotification.handleCTWADetectedOutcomeOnboardingStatusNotification(false)}.
- * Cobalt embedders wait on this projection to clear local provider
- * state and surface a user-visible "coexistence ended" toast.
+ * <p>This response is surfaced when the relay tears down a third-party-coexistence link, that is,
+ * when the {@code ai_from_meta}, {@code automation}, or {@code business_platform} surface stops
+ * handling messages on behalf of the user. It carries the notification id used to acknowledge
+ * delivery, the {@code from} JID (always the WA server), the {@code product_surface} the teardown
+ * applies to, and the {@code <provider_info/>} block identifying the integration that ended.
+ * Consumers wait on this projection to clear local provider state and surface a user-visible
+ * "coexistence ended" notice.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceOffboardingNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceServerNotificationMixin")
@@ -31,62 +27,50 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceEnums")
 public final class SmaxCoexistenceOffboardingNotificationResponse implements SmaxOperation.Response {
     /**
-     * The notification id used for delivery acknowledgement.
+     * Holds the notification id used for delivery acknowledgement.
      *
-     * @apiNote
-     * Routed back to the relay in the {@code <ack/>} the receiver
-     * sends after handling the notification.
+     * <p>Routed back to the relay in the {@code <ack/>} the receiver sends after handling the
+     * notification.
      */
     private final String notificationId;
 
     /**
-     * The notification {@code from} JID, always {@code s.whatsapp.net}.
+     * Holds the notification {@code from} JID, always the WA server JID.
      *
-     * @apiNote
-     * Validated against the WA server domain in {@link #of(Node)};
-     * present so the dispatch layer can route the projection through
-     * the same {@code from}-keyed handler registry as other server
+     * <p>Validated against the WA server domain in {@link #of(Node)} so the dispatch layer can
+     * route the projection through the same {@code from}-keyed handler registry as other server
      * notifications.
      */
     private final Jid notificationFrom;
 
     /**
-     * The {@code product_surface} attribute on {@code <offboarding/>}.
+     * Holds the {@code product_surface} attribute on {@code <offboarding/>}.
      *
-     * @apiNote
-     * One of {@code "ai_from_meta"}, {@code "automation"},
-     * {@code "business_platform"} per
-     * {@code WASmaxInCoexistenceEnums.ENUM_AIFROMMETA_AUTOMATION_BUSINESSPLATFORM};
-     * WA Web only branches on the {@code "automation"} case to call
-     * the CTWA outcome handler.
+     * <p>One of {@code "ai_from_meta"}, {@code "automation"}, or {@code "business_platform"}. WA Web
+     * branches only on the {@code "automation"} case to call its CTWA outcome handler; consumers may
+     * branch on any value to choose which surface-specific cleanup to run.
      */
     private final String offboardingProductSurface;
 
     /**
-     * The {@code <provider_info/>} sub-child.
+     * Holds the {@code <provider_info/>} sub-child.
      *
-     * @apiNote
-     * Carries the provider's display name, logo URL, and stable id so
-     * embedders can disambiguate which third-party integration ended.
+     * <p>Carries the provider's optional display name, logo URL, and stable id so consumers can
+     * disambiguate which third-party integration ended; see
+     * {@link SmaxCoexistenceOffboardingNotificationProviderInfo} for the per-field semantics.
      */
     private final SmaxCoexistenceOffboardingNotificationProviderInfo offboardingProviderInfo;
 
     /**
      * Constructs a new offboarding-notification projection.
      *
-     * @apiNote
-     * Called by {@link #of(Node)} after the inbound stanza passes the
-     * type, surface, and provider-info validation; embedders rarely
-     * instantiate this class directly outside tests.
+     * <p>Invoked by {@link #of(Node)} after the inbound stanza passes the type, surface, and
+     * provider-info validation. Every argument is required.
      *
-     * @param notificationId            the notification id; never
-     *                                  {@code null}
-     * @param notificationFrom          the from JID; never
-     *                                  {@code null}
-     * @param offboardingProductSurface the product-surface enum
-     *                                  literal; never {@code null}
-     * @param offboardingProviderInfo   the provider-info projection;
-     *                                  never {@code null}
+     * @param notificationId            the notification id; never {@code null}
+     * @param notificationFrom          the from JID; never {@code null}
+     * @param offboardingProductSurface the product-surface enum literal; never {@code null}
+     * @param offboardingProviderInfo   the provider-info projection; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxCoexistenceOffboardingNotificationResponse(String notificationId,
@@ -102,8 +86,7 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
     /**
      * Returns the notification id.
      *
-     * @apiNote
-     * Used to build the corresponding {@code <ack/>} stanza.
+     * <p>Used to build the corresponding {@code <ack/>} stanza.
      *
      * @return the id; never {@code null}
      */
@@ -114,9 +97,7 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
     /**
      * Returns the notification {@code from} JID.
      *
-     * @apiNote
-     * Always the WA server JID; exposed so dispatch can key handlers
-     * by sender.
+     * <p>Always the WA server JID; exposed so dispatch can key handlers by sender.
      *
      * @return the JID; never {@code null}
      */
@@ -127,10 +108,8 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
     /**
      * Returns the product-surface enum literal.
      *
-     * @apiNote
-     * One of {@code "ai_from_meta"}, {@code "automation"},
-     * {@code "business_platform"}; embedders branch on the value to
-     * decide which surface-specific cleanup to run.
+     * <p>One of {@code "ai_from_meta"}, {@code "automation"}, or {@code "business_platform"};
+     * consumers branch on the value to decide which surface-specific cleanup to run.
      *
      * @return the literal; never {@code null}
      */
@@ -141,10 +120,8 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
     /**
      * Returns the provider-info projection.
      *
-     * @apiNote
-     * Carries the optional logo URL, name bytes, and provider id; see
-     * {@link SmaxCoexistenceOffboardingNotificationProviderInfo} for
-     * the per-field semantics.
+     * <p>Carries the optional logo URL, name bytes, and provider id; see
+     * {@link SmaxCoexistenceOffboardingNotificationProviderInfo} for the per-field semantics.
      *
      * @return the projection; never {@code null}
      */
@@ -153,22 +130,21 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
     }
 
     /**
-     * Tries to parse a {@link SmaxCoexistenceOffboardingNotificationResponse}
-     * projection from the given stanza.
+     * Parses a {@link SmaxCoexistenceOffboardingNotificationResponse} projection from the given stanza.
      *
-     * @apiNote
-     * Mirrors
-     * {@code WASmaxInCoexistenceOffboardingNotificationRequest.parseOffboardingNotificationRequest}
-     * composed with the product-surface and provider-info mixins;
-     * empty when any attribute fails the documented validation.
+     * <p>Returns {@link Optional#empty()} unless {@code node} is a {@code <notification>} with an
+     * {@code <offboarding/>} child, a {@code from} attribute that resolves to the WA server JID via
+     * {@link Jid#isServerJid(JidServer)} against {@link JidServer#user()}, a {@code type} attribute
+     * equal to {@code "hosted"}, an {@code <offboarding/>} {@code product_surface} that is one of
+     * {@code "ai_from_meta"}, {@code "automation"}, or {@code "business_platform"}, a parseable
+     * {@code <provider_info/>} block, and a non-null {@code id} attribute. When all checks pass, a
+     * fully populated projection is returned.
      *
      * @implNote
-     * This implementation only lifts the notification {@code id} from
-     * the server-notification mixin; the server timestamp {@code t}
-     * and the optional {@code offline} batch index (0 to 1024) are
-     * dropped because Cobalt's notification dispatch keys solely on
-     * the id. WA Web's {@code parseServerNotificationMixin} returns
-     * all three fields.
+     * This implementation only lifts the notification {@code id} from the server-notification mixin;
+     * the server timestamp {@code t} and the optional {@code offline} batch index (0 to 1024) are
+     * dropped because Cobalt's notification dispatch keys solely on the id, whereas WA Web's
+     * {@code parseServerNotificationMixin} returns all three fields.
      *
      * @param node the inbound notification stanza; never {@code null}
      * @return an {@link Optional} carrying the projection
@@ -214,6 +190,15 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
         return Optional.of(new SmaxCoexistenceOffboardingNotificationResponse(id, from, productSurface, providerInfo));
     }
 
+    /**
+     * Compares this projection with another for value equality.
+     *
+     * <p>Two projections are equal when their notification id, from JID, product surface, and
+     * provider-info block are pairwise equal.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} if {@code obj} is an equal projection
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -229,11 +214,26 @@ public final class SmaxCoexistenceOffboardingNotificationResponse implements Sma
                 && Objects.equals(this.offboardingProviderInfo, that.offboardingProviderInfo);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * <p>Combines the hashes of the notification id, from JID, product surface, and provider-info
+     * block.
+     *
+     * @return the hash code for this projection
+     */
     @Override
     public int hashCode() {
         return Objects.hash(notificationId, notificationFrom, offboardingProductSurface, offboardingProviderInfo);
     }
 
+    /**
+     * Returns a debug string describing this projection.
+     *
+     * <p>Renders the notification id, from JID, product surface, and provider-info block.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxCoexistenceOffboardingNotificationResponse[notificationId=" + notificationId

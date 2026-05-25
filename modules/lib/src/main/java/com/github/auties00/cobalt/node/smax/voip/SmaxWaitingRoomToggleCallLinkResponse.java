@@ -11,14 +11,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound reply to a {@link SmaxWaitingRoomToggleCallLinkRequest},
- * projecting the relay's {@code <ack class="call">} stanza into either
- * {@link Success} (toggle applied) or {@link ClientError} (toggle rejected).
+ * Projects the relay's reply to a {@link SmaxWaitingRoomToggleCallLinkRequest}
+ * into a sealed pair of variants.
  *
- * @apiNote
- * Consumed by the call-link admin UI to confirm the toggle change persisted;
- * {@code WAWebVoipWaitingRoomToggleJob} surfaces a Nack as a backend
- * {@code ServerStatusCodeError}.
+ * <p>An inbound {@code <ack class="call">} stanza resolves to either
+ * {@link Success} (toggle applied) or {@link ClientError} (toggle rejected).
+ * The call-link admin UI uses the result to confirm the toggle change persisted
+ * and surfaces a {@link ClientError} as a backend error.
  */
 public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperation.Response
         permits SmaxWaitingRoomToggleCallLinkResponse.Success, SmaxWaitingRoomToggleCallLinkResponse.ClientError {
@@ -26,14 +25,15 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
     /**
      * Parses an inbound stanza into the first matching reply variant.
      *
-     * @apiNote
-     * Mirrors {@code WASmaxVoipWaitingRoomToggleCallLinkRPC.sendWaitingRoomToggleCallLinkRPC};
-     * Cobalt returns {@link Optional#empty()} on no-match instead of throwing
-     * the JS {@code SmaxParsingFailure}.
+     * <p>The {@link Success} parser is tried first, then {@link ClientError}.
+     *
+     * @implNote
+     * This implementation returns {@link Optional#empty()} on no match, where
+     * the WA Web dispatcher would instead throw an {@code SmaxParsingFailure}.
      *
      * @param node    the inbound stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
+     * @return an {@link Optional} carrying the parsed variant, or empty on no match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxVoipWaitingRoomToggleCallLinkRPC",
@@ -52,14 +52,13 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
      * Validates the {@code <ack class="call">} envelope common to both reply
      * variants.
      *
-     * @implNote
-     * This implementation mirrors {@code WASmaxInVoipCallAckBaseMixin.parseCallAckBaseMixin}:
-     * it requires the {@code <ack>} description, the {@code class="call"} marker,
-     * the echoed request {@code id}, and the literal {@code from="call"} server.
+     * <p>The envelope matches when the node has the {@code <ack>} description,
+     * the {@code class="call"} marker, an {@code id} echoing the request's
+     * {@code id}, and the literal {@code from="call"} server.
      *
      * @param node    the inbound stanza
      * @param request the original outbound request
-     * @return {@code true} when the envelope matches; {@code false} otherwise
+     * @return {@code true} when the envelope matches, {@code false} otherwise
      */
     private static boolean validateAckEnvelope(Node node, Node request) {
         if (!node.hasDescription("ack")) {
@@ -83,18 +82,18 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
     }
 
     /**
-     * The successful reply carrying the link-token whose waiting-room state
-     * was toggled.
+     * The successful reply carrying the link-token whose waiting-room state was
+     * toggled.
      *
-     * @apiNote
-     * The echoed token confirms which link was affected; the new state is
-     * implied by the request's {@code waitingRoomToggleEnabled} since the
-     * Ack carries no enabled echo.
+     * <p>The echoed token confirms which link was affected; the new state is
+     * implied by the request's {@link SmaxWaitingRoomToggleCallLinkRequest#waitingRoomToggleEnabled()}
+     * since the Ack carries no enabled echo.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkAck")
     final class Success implements SmaxWaitingRoomToggleCallLinkResponse {
         /**
-         * The echoed call-link token.
+         * The echoed call-link token carried by the inner
+         * {@code <waiting_room_toggle>} child's {@code link-token} attribute.
          */
         private final String waitingRoomToggleLinkToken;
 
@@ -123,8 +122,8 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
          * @implNote
          * This implementation requires the shared ack envelope, the
          * {@code type="waiting_room_toggle"} marker, an inner
-         * {@code <waiting_room_toggle>} child, and a non-null
-         * {@code link-token} attribute.
+         * {@code <waiting_room_toggle>} child, and a non-null {@code link-token}
+         * attribute.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
@@ -151,6 +150,13 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
             return Optional.of(new Success(linkToken));
         }
 
+        /**
+         * Compares this reply to another object for value equality.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with equal
+         *         fields, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -163,11 +169,21 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
             return Objects.equals(this.waitingRoomToggleLinkToken, that.waitingRoomToggleLinkToken);
         }
 
+        /**
+         * Returns a hash code derived from every field of this reply.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(waitingRoomToggleLinkToken);
         }
 
+        /**
+         * Returns a debug string listing every field of this reply.
+         *
+         * @return the string representation of this reply
+         */
         @Override
         public String toString() {
             return "SmaxWaitingRoomToggleCallLinkResponse.Success[waitingRoomToggleLinkToken="
@@ -178,16 +194,15 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
     /**
      * The client-error reply produced when the relay rejects the toggle.
      *
-     * @apiNote
-     * Typical causes are a non-creator caller, a revoked link, or a media
-     * mismatch; the per-RPC {@link #errorLinkToken()} echoes the offending
-     * token to support multi-link admin surfaces.
+     * <p>Typical causes are a non-creator caller, a revoked link, or a media
+     * mismatch; the per-RPC {@link #errorLinkToken()} echoes the offending token
+     * to support multi-link admin surfaces.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkNack")
     final class ClientError implements SmaxWaitingRoomToggleCallLinkResponse {
         /**
-         * The numeric error code parsed from the {@code error} attribute,
-         * or {@code -1} when the raw value is non-numeric.
+         * The numeric error code parsed from the {@code error} attribute, or
+         * {@code -1} when the raw value is non-numeric.
          */
         private final int errorCode;
 
@@ -197,8 +212,10 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
         private final String errorText;
 
         /**
-         * The per-RPC link-token attribute carried by the inner
-         * {@code <error>} child; identifies which link the error refers to.
+         * The per-RPC link-token carried by the inner {@code <error>} child's
+         * {@code link-token} attribute.
+         *
+         * <p>Identifies which link the error refers to.
          */
         private final String errorLinkToken;
 
@@ -235,7 +252,7 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
         }
 
         /**
-         * Returns the per-RPC link-token attribute.
+         * Returns the per-RPC link-token.
          *
          * @return an {@link Optional} carrying the link-token, or empty when omitted
          */
@@ -250,7 +267,7 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
          * This implementation requires the shared ack envelope, the
          * {@code type="waiting_room_toggle"} marker, a non-null {@code error}
          * attribute, and a non-null {@code link-token} attribute on the inner
-         * {@code <error>} child; the attribute value is parsed as a decimal
+         * {@code <error>} child; the {@code error} value is parsed as a decimal
          * integer and falls back to {@code -1} when non-numeric.
          *
          * @param node    the inbound stanza
@@ -288,6 +305,13 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
             return Optional.of(new ClientError(code, errorAttr, linkToken));
         }
 
+        /**
+         * Compares this reply to another object for value equality.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with
+         *         equal fields, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -302,11 +326,21 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
                     && Objects.equals(this.errorLinkToken, that.errorLinkToken);
         }
 
+        /**
+         * Returns a hash code derived from every field of this reply.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText, errorLinkToken);
         }
 
+        /**
+         * Returns a debug string listing every field of this reply.
+         *
+         * @return the string representation of this reply
+         */
         @Override
         public String toString() {
             return "SmaxWaitingRoomToggleCallLinkResponse.ClientError[errorCode=" + errorCode

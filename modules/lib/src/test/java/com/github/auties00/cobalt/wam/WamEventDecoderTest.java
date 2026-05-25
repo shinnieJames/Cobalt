@@ -12,30 +12,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Corrupt-input and forward-compatibility tests for
- * {@link WamEventDecoder}.
- *
- * @apiNote
- * Pins the documented error semantics so a regression in either
- * direction (over-strict rejection of forward-compatible input, or
- * silent acceptance of truncated or type-mismatched input) surfaces
- * immediately. The matrix covers truncated event markers, truncated
- * payloads, type-tag mismatches across the read primitives, and the
- * forward-compatible {@code unknown fieldId} path that the generated
+ * {@link WamEventDecoder}, pinning the error semantics so a regression
+ * in either direction (over-strict rejection of forward-compatible
+ * input, or silent acceptance of truncated or type-mismatched input)
+ * surfaces immediately. The matrix covers truncated event markers,
+ * truncated payloads, type-tag mismatches across the read primitives,
+ * and the forward-compatible unknown-fieldId path the generated
  * {@code *Impl.decode default -> skip(header)} branch relies on.
- *
- * @implNote
- * Cobalt-internal: WA Web's matching {@code WAWebWamLibProtocol} read
- * helpers have no per-error externally observable surface, so MCP
- * grounding is via the encoder/decoder contract rather than a
- * captured trace.
  */
 @DisplayName("WamEventDecoder corrupt-input handling")
 class WamEventDecoderTest {
-    /**
-     * Verifies that reading a header from a buffer truncated below
-     * the tag + fieldId minimum throws
-     * {@link IndexOutOfBoundsException}.
-     */
     @Test
     @DisplayName("truncated event marker: no fieldId byte → IndexOutOfBoundsException")
     void truncatedEventMarker() {
@@ -44,10 +30,6 @@ class WamEventDecoderTest {
         assertThrows(IndexOutOfBoundsException.class, decoder::readHeader);
     }
 
-    /**
-     * Verifies that a header declaring a 2-byte WIDE_ID fieldId but
-     * with only the first byte present throws.
-     */
     @Test
     @DisplayName("truncated WIDE_ID fieldId: only 1 of 2 bytes → IndexOutOfBoundsException")
     void truncatedWideId() {
@@ -59,11 +41,6 @@ class WamEventDecoderTest {
         assertThrows(IndexOutOfBoundsException.class, decoder::readHeader);
     }
 
-    /**
-     * Verifies that a header declaring a 4-byte int32 payload but
-     * carrying only 2 payload bytes throws on
-     * {@link WamEventDecoder#readInt}.
-     */
     @Test
     @DisplayName("truncated int32 payload: 2 of 4 bytes → IndexOutOfBoundsException")
     void truncatedInt32Payload() {
@@ -78,11 +55,6 @@ class WamEventDecoderTest {
         assertThrows(IndexOutOfBoundsException.class, () -> decoder.readInt(header));
     }
 
-    /**
-     * Verifies that a header declaring a STR8 payload whose length
-     * byte overruns the buffer throws on
-     * {@link WamEventDecoder#readString}.
-     */
     @Test
     @DisplayName("truncated STR8 payload: length byte declares more than remains → IndexOutOfBoundsException")
     void truncatedStringPayload() {
@@ -97,11 +69,6 @@ class WamEventDecoderTest {
         assertThrows(IndexOutOfBoundsException.class, () -> decoder.readString(header));
     }
 
-    /**
-     * Verifies that {@link WamEventDecoder#readString} on a header
-     * whose value-type bits encode an integer throws
-     * {@link IllegalStateException}.
-     */
     @Test
     @DisplayName("type-tag mismatch: readString on int header → IllegalStateException")
     void readStringOnIntHeader() {
@@ -113,10 +80,6 @@ class WamEventDecoderTest {
         assertThrows(IllegalStateException.class, () -> decoder.readString(header));
     }
 
-    /**
-     * Verifies that {@link WamEventDecoder#readInt} on a header whose
-     * value-type bits encode a string throws.
-     */
     @Test
     @DisplayName("type-tag mismatch: readInt on string header → IllegalStateException")
     void readIntOnStringHeader() {
@@ -128,10 +91,6 @@ class WamEventDecoderTest {
         assertThrows(IllegalStateException.class, () -> decoder.readInt(header));
     }
 
-    /**
-     * Verifies that {@link WamEventDecoder#readFloat} on a
-     * non-float header throws.
-     */
     @Test
     @DisplayName("type-tag mismatch: readFloat on int header → IllegalStateException")
     void readFloatOnIntHeader() {
@@ -143,18 +102,9 @@ class WamEventDecoderTest {
         assertThrows(IllegalStateException.class, () -> decoder.readFloat(header));
     }
 
-    /**
-     * Verifies that {@link WamEventDecoder#skip} advances past every
-     * well-formed value type, the property the generated
-     * {@code *Impl.decode} default branch relies on for forward
-     * compatibility.
-     *
-     * @implNote
-     * Exercises one entry per value-type encoding (null GLOBAL, int 0,
-     * int 1, int 7, int 200, int 70 000, float, str8, str16) so a
-     * regression on any of them fails this test rather than surfacing
-     * as a hard-to-diagnose downstream decoder hang.
-     */
+    // One entry per value-type encoding (null GLOBAL, int 0/1/7/200/70_000,
+    // float, str8, str16) so a regression on any of them fails here rather
+    // than as a downstream decoder hang.
     @Test
     @DisplayName("skip advances past every known value-type cleanly")
     void skipCoversAllTypes() {
@@ -181,12 +131,6 @@ class WamEventDecoderTest {
         assertEquals(9, skipped, "skip must walk past all 9 entries");
     }
 
-    /**
-     * Verifies that {@code writeNull} for the FIELD and EVENT roles is
-     * a no-op, matching {@code WAWebWamLibProtocol}'s shared write
-     * helper: only the GLOBAL role emits bytes when the value is
-     * {@code null}.
-     */
     @Test
     @DisplayName("writeNull is a no-op for FIELD / EVENT roles (matches WA Web's writeField/writeEvent null shortcut)")
     void writeNullNonGlobalIsNoop() {
@@ -207,13 +151,6 @@ class WamEventDecoderTest {
                 "writeNull(EVENT) must emit zero bytes - WAWebWamLibProtocol.writeEvent skips null");
     }
 
-    /**
-     * Verifies that the decoder propagates an arbitrary fieldId byte
-     * (even one no Cobalt {@code @WamEvent} declares) unchanged via
-     * {@link WamEventDecoder#fieldIdOf}, leaving the
-     * {@code default -> skip(header)} branch in caller code as the
-     * forward-compatibility seam.
-     */
     @Test
     @DisplayName("unknown fieldId is propagated to caller, not rejected")
     void unknownFieldIdIsPropagated() {

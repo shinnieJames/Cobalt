@@ -9,36 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Validates {@link Ed25519Field} against {@link BigInteger} as the
- * oracle.
- *
- * @apiNote
- * Every field operation has a one-line {@link BigInteger} equivalent
- * ({@code modPow}, {@code multiply}, {@code add}, {@code subtract},
- * {@code modInverse}); the test compares the canonical 32-byte
- * little-endian encoding of both results. The field has no branches
- * on data, so a passing randomised vector is strong evidence the
- * algebra is correct.
- *
- * @implNote
- * This implementation seeds every {@link Random} for reproducibility.
+ * Validates {@link Ed25519Field} against {@link BigInteger} as the oracle, comparing the canonical
+ * 32-byte little-endian encoding of every result. Each {@link Random} is seeded for reproducibility.
  */
 class Ed25519FieldTest {
-    /**
-     * The Ed25519 field prime {@code p = 2^255 - 19}.
-     */
     private static final BigInteger P = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
 
-    /**
-     * The number of random iterations per property-style test.
-     */
     private static final int ITERATIONS = 256;
 
-    /**
-     * Asserts {@link Ed25519Field#unpack25519} followed by
-     * {@link Ed25519Field#pack25519} is the identity on canonical
-     * 32-byte encodings of values in {@code [0, p)}.
-     */
     @Test
     void packUnpackRoundTrip() {
         var rng = new Random(0xC0BA17L);
@@ -53,10 +31,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts that {@code x + p} packs to the same canonical
-     * encoding as {@code x}.
-     */
     @Test
     void packReducesNonCanonicalInputs() {
         var rng = new Random(0xC0BA18L);
@@ -75,10 +49,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#add} matches
-     * {@link BigInteger#add} modulo {@code p}.
-     */
     @Test
     void addMatchesOracle() {
         var rng = new Random(0xC0BA19L);
@@ -94,11 +64,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#sub} matches
-     * {@link BigInteger#subtract} modulo {@code p}, including the
-     * negative-result branch.
-     */
     @Test
     void subMatchesOracle() {
         var rng = new Random(0xC0BA1AL);
@@ -114,10 +79,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#mul} matches
-     * {@link BigInteger#multiply} modulo {@code p}.
-     */
     @Test
     void mulMatchesOracle() {
         var rng = new Random(0xC0BA1BL);
@@ -133,10 +94,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#square} matches
-     * {@link BigInteger#modPow modPow(2, p)}.
-     */
     @Test
     void squareMatchesOracle() {
         var rng = new Random(0xC0BA1CL);
@@ -150,15 +107,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#mul} is safe under output-input
-     * aliasing in every direction.
-     *
-     * @apiNote
-     * Tweetnacl's {@code M} writes the result to local accumulators
-     * before storing into {@code o}, so aliasing must be safe; this
-     * pins the same property for the Java port.
-     */
     @Test
     void mulHandlesAliasing() {
         var rng = new Random(0xC0BA1DL);
@@ -184,10 +132,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#inv25519} matches
-     * {@link BigInteger#modInverse} on non-zero input.
-     */
     @Test
     void invMatchesOracle() {
         var rng = new Random(0xC0BA1EL);
@@ -201,9 +145,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@code inv(x) * x == 1} for non-zero {@code x}.
-     */
     @Test
     void invIsLeftInverseUnderMul() {
         var rng = new Random(0xC0BA1FL);
@@ -218,10 +159,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#pow2523} computes
-     * {@code x ^ ((p-5)/8) mod p}.
-     */
     @Test
     void pow2523MatchesOracle() {
         var exponent = P.subtract(BigInteger.valueOf(5)).shiftRight(3);
@@ -236,10 +173,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#sel25519} swaps when {@code b == 1}
-     * and is the identity when {@code b == 0}.
-     */
     @Test
     void sel25519SwapsWhenBitOne() {
         var rng = new Random(0xC0BA21L);
@@ -259,11 +192,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Field#unpack25519} masks the high bit of
-     * byte 31, matching the {@code o[15] &= 0x7fff} clause of
-     * tweetnacl's {@code lowlevel.unpack25519}.
-     */
     @Test
     void unpackMasksTopBit() {
         var rng = new Random(0xC0BA22L);
@@ -283,11 +211,6 @@ class Ed25519FieldTest {
         }
     }
 
-    /**
-     * Asserts boundary inputs pack to the canonical encoding:
-     * {@code 0}, {@code 1}, {@code p-1}, {@code p} (must reduce to
-     * {@code 0}), and {@code 2p-1} (must reduce to {@code p-1}).
-     */
     @Test
     void packHandlesBoundaryInputs() {
         assertEquals(BigInteger.ZERO, fromPacked(packCanonical(fromBigInteger(BigInteger.ZERO))));
@@ -308,12 +231,6 @@ class Ed25519FieldTest {
         assertEquals(P.subtract(BigInteger.ONE), fromPacked(packCanonical(feTwoPMinusOne)));
     }
 
-    /**
-     * Returns a random {@link BigInteger} in {@code [0, p)}.
-     *
-     * @param rng the random source
-     * @return the random field element
-     */
     private static BigInteger randomFieldElement(Random rng) {
         BigInteger x;
         do {
@@ -322,12 +239,6 @@ class Ed25519FieldTest {
         return x;
     }
 
-    /**
-     * Returns a random {@link BigInteger} in {@code (0, p)}.
-     *
-     * @param rng the random source
-     * @return the random non-zero field element
-     */
     private static BigInteger randomNonZeroFieldElement(Random rng) {
         BigInteger x;
         do {
@@ -336,13 +247,6 @@ class Ed25519FieldTest {
         return x;
     }
 
-    /**
-     * Encodes a non-negative {@link BigInteger} as 32 little-endian
-     * bytes.
-     *
-     * @param x the value
-     * @return the little-endian encoding
-     */
     private static byte[] toLittleEndian(BigInteger x) {
         var be = x.toByteArray();
         var out = new byte[Ed25519Field.BYTES];
@@ -352,13 +256,6 @@ class Ed25519FieldTest {
         return out;
     }
 
-    /**
-     * Decodes a little-endian byte array as an unsigned
-     * {@link BigInteger}.
-     *
-     * @param le the little-endian bytes
-     * @return the decoded value
-     */
     private static BigInteger fromLittleEndian(byte[] le) {
         var be = new byte[le.length];
         for (var i = 0; i < le.length; i++) {
@@ -367,39 +264,18 @@ class Ed25519FieldTest {
         return new BigInteger(1, be);
     }
 
-    /**
-     * Decodes a {@link BigInteger} into the radix-{@code 2^16} limb
-     * form consumed by {@link Ed25519Field}.
-     *
-     * @param x the value
-     * @return the limb form
-     */
     private static long[] fromBigInteger(BigInteger x) {
         var fe = new long[Ed25519Field.LIMBS];
         Ed25519Field.unpack25519(fe, toLittleEndian(x));
         return fe;
     }
 
-    /**
-     * Encodes a limb-form field element as 32 canonical little-endian
-     * bytes.
-     *
-     * @param fe the field element
-     * @return the canonical encoding
-     */
     private static byte[] packCanonical(long[] fe) {
         var out = new byte[Ed25519Field.BYTES];
         Ed25519Field.pack25519(out, fe);
         return out;
     }
 
-    /**
-     * Decodes 32 little-endian bytes as an unsigned
-     * {@link BigInteger}.
-     *
-     * @param le the little-endian bytes
-     * @return the decoded value
-     */
     private static BigInteger fromPacked(byte[] le) {
         return fromLittleEndian(le);
     }

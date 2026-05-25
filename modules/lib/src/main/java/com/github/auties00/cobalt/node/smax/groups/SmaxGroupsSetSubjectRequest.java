@@ -14,11 +14,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that replaces a group's subject (display name).
+ * Models the outbound {@code <iq type="set" xmlns="w:g2">} stanza that replaces a group's subject (display name).
  *
- * @apiNote Drives the "Edit group name" affordance on the group-info screen. The relay returns a bare
- * {@link SmaxGroupsSetSubjectResponse.Success} envelope on success; the subject change is broadcast back to all
- * participants via a separate notification path.
+ * <p>This request backs renaming a group. The relay returns a bare {@link SmaxGroupsSetSubjectResponse.Success}
+ * envelope on success; the subject change is broadcast back to all participants via a separate notification path.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetSubjectRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetSubjectChangeSubjectMixin")
@@ -49,7 +48,7 @@ public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request 
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -69,7 +68,7 @@ public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request 
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <subject>...UTF-8 bytes...</subject>

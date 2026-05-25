@@ -15,9 +15,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsRevokeRequestCodeRequest}.
+ * Models the sealed reply family for a {@link SmaxGroupsRevokeRequestCodeRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsRevokeRequestCodeRPC}.
+ * <p>The three permitted variants are {@link Success}, {@link ClientError}, and {@link ServerError}.
  * {@link Success} always wraps the per-participant outcome list returned by the relay; the envelope succeeds even
  * when individual candidates carry the literal {@code error="404"} marker (signalling no outstanding code), so
  * callers must walk {@link Success#participants()} to detect partial failures.
@@ -29,11 +29,11 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
      * Dispatches the inbound IQ across each {@link SmaxGroupsRevokeRequestCodeResponse} variant in priority order
      * and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsRevokeRequestCodeRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the caller so
+     * it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsRevokeRequestCodeRequest} stanza, used to validate
@@ -58,10 +58,11 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
     }
 
     /**
-     * The reply variant carrying the per-participant outcome list when the relay accepted the request envelope.
+     * Represents the reply variant carrying the per-participant outcome list when the relay accepted the request
+     * envelope.
      *
-     * @apiNote The IQ envelope succeeds even when every candidate carries the literal {@code error="404"} marker
-     * (signalling that the candidate had no outstanding code to revoke); callers must walk
+     * <p>The IQ envelope succeeds even when every candidate carries the literal {@code error="404"} marker
+     * (signalling that the candidate had no outstanding code to revoke), so callers must walk
      * {@link #participants()} to detect such partial failures.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseSuccess")
@@ -80,9 +81,12 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         /**
          * Constructs a {@link Success}.
          *
+         * <p>The participant list is copied so post-construction mutation of the caller's list has no effect on
+         * the variant.
+         *
          * @param addressingMode the optional addressing-mode echo ({@code "lid"} or {@code "pn"}); may be
          *                       {@code null}
-         * @param participants   the per-participant outcomes; defensively copied
+         * @param participants   the per-participant outcomes
          * @throws NullPointerException if {@code participants} is {@code null}
          */
         public Success(String addressingMode, List<RevokeParticipantResult> participants) {
@@ -94,8 +98,8 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         /**
          * Returns the optional {@code addressing_mode} echo.
          *
-         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
-         * mode; the field is omitted on legacy groups.
+         * <p>The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing mode; the
+         * attribute is omitted on legacy groups.
          *
          * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
@@ -115,8 +119,8 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseRevokeRequestCodeResponseSuccess}: the IQ must be a
-         * valid {@code type="result"} echo of the request, must carry a {@code <revoke>} child, and every
+         * <p>The IQ must be a valid {@code type="result"} echo of {@code request}, validated through
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, must carry a {@code <revoke>} child, and every
          * {@code <participant>} grand-child must satisfy {@link RevokeParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
@@ -187,11 +191,11 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * The per-participant outcome row produced by the relay for a single revocation candidate.
+         * Represents the per-participant outcome row produced by the relay for a single revocation candidate.
          *
-         * @apiNote Each row exposes {@link #jid()} (always present), {@link #error()} (the literal
-         * {@code "404"} marker when present, signalling the candidate had no outstanding code to revoke), and
-         * the optional {@link #phoneNumber()} / {@link #username()} echoes.
+         * <p>Each row exposes {@link #jid()} (always present), {@link #error()} (the literal {@code "404"} marker
+         * when present, signalling the candidate had no outstanding code to revoke), and the optional
+         * {@link #phoneNumber()} and {@link #username()} echoes.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseSuccess")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsPhoneNumberMixin")
@@ -245,8 +249,8 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             /**
              * Returns the optional literal {@code error="404"} marker.
              *
-             * @apiNote The relay surfaces this marker when the candidate had no outstanding code to revoke;
-             * empty when the revocation succeeded.
+             * <p>The relay surfaces this marker when the candidate had no outstanding code to revoke; the result
+             * is empty when the revocation succeeded.
              *
              * @return an {@link Optional} carrying the marker, or empty
              */
@@ -276,10 +280,8 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
              * Tries to parse an outcome row from a single {@code <participant>} child of the {@code <revoke>}
              * payload.
              *
-             * @apiNote Matches the WA Web parser
-             * {@code parseRevokeRequestCodeResponseSuccessRevokeParticipant}: the node must be a
-             * {@code <participant>} carrying a {@code jid} attribute, with an optional literal
-             * {@code error="404"} attribute.
+             * <p>The node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * literal {@code error="404"} attribute.
              *
              * @param node the {@code <participant>} child
              * @return an {@link Optional} carrying the parsed row, or empty when the node does not match
@@ -350,8 +352,8 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
-     * referencing a non-existent group.
+     * Represents the reply variant emitted when the relay rejected the request envelope as malformed,
+     * unauthorised, or referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseClientError")
     final class ClientError implements SmaxGroupsRevokeRequestCodeResponse {
@@ -397,8 +399,9 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -456,7 +459,7 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Represents the reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseServerError")
     final class ServerError implements SmaxGroupsRevokeRequestCodeResponse {
@@ -502,8 +505,9 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

@@ -15,35 +15,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that cancels pending membership-approval requests on
- * an approval-mode group.
+ * Outbound {@code <iq type="set" xmlns="w:g2">} stanza that cancels pending membership-approval requests on an
+ * approval-mode group.
  *
- * @apiNote Drives the "Cancel request" affordance surfaced by
- * {@code WAWebGroupCancelMembershipRequestJob.cancelMembershipApprovalRequestJob}: either the requester rescinds
- * their own pending request, or an admin cancels other users' pending requests in bulk. The relay accepts up to
- * 19999 entries per request.
+ * This request backs the cancel-request affordance: either the requester rescinds their own pending request, or
+ * an admin cancels other users' pending requests in bulk. The relay accepts up to 19999 entries per request.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCancelGroupMembershipRequestsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsCancelGroupMembershipRequestsRequest implements SmaxOperation.Request {
     /**
-     * The group {@link Jid} hosting the pending requests.
+     * Holds the group {@link Jid} hosting the pending requests.
      */
     private final Jid groupJid;
 
     /**
-     * The participant {@link Jid}s whose pending requests should be cancelled.
+     * Holds the participant {@link Jid}s whose pending requests should be cancelled.
      */
     private final List<Jid> participants;
 
     /**
      * Constructs a cancel-membership-requests request.
      *
-     * @apiNote The relay enforces a 1..19999 cardinality on the {@code <participant>} children.
+     * The relay enforces a 1..19999 cardinality on the {@code <participant>} children. The supplied list is
+     * defensively copied.
      *
      * @param groupJid     the group {@link Jid}
-     * @param participants the participant {@link Jid}s; defensively copied
+     * @param participants the participant {@link Jid}s
      * @throws NullPointerException     if {@code groupJid} or {@code participants} is {@code null}
      * @throws IllegalArgumentException if {@code participants} is empty
      */
@@ -59,7 +58,7 @@ public final class SmaxGroupsCancelGroupMembershipRequestsRequest implements Sma
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -79,7 +78,7 @@ public final class SmaxGroupsCancelGroupMembershipRequestsRequest implements Sma
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <cancel_membership_requests>
@@ -89,8 +88,7 @@ public final class SmaxGroupsCancelGroupMembershipRequestsRequest implements Sma
      *     </iq>
      * }
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <cancel_membership_requests>}
-     *         payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <cancel_membership_requests>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsCancelGroupMembershipRequestsRequest",

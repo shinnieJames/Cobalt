@@ -17,10 +17,10 @@ import java.util.Optional;
 /**
  * The sealed reply family for a {@link SmaxGroupsRemoveParticipantsRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsRemoveParticipantsRPC}.
- * {@link Success} always wraps the per-participant outcome list returned by the relay; the envelope succeeds even
- * when some entries are rejected at the participant-policy level, so callers must walk
- * {@link Success#participants()} to detect partial failures.
+ * <p>{@link Success} always wraps the per-participant outcome list returned by the relay; the envelope succeeds
+ * even when some entries are rejected at the participant-policy level, so callers must walk
+ * {@link Success#participants()} to detect partial failures. {@link ClientError} and {@link ServerError} surface
+ * the relay's reason codes.
  */
 public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperation.Response
         permits SmaxGroupsRemoveParticipantsResponse.Success, SmaxGroupsRemoveParticipantsResponse.ClientError, SmaxGroupsRemoveParticipantsResponse.ServerError {
@@ -29,8 +29,7 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
      * Dispatches the inbound IQ across each {@link SmaxGroupsRemoveParticipantsResponse} variant in priority
      * order and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in
-     * {@code WASmaxGroupsRemoveParticipantsRPC}.
+     * <p>Tries {@link Success} first, then {@link ClientError}, then {@link ServerError}.
      *
      * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
      * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
@@ -61,7 +60,7 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
     /**
      * The reply variant carrying the per-participant outcome list when the relay accepted the request envelope.
      *
-     * @apiNote The IQ envelope succeeds even when every candidate is rejected at the participant-policy level
+     * <p>The IQ envelope succeeds even when every candidate is rejected at the participant-policy level
      * (not-in-group, not-allowed, not-acceptable, linked-groups-server-error); callers must walk
      * {@link #participants()} to detect partial or total rejection. The relay echoes back both the
      * {@code linked_groups} flag (via {@link #removeLinkedGroups()}) and the addressing mode (via
@@ -113,8 +112,8 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
         /**
          * Returns the optional {@code addressing_mode} echo.
          *
-         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
-         * mode; the field is omitted on legacy groups.
+         * <p>The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing mode; the
+         * field is omitted on legacy groups.
          *
          * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
@@ -134,9 +133,8 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseRemoveParticipantsResponseSuccess}: the IQ must be a
-         * valid {@code type="result"} echo of the request, must carry a {@code <remove>} child, and every
-         * {@code <participant>} grand-child must satisfy {@link RemoveParticipantResult#of(Node)}.
+         * <p>The IQ must be a valid {@code type="result"} echo of the request, must carry a {@code <remove>} child,
+         * and every {@code <participant>} grand-child must satisfy {@link RemoveParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -211,9 +209,9 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
         /**
          * The per-participant outcome row produced by the relay for a single removal candidate.
          *
-         * @apiNote The WA Web wire-level shape is a 4-arm disjunction ({@code ParticipantNotInGroup},
+         * <p>The WA Web wire-level shape is a 4-arm disjunction ({@code ParticipantNotInGroup},
          * {@code ParticipantNotAllowed}, {@code ParticipantNotAcceptable},
-         * {@code RemoveParticipantsLinkedGroupsServerError}). Cobalt fuses the four arms into a single class
+         * {@code RemoveParticipantsLinkedGroupsServerError}). This class fuses the four arms into a single shape
          * exposing the always-present {@link #jid()} plus an optional {@link RejectionReason} payload that
          * distinguishes the rejected arms via {@link RejectionReason#errorCode()}.
          *
@@ -290,8 +288,8 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
             /**
              * Returns the optional rejection-reason payload.
              *
-             * @apiNote An empty value identifies this row as a successful removal; a present value identifies it
-             * as one of the rejected arms and carries the reason code via {@link RejectionReason#errorCode()}.
+             * <p>An empty value identifies this row as a successful removal; a present value identifies it as one
+             * of the rejected arms and carries the reason code via {@link RejectionReason#errorCode()}.
              *
              * @return an {@link Optional} carrying the rejection payload
              */
@@ -303,8 +301,7 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
              * Tries to parse an outcome row from a single {@code <participant>} child of the {@code <remove>}
              * payload.
              *
-             * @apiNote Matches the WA Web parser {@code parseRemoveParticipantsResponseSuccessRemoveParticipant}:
-             * the node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * <p>The node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
              * {@code error} attribute discriminating the rejected arms.
              *
              * @param node the {@code <participant>} child
@@ -376,9 +373,9 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
             /**
              * The rejection-reason payload for a candidate the relay refused to remove.
              *
-             * @apiNote {@link #errorCode()} carries the raw error code lifted from the {@code error} attribute;
-             * possible values correspond to the four arms of the WA Web disjunction
-             * ({@code ParticipantNotInGroup}, {@code ParticipantNotAllowed}, {@code ParticipantNotAcceptable},
+             * <p>{@link #errorCode()} carries the raw error code lifted from the {@code error} attribute; possible
+             * values correspond to the four rejected arms ({@code ParticipantNotInGroup},
+             * {@code ParticipantNotAllowed}, {@code ParticipantNotAcceptable},
              * {@code RemoveParticipantsLinkedGroupsServerError}).
              */
             public static final class RejectionReason {
@@ -408,8 +405,8 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
                 /**
                  * Tries to parse a {@link RejectionReason} payload from a {@code <participant>} child.
                  *
-                 * @apiNote The presence of a non-negative {@code error} attribute discriminates a rejected
-                 * arm from the success arm; an empty value signals the success arm.
+                 * <p>The presence of a non-negative {@code error} attribute discriminates a rejected arm from the
+                 * success arm; an empty value signals the success arm.
                  *
                  * @param node the {@code <participant>} child
                  * @return an {@link Optional} carrying the parsed payload, or empty when the node is on the
@@ -514,8 +511,8 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -619,8 +616,8 @@ public sealed interface SmaxGroupsRemoveParticipantsResponse extends SmaxOperati
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

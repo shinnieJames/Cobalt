@@ -9,55 +9,49 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * High-level helper that composes a fully-formed
- * {@link WaRelayMessageType#ALLOCATE_REQUEST} packet.
+ * Composes a fully formed and MAC-stamped {@link WaRelayMessageType#ALLOCATE_REQUEST}
+ * {@link WaRelayPacket}.
  *
- * <p>An Allocate Request carries four attributes in this order:
+ * <p>An Allocate Request carries four attributes in a fixed order: a
+ * {@link WaRelayAttributeType#WA_RELAY_TOKEN} (the Base64-decoded per-relay authorisation blob from
+ * {@code RelayListUpdate.relay_tokens[i]}), a {@link WaRelayAttributeType#WA_CALL_INFO} (the
+ * {@link WaRelayCallInfo} protobuf describing per-(IP version, relay) candidate priorities), a
+ * {@link WaRelayAttributeType#XOR_RELAYED_ADDRESS} (the targeted relay endpoint, see
+ * {@link WaRelayXorAddress}), and a {@link WaRelayAttributeType#MESSAGE_INTEGRITY} (the HMAC-SHA1 over
+ * all preceding bytes, see {@link WaRelayMessageIntegrity}).
  *
- * <ol>
- *   <li>{@link WaRelayAttributeType#WA_RELAY_TOKEN} — the Base64-decoded
- *       per-relay authorisation blob from
- *       {@code RelayListUpdate.relay_tokens[i]}.</li>
- *   <li>{@link WaRelayAttributeType#WA_CALL_INFO} — the protobuf
- *       payload describing per-(IP version, relay) candidate
- *       priorities; see {@link WaRelayCallInfo}.</li>
- *   <li>{@link WaRelayAttributeType#XOR_RELAYED_ADDRESS} — the
- *       targeted relay endpoint, XOR'd with the magic cookie; see
- *       {@link WaRelayXorAddress}.</li>
- *   <li>{@link WaRelayAttributeType#MESSAGE_INTEGRITY} — HMAC-SHA1 of
- *       all preceding bytes keyed on
- *       {@code RelayListUpdate.relay_key}; see
- *       {@link WaRelayMessageIntegrity}.</li>
- * </ol>
- *
- * <p>The MAC is computed and stamped into the packet after the
- * surrounding bytes are finalised, mirroring the way the wasm engine
- * emits the packet.
+ * @implNote This implementation encodes the {@code MESSAGE-INTEGRITY} attribute with a zero-filled
+ * placeholder value and computes the MAC over the finalised surrounding bytes afterwards via
+ * {@link WaRelayMessageIntegrity#stamp(byte[], byte[])}, because the HMAC must cover the header (whose
+ * {@code msgLength} already accounts for the attribute) and all preceding attributes; this mirrors the
+ * order in which the wasm engine emits the packet.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipSctpConnectionManager")
 public final class WaRelayAllocateRequestBuilder {
     /**
-     * Prevents instantiation.
+     * Prevents instantiation of this builder holder.
      */
     private WaRelayAllocateRequestBuilder() {
         throw new AssertionError("no instances");
     }
 
     /**
-     * Builds and stamps a fully-formed Allocate Request packet.
+     * Builds and MAC-stamps a fully formed Allocate Request packet.
+     *
+     * <p>Encodes the call info, derives the XOR-relayed-address value for the relay endpoint, assembles
+     * the four attributes in their fixed order with a placeholder integrity value, encodes the packet,
+     * and stamps the HMAC-SHA1 over the finalised bytes keyed on {@code relayKey}.
      *
      * @param transactionId the 12-byte STUN transaction id
-     * @param relayToken    the raw {@code WA-RELAY-TOKEN} blob (the
-     *                      {@code RelayListUpdate.relay_tokens[i]}
-     *                      Base64-decoded value)
+     * @param relayToken    the raw {@code WA-RELAY-TOKEN} blob, the Base64-decoded
+     *                      {@code RelayListUpdate.relay_tokens[i]} value
      * @param callInfo      the {@code WA-CALL-INFO} protobuf payload
-     * @param relayAddress  the relay endpoint (IPv4 or IPv6)
-     * @param relayPort     the relay port (1..65535)
-     * @param relayKey      the {@code RelayListUpdate.relay_key} bytes,
-     *                      used as the HMAC-SHA1 key
-     * @return a freshly-allocated byte array containing the encoded,
-     *         MAC-stamped packet
-     * @throws NullPointerException if any argument is {@code null}
+     * @param relayAddress  the relay endpoint address, IPv4 or IPv6
+     * @param relayPort     the relay port in the range 1 to 65535
+     * @param relayKey      the {@code RelayListUpdate.relay_key} bytes used as the HMAC-SHA1 key
+     * @return a freshly allocated byte array containing the encoded, MAC-stamped packet
+     * @throws NullPointerException if {@code transactionId}, {@code relayToken}, {@code callInfo},
+     *                              {@code relayAddress}, or {@code relayKey} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSctpConnectionManager",
             exports = "sendWAWebVoipDataToRelay", adaptation = WhatsAppAdaptation.ADAPTED)

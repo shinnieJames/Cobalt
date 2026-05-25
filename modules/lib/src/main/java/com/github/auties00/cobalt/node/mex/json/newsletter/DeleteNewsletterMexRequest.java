@@ -18,36 +18,30 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Builds the MEX request that permanently deletes a newsletter owned by the
- * authenticated user.
+ * Builds the MEX request that permanently deletes a newsletter owned by the authenticated user.
  *
- * @apiNote
- * Drives the "delete newsletter" flow consumed by
- * {@code WAWebNewsletterDeleteJob}: only the current owner may dispatch the
- * mutation, the relay then removes the channel and its subscriber list, and
- * followers stop receiving updates immediately. WA Web also evicts the
- * local newsletter metadata and chat entry after this mutation succeeds.
+ * <p>Only the current owner may dispatch this mutation; the relay then removes the channel and its
+ * subscriber list, and followers stop receiving updates immediately. The local newsletter metadata
+ * and chat entry are evicted after the mutation succeeds. The matching reply is parsed by
+ * {@link DeleteNewsletterMexResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexDeleteNewsletterJob")
 public final class DeleteNewsletterMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexDeleteNewsletterJobMutation.graphql} on the WhatsApp
-     * relay.
+     * Holds the compiled persisted-query identifier of this mutation on the WhatsApp relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Emitted as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "30062808666639665";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this mutation.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this
+     * mutation.
      */
     public static final String OPERATION_NAME = "mexDeleteNewsletter";
 
     /**
-     * The Jid string of the newsletter being deleted.
+     * Holds the Jid string of the newsletter being deleted.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexDeleteNewsletterJob", exports = "mexDeleteNewsletter",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -56,8 +50,7 @@ public final class DeleteNewsletterMexRequest implements MexOperation.Request.Js
     /**
      * Constructs a request targeting the given newsletter for deletion.
      *
-     * @apiNote
-     * The newsletter Jid is the same identifier echoed under
+     * <p>The newsletter Jid is the same identifier echoed under
      * {@code xwa2_newsletter_delete_v2.id} in the response.
      *
      * @param newsletterId the newsletter Jid to delete
@@ -71,8 +64,7 @@ public final class DeleteNewsletterMexRequest implements MexOperation.Request.Js
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -82,8 +74,7 @@ public final class DeleteNewsletterMexRequest implements MexOperation.Request.Js
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -91,21 +82,17 @@ public final class DeleteNewsletterMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the {@code {variables: {newsletter_id: "<id>"}}} payload; the
-     * {@code newsletter_id} entry is omitted when {@link #newsletterId} is
-     * {@code null} so the GraphQL schema never receives an explicit
-     * {@code null} variable.
+     * <p>Produces the {@code {variables: {newsletter_id: "<id>"}}} payload; the
+     * {@code newsletter_id} entry is omitted when {@link #newsletterId} is {@code null} so the
+     * GraphQL schema never receives an explicit {@code null} variable.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexDeleteNewsletterJob", exports = "mexDeleteNewsletter",

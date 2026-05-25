@@ -4,17 +4,15 @@ package com.github.auties00.cobalt.exception;
  * Thrown for server-driven runtime conditions that do not fit any of the
  * more specific exception types.
  *
- * @apiNote
- * The WhatsApp servers occasionally deliver informational or transient
- * error stanzas that do not map cleanly to a session, stream, message,
- * or media failure. Surfacing them through this exception lets the
- * configurable error handler log the event or run custom telemetry
- * without forcing a disconnect.
+ * <p>The WhatsApp servers occasionally deliver informational or transient
+ * error stanzas that do not map cleanly to a session, stream, message, or
+ * media failure. This exception is the catch-all that surfaces them
+ * without losing the server's detail message.
  *
- * @implNote
- * This implementation always reports the failure as non-fatal: server
- * runtime exceptions are observational and never tear the session down
- * on their own.
+ * @apiNote
+ * Raised for observational server conditions; {@link #isFatal()} reports
+ * {@code false}, so a configured {@code WhatsAppClientErrorHandler} can
+ * log the event or run custom telemetry and leave the session running.
  */
 public final class WhatsAppServerRuntimeException extends WhatsAppException {
     /**

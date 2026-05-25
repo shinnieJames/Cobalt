@@ -15,26 +15,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza that fetches a slice of a newsletter's message
- * history.
+ * Fetches a slice of a newsletter's message history.
  *
- * @apiNote
- * Drives the Channels message-list and invite-preview surfaces in WA
- * Web ({@code WAWebNewsletterGetMessagesQueryJob.queryNewsletterMessagesByJid}
- * and {@code queryNewsletterMessagesByInviteCode}). Pick a
- * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid} or
- * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite}
- * addressing mode; pass a {@code null} cursor to fetch the latest
- * slice. The relay echoes the matching
- * {@link SmaxNewslettersGetNewsletterMessagesResponse}. The resulting
- * IQ has shape:
+ * <p>Address the target with a {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid} or
+ * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite} mode; pass a {@code null} cursor
+ * to fetch the latest slice. The relay echoes the matching
+ * {@link SmaxNewslettersGetNewsletterMessagesResponse}. The resulting IQ has shape:
  * {@snippet :
  *     <iq xmlns="newsletter" type="get" to="s.whatsapp.net">
  *         <messages count="50" before="120">
  *             <smax$any type="jid" jid="..." view_role="..."/>
  *         </messages>
  *     </iq>
- * }
+ * }</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterMessagesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterMessageRequestIQPayloadMixin")
@@ -48,34 +41,27 @@ public final class SmaxNewslettersGetNewsletterMessagesRequest implements SmaxOp
     private final int count;
 
     /**
-     * The newsletter addressing parameters; either
+     * The newsletter addressing parameters, either
      * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid} or
      * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite}.
      */
     private final SmaxNewslettersGetNewsletterMessagesQueryParams queryParams;
 
     /**
-     * The optional pagination cursor; {@code null} requests the latest
-     * slice.
+     * The optional pagination cursor; {@code null} requests the latest slice.
      */
     private final SmaxNewslettersGetNewsletterMessagesDirection direction;
 
     /**
      * Constructs a new request.
      *
-     * @apiNote
-     * WA Web caps {@code count} at
-     * {@code WAWebNewsletterGatingUtils.getMaxMsgCountFromServer()} and
-     * logs a warning past that point; Cobalt does not cap on the way
-     * out, so callers should clamp before invoking when targeting WA
-     * Web parity.
+     * @implNote This implementation does not clamp {@code count} on the way out; callers targeting
+     * WhatsApp Web parity should clamp to the server-reported maximum message count before invoking.
      *
      * @param count       the per-call cap; must be non-negative
      * @param queryParams the addressing parameters; never {@code null}
-     * @param direction   the optional pagination cursor; may be
-     *                    {@code null}
-     * @throws NullPointerException if {@code queryParams} is
-     *                              {@code null}
+     * @param direction   the optional pagination cursor; may be {@code null}
+     * @throws NullPointerException if {@code queryParams} is {@code null}
      */
     public SmaxNewslettersGetNewsletterMessagesRequest(int count, SmaxNewslettersGetNewsletterMessagesQueryParams queryParams, SmaxNewslettersGetNewsletterMessagesDirection direction) {
         this.count = count;
@@ -104,24 +90,20 @@ public final class SmaxNewslettersGetNewsletterMessagesRequest implements SmaxOp
     /**
      * Returns the optional pagination cursor.
      *
-     * @return an {@link Optional} carrying the cursor, or empty when
-     *         requesting the latest slice
+     * @return an {@link Optional} carrying the cursor, or empty when requesting the latest slice
      */
     public Optional<SmaxNewslettersGetNewsletterMessagesDirection> direction() {
         return Optional.ofNullable(direction);
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza carrying the
-     * {@code <messages>} payload.
+     * Builds the outbound {@code <iq>} stanza carrying the {@code <messages>} payload.
      *
-     * @apiNote
-     * The IQ targets {@code s.whatsapp.net} (not the newsletter JID)
-     * because the request fetches across the relay's newsletter index;
-     * the {@code <smax$any>} child encodes the addressing variant.
+     * <p>The IQ targets {@link Jid#userServer()} (not the newsletter JID) because the request
+     * fetches across the relay's newsletter index; the {@code <smax$any>} child encodes the
+     * addressing variant.</p>
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <messages>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <messages>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutNewslettersGetNewsletterMessagesRequest",
@@ -163,9 +145,8 @@ public final class SmaxNewslettersGetNewsletterMessagesRequest implements SmaxOp
      * Compares two requests for value equality on every field.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a request carrying
-     *         equal {@link #count()}, {@link #queryParams()}, and
-     *         {@link #direction()}
+     * @return {@code true} when {@code obj} is a request carrying equal {@link #count()},
+     *         {@link #queryParams()}, and {@link #direction()}
      */
     @Override
     public boolean equals(Object obj) {
@@ -184,8 +165,7 @@ public final class SmaxNewslettersGetNewsletterMessagesRequest implements SmaxOp
     /**
      * Returns the hash code derived from every field.
      *
-     * @return the combined hash of {@link #count()},
-     *         {@link #queryParams()}, and {@link #direction()}
+     * @return the combined hash of {@link #count()}, {@link #queryParams()}, and {@link #direction()}
      */
     @Override
     public int hashCode() {

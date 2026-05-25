@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
 import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.store.persistent.PersistentStoreFactory;
+import com.github.auties00.cobalt.store.temporary.TemporaryStoreFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;

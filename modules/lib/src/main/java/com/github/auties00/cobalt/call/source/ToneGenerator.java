@@ -6,105 +6,118 @@ import com.github.auties00.cobalt.call.frame.audio.AudioSource;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * An {@link AudioSource} that synthesises a sine wave (or a sum
- * of two sines for DTMF tones) at the call's PCM rate — the
- * batteries-included answer for ringback, hold music, DTMF
- * emission, and acoustic test signals.
+ * Synthesises a sine wave, or a sum of two sines, as an {@link AudioSource} at the call's PCM rate.
  *
- * <p>Every {@link #next()} returns a fresh frame whose phase
- * advances continuously, so concatenating frames produces a
- * click-free waveform.
+ * <p>Each {@link #next()} renders the next slice of the waveform into a fresh {@link AudioFrame}.
+ * Phase is derived from a monotonic frame index rather than reset per frame, so concatenating the
+ * emitted frames reproduces one continuous, click-free waveform. A single frequency produces a pure
+ * tone; a second non-zero frequency sums two sines, which is how dual-tone signals such as DTMF are
+ * built. The source can also follow an on/off cadence: within each cadence cycle it emits the tone
+ * for the configured number of "on" frames and digital silence for the remainder, repeating
+ * indefinitely. A source configured with {@code Long.MAX_VALUE} for both the on and cadence frame
+ * counts plays continuously.
  *
- * <h2>Common factories</h2>
+ * <p>The source never ends; like other synthetic sources it produces frames until the call stops
+ * pulling from it.
  *
- * <ul>
- *   <li>{@link #sine(int)} — single tone</li>
- *   <li>{@link #ringback()} — Western European ringback (425 Hz,
- *       1 s on / 4 s off)</li>
- *   <li>{@link #dtmf(char)} — DTMF tone for one of
- *       {@code 0-9 * # A B C D}</li>
- * </ul>
+ * @apiNote Wire this source into a call to play a generated signal: use {@link #sine(int)} for a
+ * single test tone, {@link #ringback()} for a Western European ringback while a call is being set
+ * up, and {@link #dtmf(char)} to emit a single dial digit. Because the source is endless, swap it
+ * out rather than waiting for it to signal end-of-stream.
  */
 public final class ToneGenerator implements AudioSource {
     /**
-     * Sample rate of the WhatsApp wire profile, hard-coded.
+     * Holds the synthesis sample rate, in Hz, fixed to the call wire profile.
+     *
+     * @implNote This implementation hard-codes 16000 rather than making it configurable, because the
+     * generated samples feed the call encoder directly and that is the only rate it consumes.
      */
     public static final int SAMPLE_RATE = 16_000;
 
     /**
-     * Default samples per emitted frame (10 ms at 16 kHz).
+     * Holds the default sample count per emitted frame.
+     *
+     * @implNote This implementation uses 160, which is 10 ms at {@link #SAMPLE_RATE}.
      */
     public static final int DEFAULT_FRAME_SIZE = 160;
 
     /**
-     * Default emitted-frame duration, ms.
+     * Holds the default duration, in milliseconds, of each emitted frame.
      */
     public static final long DEFAULT_FRAME_DURATION_MS = 10;
 
     /**
-     * Peak amplitude of the synthesised waveform — half full-scale
-     * so two summed sines (DTMF) don't clip.
+     * Holds the peak amplitude of the synthesised waveform.
+     *
+     * @implNote This implementation uses {@code 0x4000} (half of the signed 16-bit full scale of
+     * {@code 0x8000}) so that summing two sines for a dual-tone signal cannot exceed full scale and
+     * clip.
      */
     private static final double AMPLITUDE = 0x4000;
 
     /**
-     * Primary tone frequency in Hz.
+     * Holds the primary tone frequency, in Hz.
      */
     private final double freq1Hz;
 
     /**
-     * Secondary tone frequency in Hz, or {@code 0} for a single
-     * sine.
+     * Holds the secondary tone frequency, in Hz, or {@code 0} for a single sine.
      */
     private final double freq2Hz;
 
     /**
-     * Frames in one full on/off cadence — for a continuous tone,
-     * {@code Long.MAX_VALUE}. For ringback the cycle is the on +
-     * off duration in frames.
+     * Holds the total number of frames in one on/off cadence cycle, or {@code Long.MAX_VALUE} for a
+     * continuous tone.
      */
     private final long cadenceFrames;
 
     /**
-     * Frames the cadence spends in the "on" phase. Beyond this
-     * and before {@link #cadenceFrames}, the source emits silence.
+     * Holds the number of frames the cadence spends in the "on" phase.
+     *
+     * <p>Frames whose index within a cadence cycle is at or beyond this value, and before
+     * {@link #cadenceFrames}, are emitted as silence.
      */
     private final long onFrames;
 
     /**
-     * Samples per emitted frame.
+     * Holds the number of samples in each emitted frame.
      */
     private final int frameSize;
 
     /**
-     * Duration of each emitted frame in milliseconds.
+     * Holds the duration of each emitted frame, in milliseconds, by which each frame's presentation
+     * timestamp advances.
      */
     private final long frameDurationMs;
 
     /**
-     * Monotonic frame counter — drives both phase and the on/off
-     * cadence.
+     * Holds the monotonic frame counter that drives both the waveform phase and the on/off cadence,
+     * advanced atomically so the source may be polled from any thread.
      */
     private final AtomicLong frameIndex = new AtomicLong();
 
     /**
-     * Monotonic timestamp of the next frame.
+     * Holds the presentation timestamp, in milliseconds, of the next frame, advanced atomically so
+     * the source may be polled from any thread.
      */
     private final AtomicLong ptsMs = new AtomicLong();
 
     /**
-     * Constructs a tone source.
+     * Constructs a tone source from explicit frequencies, cadence, and frame geometry.
      *
-     * @param freq1Hz         primary frequency in Hz, must be &gt; 0
-     * @param freq2Hz         secondary frequency in Hz, or {@code 0}
-     *                        for a single sine
-     * @param onFrames        frames in the on phase per cadence
-     *                        cycle, or {@code Long.MAX_VALUE} for a
-     *                        continuous tone
-     * @param cadenceFrames   total frames in one on+off cycle, or
-     *                        {@code Long.MAX_VALUE} for continuous
-     * @param frameSize       samples per emitted frame
-     * @param frameDurationMs duration of each emitted frame, ms
+     * @param freq1Hz         the primary frequency in Hz; must be greater than {@code 0}
+     * @param freq2Hz         the secondary frequency in Hz, or {@code 0} for a single sine
+     * @param onFrames        the number of frames in the "on" phase per cadence cycle, or
+     *                        {@code Long.MAX_VALUE} for a continuous tone
+     * @param cadenceFrames   the total number of frames in one on plus off cycle, or
+     *                        {@code Long.MAX_VALUE} for a continuous tone
+     * @param frameSize       the number of samples per emitted frame
+     * @param frameDurationMs the duration of each emitted frame in milliseconds
+     * @throws IllegalArgumentException if {@code freq1Hz} is not greater than {@code 0}, if
+     *                                  {@code freq2Hz} is negative, if {@code onFrames} is less than
+     *                                  {@code 1}, if {@code cadenceFrames} is less than
+     *                                  {@code onFrames}, or if {@code frameSize} or
+     *                                  {@code frameDurationMs} is less than {@code 1}
      */
     public ToneGenerator(double freq1Hz, double freq2Hz, long onFrames, long cadenceFrames,
                 int frameSize, long frameDurationMs) {
@@ -112,19 +125,19 @@ public final class ToneGenerator implements AudioSource {
             throw new IllegalArgumentException("freq1Hz must be > 0");
         }
         if (freq2Hz < 0) {
-            throw new IllegalArgumentException("freq2Hz must be ≥ 0");
+            throw new IllegalArgumentException("freq2Hz must be >= 0");
         }
         if (onFrames < 1) {
-            throw new IllegalArgumentException("onFrames must be ≥ 1");
+            throw new IllegalArgumentException("onFrames must be >= 1");
         }
         if (cadenceFrames < onFrames) {
-            throw new IllegalArgumentException("cadenceFrames must be ≥ onFrames");
+            throw new IllegalArgumentException("cadenceFrames must be >= onFrames");
         }
         if (frameSize < 1) {
-            throw new IllegalArgumentException("frameSize must be ≥ 1");
+            throw new IllegalArgumentException("frameSize must be >= 1");
         }
         if (frameDurationMs < 1) {
-            throw new IllegalArgumentException("frameDurationMs must be ≥ 1");
+            throw new IllegalArgumentException("frameDurationMs must be >= 1");
         }
         this.freq1Hz = freq1Hz;
         this.freq2Hz = freq2Hz;
@@ -135,11 +148,11 @@ public final class ToneGenerator implements AudioSource {
     }
 
     /**
-     * Returns a continuous single-tone source at the given
-     * frequency, default frame geometry.
+     * Returns a continuous single-tone source at the given frequency with the default frame
+     * geometry.
      *
-     * @param frequencyHz the tone frequency
-     * @return the source
+     * @param frequencyHz the tone frequency in Hz
+     * @return a continuous single-tone source
      */
     public static ToneGenerator sine(int frequencyHz) {
         return new ToneGenerator(frequencyHz, 0,
@@ -148,10 +161,12 @@ public final class ToneGenerator implements AudioSource {
     }
 
     /**
-     * Returns a Western European ringback tone source — 425 Hz on
-     * for 1 second, off for 4 seconds, repeating.
+     * Returns a Western European ringback tone source.
      *
-     * @return the source
+     * <p>Emits a 425 Hz tone for one second, then silence for four seconds, repeating the
+     * five-second cadence indefinitely.
+     *
+     * @return a ringback tone source
      */
     public static ToneGenerator ringback() {
         var onFrames = 1000 / DEFAULT_FRAME_DURATION_MS;
@@ -161,12 +176,15 @@ public final class ToneGenerator implements AudioSource {
     }
 
     /**
-     * Returns a DTMF tone source for the given digit, continuous.
+     * Returns a continuous DTMF tone source for the given dial digit.
      *
-     * @param digit one of {@code 0-9 * # A B C D}
-     * @return the source
-     * @throws IllegalArgumentException if {@code digit} isn't a
-     *                                  valid DTMF symbol
+     * <p>Maps the digit to its standard low-group (row) and high-group (column) frequencies and
+     * synthesises both summed continuously.
+     *
+     * @param digit one of the DTMF symbols {@code 0} through {@code 9}, {@code *}, {@code #}, or
+     *              {@code A} through {@code D}
+     * @return a continuous DTMF tone source
+     * @throws IllegalArgumentException if {@code digit} is not a valid DTMF symbol
      */
     public static ToneGenerator dtmf(char digit) {
         double row, col;
@@ -195,6 +213,17 @@ public final class ToneGenerator implements AudioSource {
                 DEFAULT_FRAME_SIZE, DEFAULT_FRAME_DURATION_MS);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Advances the frame counter and presentation timestamp, then renders the next slice of the
+     * waveform. When the current frame index falls in the cadence's off phase the frame is silence;
+     * otherwise each sample is the sine of the primary frequency, plus the secondary frequency when
+     * configured, scaled to the peak amplitude and rounded to a signed 16-bit sample. Never blocks
+     * and never returns {@code null}.
+     *
+     * @return the next synthesised frame; never {@code null}
+     */
     @Override
     public AudioFrame next() {
         var index = frameIndex.getAndIncrement();

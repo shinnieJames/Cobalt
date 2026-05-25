@@ -17,17 +17,13 @@ import com.github.auties00.libsignal.protocol.SignalSenderKeyDistributionMessage
 import java.util.Objects;
 
 /**
- * Encrypts outbound message protobufs into Signal envelopes for per-device
- * fanout or group sender-key delivery.
- *
- * @apiNote
- * Sending counterpart of {@link MessageDecryption}: every outgoing
- * {@link com.github.auties00.cobalt.model.message.MessageContainer} that
- * leaves the client passes through {@link #encryptForDevice} (1:1 and
- * companion fanout, matching WA Web's {@code WAWebEncryptMsgProtobuf.encryptMsgProtobuf})
- * or {@link #encryptForGroup} (SKMSG, matching {@code encryptMsgSenderKey}).
- * Held by the stanza-build pipeline as an injected service; embedders that
- * speak Signal directly do not normally call it.
+ * Encrypts outbound message protobufs into Signal envelopes for per-device fanout or group sender-key delivery.
+ * <p>
+ * This service is the sending counterpart of {@link MessageDecryption}: every outgoing
+ * {@link com.github.auties00.cobalt.model.message.MessageContainer} that leaves the client passes through
+ * {@link #encryptForDevice(Jid, byte[])} for 1:1 and companion fanout, or through {@link #encryptForGroup(Jid, Jid, byte[])}
+ * for SKMSG group delivery. It is held by the stanza-build pipeline as an injected service; embedders that speak Signal
+ * directly do not normally call it.
  */
 @WhatsAppWebModule(moduleName = "WAWebEncryptMsgProtobuf")
 @WhatsAppWebModule(moduleName = "WAWebBackendJobsCommon")
@@ -37,63 +33,56 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WASignalGroupCipher")
 public final class MessageEncryption {
     /**
-     * Logger for encryption diagnostics.
+     * Holds the logger used for encryption diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageEncryption.class.getName());
 
     /**
-     * The ciphertext format version stamped on every outgoing {@code <enc>}
-     * stanza.
-     *
-     * @apiNote
-     * Maps to the {@code v="2"} attribute the fanout stanza writer adds to
-     * every encrypted child element. Bumped only in lockstep with the WA Web
-     * bundle; embedders should treat this as a read-only wire constant.
+     * Holds the ciphertext format version stamped on every outgoing {@code <enc>} stanza.
+     * <p>
+     * The fanout-stanza writer copies this value into the {@code v} attribute of every encrypted child element. It is
+     * bumped only in lockstep with the WhatsApp Web bundle, so callers treat it as a read-only wire constant.
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "CIPHERTEXT_VERSION",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final int CIPHERTEXT_VERSION = 2;
 
     /**
-     * The store consulted for Signal session and sender-key lookups.
+     * Holds the store consulted for Signal session and sender-key lookups.
      */
     private final WhatsAppStore store;
 
     /**
-     * The per-device Signal session cipher used by {@link #encryptForDevice}.
+     * Holds the per-device Signal session cipher used by {@link #encryptForDevice(Jid, byte[])}.
      */
     private final SignalSessionCipher sessionCipher;
 
     /**
-     * The sender-key group cipher used by {@link #encryptForGroup} and
-     * {@link #createSenderKeyDistributionMessage}.
+     * Holds the sender-key group cipher used by {@link #encryptForGroup(Jid, Jid, byte[])} and
+     * {@link #createSenderKeyDistributionMessage(Jid, Jid)}.
      */
     private final SignalGroupCipher groupCipher;
 
     /**
-     * The minimum number of random padding bytes appended to a plaintext
-     * before encryption.
+     * Holds the minimum number of random padding bytes appended to a plaintext before encryption.
      */
     private static final int MIN_PADDING = 1;
 
     /**
-     * The maximum number of random padding bytes appended to a plaintext
-     * before encryption.
+     * Holds the maximum number of random padding bytes appended to a plaintext before encryption.
      */
     private static final int MAX_PADDING = 16;
 
     /**
      * Constructs an encryption service bound to the given Signal dependencies.
-     *
-     * @apiNote
-     * The same {@link WhatsAppStore} must be shared with the
-     * {@link SignalSessionCipher} and {@link SignalGroupCipher} so session
-     * lookups during encrypt-then-cleanup observe the same backing state.
+     * <p>
+     * The same {@link WhatsAppStore} must be shared with the {@link SignalSessionCipher} and {@link SignalGroupCipher} so
+     * that session lookups during encrypt-then-cleanup observe the same backing state.
      *
      * @param store         the store providing Signal protocol state
-     * @param sessionCipher the cipher used for {@link #encryptForDevice}
-     * @param groupCipher   the cipher used for {@link #encryptForGroup} and
-     *                      {@link #createSenderKeyDistributionMessage}
+     * @param sessionCipher the cipher used for {@link #encryptForDevice(Jid, byte[])}
+     * @param groupCipher   the cipher used for {@link #encryptForGroup(Jid, Jid, byte[])} and
+     *                      {@link #createSenderKeyDistributionMessage(Jid, Jid)}
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptMsgProtobuf", exports = {"encryptMsgProtobuf", "encryptMsgSenderKey"},
@@ -110,28 +99,21 @@ public final class MessageEncryption {
 
     /**
      * Encrypts the given plaintext for a specific recipient device.
+     * <p>
+     * The {@code plaintext} input is the protobuf-encoded {@link com.github.auties00.cobalt.model.message.MessageContainer}.
+     * The result is a {@link MessageEncryptionType#PKMSG} payload when the Signal session is freshly established and a
+     * {@link MessageEncryptionType#MSG} payload once the recipient has decrypted at least one PKMSG. A thrown
+     * {@link WhatsAppMessageException.Send.Unknown} aborts the per-device branch for that recipient; the caller decides
+     * whether the recipient is critical (a primary device, in which case the whole send fails) or skippable (a companion).
      *
-     * @apiNote
-     * Used by the per-device fanout writer to produce one
-     * {@link MessageEncryptedPayload} per recipient address; the result is a
-     * {@code PreKeySignalMessage} when the Signal session is freshly
-     * established and a {@code SignalMessage} once the recipient has decrypted
-     * at least one PKMSG. Throwing here aborts the per-device branch for that
-     * recipient; the caller decides whether the recipient is critical (a
-     * primary device, in which case the whole send fails) or skippable (a
-     * companion). The plaintext input is the protobuf-encoded
-     * {@link com.github.auties00.cobalt.model.message.MessageContainer}.
-     * @implNote
-     * This implementation cleans up the failing Signal session on encryption
-     * error (mirroring WA Web's {@code maybeDeleteUnconvertedSession}) so a
-     * later retry on the same address triggers a fresh PreKey exchange rather
-     * than re-using the stale session record.
+     * @implNote This implementation removes the failing Signal session via {@link WhatsAppStore#removeSession} on
+     * encryption error so a later retry on the same address triggers a fresh PreKey exchange rather than re-using the
+     * stale session record.
      *
      * @param recipientJid the recipient device {@link Jid}
      * @param plaintext    the protobuf-encoded plaintext bytes
      * @return the encrypted payload tagged with its envelope type
-     * @throws NullPointerException                  if any argument is
-     *                                               {@code null}
+     * @throws NullPointerException                  if any argument is {@code null}
      * @throws WhatsAppMessageException.Send.Unknown if encryption fails
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptMsgProtobuf", exports = "encryptMsgProtobuf",
@@ -184,28 +166,20 @@ public final class MessageEncryption {
 
     /**
      * Encrypts the given plaintext for a group using sender-key encryption.
+     * <p>
+     * The resulting SKMSG ciphertext is delivered once to the group; every member who already holds the sender's
+     * {@link SignalSenderKeyDistributionMessage} can decrypt it locally. Members without the distribution must receive it
+     * first through {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution#encrypt(Jid, byte[], java.util.Collection)}.
+     * The returned payload always has a {@code null} {@link MessageEncryptedPayload#recipientJid()}.
      *
-     * @apiNote
-     * Used by the group send pipeline (matching WA Web's
-     * {@code WAWebSendGroupSkmsgJob}) to produce one SKMSG ciphertext that is
-     * delivered once to the group; every member who already holds the
-     * sender's {@link SignalSenderKeyDistributionMessage} can decrypt it
-     * locally. Members without the distribution need to receive it first via
-     * {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution#encrypt}.
-     * @implNote
-     * This implementation lazily bootstraps the sender-key state via
-     * {@link SignalGroupCipher#create} when the store does not already hold
-     * one for this sender; WA Web does the same lookup through
-     * {@code getGroupSenderKeyInfo}.
+     * @implNote This implementation lazily bootstraps the sender-key state via {@link SignalGroupCipher#create} when the
+     * store does not already hold one for this sender.
      *
      * @param groupJid  the group {@link Jid}
-     * @param senderJid the sender device {@link Jid} (PN or LID depending on
-     *                  the group's addressing mode)
+     * @param senderJid the sender device {@link Jid}, PN or LID depending on the group's addressing mode
      * @param plaintext the protobuf-encoded plaintext bytes
-     * @return the SKMSG-typed encrypted payload (with
-     *         {@link MessageEncryptedPayload#recipientJid()} {@code null})
-     * @throws NullPointerException                  if any argument is
-     *                                               {@code null}
+     * @return the SKMSG-typed encrypted payload
+     * @throws NullPointerException                  if any argument is {@code null}
      * @throws WhatsAppMessageException.Send.Unknown if encryption fails
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptMsgProtobuf", exports = "encryptMsgSenderKey",
@@ -251,18 +225,13 @@ public final class MessageEncryption {
     }
 
     /**
-     * Appends {@value #MIN_PADDING} to {@value #MAX_PADDING} random padding
-     * bytes to the supplied plaintext.
+     * Appends {@value #MIN_PADDING} to {@value #MAX_PADDING} random padding bytes to the supplied plaintext.
+     * <p>
+     * Every padding byte carries the padding length value, so the recipient recovers the original length by reading the
+     * last byte. Padding is applied before encryption to mask the plaintext length distribution.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code writeRandomPadMax16}: every padding byte carries
-     * the padding length value so the recipient can recover the original
-     * length by reading the last byte. Required before encryption to mask the
-     * plaintext length distribution.
-     * @implNote
-     * This implementation samples the padding length from the low four bits of
-     * a single random byte and adds {@value #MIN_PADDING}, yielding the
-     * inclusive range {@code [1, 16]} matching WA Web's pad distribution.
+     * @implNote This implementation samples the padding length from the low four bits of a single random byte and adds
+     * {@value #MIN_PADDING}, yielding the inclusive range {@code [1, 16]}.
      *
      * @param plaintext the unpadded plaintext bytes
      * @return the padded plaintext bytes
@@ -290,15 +259,10 @@ public final class MessageEncryption {
     }
 
     /**
-     * Creates and returns the sender-key distribution message for the given
-     * group/sender pair.
-     *
-     * @apiNote
-     * The distribution message must be delivered, via per-device pkmsg/msg
-     * encryption, to every group member that does not yet hold the sender's
-     * key before they can decrypt any SKMSG produced by
-     * {@link #encryptForGroup}. Counterpart of WA Web's
-     * {@code Session.getGroupSenderKeyInfo}.
+     * Creates and returns the sender-key distribution message for the given group and sender pair.
+     * <p>
+     * The distribution message must be delivered, via per-device PKMSG or MSG encryption, to every group member that does
+     * not yet hold the sender's key before they can decrypt any SKMSG produced by {@link #encryptForGroup(Jid, Jid, byte[])}.
      *
      * @param groupJid  the group {@link Jid}
      * @param senderJid the sender device {@link Jid}
@@ -318,18 +282,15 @@ public final class MessageEncryption {
     }
 
     /**
-     * Returns the serialised sender-key distribution bytes for the given
-     * group/sender pair.
-     *
-     * @apiNote
-     * Convenience wrapper over
-     * {@link #createSenderKeyDistributionMessage(Jid, Jid)} that hands the
+     * Returns the serialised sender-key distribution bytes for the given group and sender pair.
+     * <p>
+     * This is a convenience wrapper over {@link #createSenderKeyDistributionMessage(Jid, Jid)} that hands the
      * already-serialised proto straight to the per-device encryption path in
-     * {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution#encrypt}.
+     * {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution#encrypt(Jid, byte[], java.util.Collection)}.
      *
      * @param groupJid  the group {@link Jid}
      * @param senderJid the sender device {@link Jid}
-     * @return the serialised {@code SenderKeyDistributionMessage} bytes
+     * @return the serialised sender-key distribution message bytes
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "getKeyDistributionMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -339,15 +300,11 @@ public final class MessageEncryption {
     }
 
     /**
-     * Removes the sender key for the given group/sender pair, forcing it to be
-     * regenerated on the next send.
-     *
-     * @apiNote
-     * Called after a participant change (member removed, added, or rotated)
-     * invalidates the existing sender key, so the next {@link #encryptForGroup}
-     * call lazily creates a fresh distribution and re-fans it out via
-     * {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution#encrypt}.
-     * Counterpart of WA Web's {@code Session.deleteGroupSenderKeyInfo}.
+     * Removes the sender key for the given group and sender pair, forcing it to be regenerated on the next send.
+     * <p>
+     * This is called after a participant change (a member removed, added, or rotated) invalidates the existing sender key,
+     * so the next {@link #encryptForGroup(Jid, Jid, byte[])} call lazily creates a fresh distribution and re-fans it out
+     * via {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution#encrypt(Jid, byte[], java.util.Collection)}.
      *
      * @param groupJid  the group {@link Jid}
      * @param senderJid the sender device {@link Jid}
@@ -369,15 +326,12 @@ public final class MessageEncryption {
 
     /**
      * Returns whether a Signal session already exists with the given device.
-     *
-     * @apiNote
-     * Used by the fanout planner to decide whether a per-device send needs to
-     * be preceded by a PreKey exchange (no session) or can proceed directly
-     * (session present). Counterpart of WA Web's {@code hasSignalSessions}.
+     * <p>
+     * The fanout planner consults this to decide whether a per-device send must be preceded by a PreKey exchange (no
+     * session) or can proceed directly (session present).
      *
      * @param deviceJid the device {@link Jid} to query
-     * @return {@code true} when a Signal session exists with
-     *         {@code deviceJid}
+     * @return {@code true} when a Signal session exists with {@code deviceJid}
      * @throws NullPointerException if {@code deviceJid} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSignalSessionApi", exports = "hasSignalSessions",
@@ -389,14 +343,11 @@ public final class MessageEncryption {
     }
 
     /**
-     * Returns whether a sender key already exists for the given group/sender
-     * pair.
-     *
-     * @apiNote
-     * Used by the group send planner to skip the distribution-fanout step when
-     * the sender key is already established for every recipient; the
-     * complementary {@link #rotateSenderKey} clears this state when the group
-     * membership changes.
+     * Returns whether a sender key already exists for the given group and sender pair.
+     * <p>
+     * The group send planner consults this to skip the distribution-fanout step when the sender key is already
+     * established for every recipient; the complementary {@link #rotateSenderKey(Jid, Jid)} clears this state when the
+     * group membership changes.
      *
      * @param groupJid  the group {@link Jid}
      * @param senderJid the sender device {@link Jid}

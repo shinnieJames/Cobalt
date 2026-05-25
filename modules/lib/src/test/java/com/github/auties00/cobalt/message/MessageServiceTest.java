@@ -18,33 +18,19 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Exercises the {@link MessageService} facade that wires the send and
- * receive pipelines together.
- *
- * @apiNote The class under test is a thin orchestrator: its value-add lives
- * in the constructor null-arg coverage and in the delegation of the public
- * {@code send}, {@code sendPeer}, {@code process}, and
- * {@code clearPendingMessages} methods to the underlying services. The
- * heavier per-pipeline behaviour is covered by the
- * {@link com.github.auties00.cobalt.message.send.MessageSendingService} and
- * {@link com.github.auties00.cobalt.message.receive.MessageReceivingService}
- * test suites.
- *
- * @implNote Builds each subject through {@link MessageFixtures#temporaryStore}
- * plus {@link TestWhatsAppClient} so the assembled facade is isolated from
- * any process-wide state.
+ * Covers the {@link MessageService} facade that wires the send and receive pipelines
+ * together: constructor null-argument rejection, happy-path assembly, and the idempotence
+ * of {@link MessageService#clearPendingMessages()}. Each subject is built through
+ * {@link MessageFixtures#temporaryStore} plus {@link TestWhatsAppClient} so the assembled
+ * facade is isolated from any process-wide state. The heavier per-pipeline behaviour is
+ * covered by the {@link com.github.auties00.cobalt.message.send.MessageSendingService} and
+ * {@link com.github.auties00.cobalt.message.receive.MessageReceivingService} test suites.
  */
 @DisplayName("MessageService")
 class MessageServiceTest {
 
-    /**
-     * Self-JID used by every subject in this suite.
-     */
     private static final Jid SELF_PN = Jid.of("12025550100@s.whatsapp.net");
 
-    /**
-     * Verifies that every collaborator is required by the constructor.
-     */
     @Test
     @DisplayName("constructor: every collaborator is required (null throws NullPointerException)")
     void constructorNullArgs() {
@@ -70,10 +56,6 @@ class MessageServiceTest {
         assertThrows(NullPointerException.class, () -> new MessageService(client, session, group, device, migration, props, wam, null));
     }
 
-    /**
-     * Verifies that a {@link MessageService} can be assembled from a full
-     * set of valid collaborators.
-     */
     @Test
     @DisplayName("constructor: with all valid collaborators, the service is constructed successfully")
     void constructorHappyPath() {
@@ -94,10 +76,6 @@ class MessageServiceTest {
                 "with all valid collaborators MessageService must be constructed without throwing");
     }
 
-    /**
-     * Verifies that {@link MessageService#clearPendingMessages()} is
-     * idempotent on a fresh service.
-     */
     @Test
     @DisplayName("clearPendingMessages: idempotent no-op on a fresh service")
     void clearPendingMessagesIdempotent() {

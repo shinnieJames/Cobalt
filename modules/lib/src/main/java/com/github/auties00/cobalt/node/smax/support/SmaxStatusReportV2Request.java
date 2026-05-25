@@ -14,22 +14,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code spam} IQ that reports an offending newsletter-status post (v2 schema).
- *
- * @apiNote
- * Drives the "Report newsletter status" surface invoked by WA Web's
- * {@code WAWebNewsletterReportUtils.sendNewsletterStatusReport}; the v2 schema replaces the
- * legacy {@code <message>} envelope of {@link SmaxStatusReportRequest} with a
- * {@code <status>} envelope carrying {@code server_id} and {@code t} attributes plus an
- * optional payload child. Pair with {@link SmaxStatusReportV2Response} to consume the relay's
- * verdict.
+ * Builds the outbound {@code spam} IQ that reports an offending newsletter-status post under
+ * the v2 schema.
+ * <p>
+ * The v2 schema replaces the legacy {@code <message>} envelope of {@link SmaxStatusReportRequest}
+ * with a {@code <status>} envelope carrying {@code server_id} and {@code t} attributes plus an
+ * optional payload child. Callers pair this request with {@link SmaxStatusReportV2Response} to
+ * consume the relay's verdict.
  *
  * @implNote
- * This implementation flattens the WA Web mixin chain (BaseIQSetRequest, BaseReport,
- * EntitySubject, ReportableNewsletterStatus) into a single {@link NodeBuilder} that pins
- * {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. WA Web composes
- * the payload child via {@code mergeStatusNewsletterTextOrMediaMixinGroup}; this implementation
- * accepts the supplied node verbatim under {@code <status>}.
+ * This implementation flattens the WA Web mixin chain into a single {@link NodeBuilder} that
+ * pins {@code xmlns="spam"}, {@code to} to {@link JidServer#user()} and {@code type="set"}.
+ * The supplied payload node is appended verbatim under {@code <status>} rather than being
+ * composed from its constituent text-or-media parts as WA Web does.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamStatusReportV2Request")
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamBaseReportMixin")
@@ -37,62 +34,53 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamReportableNewsletterStatusMixin")
 public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
     /**
-     * The newsletter JID being reported.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list jid="..."/>} via WA Web's {@code JID} marshaller.
+     * Holds the newsletter JID being reported.
+     * <p>
+     * This value is routed into the {@code <spam_list jid="..."/>} attribute.
      */
     private final Jid spamListJid;
 
     /**
-     * The spam-flow identifier surfacing the user-facing report flow.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list spam_flow="..."/>}.
+     * Holds the spam-flow identifier naming the user-facing report flow.
+     * <p>
+     * This value is routed into the {@code <spam_list spam_flow="..."/>} attribute.
      */
     private final String spamListSpamFlow;
 
     /**
-     * The {@code server_id} of the offending status post.
-     *
-     * @apiNote
-     * Routed into {@code <status server_id="..."/>}.
+     * Holds the {@code server_id} of the offending status post.
+     * <p>
+     * This value is routed into the {@code <status server_id="..."/>} attribute.
      */
     private final long statusServerId;
 
     /**
-     * The Unix-second timestamp of the offending status post.
-     *
-     * @apiNote
-     * Routed into {@code <status t="..."/>}.
+     * Holds the Unix-second timestamp of the offending status post.
+     * <p>
+     * This value is routed into the {@code <status t="..."/>} attribute.
      */
     private final long statusTimestamp;
 
     /**
-     * The optional newsletter subject string echoed by the relay for attribution context.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list subject="..."/>} via
-     * {@code WASmaxOutSpamEntitySubjectMixin}.
+     * Holds the optional newsletter subject string echoed by the relay for attribution context.
+     * <p>
+     * This value is routed into the {@code <spam_list subject="..."/>} attribute, or omitted
+     * when {@code null}.
      */
     private final String spamListSubject;
 
     /**
-     * The optional pre-built payload child for the {@code <status>} envelope.
-     *
-     * @apiNote
-     * Appended verbatim under {@code <status>} when present; carries the text-or-media inner
-     * content produced by WA Web's {@code mergeStatusNewsletterTextOrMediaMixinGroup}. When
-     * absent the {@code <status>} envelope is emitted without a content child.
+     * Holds the optional pre-built payload child for the {@code <status>} envelope.
+     * <p>
+     * When present this node carries the text-or-media inner content and is appended verbatim
+     * under {@code <status>}; when {@code null} the {@code <status>} envelope is emitted without
+     * a content child.
      */
     private final Node statusPayloadContent;
 
     /**
-     * Constructs a v2 status-report request.
-     *
-     * @apiNote
-     * Typically invoked by callers that have collected the form fields and harvested the
-     * offending status from the local cache.
+     * Constructs a v2 status-report request from the collected form fields and the harvested
+     * offending status.
      *
      * @param spamListJid          the newsletter JID; never {@code null}
      * @param spamListSpamFlow     the spam-flow string; never {@code null}
@@ -116,9 +104,8 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
 
     /**
      * Returns the newsletter JID.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list jid>} value.
+     * <p>
+     * This is the value routed into the {@code <spam_list jid>} attribute.
      *
      * @return the JID; never {@code null}
      */
@@ -128,9 +115,9 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
 
     /**
      * Returns the spam-flow identifier.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list spam_flow>} value naming the user-facing surface.
+     * <p>
+     * This is the value routed into the {@code <spam_list spam_flow>} attribute that names the
+     * user-facing surface.
      *
      * @return the spam-flow; never {@code null}
      */
@@ -140,9 +127,8 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
 
     /**
      * Returns the status {@code server_id}.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <status server_id>}.
+     * <p>
+     * This is the value routed into the {@code <status server_id>} attribute.
      *
      * @return the {@code server_id}
      */
@@ -152,9 +138,8 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
 
     /**
      * Returns the status timestamp.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <status t>} in Unix seconds.
+     * <p>
+     * This is the Unix-second value routed into the {@code <status t>} attribute.
      *
      * @return the timestamp
      */
@@ -164,9 +149,9 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
 
     /**
      * Returns the optional newsletter subject.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list subject>} value.
+     * <p>
+     * This is the value routed into the {@code <spam_list subject>} attribute, empty when it was
+     * not supplied.
      *
      * @return an {@link Optional} carrying the subject, or empty when omitted
      */
@@ -176,9 +161,9 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
 
     /**
      * Returns the optional pre-built payload child.
-     *
-     * @apiNote
-     * Empty when the {@code <status>} envelope should be emitted without a content child.
+     * <p>
+     * The result is empty when the {@code <status>} envelope should be emitted without a content
+     * child.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -189,15 +174,11 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Emits the outbound v2 status-report IQ ready for
-     * {@link com.github.auties00.cobalt.node.smax} dispatch.
-     *
      * @implNote
      * This implementation builds the {@code <status>} envelope first ({@code server_id},
-     * {@code t}, optional payload child) and then attaches it under {@code <spam_list>} with
-     * the optional {@code subject} attribute; the outer {@code <iq>} carries no further
-     * optional children.
+     * {@code t}, optional payload child) and then nests it under {@code <spam_list>} with the
+     * optional {@code subject} attribute; the outer {@code <iq>} carries no further optional
+     * children.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSpamStatusReportV2Request",
@@ -226,6 +207,13 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
                 .content(spamListBuilder.build());
     }
 
+    /**
+     * Compares this request to another for equality across all reported fields.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a {@link SmaxStatusReportV2Request} with equal
+     *         JID, spam-flow, server id, timestamp, subject, and payload content
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -243,12 +231,22 @@ public final class SmaxStatusReportV2Request implements SmaxOperation.Request {
                 && Objects.equals(this.statusPayloadContent, that.statusPayloadContent);
     }
 
+    /**
+     * Returns a hash code derived from all reported fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(spamListJid, spamListSpamFlow, statusServerId, statusTimestamp,
                 spamListSubject, statusPayloadContent);
     }
 
+    /**
+     * Returns a debug string carrying the scalar reported fields.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxStatusReportV2Request[spamListJid=" + spamListJid

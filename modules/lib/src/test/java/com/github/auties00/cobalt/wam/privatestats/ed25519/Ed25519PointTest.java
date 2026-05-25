@@ -9,61 +9,30 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Validates {@link Ed25519Point} against an independent
- * {@link BigInteger}-based reference implementation of affine
- * Edwards-curve arithmetic.
- *
- * @apiNote
- * The reference uses the affine formulas directly with
- * {@link BigInteger#modPow} for field inversion. It shares zero code
- * with the radix-{@code 2^16} port, so agreement on randomised
- * inputs is strong evidence the extended-coordinate code computes
- * the same group operation.
+ * Validates {@link Ed25519Point} against an independent affine Edwards-curve reference built on
+ * {@link BigInteger#modPow} for field inversion. The reference shares no code with the
+ * radix-{@code 2^16} port, so agreement on randomised inputs is strong evidence the
+ * extended-coordinate code computes the same group operation.
  */
 class Ed25519PointTest {
-    /**
-     * The Ed25519 field prime {@code p = 2^255 - 19}.
-     */
     private static final BigInteger P = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
 
-    /**
-     * The Ed25519 group order
-     * {@code L = 2^252 + 27742317777372353535851937790883648493}.
-     */
     private static final BigInteger L =
             BigInteger.ONE.shiftLeft(252).add(new BigInteger("27742317777372353535851937790883648493"));
 
-    /**
-     * The Edwards-curve constant {@code d = -121665 / 121666 (mod p)}.
-     */
     private static final BigInteger D =
             BigInteger.valueOf(-121665).multiply(BigInteger.valueOf(121666).modInverse(P)).mod(P);
 
-    /**
-     * The affine x-coordinate of the Ed25519 base point.
-     */
     private static final BigInteger BX =
             new BigInteger("15112221349535400772501151409588531511454012693041857206046113283949847762202");
 
-    /**
-     * The affine y-coordinate of the Ed25519 base point
-     * ({@code 4/5 mod p}).
-     */
+    // base-point y = 4/5 mod p
     private static final BigInteger BY = BigInteger.valueOf(4).multiply(BigInteger.valueOf(5).modInverse(P)).mod(P);
 
-    /**
-     * The point at infinity in affine Edwards form.
-     */
     private static final BigInteger[] IDENTITY = {BigInteger.ZERO, BigInteger.ONE};
 
-    /**
-     * The number of random iterations per property-style test.
-     */
     private static final int ITERATIONS = 16;
 
-    /**
-     * Asserts {@code 0 * B == identity}.
-     */
     @Test
     void scalarMultBaseByZeroYieldsIdentity() {
         var s = new byte[32];
@@ -74,9 +43,6 @@ class Ed25519PointTest {
         assertArrayEquals(packAffine(IDENTITY), packed);
     }
 
-    /**
-     * Asserts {@code 1 * B == B}.
-     */
     @Test
     void scalarMultBaseByOneYieldsBase() {
         var s = new byte[32];
@@ -88,10 +54,6 @@ class Ed25519PointTest {
         assertArrayEquals(packAffine(new BigInteger[]{BX, BY}), packed);
     }
 
-    /**
-     * Asserts {@code L * B == identity}, exercising the full
-     * 253-bit ladder.
-     */
     @Test
     void scalarMultBaseByOrderYieldsIdentity() {
         var s = bigIntegerToScalar(L);
@@ -102,10 +64,6 @@ class Ed25519PointTest {
         assertArrayEquals(packAffine(IDENTITY), packed);
     }
 
-    /**
-     * Asserts {@link Ed25519Point#scalarMultBase} matches the
-     * affine reference for randomised scalars.
-     */
     @Test
     void scalarMultBaseMatchesAffineReference() {
         var rng = new Random(0xC0BA40L);
@@ -123,10 +81,6 @@ class Ed25519PointTest {
         }
     }
 
-    /**
-     * Asserts the group-homomorphism property
-     * {@code (s + t) * B == s * B + t * B}.
-     */
     @Test
     void scalarMultBaseIsHomomorphic() {
         var rng = new Random(0xC0BA41L);
@@ -149,12 +103,6 @@ class Ed25519PointTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Point#unpackNeg} on a packed point
-     * returns the negation: re-packing the result must yield the
-     * same y-coordinate bytes as the original with the parity bit
-     * flipped, since Edwards negation maps {@code (x, y) -> (-x, y)}.
-     */
     @Test
     void unpackNegRoundTripsToNegatedPoint() {
         var rng = new Random(0xC0BA42L);
@@ -185,14 +133,6 @@ class Ed25519PointTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Point#unpackNeg} returns {@code -1} on
-     * an encoding whose y-coordinate is not a curve point.
-     *
-     * @apiNote
-     * Sweeps small y values from {@code 2} upward until a non-curve
-     * one is found; the loop is bounded to keep the test fast.
-     */
     @Test
     void unpackNegRejectsInvalidEncoding() {
         var encoded = new byte[32];
@@ -209,10 +149,6 @@ class Ed25519PointTest {
         assertEquals(true, rejected, "expected at least one non-curve y in [2, 64)");
     }
 
-    /**
-     * Asserts {@link Ed25519Point#par25519} equals the parity of
-     * the canonical {@link Ed25519Field#pack25519} encoding.
-     */
     @Test
     void par25519MatchesPackedLowBit() {
         var rng = new Random(0xC0BA43L);
@@ -228,13 +164,6 @@ class Ed25519PointTest {
         }
     }
 
-    /**
-     * Computes {@code k * B} and returns the result as an
-     * extended-Edwards point.
-     *
-     * @param k the scalar
-     * @return the extended-Edwards point
-     */
     private static long[][] pointTimesBase(BigInteger k) {
         var s = bigIntegerToScalar(k);
         var p = Ed25519Point.p3();
@@ -242,18 +171,7 @@ class Ed25519PointTest {
         return p;
     }
 
-    /**
-     * Affine reference: {@code k * P} via simple double-and-add.
-     *
-     * @implNote
-     * This implementation is not constant time; that is acceptable
-     * because the reference exists only to oracle the constant-time
-     * port.
-     *
-     * @param k     the scalar
-     * @param point the affine input point
-     * @return the affine result
-     */
+    // Affine k * P via double-and-add; not constant time, which is fine for an oracle of the constant-time port.
     private static BigInteger[] scalarMultAffine(BigInteger k, BigInteger[] point) {
         var result = IDENTITY;
         var addend = point;
@@ -266,13 +184,6 @@ class Ed25519PointTest {
         return result;
     }
 
-    /**
-     * Affine Edwards addition reference.
-     *
-     * @param p the left operand
-     * @param q the right operand
-     * @return {@code p + q} in affine form
-     */
     private static BigInteger[] addAffine(BigInteger[] p, BigInteger[] q) {
         var x1y2 = p[0].multiply(q[1]).mod(P);
         var x2y1 = q[0].multiply(p[1]).mod(P);
@@ -284,12 +195,6 @@ class Ed25519PointTest {
         return new BigInteger[]{x3, y3};
     }
 
-    /**
-     * Encodes an affine point in compressed Ed25519 form.
-     *
-     * @param point the affine point
-     * @return the 32-byte compressed encoding
-     */
     private static byte[] packAffine(BigInteger[] point) {
         var out = bigIntegerToFieldBytes(point[1]);
         if (point[0].testBit(0)) {
@@ -298,24 +203,10 @@ class Ed25519PointTest {
         return out;
     }
 
-    /**
-     * Encodes a {@link BigInteger} as a 32-byte little-endian
-     * Ed25519 scalar.
-     *
-     * @param k the scalar value
-     * @return the scalar bytes
-     */
     private static byte[] bigIntegerToScalar(BigInteger k) {
         return bigIntegerToFieldBytes(k.mod(BigInteger.ONE.shiftLeft(256)));
     }
 
-    /**
-     * Encodes a non-negative {@link BigInteger} as 32 little-endian
-     * bytes.
-     *
-     * @param x the value
-     * @return the little-endian encoding
-     */
     private static byte[] bigIntegerToFieldBytes(BigInteger x) {
         var be = x.toByteArray();
         var out = new byte[32];

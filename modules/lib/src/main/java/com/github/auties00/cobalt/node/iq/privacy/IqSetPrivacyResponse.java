@@ -13,33 +13,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay for an
- * {@link IqSetPrivacyRequest}.
- *
- * @apiNote
- * Pattern match against the three permitted subtypes ({@link Success}, {@link ClientError},
- * {@link ServerError}) to surface the per-category outcome list or the error envelope to the
- * caller. Note that {@link Success} can still carry per-category rejections via
+ * Sealed family of inbound reply variants produced by the relay for an {@link IqSetPrivacyRequest}.
+ * <p>
+ * Pattern matching against the three permitted subtypes ({@link Success}, {@link ClientError},
+ * {@link ServerError}) surfaces the per-category outcome list or the error envelope. A
+ * {@link Success} envelope can still carry per-category rejections via
  * {@link CategoryOutcome#errorCode()}; the envelope being a success only means the relay accepted
  * the {@code <iq>} for processing.
  *
  * @implNote
- * This implementation collapses WA Web's split parse-and-throw flow ({@code setPrivacyParser}
- * plus the {@code ServerStatusCodeError} thrown by {@code WAWebSetPrivacyJob.setPrivacy} on a
- * {@code 4xx}/{@code 5xx} reply) into a single sealed hierarchy; an error reply is a typed value
- * here rather than an exception.
+ * This implementation collapses WA Web's split parse-and-throw flow ({@code setPrivacyParser} plus
+ * the {@code ServerStatusCodeError} thrown by {@code WAWebSetPrivacyJob.setPrivacy} on a {@code 4xx}
+ * or {@code 5xx} reply) into a single sealed hierarchy; an error reply is a typed value here rather
+ * than an exception.
  */
 public sealed interface IqSetPrivacyResponse extends IqOperation.Response
         permits IqSetPrivacyResponse.Success, IqSetPrivacyResponse.ClientError, IqSetPrivacyResponse.ServerError {
 
     /**
-     * Tries each {@link IqSetPrivacyResponse} variant in priority order and returns the first
-     * that parses cleanly.
-     *
-     * @apiNote
-     * The dispatcher calls this immediately after receiving an inbound {@code <iq>} stanza whose
-     * id matches an outstanding {@link IqSetPrivacyRequest}; the empty {@link Optional} indicates
-     * the stanza did not match any documented schema.
+     * Tries each {@link IqSetPrivacyResponse} variant in priority order and returns the first that
+     * parses cleanly.
+     * <p>
+     * The dispatcher calls this immediately after receiving an inbound {@code <iq>} stanza whose id
+     * matches an outstanding {@link IqSetPrivacyRequest}; the empty {@link Optional} indicates the
+     * stanza did not match any documented schema.
      *
      * @implNote
      * This implementation tries {@link Success} first, then {@link ClientError}, then
@@ -68,11 +65,10 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
     /**
      * One per-category outcome inside a {@link Success} response.
-     *
-     * @apiNote
+     * <p>
      * Carries the new value, the optional echoed digest (for blacklist mutations), and any
-     * per-category error code; the relay returns one outcome per {@code <category>} child that
-     * was sent in the request. A non-empty {@link #errorText()} together with a non-{@code -1}
+     * per-category error code; the relay returns one outcome per {@code <category>} child that was
+     * sent in the request. A non-empty {@link #errorText()} together with a non-{@code -1}
      * {@link #errorCode()} indicates the relay rejected this specific category with the
      * {@code value="error"} sentinel even though the envelope itself succeeded.
      *
@@ -99,8 +95,8 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
         private final String dhash;
 
         /**
-         * The numeric error code carried inside the embedded {@code <error>} child when the
-         * relay rejected this category, or {@code -1} when the category succeeded.
+         * The numeric error code carried inside the embedded {@code <error>} child when the relay
+         * rejected this category, or {@code -1} when the category succeeded.
          */
         private final int errorCode;
 
@@ -111,10 +107,9 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Constructs a category outcome.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link Success#of(Node, Node)}; this
-         * constructor is also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link Success#of(Node, Node)}; this constructor is
+         * also reachable for tests and synthetic fixtures.
          *
          * @param name      the category; never {@code null}
          * @param value     the new value, or {@code null} when the relay rejected the mutation
@@ -146,12 +141,10 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Returns the new value, when the per-category mutation succeeded.
-         *
-         * @apiNote
-         * The {@link Optional#empty()} return signals the relay rejected this specific
-         * mutation with the {@code value="error"} sentinel even though the envelope itself
-         * succeeded; check {@link #errorCode()} and {@link #errorText()} for the rejection
-         * reason.
+         * <p>
+         * The {@link Optional#empty()} return signals the relay rejected this specific mutation with
+         * the {@code value="error"} sentinel even though the envelope itself succeeded;
+         * {@link #errorCode()} and {@link #errorText()} carry the rejection reason.
          *
          * @return the value, or {@link Optional#empty()} when rejected
          */
@@ -161,11 +154,10 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Returns the optional list digest echoed by the relay.
-         *
-         * @apiNote
+         * <p>
          * Present only for categories whose request carried a non-empty
-         * {@link IqSetPrivacyRequest#users()} list; consumers should persist it as the new
-         * baseline for the next mutation on the same category.
+         * {@link IqSetPrivacyRequest#users()} list; consumers persist it as the new baseline for the
+         * next mutation on the same category.
          *
          * @return the digest, or {@link Optional#empty()} when omitted
          */
@@ -228,8 +220,8 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation of every field; the format is
-         * not stable and must not be parsed.
+         * This implementation emits a debug-only representation of every field; the format is not
+         * stable and must not be parsed.
          */
         @Override
         public String toString() {
@@ -240,13 +232,12 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant; the relay accepted the envelope and returned a
-     * per-category outcome list.
-     *
-     * @apiNote
-     * Iterate {@link #categories()} to apply each outcome locally; even on a successful envelope
-     * individual categories may still carry a non-{@code -1}
-     * {@link CategoryOutcome#errorCode()} signalling per-category rejection.
+     * The {@code Success} reply variant; the relay accepted the envelope and returned a per-category
+     * outcome list.
+     * <p>
+     * Iterating {@link #categories()} applies each outcome locally; even on a successful envelope
+     * individual categories may still carry a non-{@code -1} {@link CategoryOutcome#errorCode()}
+     * signalling per-category rejection.
      */
     @WhatsAppWebModule(moduleName = "WAWebSetPrivacyJob")
     final class Success implements IqSetPrivacyResponse {
@@ -257,10 +248,9 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Constructs a {@code Success} reply.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link #of(Node, Node)}; this constructor is
-         * also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link #of(Node, Node)}; this constructor is also
+         * reachable for tests and synthetic fixtures.
          *
          * @implNote
          * This implementation defensively copies {@code categories} via
@@ -285,28 +275,25 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Tries to parse a {@link Success} variant from the given inbound stanza.
-         *
-         * @apiNote
-         * The {@link Optional#empty()} return signals the stanza is not a success envelope;
-         * callers should fall through to {@link ClientError#of(Node, Node)} and
-         * {@link ServerError#of(Node, Node)}.
+         * <p>
+         * The {@link Optional#empty()} return signals the stanza is not a success envelope; callers
+         * fall through to {@link ClientError#of(Node, Node)} and {@link ServerError#of(Node, Node)}.
          *
          * @implNote
          * This implementation iterates every {@code <category>} child and folds the
-         * {@code value="error"} sentinel back into the {@link CategoryOutcome} typed fields:
-         * a literal {@code "error"} value triggers a lookup of the embedded {@code <error>}
-         * child's {@code code}/{@code text} attributes (matching WA Web's
-         * {@code ServerStatusCodeError} construction in {@code setPrivacyParser}), every other
-         * value is projected through {@link IqQueryPrivacySettingsVisibility#fromWire(String)}.
-         * Entries whose {@code name} cannot be resolved by
-         * {@link IqQueryPrivacySettingsCategoryName#fromWire(String)} are silently dropped, as
-         * are entries with a missing {@code value} attribute or an unrecognised non-{@code error}
-         * value.
+         * {@code value="error"} sentinel back into the {@link CategoryOutcome} typed fields: a
+         * literal {@code "error"} value triggers a lookup of the embedded {@code <error>} child's
+         * {@code code} and {@code text} attributes (matching WA Web's {@code ServerStatusCodeError}
+         * construction in {@code setPrivacyParser}), every other value is projected through
+         * {@link IqQueryPrivacySettingsVisibility#fromWire(String)}. Entries whose {@code name}
+         * cannot be resolved by {@link IqQueryPrivacySettingsCategoryName#fromWire(String)} are
+         * silently dropped, as are entries with a missing {@code value} attribute or an unrecognised
+         * non-{@code error} value.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match
-         *         the success schema
+         * @return the parsed variant, or {@link Optional#empty()} when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSetPrivacyJob",
                 exports = "setPrivacyParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -372,8 +359,7 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation hashes the categories list consistently with
-         * {@link #equals(Object)}.
+         * This implementation hashes the categories list consistently with {@link #equals(Object)}.
          */
         @Override
         public int hashCode() {
@@ -384,8 +370,8 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation; the format is not stable and
-         * must not be parsed.
+         * This implementation emits a debug-only representation; the format is not stable and must
+         * not be parsed.
          */
         @Override
         public String toString() {
@@ -396,8 +382,7 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
     /**
      * The {@code ClientError} reply variant; the relay rejected the envelope with a {@code 4xx}
      * error code.
-     *
-     * @apiNote
+     * <p>
      * The most actionable {@code 4xx} for this surface is {@code 409 Conflict}, returned when the
      * supplied {@link IqSetPrivacyRequest#dhash()} no longer matches the relay's view of the
      * per-category exclusion list; WA Web's {@code WAWebSetPrivacyForOneCategoryAction} reacts by
@@ -417,10 +402,9 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link #of(Node, Node)}; this constructor is
-         * also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link #of(Node, Node)}; this constructor is also
+         * reachable for tests and synthetic fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -501,8 +485,8 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation; the format is not stable and
-         * must not be parsed.
+         * This implementation emits a debug-only representation; the format is not stable and must
+         * not be parsed.
          */
         @Override
         public String toString() {
@@ -512,10 +496,9 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant; the relay encountered a transient internal failure
-     * ({@code 5xx} error code).
-     *
-     * @apiNote
+     * The {@code ServerError} reply variant; the relay encountered a transient internal failure (a
+     * {@code 5xx} error code).
+     * <p>
      * Distinguished from {@link ClientError} so callers can choose a different retry policy;
      * transient failures normally warrant a backoff-and-retry, client errors normally do not.
      */
@@ -533,10 +516,9 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
 
         /**
          * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Embedders normally obtain instances via {@link #of(Node, Node)}; this constructor is
-         * also reachable for tests and synthetic fixtures.
+         * <p>
+         * Instances are normally obtained via {@link #of(Node, Node)}; this constructor is also
+         * reachable for tests and synthetic fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -617,8 +599,8 @@ public sealed interface IqSetPrivacyResponse extends IqOperation.Response
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation emits a debug-only representation; the format is not stable and
-         * must not be parsed.
+         * This implementation emits a debug-only representation; the format is not stable and must
+         * not be parsed.
          */
         @Override
         public String toString() {

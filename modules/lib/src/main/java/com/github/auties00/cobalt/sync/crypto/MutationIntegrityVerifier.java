@@ -22,20 +22,18 @@ import java.util.SequencedCollection;
  * Validates the snapshot MAC and patch MAC on every app-state sync envelope
  * the relay sends, and computes the same MACs for every outgoing patch.
  *
- * <p>The MAC formulas live in {@code WAWebSyncdEncryptionManager}; the
- * wire-level verification routines that call into them live in
- * {@code WAWebSyncdAntiTampering}. This class collapses the two:
- * {@link #verifySnapshotMac} and {@link #verifyPatchIntegrity} are the
- * verification entry points, the static {@link #computeSnapshotMac} and
- * {@link #computePatchMac} are the underlying formulas, and
- * {@link #computeOutgoingSnapshotAndPatchMacs} pairs them for the outgoing path.
+ * <p>This class collapses the MAC formulas and the wire-level verification
+ * routines that call into them: {@link #verifySnapshotMac} and
+ * {@link #verifyPatchIntegrity} are the verification entry points, the static
+ * {@link #computeSnapshotMac} and {@link #computePatchMac} are the underlying
+ * formulas, and {@link #computeOutgoingSnapshotAndPatchMacs} pairs them for the
+ * outgoing path.
  *
- * @apiNote
- * Driven by the collection-handler pipeline that processes a single
- * {@code SyncdPatch} or {@code SyncdSnapshot} envelope at a time. Cobalt
- * does not batch verification across patches; every patch carries its own
- * value MAC list and its own wire snapshot MAC, both of which feed back into
- * the patch MAC chain.
+ * <p>Driven by the collection-handler pipeline that processes a single
+ * {@link SyncdPatch} or {@link SyncdSnapshot} envelope at a time. Cobalt does
+ * not batch verification across patches; every patch carries its own value MAC
+ * list and its own wire snapshot MAC, both of which feed back into the patch
+ * MAC chain.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdAntiTampering")
 @WhatsAppWebModule(moduleName = "WAWebSyncdEncryptionManager")
@@ -59,12 +57,11 @@ public final class MutationIntegrityVerifier {
      * Verifies the snapshot MAC on a freshly received {@link SyncdSnapshot}
      * and returns the computed MAC for downstream use.
      *
-     * @apiNote
-     * Called once per incoming snapshot, after the caller has decrypted every
-     * mutation in the snapshot and accumulated the new LT-Hash. The
-     * {@code expectedHash} input is the locally computed LT-Hash; matching
-     * it under the snapshot-MAC key against the wire MAC closes the loop
-     * between the decrypted records and the relay's authenticated digest.
+     * <p>Called once per incoming snapshot, after the caller has decrypted
+     * every mutation in the snapshot and accumulated the new LT-Hash. The
+     * {@code expectedHash} input is the locally computed LT-Hash; matching it
+     * under the snapshot-MAC key against the wire MAC closes the loop between
+     * the decrypted records and the relay's authenticated digest.
      *
      * @implNote
      * This implementation diverges from
@@ -129,15 +126,13 @@ public final class MutationIntegrityVerifier {
      * Verifies the patch MAC and the snapshot MAC on a freshly received
      * {@link SyncdPatch}.
      *
-     * @apiNote
-     * Called once per incoming patch envelope. The patch MAC chains over the
+     * <p>Called once per incoming patch envelope. The patch MAC chains over the
      * wire snapshot MAC plus the per-mutation value MACs and is the primary
      * integrity gate; the snapshot MAC re-checks the locally accumulated
-     * LT-Hash against the relay's expected digest. WA Web treats the two
-     * mismatches differently and Cobalt mirrors that asymmetry: patch MAC
-     * mismatch is fatal, snapshot MAC mismatch reports {@code false} so the
-     * caller can flip the collection into the mac-mismatch state without
-     * tearing down the session.
+     * LT-Hash against the relay's expected digest. The two mismatches are
+     * treated differently: a patch MAC mismatch is fatal, while a snapshot MAC
+     * mismatch reports {@code false} so the caller can flip the collection into
+     * the mac-mismatch state without tearing down the session.
      *
      * @implNote
      * This implementation skips the snapshot MAC validation when the
@@ -226,8 +221,7 @@ public final class MutationIntegrityVerifier {
     /**
      * Computes the snapshot MAC and patch MAC for an outgoing patch envelope.
      *
-     * @apiNote
-     * Called by the outgoing patch builder after the LT-Hash has been
+     * <p>Called by the outgoing patch builder after the LT-Hash has been
      * recomputed for the new version. The patch MAC chains over the snapshot
      * MAC, so callers must use the {@link OutgoingMacs#snapshotMac()} output
      * (not any pre-existing wire MAC) for the relay to accept the patch.
@@ -263,8 +257,8 @@ public final class MutationIntegrityVerifier {
     /**
      * Computes the snapshot MAC under the snapshot-MAC key.
      *
-     * @apiNote
-     * Formula: {@code HMAC-SHA256(snapshotMacKey, ltHash || version8 || collectionUtf8)}
+     * <p>The formula is
+     * {@code HMAC-SHA256(snapshotMacKey, ltHash || version8 || collectionUtf8)}
      * where {@code version8} is an 8-byte big-endian encoding of the version
      * (the upper 4 bytes are zero in practice because versions are unsigned
      * 32-bit counters).
@@ -309,11 +303,11 @@ public final class MutationIntegrityVerifier {
     /**
      * Computes the patch MAC under the patch-MAC key.
      *
-     * @apiNote
-     * Formula: {@code HMAC-SHA256(patchMacKey, snapshotMac || valueMac1 || ... || valueMacN || version8 || collectionUtf8)}.
-     * The patch MAC therefore depends on the snapshot MAC, which is what
-     * binds the per-mutation value MACs and the collection-level LT-Hash
-     * digest together into a single per-version authenticator.
+     * <p>The formula is
+     * {@code HMAC-SHA256(patchMacKey, snapshotMac || valueMac1 || ... || valueMacN || version8 || collectionUtf8)}.
+     * The patch MAC therefore depends on the snapshot MAC, which is what binds
+     * the per-mutation value MACs and the collection-level LT-Hash digest
+     * together into a single per-version authenticator.
      *
      * @implNote
      * This implementation tolerates a {@code null} {@code snapshotMac} by
@@ -364,12 +358,11 @@ public final class MutationIntegrityVerifier {
     /**
      * Formats an {@code (indexMac, valueMac)} pair as a colon-delimited hex string.
      *
-     * @apiNote
-     * Diagnostic helper consumed by the collection-handler log statements
+     * <p>Diagnostic helper consumed by the collection-handler log statements
      * that print per-mutation MAC pairs when a patch or snapshot fails to
-     * validate. Not part of the wire-protocol surface. The truncated form
-     * (last 16 hex characters of each side) is WA Web's default and the form
-     * that flows into production log lines.
+     * validate; it is not part of the wire-protocol surface. The truncated form
+     * (last 16 hex characters of each side) is the default and the form that
+     * flows into production log lines.
      * {@snippet :
      *     // verbose          = "0102030405060708...:090a0b0c0d0e0f10..."
      *     // truncated (true) = "0a1b2c3d4e5f6071:1234567890abcdef"
@@ -394,12 +387,11 @@ public final class MutationIntegrityVerifier {
     }
 
     /**
-     * Formats an {@code (indexMac, valueMac)} pair with the WA Web default truncation.
+     * Formats an {@code (indexMac, valueMac)} pair with the default truncation.
      *
-     * @apiNote
-     * Convenience overload that pins the {@code truncate} parameter to
-     * {@code true}, matching the WA Web call sites that rely on the
-     * defaulted argument.
+     * <p>Convenience overload that pins the {@code truncate} parameter of
+     * {@link #indexAndValueMacToString(byte[], byte[], boolean)} to
+     * {@code true}.
      *
      * @param indexMac the index MAC bytes
      * @param valueMac the value MAC bytes
@@ -413,21 +405,17 @@ public final class MutationIntegrityVerifier {
     /**
      * The direction of a syncd patch relative to this device.
      *
-     * @apiNote
-     * Surfaced for parity with WA Web's {@code WAWebSyncdAntiTampering.flow}
-     * enum, which threads through the LT-Hash computation helper purely for
-     * the verbose-logging branch that the {@code enable_syncd_debug_data_in_patch}
-     * AB prop gates. The enum has no effect on any wire value (LT-Hash,
-     * snapshot MAC, or patch MAC); it is kept so callers that want to log
-     * the direction have a typed constant.
+     * <p>The enum has no effect on any wire value (LT-Hash, snapshot MAC, or
+     * patch MAC); it is kept so callers that want to log the patch direction
+     * have a typed constant.
      *
      * @implNote
      * This implementation does not yet route the direction through to any
      * diagnostic path; {@link #verifyPatchIntegrity} is implicitly
      * {@link #INCOMING} and the outgoing MAC helper does not consult this
-     * enum. Future contributors should plumb it through if and when the
-     * Cobalt-side debug-data-in-patch logging is implemented.
+     * enum.
      */
+    // TODO: plumb the direction through to the debug-data-in-patch logging once that path exists
     @WhatsAppWebModule(moduleName = "WAWebSyncdAntiTampering.flow")
     public enum SyncdPatchDirection {
         /**

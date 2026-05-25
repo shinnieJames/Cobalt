@@ -12,100 +12,75 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed projection of the inbound
- * {@code <notification type="link_code_companion_reg" stage="primary_hello">}
- * stanza pushed to a companion that is mid-flight in the link-code (alt
- * device) pairing flow.
+ * Models the inbound {@code <notification type="link_code_companion_reg" stage="primary_hello">}
+ * stanza pushed to a companion mid-flight in the link-code (alt device) pairing flow.
  *
- * @apiNote
- * Surfaced to companion-side embedders so they can complete the
- * link-code handshake against a primary device that has just typed the
- * eight-character code. The payload carries the wrapped primary
- * ephemeral pubkey, the primary identity pubkey and the pairing
- * reference; the companion derives the shared secret from these three
- * inputs (see WA Web's {@code WAWebAltDeviceLinkingApi.handlePrimaryHello})
- * before replying with a {@link SmaxMdSetRegResponseClient} pair-device
- * signature.
+ * <p>The companion consumes this projection to complete the link-code handshake against a
+ * primary device that has just typed the eight-character code. The payload carries the wrapped
+ * primary ephemeral public key, the primary identity public key, and the pairing reference; the
+ * companion derives the shared secret from those three inputs before replying with a
+ * {@link SmaxMdSetRegResponseClient} pair-device signature. An inbound notification is
+ * acknowledged with a {@link SmaxMdPrimaryHelloNotifyCompanionAcknowledgement} built from this
+ * projection.
  *
- * @implNote
- * This implementation maps the WA Web schema field names verbatim onto
- * Java fields ({@code linkCodePairingWrappedPrimaryEphemeralPub},
- * {@code primaryIdentityPub}, {@code linkCodePairingRef}) so the parser
- * can be diffed line by line against the upstream
- * {@link WhatsAppWebModule}
- * source. The {@code from} attribute is validated against the
- * {@code s.whatsapp.net} server domain to mirror the
- * {@code attrDomainJid("from", "s.whatsapp.net")} literal in the JS
- * parser.
+ * @implNote This implementation maps the WA Web schema field names verbatim onto Java fields so
+ * the parser can be diffed line by line against the upstream source, and validates the
+ * {@code from} attribute against the {@code s.whatsapp.net} server domain to mirror the
+ * upstream domain-JID literal.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInMdPrimaryHelloNotifyCompanionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMdServerNotificationMixin")
 public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOperation.Response {
     /**
-     * The {@code id} attribute of the inbound notification stanza.
+     * Holds the {@code id} attribute of the inbound notification stanza.
      *
-     * @apiNote
-     * Echoed back into the
-     * {@link SmaxMdPrimaryHelloNotifyCompanionAcknowledgement} stanza's
+     * <p>Echoed back into the {@link SmaxMdPrimaryHelloNotifyCompanionAcknowledgement} stanza's
      * {@code id} attribute by
      * {@link SmaxMdPrimaryHelloNotifyCompanionAcknowledgement#from(SmaxMdPrimaryHelloNotifyCompanionResponse)}.
      */
     private final String notificationId;
 
     /**
-     * The {@code from} JID of the inbound notification, always the
-     * {@code s.whatsapp.net} server domain.
+     * Holds the {@code from} JID of the inbound notification, always the {@code s.whatsapp.net}
+     * server domain.
      *
-     * @apiNote
-     * Echoed back as the ack's {@code to} attribute by
+     * <p>Echoed back as the ack's {@code to} attribute by
      * {@link SmaxMdPrimaryHelloNotifyCompanionAcknowledgement#from(SmaxMdPrimaryHelloNotifyCompanionResponse)}.
      */
     private final Jid notificationFrom;
 
     /**
-     * The wrapped primary ephemeral public-key bytes carried in
+     * Holds the wrapped primary ephemeral public-key bytes carried in
      * {@code <link_code_pairing_wrapped_primary_ephemeral_pub/>}.
      *
-     * @apiNote
-     * Used by the companion to unwrap the primary device's X25519
-     * ephemeral pubkey with the AES-key derived from the eight-character
-     * code, which then feeds the shared-secret derivation that produces
-     * the ADV signing key.
+     * <p>The companion unwraps these with the AES key derived from the eight-character code to
+     * recover the primary device's X25519 ephemeral public key, which then feeds the
+     * shared-secret derivation that produces the ADV signing key.
      */
     private final byte[] linkCodePairingWrappedPrimaryEphemeralPub;
 
     /**
-     * The primary device's identity public-key bytes carried in
-     * {@code <primary_identity_pub/>}.
+     * Holds the primary device's identity public-key bytes carried in {@code <primary_identity_pub/>}.
      *
-     * @apiNote
-     * Pinned by the companion as the trusted long-term identity of the
-     * primary device before any pair-device-sign signature is sent.
+     * <p>Pinned by the companion as the trusted long-term identity of the primary device before
+     * any pair-device-sign signature is sent.
      */
     private final byte[] primaryIdentityPub;
 
     /**
-     * The pairing-reference bytes carried in
-     * {@code <link_code_pairing_ref/>}.
+     * Holds the pairing-reference bytes carried in {@code <link_code_pairing_ref/>}.
      *
-     * @apiNote
-     * Matches the {@code ref} that the companion previously displayed in
-     * its link-code prompt; consumed by WA Web as the join-token for
-     * the rolling pairing window and re-issued by
-     * {@link SmaxMdRefreshCodeNotifyCompanionResponse} when the window
-     * expires.
+     * <p>Matches the {@code ref} the companion previously displayed in its link-code prompt; it
+     * is the join-token for the rolling pairing window and is re-issued by
+     * {@link SmaxMdRefreshCodeNotifyCompanionResponse} when the window expires.
      */
     private final byte[] linkCodePairingRef;
 
     /**
-     * Constructs the typed projection from already-validated component
-     * fields.
+     * Constructs the typed projection from already-validated component fields.
      *
-     * @apiNote
-     * Library code does not normally call this constructor; it is the
-     * package-internal target of {@link #of(Node)} after parsing has
-     * succeeded. Public visibility is preserved so unit tests can
-     * construct fixtures directly.
+     * <p>This is the target of {@link #of(Node)} after parsing has succeeded. Public visibility
+     * is preserved so unit tests can construct fixtures directly.
      *
      * @param notificationId                            the notification id; never {@code null}
      * @param notificationFrom                          the notification sender JID; never {@code null}
@@ -129,8 +104,7 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
     /**
      * Returns the notification id.
      *
-     * @apiNote
-     * Used by
+     * <p>Used by
      * {@link SmaxMdPrimaryHelloNotifyCompanionAcknowledgement#from(SmaxMdPrimaryHelloNotifyCompanionResponse)}
      * to populate the matching {@code <ack id="..."/>}.
      *
@@ -141,11 +115,9 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
     }
 
     /**
-     * Returns the notification sender JID.
+     * Returns the notification sender JID, always the {@code s.whatsapp.net} server domain JID.
      *
-     * @apiNote
-     * Always the {@code s.whatsapp.net} server domain JID; validated by
-     * {@link #of(Node)} during parsing.
+     * <p>The domain is validated by {@link #of(Node)} during parsing.
      *
      * @return the JID; never {@code null}
      */
@@ -156,9 +128,8 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
     /**
      * Returns the wrapped primary ephemeral public-key bytes.
      *
-     * @apiNote
-     * Feeds the link-code AES unwrap step that recovers the primary's
-     * X25519 ephemeral pubkey.
+     * <p>These feed the link-code AES unwrap step that recovers the primary's X25519 ephemeral
+     * public key.
      *
      * @return the wrapped pubkey bytes; never {@code null}
      */
@@ -169,9 +140,8 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
     /**
      * Returns the primary device's identity public-key bytes.
      *
-     * @apiNote
-     * Pinned by the companion as the long-term identity of the primary
-     * device before the pair-device-sign signature is generated.
+     * <p>Pinned by the companion as the long-term identity of the primary device before the
+     * pair-device-sign signature is generated.
      *
      * @return the identity pubkey bytes; never {@code null}
      */
@@ -180,14 +150,10 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
     }
 
     /**
-     * Returns the pairing-reference bytes that the companion previously
-     * displayed.
+     * Returns the pairing-reference bytes the companion previously displayed.
      *
-     * @apiNote
-     * Match against
-     * {@link SmaxMdRefreshCodeNotifyCompanionResponse#linkCodePairingRef()}
-     * when a refresh notification arrives to detect a stale ref versus
-     * the current ref.
+     * <p>Compare against {@link SmaxMdRefreshCodeNotifyCompanionResponse#linkCodePairingRef()}
+     * when a refresh notification arrives to detect a stale ref versus the current ref.
      *
      * @return the pairing-reference bytes; never {@code null}
      */
@@ -199,30 +165,22 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
      * Parses a {@code <notification type="link_code_companion_reg" stage="primary_hello"/>}
      * stanza into a typed projection.
      *
-     * @apiNote
-     * The companion calls this once per inbound notification of that
-     * type to unwrap the primary's pairing payload and continue the
-     * link-code handshake. The returned {@link Optional} is empty when
-     * the stanza shape diverges from the documented schema, mirroring
-     * WA Web's {@code SmaxParsingFailure} swallowing in
-     * {@code WAWebAltDeviceLinkingHandleNotification}.
+     * <p>The companion calls this once per inbound notification of that type to unwrap the
+     * primary's pairing payload and continue the link-code handshake. The result is
+     * {@link Optional#empty()} when the stanza shape diverges from the documented schema, rather
+     * than an exception.
      *
-     * @implNote
-     * This implementation enforces the same six structural checks as
-     * WA Web's {@code parsePrimaryHelloNotifyCompanionRequest}: the
-     * tag is {@code notification}, the {@code type} is
-     * {@code link_code_companion_reg}, the {@code from} is the
-     * {@code s.whatsapp.net} domain, the nested
-     * {@code <link_code_companion_reg/>} child carries
-     * {@code stage="primary_hello"}, and the three byte-payload
-     * children {@code link_code_pairing_wrapped_primary_ephemeral_pub},
-     * {@code primary_identity_pub} and {@code link_code_pairing_ref}
-     * each resolve to non-empty content bytes. Any failure surfaces as
-     * {@link Optional#empty()} rather than an exception.
+     * @implNote This implementation enforces six structural checks: the tag is
+     * {@code notification}, the {@code type} is {@code link_code_companion_reg}, the {@code from}
+     * is the {@code s.whatsapp.net} domain, the nested {@code <link_code_companion_reg/>} child
+     * carries {@code stage="primary_hello"}, and the three byte-payload children
+     * {@code link_code_pairing_wrapped_primary_ephemeral_pub}, {@code primary_identity_pub}, and
+     * {@code link_code_pairing_ref} each resolve to non-empty content bytes. Any failure surfaces
+     * as {@link Optional#empty()} to mirror the WA Web parser swallowing parsing failures.
      *
      * @param node the inbound notification stanza
-     * @return an {@link Optional} carrying the typed projection, or
-     *         empty when the stanza shape diverges from the schema
+     * @return an {@link Optional} carrying the typed projection, or empty when the stanza shape
+     *         diverges from the schema
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMdPrimaryHelloNotifyCompanionRequest",
@@ -269,6 +227,15 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
         return Optional.of(new SmaxMdPrimaryHelloNotifyCompanionResponse(id, from, wrappedEphemeral, identityPub, pairingRef));
     }
 
+    /**
+     * Compares this projection to another object for value equality.
+     *
+     * <p>Two projections are equal when their notification id, sender JID, and all three
+     * byte-payload fields match element by element.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an equal projection
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -285,6 +252,14 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
                 && Arrays.equals(this.linkCodePairingRef, that.linkCodePairingRef);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * <p>The byte-payload fields contribute through {@link Arrays#hashCode(byte[])} so equal
+     * contents yield equal codes.
+     *
+     * @return the hash code derived from the id, sender JID, and byte payloads
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(notificationId, notificationFrom);
@@ -294,6 +269,11 @@ public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxOper
         return result;
     }
 
+    /**
+     * Returns a debug string listing the id, sender JID, and byte payloads.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxMdPrimaryHelloNotifyCompanionResponse[notificationId=" + notificationId

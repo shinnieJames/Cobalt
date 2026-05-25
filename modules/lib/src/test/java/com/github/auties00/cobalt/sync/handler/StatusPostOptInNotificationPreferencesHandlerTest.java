@@ -28,24 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link StatusPostOptInNotificationPreferencesHandler}'s
- * forward-looking adapter for the
- * {@code "status_post_opt_in_notification_preferences_action"} action.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * persists the boolean opt-in on
- * {@link WhatsAppStore#setStatusPostOptInNotificationPreferencesEnabled(boolean)},
- * the malformed branch for a wrong-typed action, the
- * {@link SyncdOperation#REMOVE} unsupported branch, and the default
- * conflict-resolution tiebreaker. The handler has no WA Web counterpart
- * to mirror so the test surface enforces the Cobalt-inferred shape.
- *
- * @implNote
+ * Verifies {@link StatusPostOptInNotificationPreferencesHandler}: applying
+ * an incoming opt-in mutation and asserting the boolean flag side-effect on
+ * {@link WhatsAppStore#setStatusPostOptInNotificationPreferencesEnabled(Boolean)}.
  * The handler is a private-constructor singleton accessed via
- * {@link StatusPostOptInNotificationPreferencesHandler#INSTANCE}; each
- * test still rebuilds the store and client harness so flag state does
- * not leak between cases.
+ * {@link StatusPostOptInNotificationPreferencesHandler#INSTANCE}, so each
+ * test rebuilds the store and client so flag state does not leak.
  */
 @DisplayName("StatusPostOptInNotificationPreferencesHandler")
 class StatusPostOptInNotificationPreferencesHandlerTest {
@@ -56,14 +44,6 @@ class StatusPostOptInNotificationPreferencesHandlerTest {
     private WhatsAppClient client;
     private StatusPostOptInNotificationPreferencesHandler handler;
 
-    /**
-     * Builds the per-test harness and pins the singleton handler.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} so the
-     * opt-in flag starts empty.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -71,20 +51,7 @@ class StatusPostOptInNotificationPreferencesHandlerTest {
         handler = StatusPostOptInNotificationPreferencesHandler.INSTANCE;
     }
 
-    /**
-     * Wraps the given action and operation into a trusted mutation
-     * carrying a single-element index.
-     *
-     * @apiNote
-     * The action argument may be {@code null} to exercise the
-     * missing-action malformed branch; the index is the canonical
-     * one-element {@code [actionName]} array.
-     *
-     * @param action the opt-in action, or {@code null} to omit it
-     * @param op     the mutation operation
-     * @param ts     the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null action omits the payload to drive the missing-action malformed branch.
     private DecryptedMutation.Trusted build(StatusPostOptInNotificationPreferencesAction action,
                                             SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);

@@ -16,27 +16,19 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code lock} app-state sync action that locks or unlocks a chat
  * across the user's linked devices.
  *
- * @apiNote
- * Drives the chat-list "Lock chat" affordance: when the primary device
- * locks or unlocks a conversation the resulting bit fans out across the
- * {@link SyncPatchType#REGULAR_LOW} collection. Locking forcibly clears
- * the chat's archive and pin states so the three sticky-chat states
- * remain mutually consistent. The mutation index keys each entry by
- * the chat JID, formatted as
+ * <p>The bit fans out across the {@link SyncPatchType#REGULAR_LOW} collection.
+ * Locking forcibly clears the chat's archive and pin states so the three
+ * sticky-chat states remain mutually consistent. The mutation index keys each
+ * entry by the chat JID, formatted as
  * {@snippet :
  *     ["lock", chatJid]
  * }
  *
  * @implNote
- * This implementation inlines the
- * {@code WAWebChatLockAction.setChatAsLocked / setChatAsUnlocked}
- * post-loop write directly on the in-memory
- * {@link com.github.auties00.cobalt.model.chat.Chat} instead of going
- * through a chat-table updater, mirroring the
- * {@code syncWithPrimaries: false} branch that WA Web takes for
- * incoming syncs. Per the project's "no Optional&lt;Boolean&gt;" rule,
- * a {@code null} {@code locked} field on a present action coalesces to
- * {@code false} (i.e. unlock) where WA Web would return
+ * This implementation writes the lock state directly on the in-memory
+ * {@link com.github.auties00.cobalt.model.chat.Chat}. Because the
+ * {@link LockChatAction#locked()} accessor coalesces a {@code null} protobuf
+ * field to {@code false}, a missing flag is treated as an unlock rather than as
  * {@link MutationApplicationResult#malformed()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebLockChatSync")
@@ -44,14 +36,6 @@ public final class LockChatHandler implements WebAppStateActionHandler {
 
     /**
      * Constructs a new singleton {@link LockChatHandler}.
-     *
-     * @apiNote
-     * Mirrors WA Web's constructor for {@code WAWebLockChatSync},
-     * which inherits from {@code ChatSyncdActionBase} and assigns
-     * {@code chatJidIndex = 1} and
-     * {@code collectionName = WASyncdConst.CollectionName.RegularLow};
-     * those are surfaced via the fixed {@code indexParts[1]} read in
-     * {@link #applyMutation} and via {@link #collectionName()}.
      */
     @WhatsAppWebExport(moduleName = "WAWebLockChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public LockChatHandler() {
@@ -87,16 +71,19 @@ public final class LockChatHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()}, an absent action payload
+     * or missing chat JID as malformed, and an absent chat as
+     * {@link MutationApplicationResult#orphan(String, String)} with model type
+     * {@code "Chat"}. Otherwise the chat's lock state is set from
+     * {@link LockChatAction#locked()}; when locking, the chat is additionally
+     * marked as not archived and not pinned so the sticky-chat invariant is
+     * preserved.
+     *
      * @implNote
-     * This implementation collapses WA Web's two-pass
-     * "collect, then setChatAsLocked / setChatAsUnlocked" loop into a
-     * single in-place mutation on the
-     * {@link com.github.auties00.cobalt.model.chat.Chat} model: when
-     * locking, the chat is also marked as not archived and not pinned
-     * so the sticky-chat invariant is preserved. A failed
-     * {@link Jid#of(String)} is mapped to
-     * {@link MutationApplicationResult#malformed()} mirroring WA Web's
-     * {@code !WAWebWid.isWid(n)} branch.
+     * This implementation mutates the {@link com.github.auties00.cobalt.model.chat.Chat}
+     * in place in a single pass rather than collecting then writing, and maps a
+     * failed {@link Jid#of(String)} to {@link MutationApplicationResult#malformed()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLockChatSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

@@ -14,32 +14,31 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 
 /**
- * The per-source resolver that builds preview cards for
- * {@code chat.whatsapp.com} group-invite deep links.
+ * Builds preview cards for {@code chat.whatsapp.com} group-invite deep
+ * links.
  *
- * @apiNote
- * Mirrors {@code WAWebLinkPreviewGroupUtils.getGroupInviteLinkPreview};
- * invoked from {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run} on the
- * {@link DeepLinkParser.DeepLink.GroupInvite} branch.
+ * <p>This resolver is invoked from
+ * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run}
+ * on the {@link DeepLinkParser.DeepLink.GroupInvite} branch. It queries
+ * the server for the target group's metadata, derives the preview
+ * description from the group's community relationship, and downloads the
+ * group's profile picture as the inline thumbnail.
  */
 @WhatsAppWebModule(moduleName = "WAWebLinkPreviewGroupUtils")
 public final class GroupInvitePreviewResolver {
     /**
-     * The default description rendered when no community or
+     * Holds the default description rendered when no community or
      * sub-group hint applies.
      *
-     * @apiNote
-     * Mirrors {@code WAWebLinkPreviewGroupUtils.GROUP_INVITE_DEFAULT_DESCRIPTION}
-     * which is the fbt-localised {@code "Group chat invite"}
-     * string; surfaced when the invite points at a plain group
-     * outside a community.
+     * <p>Surfaced when the invite points at a plain group outside a
+     * community.
      */
     @WhatsAppWebExport(moduleName = "WAWebLinkPreviewGroupUtils", exports = "GROUP_INVITE_DEFAULT_DESCRIPTION",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final String GROUP_INVITE_DEFAULT_DESCRIPTION = "Group chat invite";
 
     /**
-     * The hidden constructor of the utility class.
+     * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -48,24 +47,24 @@ public final class GroupInvitePreviewResolver {
     }
 
     /**
-     * Resolves the preview for a group-invite URL and stamps the
-     * result onto {@code message}.
+     * Resolves the preview for a group-invite URL and stamps the result
+     * onto {@code message}.
      *
-     * @apiNote
-     * Mirrors {@code WAWebLinkPreviewGroupUtils.getGroupInviteLinkPreview};
-     * queries the server for the target group's metadata via
-     * {@link WhatsAppClient#queryInviteGroupInfo(String)} and
-     * downloads the group's profile picture as the inline JPEG
-     * thumbnail. On a successful resolve the {@code title},
-     * {@code description}, {@code previewType},
-     * {@code doNotPlayInline}, and {@code jpegThumbnail} fields are
-     * written onto {@code message} in place.
+     * <p>Queries the server for the target group's metadata via
+     * {@link WhatsAppClient#queryInviteGroupInfo(String)} and downloads
+     * the group's profile picture as the inline JPEG thumbnail. On a
+     * successful resolve the {@code title}, {@code description},
+     * {@code previewType}, {@code doNotPlayInline}, and
+     * {@code jpegThumbnail} fields are written onto {@code message} in
+     * place. Returns {@code false} without mutating {@code message} when
+     * {@code client}, {@code code}, or {@code message} is {@code null},
+     * when {@code code} is empty, or when the metadata query fails or
+     * yields no group.
      *
-     * @implNote
-     * This implementation embeds the server-supplied picture bytes
-     * verbatim; {@link PreviewThumbnailFetcher#download} resizes
-     * them to 100x100 when {@code java.desktop} is on the runtime
-     * path and otherwise embeds the source bytes unchanged.
+     * @implNote This implementation hands the server-supplied picture
+     * bytes to {@link PreviewThumbnailFetcher#download(HttpClient, java.net.URI, Duration)},
+     * which resizes them to 100x100 when {@code java.desktop} is on the
+     * runtime path and otherwise embeds the source bytes unchanged.
      *
      * @param client     the WhatsApp client used to query the server
      * @param code       the invite code parsed from the URL
@@ -73,9 +72,9 @@ public final class GroupInvitePreviewResolver {
      *                   profile picture
      * @param timeout    the per-download timeout, derived from
      *                   {@code link_preview_wait_time}
-     * @param message    the outgoing message to enrich; mutated in
-     *                   place
-     * @return {@code true} when a preview was applied
+     * @param message    the outgoing message to enrich; mutated in place
+     * @return {@code true} when a preview was applied, {@code false}
+     *         otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebLinkPreviewGroupUtils", exports = "getGroupInviteLinkPreview",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -105,21 +104,22 @@ public final class GroupInvitePreviewResolver {
     }
 
     /**
-     * Resolves the group profile picture URL through
-     * {@link WhatsAppClient#queryPicture(JidProvider)} and downloads
-     * its bytes.
+     * Resolves the group profile picture URL and downloads its bytes.
      *
-     * @apiNote
-     * Called from {@link #resolve}; returns {@code null} when the
-     * group has no picture set or when the download failed, so the
-     * caller can still attach a preview without an inline thumbnail.
+     * <p>Resolves the picture URL through
+     * {@link WhatsAppClient#queryPicture(JidProvider)} and downloads it
+     * via {@link PreviewThumbnailFetcher#download(HttpClient, java.net.URI, Duration)}.
+     * Returns {@code null} when {@code groupJid} is {@code null}, when
+     * the group has no picture set, or when the resolution or download
+     * fails, so the caller can still attach a preview without an inline
+     * thumbnail.
      *
      * @param client     the WhatsApp client used to resolve the URL
      * @param groupJid   the group whose picture is requested
      * @param httpClient the HTTP client used for the download
      * @param timeout    the per-download timeout
-     * @return the downloaded JPEG bytes, or {@code null} when no
-     *         picture was set or the download failed
+     * @return the downloaded JPEG bytes, or {@code null} when no picture
+     *         was set or the download failed
      */
     private static byte[] downloadGroupPicture(WhatsAppClient client,
                                                Jid groupJid,
@@ -142,16 +142,14 @@ public final class GroupInvitePreviewResolver {
     /**
      * Picks the preview description based on the group's type.
      *
-     * @apiNote
-     * Mirrors {@code WAWebLinkPreviewGroupUtils.getInviteLinkDescription}:
-     * the default-subgroup branch surfaces "Announcements"; the
-     * sub-group branch surfaces "Group in \"{community title}\"";
-     * everything else falls back to
-     * {@link #GROUP_INVITE_DEFAULT_DESCRIPTION}.
+     * <p>The default-subgroup branch surfaces "Announcements"; the
+     * sub-group branch surfaces {@code Group in "{community title}"}
+     * using the parent community's resolved subject; everything else
+     * falls back to {@link #GROUP_INVITE_DEFAULT_DESCRIPTION}.
      *
      * @param client   the WhatsApp client used to resolve the parent
-     *                 community's display title when the invite
-     *                 points at a sub-group
+     *                 community's display title when the invite points
+     *                 at a sub-group
      * @param metadata the resolved group metadata
      * @return the preview description string
      */

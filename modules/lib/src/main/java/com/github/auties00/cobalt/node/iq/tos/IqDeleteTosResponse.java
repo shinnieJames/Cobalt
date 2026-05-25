@@ -11,40 +11,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Models the sealed family of inbound reply variants produced by the relay in response to an
  * {@link IqDeleteTosRequest}.
  *
- * @apiNote
- * Switch on the returned variant to discriminate the relay outcome: a {@link Success}
- * is a bare acknowledgement (WA Web uses a no-op parser, the relay echoes no
- * payload), a {@link ClientError} surfaces a relay rejection, and a
- * {@link ServerError} surfaces a transient relay failure.
+ * <p>Callers discriminate the relay outcome by switching on the returned variant. A {@link Success}
+ * is a bare acknowledgement that carries no payload and confirms the deletion landed. A
+ * {@link ClientError} surfaces a relay rejection, and a {@link ServerError} surfaces a transient
+ * relay failure.
  *
- * @implNote
- * This implementation mirrors WA Web's {@code WAWebTosJob.deleteTosState} which
- * builds its parser from {@code WAWebNoop}, plus the standard SMAX server-error
- * envelope.
+ * @implNote The {@link Success} parser is a no-op envelope check because WhatsApp Web builds its
+ *           parser from {@code WAWebNoop}; the error variants reuse the standard SMAX server-error
+ *           envelope.
  */
 public sealed interface IqDeleteTosResponse extends IqOperation.Response
         permits IqDeleteTosResponse.Success, IqDeleteTosResponse.ClientError, IqDeleteTosResponse.ServerError {
 
     /**
-     * Parses the inbound stanza into the first matching {@link IqDeleteTosResponse}
-     * variant.
+     * Parses the inbound stanza into the first matching {@link IqDeleteTosResponse} variant.
      *
-     * @apiNote
-     * Try this once per inbound reply; the priority ordering (success, then
-     * client-error, then server-error) matches the wire shape and never returns
-     * ambiguous matches.
+     * <p>The priority ordering (success, then client-error, then server-error) matches the wire
+     * shape so the variants are mutually exclusive and the match is never ambiguous.
      *
-     * @implNote
-     * This implementation calls each variant's {@code of(node, request)} in turn
-     * and returns the first present result.
-     *
+     * @implNote This implementation calls each variant's {@code of(node, request)} in turn and
+     *           returns the first present result.
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty when no
-     *         documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant
+     *         matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
@@ -64,13 +57,11 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
     }
 
     /**
-     * Success variant. The relay accepted the deletion and echoed only the IQ
+     * Models the success variant in which the relay accepted the deletion and echoed only the IQ
      * envelope.
      *
-     * @apiNote
-     * Carries no payload; the caller treats a present {@link Success} as
-     * confirmation that the server-side accepted-state for the bound notice id is
-     * now cleared.
+     * <p>A present {@link Success} confirms that the server-side accepted state for the bound notice
+     * id is now cleared. The variant carries no payload.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class Success implements IqDeleteTosResponse {
@@ -81,17 +72,16 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
         }
 
         /**
-         * Parses the inbound stanza into a {@link Success} variant when it
-         * matches the success schema.
+         * Parses the inbound stanza into a {@link Success} variant when it matches the success
+         * schema.
          *
-         * @apiNote
-         * Returns empty when the SMAX result-envelope check fails; never reads
-         * past the envelope.
+         * <p>Returns empty when the SMAX result-envelope check fails; the parser never reads past
+         * the envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "deleteTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -102,6 +92,14 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
             return Optional.of(new Success());
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>All {@link Success} instances are equal because the variant carries no state.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success}, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -110,11 +108,21 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a constant hash code shared by all {@link Success} instances.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Success.class.hashCode();
         }
 
+        /**
+         * Returns a debug string for this stateless variant.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqDeleteTosResponse.Success[]";
@@ -122,12 +130,12 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
     }
 
     /**
-     * Client-error variant. The relay rejected the deletion with a {@code 4xx} code.
+     * Models the client-error variant in which the relay rejected the deletion with a {@code 4xx}
+     * code.
      *
-     * @apiNote
-     * Typically signals a malformed envelope or an unauthorised caller; the
-     * notice-id payload itself is opaque so the relay does not reject on unknown
-     * ids (it silently no-ops instead).
+     * <p>This typically signals a malformed envelope or an unauthorised caller. The notice-id
+     * payload is opaque to the relay, so an unknown id does not produce a client error; the relay
+     * silently no-ops instead.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class ClientError implements IqDeleteTosResponse {
@@ -137,7 +145,7 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -164,25 +172,23 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ClientError} variant when it
-         * matches the standard SMAX client-error envelope.
+         * Parses the inbound stanza into a {@link ClientError} variant when it matches the standard
+         * SMAX client-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails. Envelope parsing is delegated to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "deleteTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -194,6 +200,15 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two client errors are equal when they carry the same code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with an equal code and
+         *         text, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -207,11 +222,21 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqDeleteTosResponse.ClientError[errorCode=" + errorCode
@@ -220,11 +245,10 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
     }
 
     /**
-     * Server-error variant. The relay encountered a transient internal failure
+     * Models the server-error variant in which the relay encountered a transient internal failure
      * processing the deletion.
      *
-     * @apiNote
-     * Typically retryable after a short backoff; the server-side accepted state
+     * <p>This outcome is typically retryable after a short backoff. The server-side accepted state
      * is unchanged until a subsequent attempt returns {@link Success}.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
@@ -235,7 +259,7 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -262,25 +286,23 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ServerError} variant when it
-         * matches the standard SMAX server-error envelope.
+         * Parses the inbound stanza into a {@link ServerError} variant when it matches the standard
+         * SMAX server-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails. Envelope parsing is delegated to
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "deleteTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -292,6 +314,15 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two server errors are equal when they carry the same code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with an equal code and
+         *         text, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -305,11 +336,21 @@ public sealed interface IqDeleteTosResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqDeleteTosResponse.ServerError[errorCode=" + errorCode

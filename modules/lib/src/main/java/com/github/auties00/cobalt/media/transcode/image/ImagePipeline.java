@@ -26,43 +26,43 @@ import java.lang.foreign.ValueLayout;
 import java.nio.channels.SeekableByteChannel;
 
 /**
- * Decodes a source image, rescales it to the WhatsApp upload preset, and
- * re-encodes it as a sanitised JFIF JPEG.
+ * Decodes a source image, rescales it to the WhatsApp upload preset, and re-encodes it as a
+ * sanitised JFIF JPEG.
  *
- * @apiNote
- * Drives the image branch of the upload transcoder via FFmpeg: demux and
- * decode the source through libavformat / libavcodec, run the decoded
- * frame through a libavfilter graph that scales to the per-quality maximum
- * edge and coerces the pixel format to {@code yuvj420p}, encode the result
- * with the native {@code mjpeg} encoder, then run the bytes through
- * {@link JpegCleaner}. A second pass with a much smaller maximum edge
- * produces the micro-thumbnail that ships in the message protobuf.
+ * <p>Drives the image branch of the upload transcoder through FFmpeg. The source is demuxed and
+ * decoded through {@code libavformat} and {@code libavcodec}, the decoded frame is pushed through a
+ * {@code libavfilter} graph that scales it to the per-quality maximum edge and coerces the pixel
+ * format to {@code yuvj420p}, the result is encoded with the native {@code mjpeg} encoder, and the
+ * encoded bytes are then run through {@link JpegCleaner}. A second pass with a much smaller maximum
+ * edge produces the micro-thumbnail that ships in the message protobuf. The single instance is owned
+ * by {@link MediaTranscoderService}.
  *
  * @implNote
- * This implementation mirrors the FFmpeg-driven encode WA Web ships in its
- * worker pool: scale via libavfilter, coerce to JPEG-range YUV, encode with
- * mjpeg, strip non-essential APP/COM markers. The quality presets follow
- * {@link SettingsSyncAction.MediaQualitySetting}: {@code STANDARD} caps at
- * {@value #MAX_EDGE_STANDARD} pixels and uses qscale
- * {@value #QSCALE_STANDARD}; {@code HD} caps at {@value #MAX_EDGE_HD} pixels
- * and uses qscale {@value #QSCALE_HD}. EXIF orientation is read from the
- * stream metadata dictionary; values of 90 and 270 swap the bound
- * dimensions before scaling and prepend a {@code transpose} filter so the
- * encoded output is upright. The thumbnail pass sizes-tunes the encoded
- * output through a qscale ramp ({@value #QSCALE_THUMB_START}-{@value
- * #QSCALE_THUMB_CAP}) until the encoded JPEG fits within the
- * {@value #MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES}-byte WhatsApp wire budget.
+ * This implementation mirrors the FFmpeg-driven encode WhatsApp Web runs in its worker pool: scale
+ * via the filter graph, coerce to JPEG-range YUV, encode with {@code mjpeg}, strip non-essential
+ * APP/COM markers. The quality presets follow {@link SettingsSyncAction.MediaQualitySetting}:
+ * {@code STANDARD} caps at {@value #MAX_EDGE_STANDARD} pixels and uses qscale
+ * {@value #QSCALE_STANDARD}; {@code HD} caps at {@value #MAX_EDGE_HD} pixels and uses qscale
+ * {@value #QSCALE_HD}. EXIF orientation is read from the stream metadata dictionary; values of 90
+ * and 270 swap the bound dimensions before scaling and prepend a {@code transpose} filter so the
+ * encoded output is upright. The thumbnail pass tunes the encoded size through a qscale ramp
+ * ({@value #QSCALE_THUMB_START} to {@value #QSCALE_THUMB_CAP}) until the encoded JPEG fits within
+ * the {@value #MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES}-byte WhatsApp wire budget.
  */
 public final class ImagePipeline {
     /**
      * Maximum edge in pixels for the {@code STANDARD} quality preset.
-     * Mirrors {@code WAWebMediaConstants.IMG_MAX_EDGE_STANDARD}.
+     *
+     * @implNote
+     * This implementation mirrors {@code WAWebMediaConstants.IMG_MAX_EDGE_STANDARD}.
      */
     private static final int MAX_EDGE_STANDARD = 1600;
 
     /**
-     * Maximum edge in pixels for the {@code HD} quality preset. Mirrors
-     * {@code WAWebMediaConstants.IMG_MAX_EDGE_HD}.
+     * Maximum edge in pixels for the {@code HD} quality preset.
+     *
+     * @implNote
+     * This implementation mirrors {@code WAWebMediaConstants.IMG_MAX_EDGE_HD}.
      */
     private static final int MAX_EDGE_HD = 4096;
 
@@ -77,77 +77,95 @@ public final class ImagePipeline {
     private static final int QSCALE_HD = 2;
 
     /**
-     * Maximum edge in pixels for the micro-thumbnail. Mirrors
-     * {@code WAWebMediaConstants.IMG_THUMB_MAX_EDGE}.
+     * Maximum edge in pixels for the micro-thumbnail.
+     *
+     * @implNote
+     * This implementation mirrors {@code WAWebMediaConstants.IMG_THUMB_MAX_EDGE}.
      */
     private static final int THUMB_MAX_EDGE = 100;
 
     /**
-     * Initial MJPEG qscale used for the thumbnail pass. Mirrors the start
-     * value WA Web ships in its worker pool.
+     * Initial MJPEG qscale used for the thumbnail pass.
+     *
+     * @implNote
+     * This implementation mirrors the start value WhatsApp Web ships in its worker pool.
      */
     private static final int QSCALE_THUMB_START = 6;
 
     /**
-     * Upper bound on MJPEG qscale for the thumbnail pass; the size-tune
-     * loop gives up once the output exceeds this without fitting the wire
-     * budget.
+     * Upper bound on MJPEG qscale for the thumbnail pass.
+     *
+     * <p>The size-tune loop in {@link #encodeThumbnail(DecodedSource, int, int, int)} gives up once
+     * the output reaches this qscale without fitting the wire budget.
      */
     private static final int QSCALE_THUMB_CAP = 12;
 
     /**
-     * Maximum encoded size for the micro-thumbnail in bytes. Mirrors
-     * {@code WAWebMediaConstants.MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES}.
+     * Maximum encoded size for the micro-thumbnail in bytes.
+     *
+     * @implNote
+     * This implementation mirrors {@code WAWebMediaConstants.MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES}.
      */
     private static final int MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES = 1300;
 
     /**
-     * Value of {@code AV_CODEC_FLAG_QSCALE} from
-     * {@code <libavcodec/avcodec.h>}. Resolved through the binding's
-     * {@link Ffmpeg#AV_CODEC_FLAG_QSCALE()} accessor; held as a Java
-     * constant to avoid the lookup overhead on every encode.
+     * Value of {@code AV_CODEC_FLAG_QSCALE} from {@code <libavcodec/avcodec.h>}.
+     *
+     * <p>Set on the encoder context so {@code global_quality} is honoured as a fixed quantizer scale
+     * rather than ignored in favour of rate control.
+     *
+     * @implNote
+     * This implementation resolves the value through {@code Ffmpeg#AV_CODEC_FLAG_QSCALE()} once and
+     * caches it as a Java constant to avoid the native lookup on every encode.
      */
     private static final int CODEC_FLAG_QSCALE = Ffmpeg.AV_CODEC_FLAG_QSCALE();
 
     /**
-     * Value of {@code FF_QP2LAMBDA} from {@code <libavutil/avutil.h>};
-     * the scalar that converts a quantizer scale into the encoder's
-     * {@code global_quality} field.
+     * Value of {@code FF_QP2LAMBDA} from {@code <libavutil/avutil.h>}.
+     *
+     * <p>The scalar that converts a quantizer scale into the encoder's {@code global_quality} field.
+     *
+     * @implNote
+     * This implementation resolves the value through {@code Ffmpeg#FF_QP2LAMBDA()} once and caches
+     * it as a Java constant.
      */
     private static final int FF_QP2LAMBDA = Ffmpeg.FF_QP2LAMBDA();
 
     /**
-     * Final pixel format produced by the filter graph. JPEG-range YUV 4:2:0,
-     * the format the {@code mjpeg} encoder accepts directly.
+     * Final pixel format produced by the filter graph.
+     *
+     * <p>JPEG-range YUV 4:2:0, the format the {@code mjpeg} encoder accepts directly.
+     *
+     * @implNote
+     * This implementation resolves the value through {@code Ffmpeg#AV_PIX_FMT_YUVJ420P()} once and
+     * caches it as a Java constant.
      */
     private static final int OUTPUT_PIX_FMT = Ffmpeg.AV_PIX_FMT_YUVJ420P();
 
     /**
-     * Constructs the pipeline; the parent
-     * {@link MediaTranscoderService} owns the single instance.
+     * Constructs the pipeline.
+     *
+     * <p>The parent {@link MediaTranscoderService} owns the single instance.
      */
     public ImagePipeline() {
     }
 
     /**
-     * Transcodes the source image, applies codec-derived metadata to
-     * {@code provider}, and returns the encoded payload stream.
+     * Transcodes the source image, applies codec-derived metadata to {@code provider}, and returns
+     * the encoded payload stream.
      *
-     * @apiNote
-     * Mutates the provider in place: when {@code provider} is an
-     * {@link ImageMessage} the {@code mimetype}, {@code mediaSize},
-     * {@code width}, {@code height}, and {@code jpegThumbnail} fields are
-     * populated; every other {@link MediaProvider} variant receives only
-     * the common {@code mediaSize} update. The source stream is consumed
-     * in full and closed before this method returns.
+     * <p>Mutates the provider in place. When {@code provider} is an {@link ImageMessage} the
+     * {@code mimetype}, {@code mediaSize}, {@code width}, {@code height}, and {@code jpegThumbnail}
+     * fields are populated; every other {@link MediaProvider} variant receives only the common
+     * {@code mediaSize} update. The decoded source is held open for the duration of the call and
+     * released through {@link DecodedSource#close()} before this method returns; the {@code source}
+     * channel itself is not closed by this method.
      *
-     * @param provider the upload target; codec-derived fields are applied
-     *                 to this instance
+     * @param provider the upload target; codec-derived fields are applied to this instance
      * @param source   the raw image channel; not closed by this method
      * @param quality  the quality preset; selects edge cap and qscale
      * @return the encoded JPEG payload
-     * @throws WhatsAppMediaException.Processing if decoding, filtering,
-     *         or encoding fails
+     * @throws WhatsAppMediaException.Processing if decoding, filtering, or encoding fails
      */
     public MediaPayload run(MediaProvider provider, SeekableByteChannel source,
                             SettingsSyncAction.MediaQualitySetting quality)
@@ -192,24 +210,21 @@ public final class ImagePipeline {
     }
 
     /**
-     * Builds a libavfilter graph that scales the source frame to the given
-     * dimensions, applies the orientation transpose, and coerces the output
-     * pixel format, then drives a single frame through it and returns the
-     * resized output.
+     * Builds a {@code libavfilter} graph that scales the source frame to the given dimensions,
+     * applies the orientation transpose, and coerces the output pixel format, then drives a single
+     * frame through it and returns the resized output.
      *
-     * @apiNote
-     * The caller owns the returned frame and must {@code av_frame_free}
-     * it; this method allocates with the helper {@link #allocFrame()} so
-     * callers wrap the result in a try/finally that frees on every path.
+     * <p>The returned frame is owned by the caller and must be released with
+     * {@link #freeFrame(MemorySegment)}; it is allocated through {@link #allocFrame()}, so callers
+     * wrap the result in a try/finally that frees on every path. An orientation of 90 or 270 prepends
+     * a {@code transpose} filter so the encoded output is upright.
      *
-     * @param decoded     the demuxed source state holding the first input
-     *                    frame and the source stream parameters
+     * @param decoded     the demuxed source state holding the first input frame and the source
+     *                    stream parameters
      * @param dstW        target width in pixels
      * @param dstH        target height in pixels
-     * @param orientation EXIF rotation in degrees clockwise (0, 90, 180,
-     *                    or 270); 90 and 270 prepend a {@code transpose}
-     *                    filter so the encoded output is upright
-     * @return a freshly-allocated {@link AVFrame} holding the scaled output
+     * @param orientation EXIF rotation in degrees clockwise (0, 90, 180, or 270)
+     * @return a freshly-allocated {@code AVFrame} pointer holding the scaled output
      */
     private static MemorySegment scaleAndFormat(DecodedSource decoded,
                                                  int dstW, int dstH, int orientation) {
@@ -288,18 +303,17 @@ public final class ImagePipeline {
     }
 
     /**
-     * Returns the leading transpose-filter directive for the given EXIF
-     * orientation, including the trailing comma when non-empty.
+     * Returns the leading transpose-filter directive for the given EXIF orientation, including the
+     * trailing comma when non-empty.
      *
-     * @apiNote
-     * EXIF orientation values map to FFmpeg's {@code transpose} parameter
-     * as follows: 90 deg CW (orientation 6) -> {@code transpose=1}, 180 deg
-     * (orientation 3) -> {@code transpose=1,transpose=1}, 270 deg CW
-     * (orientation 8, equivalently 90 deg CCW) -> {@code transpose=2}.
+     * <p>EXIF orientation values map to FFmpeg's {@code transpose} parameter as follows: 90 deg
+     * clockwise (EXIF orientation 6) becomes {@code transpose=1}, 180 deg (EXIF orientation 3)
+     * becomes {@code transpose=1,transpose=1}, and 270 deg clockwise (EXIF orientation 8, equivalent
+     * to 90 deg counter-clockwise) becomes {@code transpose=2}.
      *
      * @param orientation EXIF rotation in degrees clockwise
-     * @return the filter prefix to inject into the chain, or an empty
-     *         string for orientation {@code 0}
+     * @return the filter prefix to inject into the chain, or an empty string for orientation
+     *         {@code 0}
      */
     private static String transposeFilterPrefix(int orientation) {
         return switch (orientation) {
@@ -311,18 +325,20 @@ public final class ImagePipeline {
     }
 
     /**
-     * Encodes the given decoded source as a scaled MJPEG and returns the
-     * raw bytes (pre-{@link JpegCleaner}).
+     * Encodes the given decoded source as a scaled MJPEG and returns the raw bytes before
+     * {@link JpegCleaner} sanitisation.
+     *
+     * <p>Scales and reformats the frame through {@link #scaleAndFormat(DecodedSource, int, int, int)}
+     * and encodes it through {@link #encodeMjpeg(MemorySegment, int, int, int)}, freeing the scaled
+     * frame on every path.
      *
      * @param decoded     the demuxed source state
      * @param dstW        target width in pixels
      * @param dstH        target height in pixels
      * @param orientation EXIF rotation in degrees clockwise
-     * @param qscale      MJPEG qscale to apply via
-     *                    {@code global_quality = qscale * FF_QP2LAMBDA}
+     * @param qscale      MJPEG qscale to apply via {@code global_quality = qscale * FF_QP2LAMBDA}
      * @return the encoded JPEG bytes
-     * @throws WhatsAppMediaException.Processing if the encode pipeline
-     *         fails
+     * @throws WhatsAppMediaException.Processing if the encode pipeline fails
      */
     private static byte[] encodeScaledJpeg(DecodedSource decoded, int dstW, int dstH,
                                             int orientation, int qscale)
@@ -336,18 +352,20 @@ public final class ImagePipeline {
     }
 
     /**
-     * Encodes a single MJPEG-ready frame at the requested qscale and
-     * returns the encoded packet bytes.
+     * Encodes a single MJPEG-ready frame at the requested qscale and returns the encoded packet
+     * bytes.
      *
-     * @apiNote
-     * Allocates and tears down an MJPEG encoder context per call. MJPEG
-     * holds no inter-frame state, so the per-call allocation cost is
-     * negligible compared to the encode itself.
+     * <p>The input frame must already be at the target size and in {@code yuvj420p}. The encoder is
+     * driven in single-frame, single-packet mode: the frame is sent, a flush ({@code NULL} frame)
+     * follows, and the one resulting packet is copied out.
      *
-     * @param frame the input frame (must already be at the target size and
-     *              in {@code yuvj420p})
-     * @param w     frame width in pixels
-     * @param h     frame height in pixels
+     * @implNote
+     * This implementation allocates and tears down an MJPEG encoder context per call. MJPEG holds no
+     * inter-frame state, so the per-call allocation cost is negligible compared to the encode itself.
+     *
+     * @param frame  the input frame pointer
+     * @param w      frame width in pixels
+     * @param h      frame height in pixels
      * @param qscale MJPEG quantizer scale; lower is higher quality
      * @return the encoded JPEG bytes
      * @throws WhatsAppMediaException.Processing if any encoder call fails
@@ -408,19 +426,20 @@ public final class ImagePipeline {
     }
 
     /**
-     * Produces the in-band micro-thumbnail JPEG, retrying with progressively
-     * coarser qscale until the encoded output fits within
-     * {@value #MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES} bytes or
+     * Produces the in-band micro-thumbnail JPEG, retrying with progressively coarser qscale until the
+     * encoded output fits within {@value #MICRO_THUMBNAIL_MAX_FILE_SIZE_BYTES} bytes or
      * {@value #QSCALE_THUMB_CAP} is reached.
+     *
+     * <p>The frame is scaled once; each iteration re-encodes that scaled frame at the next qscale and
+     * runs the bytes through {@link JpegCleaner}. The first encode that fits the budget is returned;
+     * if none fit, the last (coarsest) attempt is returned so a thumbnail is always produced.
      *
      * @param decoded     the demuxed source state
      * @param dstW        thumbnail width in pixels
      * @param dstH        thumbnail height in pixels
      * @param orientation EXIF rotation in degrees clockwise
-     * @return the encoded thumbnail bytes (already passed through
-     *         {@link JpegCleaner})
-     * @throws WhatsAppMediaException.Processing if every encode attempt
-     *         fails
+     * @return the encoded thumbnail bytes, already passed through {@link JpegCleaner}
+     * @throws WhatsAppMediaException.Processing if every encode attempt fails
      */
     private static byte[] encodeThumbnail(DecodedSource decoded, int dstW, int dstH,
                                            int orientation)
@@ -443,19 +462,17 @@ public final class ImagePipeline {
     }
 
     /**
-     * Reads the {@code "rotate"} key from the given stream's metadata
-     * dictionary, if present, and clamps the value to one of {@code 0},
-     * {@code 90}, {@code 180}, or {@code 270}.
+     * Reads the {@code "rotate"} key from the given stream's metadata dictionary, if present, and
+     * clamps the value to one of {@code 0}, {@code 90}, {@code 180}, or {@code 270}.
      *
-     * @apiNote
-     * libavformat normalises EXIF orientation tags into the
-     * {@code "rotate"} metadata key on the demuxed stream when reading
-     * JPEG, HEIC, and TIFF input. Values that don't match a multiple of
-     * 90 fall back to {@code 0}.
+     * <p>{@code libavformat} normalises EXIF orientation tags into the {@code "rotate"} metadata key
+     * on the demuxed stream when reading JPEG, HEIC, and TIFF input. The value is normalised into the
+     * {@code 0..359} range and then clamped: any value that is not an exact multiple of 90 falls back
+     * to {@code 0}, as does a missing dictionary, a missing key, or an unparseable value.
      *
-     * @param stream the demuxed source stream
-     * @return the rotation in degrees clockwise; one of {@code 0},
-     *         {@code 90}, {@code 180}, {@code 270}
+     * @param stream the demuxed source stream pointer
+     * @return the rotation in degrees clockwise; one of {@code 0}, {@code 90}, {@code 180},
+     *         {@code 270}
      */
     private static int readOrientation(MemorySegment stream) {
         var metadata = AVStream.metadata(stream);
@@ -489,22 +506,20 @@ public final class ImagePipeline {
     }
 
     /**
-     * Opens the buffered source through FFmpeg and returns the first
-     * decoded frame plus the demuxer state needed for subsequent encode
-     * passes.
+     * Opens the buffered source through FFmpeg and returns the first decoded frame plus the demuxer
+     * state needed for subsequent encode passes.
      *
-     * @apiNote
-     * Drains the demuxer until the decoder emits one frame, then halts.
-     * Images are single-frame inputs by definition; multi-frame inputs
-     * (animated GIF on the image path, for instance) take the first frame.
+     * <p>Drains the demuxer until the decoder emits one frame, then halts. Images are single-frame
+     * inputs by definition; for multi-frame inputs that reach the image path (an animated GIF, for
+     * instance) the first frame is taken. On any failure during open or decode the partially
+     * initialised native resources are released through
+     * {@link #freeOnFailure(MemorySegment, MemorySegment, MemorySegment, MemorySegment, AvioReadBuffer)}
+     * before the exception propagates.
      *
-     * @param arena   the shared arena that owns the AVIO bridge and any
-     *                transient allocations
+     * @param arena   the shared arena that owns the AVIO bridge and any transient allocations
      * @param channel the source channel
-     * @return the decoded source bundle holding the open contexts and the
-     *         first decoded frame
-     * @throws WhatsAppMediaException.Processing if the source cannot be
-     *         probed, opened, or decoded
+     * @return the decoded source bundle holding the open contexts and the first decoded frame
+     * @throws WhatsAppMediaException.Processing if the source cannot be probed, opened, or decoded
      */
     private static DecodedSource decodeFirstFrame(Arena arena, SeekableByteChannel channel)
             throws WhatsAppMediaException.Processing {
@@ -588,9 +603,8 @@ public final class ImagePipeline {
     /**
      * Picks the first video stream out of the demuxed format context.
      *
-     * @param formatCtx the open demuxer
-     * @return the stream index, or {@code -1} if no video stream is
-     *         present
+     * @param formatCtx the open demuxer pointer
+     * @return the stream index, or {@code -1} if no video stream is present
      */
     private static int pickVideoStream(MemorySegment formatCtx) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -609,9 +623,9 @@ public final class ImagePipeline {
     /**
      * Returns the i-th stream pointer from the demuxer's stream array.
      *
-     * @param formatCtx the open demuxer
+     * @param formatCtx the open demuxer pointer
      * @param index     the zero-based stream index
-     * @return the stream pointer reinterpreted as an {@link AVStream}
+     * @return the stream pointer reinterpreted with the {@code AVStream} layout
      */
     private static MemorySegment streamPointer(MemorySegment formatCtx, int index) {
         return AVFormatContext.streams(formatCtx)
@@ -620,19 +634,18 @@ public final class ImagePipeline {
     }
 
     /**
-     * Allocates a fresh {@link AVFrame}.
+     * Allocates a fresh {@code AVFrame}.
      *
-     * @return the allocated frame
+     * @return the allocated frame pointer
      */
     private static MemorySegment allocFrame() {
         return FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
     }
 
     /**
-     * Frees the given frame via {@code av_frame_free}, tolerating
-     * {@code NULL} inputs.
+     * Frees the given frame via {@code av_frame_free}, tolerating {@code NULL} inputs.
      *
-     * @param frame the frame to free; {@code NULL} is allowed
+     * @param frame the frame pointer to free; {@code NULL} is allowed
      */
     private static void freeFrame(MemorySegment frame) {
         if (frame == null || frame == MemorySegment.NULL) {
@@ -646,13 +659,15 @@ public final class ImagePipeline {
     }
 
     /**
-     * Releases any half-initialised resources held during a failed open or
-     * decode attempt.
+     * Releases any half-initialised resources held during a failed open or decode attempt.
      *
-     * @param formatCtx the demuxer context, or {@code NULL}
-     * @param codecCtx  the decoder context, or {@code NULL}
-     * @param frame     the decoder output frame, or {@code NULL}
-     * @param packet    the demuxer packet, or {@code NULL}
+     * <p>Each native pointer is freed only when non-{@code NULL}, in reverse allocation order, and
+     * the AVIO bridge is closed last.
+     *
+     * @param formatCtx the demuxer context pointer, or {@code NULL}
+     * @param codecCtx  the decoder context pointer, or {@code NULL}
+     * @param frame     the decoder output frame pointer, or {@code NULL}
+     * @param packet    the demuxer packet pointer, or {@code NULL}
      * @param bridge    the AVIO bridge to close
      */
     private static void freeOnFailure(MemorySegment formatCtx, MemorySegment codecCtx,
@@ -684,11 +699,15 @@ public final class ImagePipeline {
     }
 
     /**
-     * Computes the largest pair of dimensions that fit inside a square of
-     * side {@code maxEdge} while preserving the source aspect ratio. Both
-     * output dimensions are at least 1 and rounded to even values so the
-     * MJPEG encoder (which requires chroma subsampling to align on a
-     * 2-pixel grid) is happy.
+     * Computes the largest pair of dimensions that fit inside a square of side {@code maxEdge} while
+     * preserving the source aspect ratio.
+     *
+     * <p>Both output dimensions are at least 2 and rounded down to even values through
+     * {@link #roundEven(int)}.
+     *
+     * @implNote
+     * This implementation rounds to even dimensions because the {@code mjpeg} encoder uses chroma
+     * subsampling that must align on a 2-pixel grid.
      *
      * @param srcW    source width in pixels
      * @param srcH    source height in pixels
@@ -707,8 +726,7 @@ public final class ImagePipeline {
     }
 
     /**
-     * Rounds the given value down to the nearest even integer, with a
-     * floor of {@code 2}.
+     * Rounds the given value down to the nearest even integer, with a floor of {@code 2}.
      *
      * @param value the value to round
      * @return the rounded value
@@ -728,24 +746,21 @@ public final class ImagePipeline {
     }
 
     /**
-     * Bundle of FFmpeg state shared between the demux/decode step and the
-     * subsequent encode passes.
+     * Bundles the FFmpeg state shared between the demux/decode step and the subsequent encode passes.
      *
-     * @apiNote
-     * Held by the pipeline only for the duration of a single
-     * {@code run} invocation. Implements {@link AutoCloseable} so the
-     * orchestrator can wrap it in a try-with-resources block and
-     * guarantee FFmpeg cleanup runs even when the encode passes throw.
+     * <p>Held by the pipeline only for the duration of a single {@link ImagePipeline#run} invocation.
+     * Implements {@link AutoCloseable} so the orchestrator can wrap it in a try-with-resources block
+     * and guarantee FFmpeg cleanup runs even when the encode passes throw.
      *
      * @implNote
-     * Owns the AVIO bridge backing the format context's read path. The
-     * shared {@link Arena} is provided by the caller (the pipeline
-     * orchestrator) and confines every upcall stub the bridge installs.
+     * This implementation owns the AVIO bridge backing the format context's read path. The shared
+     * {@link Arena} is provided by the caller (the pipeline orchestrator) and confines every upcall
+     * stub the bridge installs.
      */
     private static final class DecodedSource implements AutoCloseable {
         /**
-         * Shared arena that owns the AVIO bridge and any transient
-         * allocations made by helper methods.
+         * Shared arena that owns the AVIO bridge and any transient allocations made by helper
+         * methods.
          */
         final Arena arena;
 
@@ -755,23 +770,24 @@ public final class ImagePipeline {
         final AvioReadBuffer bridge;
 
         /**
-         * Open libavformat demuxer.
+         * Open {@code libavformat} demuxer pointer.
          */
         final MemorySegment formatCtx;
 
         /**
-         * Open libavcodec decoder for the picked video stream.
+         * Open {@code libavcodec} decoder pointer for the picked video stream.
          */
         final MemorySegment codecCtx;
 
         /**
-         * Reusable demuxer packet.
+         * Reusable demuxer packet pointer.
          */
         final MemorySegment packet;
 
         /**
-         * The first decoded frame produced by the source. Reused by every
-         * encode pass during a single {@code run}.
+         * Pointer to the first decoded frame produced by the source.
+         *
+         * <p>Reused by every encode pass during a single {@link ImagePipeline#run}.
          */
         final MemorySegment frame;
 
@@ -790,11 +806,11 @@ public final class ImagePipeline {
          *
          * @param arena       the shared arena
          * @param bridge      the AVIO bridge
-         * @param formatCtx   the open demuxer
-         * @param codecCtx    the open decoder
-         * @param packet      the demuxer packet
-         * @param frame       the first decoded frame
-         * @param stream      the picked stream
+         * @param formatCtx   the open demuxer pointer
+         * @param codecCtx    the open decoder pointer
+         * @param packet      the demuxer packet pointer
+         * @param frame       the first decoded frame pointer
+         * @param stream      the picked stream pointer
          * @param streamIndex the picked stream index
          */
         DecodedSource(Arena arena, AvioReadBuffer bridge, MemorySegment formatCtx,
@@ -810,6 +826,13 @@ public final class ImagePipeline {
             this.streamIndex = streamIndex;
         }
 
+        /**
+         * Releases the packet, frame, decoder context, and demuxer context held by this bundle, then
+         * closes the AVIO bridge.
+         *
+         * <p>Each native pointer is freed only when non-{@code NULL}. Safe to call exactly once at the
+         * end of a {@link ImagePipeline#run} invocation.
+         */
         @Override
         public void close() {
             try (var local = Arena.ofConfined()) {

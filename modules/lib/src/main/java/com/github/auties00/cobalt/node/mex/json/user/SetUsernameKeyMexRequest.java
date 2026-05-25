@@ -14,18 +14,11 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Builds the MEX IQ stanza that registers or rotates the username recovery
- * PIN.
+ * Builds the MEX IQ stanza that registers or rotates the username recovery PIN.
  *
- * @apiNote Powers the username PIN settings screen. WA Web's
- * {@code WAWebSetUsernameKeyQueryJob} dispatches this mutation under the
- * {@code UI_ACTION} job-priority bucket and treats a {@code null} pin as
- * the "clear PIN" intent. Pair the dispatched stanza with
- * {@link SetUsernameKeyMexResponse} to consume the reply.
- *
- * @implNote This implementation omits the {@code pin} variable when
- * {@code null}, mirroring WA Web's {@code t!=null?{pin:t}:{}} call site;
- * the relay then interprets the absent variable as the clear-PIN action.
+ * <p>This request backs the username PIN settings screen. The PIN is dispatched as the {@code pin}
+ * GraphQL variable; a {@code null} PIN is the clear-PIN intent and omits the variable entirely. The
+ * reply is consumed through {@link SetUsernameKeyMexResponse}.
  *
  * @see SetUsernameKeyMexResponse
  */
@@ -34,10 +27,7 @@ public final class SetUsernameKeyMexRequest implements MexOperation.Request.Json
     /**
      * The compiled-document id the relay maps to the persisted mutation.
      *
-     * @apiNote Used as the {@code query_id} attribute of the outbound
-     * {@code <query>} node. Matches the {@code params.id} field of
-     * {@code WAWebMexSetUsernameKeyJobMutation.graphql} for the snapshot
-     * this file was generated against.
+     * <p>Emitted as the {@code query_id} attribute of the outbound {@code <query>} node.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameKeyJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -45,29 +35,23 @@ public final class SetUsernameKeyMexRequest implements MexOperation.Request.Json
 
     /**
      * The GraphQL operation name reported alongside this request.
-     *
-     * @apiNote Mirrors {@code params.name} on
-     * {@code WAWebMexSetUsernameKeyJobMutation.graphql}; WA Web tags the
-     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameKeyJobMutation.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexSetUsernameKeyQueryJob";
 
     /**
-     * The {@code pin} GraphQL variable carrying the new recovery PIN.
+     * The {@code pin} GraphQL variable carrying the new recovery PIN, or {@code null} to clear it.
      */
     private final String pin;
 
     /**
      * Constructs a set-username-key mutation request.
      *
-     * @apiNote Pass the cleartext PIN; the relay performs the hashing
-     * server-side. Passing {@code null} omits the variable, which signals
-     * the relay to clear any existing PIN.
+     * <p>The cleartext PIN is forwarded as-is; the relay performs the hashing server-side. Passing
+     * {@code null} omits the variable, which signals the relay to clear any existing PIN.
      *
-     * @param pin the new recovery PIN, or {@code null} to clear the
-     *            existing PIN
+     * @param pin the new recovery PIN, or {@code null} to clear the existing PIN
      */
     public SetUsernameKeyMexRequest(String pin) {
         this.pin = pin;
@@ -92,9 +76,9 @@ public final class SetUsernameKeyMexRequest implements MexOperation.Request.Json
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation emits {@code {"variables": {"pin": <pin>}}}
-     * (or {@code {"variables": {}}} when {@code pin} is {@code null}) and
-     * defers envelope construction to
+     * @implNote This implementation emits {@code {"variables": {"pin": <pin>}}}, or
+     * {@code {"variables": {}}} when {@link #pin} is {@code null}, mirroring the relay's reading of
+     * the absent variable as the clear-PIN action; envelope construction is delegated to
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameKeyJob", exports = "mexSetUsernameKeyQueryJob",

@@ -15,38 +15,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="urn:xmpp:whatsapp:push" type="set">}
- * stanza that registers or clears a push-notification channel.
+ * Represents the outbound {@code <iq xmlns="urn:xmpp:whatsapp:push" type="set">} stanza that
+ * registers or clears a push-notification channel.
  *
- * @apiNote
- * Built by Cobalt's push-registration path, the counterpart of WA Web's
- * {@code WAWebSetPushConfigJob.setPushConfig}. The caller chooses either
- * a {@link SmaxPushConfigSetSetVariant.Config} payload to register a
- * platform-specific push channel (W3C Push API endpoint for web,
- * APNs/iOS, FCM-style for Android, WNS for Windows, etc.) or a
- * {@link SmaxPushConfigSetSetVariant.Clear} payload to de-register. WA
- * Web emits exactly this stanza after a successful
- * {@code PushManager.subscribe} in
- * {@code WAWebSubscribePushManagerAction}; Cobalt embedders that wire
- * server-side push to their own application use the same RPC.
+ * <p>The request carries a single {@link SmaxPushConfigSetSetVariant}: a
+ * {@link SmaxPushConfigSetSetVariant.Config} payload to register a platform-specific push channel
+ * (W3C Push API endpoint for web, APNs for iOS, FCM-style for Android, WNS for Windows, and so on)
+ * or a {@link SmaxPushConfigSetSetVariant.Clear} payload to de-register. Callers wiring server-side
+ * push to their own application build this stanza after obtaining a push subscription and dispatch
+ * it through the SMAX layer; the relay replies with a {@link SmaxPushConfigSetResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigSetRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigBaseIQSetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigSetSetConfigOrSetClearMixinGroup")
 public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     /**
-     * The exclusive payload variant: either {@code <config>} or
-     * {@code <clear>}.
+     * Holds the exclusive payload variant, either {@code <config>} or {@code <clear>}.
      */
     private final SmaxPushConfigSetSetVariant variant;
 
     /**
-     * Constructs a push-config request.
+     * Constructs a push-config request around the given payload variant.
      *
-     * @apiNote
-     * Pass a {@link SmaxPushConfigSetSetVariant.Config} to register a
-     * platform-specific push channel or a
-     * {@link SmaxPushConfigSetSetVariant.Clear} to drop the registration.
+     * <p>Pass a {@link SmaxPushConfigSetSetVariant.Config} to register a platform-specific push
+     * channel or a {@link SmaxPushConfigSetSetVariant.Clear} to drop the registration.
      *
      * @param variant the payload variant
      * @throws NullPointerException if {@code variant} is {@code null}
@@ -56,10 +48,7 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the payload variant.
-     *
-     * @apiNote
-     * Exposed for test and audit code; the variant is immutable.
+     * Returns the payload variant carried by this request.
      *
      * @return the {@link SmaxPushConfigSetSetVariant}
      */
@@ -68,15 +57,14 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Builds the {@code <iq>} envelope and nests the payload variant as its sole child.
      *
-     * @implNote
-     * This implementation hard-codes
-     * {@code xmlns="urn:xmpp:whatsapp:push"}, {@code type="set"}, and
-     * {@code to=s.whatsapp.net} per the
-     * {@code WASmaxOutPushConfigSetRequest.makeSetRequest} fixture, then
-     * nests {@link SmaxPushConfigSetSetVariant#toNode()} as the sole
-     * payload.
+     * <p>The envelope is addressed to the user server with {@code xmlns="urn:xmpp:whatsapp:push"}
+     * and {@code type="set"}; the payload is produced by {@link SmaxPushConfigSetSetVariant#toNode()}.
+     *
+     * @implNote This implementation addresses the stanza to {@link Jid#userServer()} rather than a
+     * literal {@code s.whatsapp.net} string so the destination tracks the shared server constant.
+     * @return the {@link NodeBuilder} for the request envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigSetRequest",
@@ -91,10 +79,11 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to another object for equality on the carried variant.
      *
-     * @implNote
-     * This implementation compares the carried {@link #variant}.
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a {@link SmaxPushConfigSetRequest} with an equal
+     *         variant
      */
     @Override
     public boolean equals(Object obj) {
@@ -109,11 +98,9 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code derived from the carried variant.
      *
-     * @implNote
-     * This implementation hashes the carried {@link #variant} to stay
-     * consistent with {@link #equals(Object)}.
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -121,11 +108,9 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug rendering of this request.
      *
-     * @implNote
-     * This implementation mirrors the record-like rendering used across
-     * the {@code Smax*} stanza family.
+     * @return the string form
      */
     @Override
     public String toString() {

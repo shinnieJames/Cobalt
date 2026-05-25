@@ -27,33 +27,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Validates Account Device Verification signatures binding companion device
- * identities to the primary WhatsApp account.
+ * Validates Account Device Verification (ADV) signatures binding companion device identities to the
+ * primary WhatsApp account.
  *
- * @apiNote
- * The single entry point for every ADV signature check Cobalt performs: pairing
- * (local device identity from a {@code <device-identity>} pair-success node),
- * prekey fetches (remote companion device identity from a
- * {@code <device-identity>} prekey node), and signed key-index list verification
- * (during device-list synchronisation and ADV change notifications). Covers both
- * standard end-to-end encrypted accounts (E2EE) and hosted business-coexistence
- * accounts (HOSTED). The crypto is Curve25519 signatures with two-byte
- * domain-separation headers; the headers themselves come from
- * {@code WAWebAdvSignatureConstants}.
+ * <p>This is the single entry point for every ADV signature check Cobalt performs: pairing (local
+ * device identity from a {@code <device-identity>} pair-success node, via
+ * {@link #extractAndValidateLocalSignedDeviceIdentity(Node)}), prekey fetches (remote companion
+ * device identity from a {@code <device-identity>} prekey node, via
+ * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)}), and signed
+ * key-index list verification during device-list synchronisation and ADV change notifications (via
+ * {@link #decodeSignedKeyIndexBytes(Jid, byte[])} and {@link #verifySKeyIndexWithAccSigKey(byte[])}).
+ * It covers both standard end-to-end encrypted accounts (E2EE) and hosted business-coexistence
+ * accounts (HOSTED). The crypto is Curve25519 signatures over messages prefixed with two-byte
+ * domain-separation headers; the headers themselves come from {@code WAWebAdvSignatureConstants}.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvSignatureApi")
 @WhatsAppWebModule(moduleName = "WAWebHandleAdvDeviceNotificationUtils")
 @WhatsAppWebModule(moduleName = "WAWebAdvSignatureConstants")
 public final class DeviceADVValidator {
     /**
-     * Domain-separation header {@code [6, 0]} for the E2EE device-identity
-     * account signature.
+     * Holds the domain-separation header {@code [6, 0]} for the E2EE device-identity account
+     * signature.
      *
-     * @apiNote
-     * Prefixed to the signed message during the account-signature check in
+     * <p>The header is prefixed to the signed message during the account-signature check in
      * {@link #extractAndValidateLocalSignedDeviceIdentity(Node)} and
-     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)}
-     * for non-hosted accounts.
+     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)} for
+     * non-hosted accounts.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureConstants",
             exports = "ADV_PREFIX_DEVICE_IDENTITY_ACCOUNT_SIGNATURE",
@@ -61,12 +60,11 @@ public final class DeviceADVValidator {
     private static final byte[] E2EE_ACCOUNT_SIGNATURE_HEADER = {6, 0};
 
     /**
-     * Domain-separation header {@code [6, 1]} for the E2EE device-identity
-     * device signature.
+     * Holds the domain-separation header {@code [6, 1]} for the E2EE device-identity device
+     * signature.
      *
-     * @apiNote
-     * Used both to verify remote E2EE device signatures and to generate the
-     * local device signature during pairing.
+     * <p>The header is used both to verify remote E2EE device signatures and to generate the local
+     * device signature during pairing.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureConstants",
             exports = "ADV_PREFIX_DEVICE_IDENTITY_DEVICE_SIGNATURE",
@@ -74,11 +72,10 @@ public final class DeviceADVValidator {
     private static final byte[] E2EE_DEVICE_SIGNATURE_HEADER = {6, 1};
 
     /**
-     * Domain-separation header {@code [6, 2]} for signed key-index lists.
+     * Holds the domain-separation header {@code [6, 2]} for signed key-index lists.
      *
-     * @apiNote
-     * Prefixed to the signed message during the key-index-list signature check
-     * in {@link #verifyAndBuildResult}.
+     * <p>The header is prefixed to the signed message during the key-index-list signature check in
+     * {@link #verifyAndBuildResult}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureConstants",
             exports = "ADV_PREFIX_KEY_INDEX_LIST_ACCOUNT_SIGNATURE",
@@ -86,13 +83,12 @@ public final class DeviceADVValidator {
     private static final byte[] KEY_INDEX_LIST_SIGNATURE_HEADER = {6, 2};
 
     /**
-     * Domain-separation header {@code [6, 5]} for the HOSTED device-identity
-     * account signature.
+     * Holds the domain-separation header {@code [6, 5]} for the HOSTED device-identity account
+     * signature.
      *
-     * @apiNote
-     * Selected over {@link #E2EE_ACCOUNT_SIGNATURE_HEADER} when the inner
-     * {@code ADVDeviceIdentity.deviceType} is HOSTED and the
-     * {@code adv_accept_hosted_devices} AB prop is on.
+     * <p>The header is selected over {@link #E2EE_ACCOUNT_SIGNATURE_HEADER} when the inner
+     * {@code ADVDeviceIdentity.deviceType} is HOSTED and the {@code adv_accept_hosted_devices} AB
+     * prop is on.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureConstants",
             exports = "ADV_HOSTED_PREFIX_DEVICE_IDENTITY_ACCOUNT_SIGNATURE",
@@ -100,14 +96,12 @@ public final class DeviceADVValidator {
     private static final byte[] HOSTED_ACCOUNT_SIGNATURE_HEADER = {6, 5};
 
     /**
-     * Domain-separation header {@code [6, 6]} for the HOSTED device-identity
-     * device signature.
+     * Holds the domain-separation header {@code [6, 6]} for the HOSTED device-identity device
+     * signature.
      *
-     * @apiNote
-     * Used only for verifying remote HOSTED devices (the device-signature
-     * header is driven by the JID's hosted flag, not the protobuf). WA Web
-     * always generates the local device signature with
-     * {@link #E2EE_DEVICE_SIGNATURE_HEADER}, so this header has no
+     * <p>The header is used only to verify remote HOSTED devices, where the device-signature header
+     * is driven by the JID's hosted flag rather than the protobuf. WA Web always generates the local
+     * device signature with {@link #E2EE_DEVICE_SIGNATURE_HEADER}, so this header has no
      * generate-side counterpart.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureConstants",
@@ -116,22 +110,18 @@ public final class DeviceADVValidator {
     private static final byte[] HOSTED_DEVICE_SIGNATURE_HEADER = {6, 6};
 
     /**
-     * The store providing the local identity key pair, the ADV secret key, and
-     * stored peer identity keys.
+     * Holds the store providing the local identity key pair, the ADV secret key, and stored peer
+     * identity keys.
      */
     private final WhatsAppStore store;
 
     /**
-     * The AB props service used to gate hosted-device behaviour.
+     * Holds the AB props service used to gate hosted-device behaviour.
      */
     private final ABPropsService abProps;
 
     /**
-     * Constructs a new ADV validator.
-     *
-     * @apiNote
-     * Wired up by the device-service construction graph; embedders do not call
-     * this directly.
+     * Constructs an ADV validator bound to the given store and AB props service.
      *
      * @param store   the store
      * @param abProps the AB props service
@@ -148,8 +138,7 @@ public final class DeviceADVValidator {
     /**
      * Returns whether the hosted business-coexistence path is enabled.
      *
-     * @apiNote
-     * Reads the {@code adv_accept_hosted_devices} AB prop. Every code path that
+     * <p>The value reflects the {@code adv_accept_hosted_devices} AB prop. Every code path that
      * selects between E2EE and HOSTED headers consults this gate first.
      *
      * @return {@code true} when {@code adv_accept_hosted_devices} is set
@@ -162,32 +151,26 @@ public final class DeviceADVValidator {
     }
 
     /**
-     * Extracts and validates the local device identity from a pairing response,
-     * then generates the device signature.
+     * Extracts and validates the local device identity from a pairing response, then generates the
+     * device signature.
      *
-     * @apiNote
-     * Called once during pairing, when the {@code <pair-success>} envelope
-     * carries the {@code <device-identity>} node. Verifies the HMAC over the
-     * device identity (using the locally-stored {@code advSecretKey}), verifies
-     * the account signature (using the device-identity's embedded account
-     * signature key), and signs the bundle with the local Signal identity to
-     * produce the device signature returned in the result.
+     * <p>This is called once during pairing, when the {@code <pair-success>} envelope carries the
+     * {@code <device-identity>} node. It verifies the HMAC over the device identity using the
+     * locally-stored {@code advSecretKey}, verifies the account signature using the device
+     * identity's embedded account signature key, and signs the bundle with the local Signal identity
+     * to produce the device signature returned in the result.
      *
      * @implNote
      * This implementation selects the account-signature header from the inner
-     * {@code ADVDeviceIdentity.deviceType} (gated by the hosted-devices feature
-     * flag) and from the SMB-vs-consumer platform check on the outer HMAC
-     * input. WA Web always uses the E2EE header when generating the local device
-     * signature; the HOSTED device-signature header only ever participates in
-     * verification of remote devices.
+     * {@code ADVDeviceIdentity.deviceType} (gated by the hosted-devices feature flag) and from the
+     * SMB-versus-consumer platform check on the outer HMAC input. WA Web always uses the E2EE header
+     * when generating the local device signature; the HOSTED device-signature header only ever
+     * participates in verification of remote devices.
      *
      * @param deviceIdentityNode the {@code <device-identity>} pairing node
-     * @return the validated signed device identity, carrying the freshly
-     *         generated device signature
-     * @throws WhatsAppAdvValidationException if HMAC or signature validation
-     *                                        fails
-     * @throws IllegalStateException          if required store values are
-     *                                        missing
+     * @return the validated signed device identity, carrying the freshly generated device signature
+     * @throws WhatsAppAdvValidationException if HMAC or signature validation fails
+     * @throws IllegalStateException          if required store values are missing
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureApi",
             exports = {"verifyDeviceIdentityAccountSignature", "generateDeviceSignature"},
@@ -286,31 +269,26 @@ public final class DeviceADVValidator {
     /**
      * Extracts and validates a remote device identity from a prekey response.
      *
-     * @apiNote
-     * Called by the Signal session-creation path when the prekey bundle for a
-     * companion device includes a {@code <device-identity>} child. Verifies the
-     * account signature and the device signature against the claimed identity
-     * key, returning the validated identity for the caller to persist. Returns
-     * empty when validation is not required (the device is the primary and the
-     * primary never carries an ADV envelope), or when the device's stored
-     * identity already matches the claimed one (no work to do).
+     * <p>This is called by the Signal session-creation path when the prekey bundle for a companion
+     * device includes a {@code <device-identity>} child. It verifies the account signature and the
+     * device signature against the claimed identity key, returning the validated identity for the
+     * caller to persist. It returns empty when validation is unnecessary: when the device is the
+     * primary (which never carries an ADV envelope), or when the device's stored identity already
+     * matches the claimed one.
      *
      * @implNote
      * This implementation derives the account-signature header from the inner
-     * {@code ADVDeviceIdentity.deviceType} and the device-signature header from
-     * the JID's hosted flag; both selections are gated by the hosted-devices
-     * feature flag. The protobuf {@code accountSignatureKey} takes precedence,
-     * falling back to the stored user identity key when the field is missing
-     * or empty.
+     * {@code ADVDeviceIdentity.deviceType} and the device-signature header from the JID's hosted
+     * flag; both selections are gated by the hosted-devices feature flag. The protobuf
+     * {@code accountSignatureKey} takes precedence, falling back to the stored user identity key
+     * when the field is missing or empty.
      *
      * @param remoteJid          the remote device JID
      * @param remoteIdentityNode the remote device identity node
-     * @param remoteIdentityKey  the remote device's claimed identity key
-     *                           (32 bytes)
-     * @param isHostedFromJid    whether the remote JID indicates a hosted
-     *                           device
-     * @return the validated signed device identity, or empty when validation is
-     *         unnecessary or the device's identity is unchanged
+     * @param remoteIdentityKey  the remote device's claimed identity key (32 bytes)
+     * @param isHostedFromJid    whether the remote JID indicates a hosted device
+     * @return the validated signed device identity, or empty when validation is unnecessary or the
+     *         device's identity is unchanged
      * @throws WhatsAppAdvValidationException if signature validation fails
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureApi",
@@ -398,22 +376,19 @@ public final class DeviceADVValidator {
     }
 
     /**
-     * Decodes and verifies a signed key-index list against the user's local
-     * primary identity key.
+     * Decodes and verifies a signed key-index list against the user's local primary identity key.
      *
-     * @apiNote
-     * The standard E2EE path used for normal accounts. The verification key
-     * comes from the local Signal store (device 0 of {@code userJid}); any
-     * embedded {@code accountSignatureKey} on the wire is ignored. The server
-     * commonly omits that field because peers verify against the identity they
-     * already trust from their Signal session with the primary device. The
-     * returned result therefore carries an empty {@code accountSignatureKey}.
+     * <p>This is the standard E2EE path used for normal accounts. The verification key comes from
+     * the local Signal store (device 0 of {@code userJid}), and any embedded
+     * {@code accountSignatureKey} on the wire is ignored; the server commonly omits that field
+     * because peers verify against the identity they already trust from their Signal session with
+     * the primary device. The returned result therefore carries an empty
+     * {@code accountSignatureKey}.
      *
-     * @param userJid             the user JID whose primary identity is the
-     *                            verification key
+     * @param userJid             the user JID whose primary identity is the verification key
      * @param signedKeyIndexBytes the raw signed key-index list bytes
-     * @return the validated key-index list data, or empty when no local
-     *         primary identity is known or validation fails
+     * @return the validated key-index list data, or empty when no local primary identity is known or
+     *         validation fails
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
@@ -432,22 +407,18 @@ public final class DeviceADVValidator {
     }
 
     /**
-     * Decodes and verifies a signed key-index list against the embedded
-     * account-signature key.
+     * Decodes and verifies a signed key-index list against the embedded account-signature key.
      *
-     * @apiNote
-     * The hosted business-coexistence path: the verification key must be present
-     * in the outer protobuf {@code accountSignatureKey} field; if it is missing
-     * or empty the result is empty. Used when peers may not yet have a Signal
-     * session with the primary phone (and therefore cannot resolve a stored
-     * identity) but still need to trust a freshly-received key-index list. The
-     * returned result carries the embedded key so callers can persist it as the
+     * <p>This is the hosted business-coexistence path: the verification key must be present in the
+     * outer protobuf {@code accountSignatureKey} field, and the result is empty when it is missing
+     * or empty. It is used when peers may not yet have a Signal session with the primary phone (and
+     * therefore cannot resolve a stored identity) but still need to trust a freshly-received
+     * key-index list. The returned result carries the embedded key so callers can persist it as the
      * primary identity.
      *
      * @param signedKeyIndexBytes the raw signed key-index list bytes
      * @return the validated key-index list data, or empty when validation fails
-     * @throws NullPointerException if {@code signedKeyIndexBytes} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code signedKeyIndexBytes} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "verifySKeyIndexWithAccSigKey",
@@ -471,20 +442,15 @@ public final class DeviceADVValidator {
 
     /**
      * Decodes the outer {@code ADVSignedKeyIndexList} envelope and dispatches to
-     * {@link #verifyAndBuildResult} for signature verification and inner
-     * decoding.
+     * {@link #verifyAndBuildResult} for signature verification and inner decoding.
      *
-     * @apiNote
-     * Shared shim between the standard E2EE and hosted-business entry points;
-     * factored out so the entry points only differ in how they choose the
-     * verification key.
+     * <p>This is the shared shim between the standard E2EE and hosted-business entry points; it is
+     * factored out so the entry points differ only in how they choose the verification key.
      *
      * @param signedKeyIndexBytes       the raw signed key-index list bytes
-     * @param verificationKey           the public key used to verify the
-     *                                  signature
-     * @param resultAccountSignatureKey the key embedded in the returned result,
-     *                                  or {@code null} for the standard path
-     *                                  that has no embedded key to forward
+     * @param verificationKey           the public key used to verify the signature
+     * @param resultAccountSignatureKey the key embedded in the returned result, or {@code null} for
+     *                                  the standard path that has no embedded key to forward
      * @return the validated key-index list data, or empty when validation fails
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
@@ -504,18 +470,17 @@ public final class DeviceADVValidator {
     }
 
     /**
-     * Verifies the account signature on a parsed {@code ADVSignedKeyIndexList},
-     * decodes the inner {@code ADVKeyIndexList}, and packages the result.
+     * Verifies the account signature on a parsed {@code ADVSignedKeyIndexList}, decodes the inner
+     * {@code ADVKeyIndexList}, and packages the result.
      *
-     * @apiNote
-     * Internal helper shared by the two entry points; never called from outside
-     * the validator.
+     * <p>This internal helper is shared by both entry points and is never called from outside the
+     * validator. It returns empty when the envelope lacks details or a signature, when the signature
+     * fails to verify, or when the inner list lacks a raw id or timestamp.
      *
      * @param signedKeyIndexList        the parsed outer envelope
-     * @param verificationKey           the public key used to verify the
-     *                                  signature
-     * @param resultAccountSignatureKey the key embedded in the returned result,
-     *                                  or {@code null} for the standard path
+     * @param verificationKey           the public key used to verify the signature
+     * @param resultAccountSignatureKey the key embedded in the returned result, or {@code null} for
+     *                                  the standard path
      * @return the validated key-index list data, or empty when any check fails
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
@@ -571,11 +536,9 @@ public final class DeviceADVValidator {
     /**
      * Returns the stored identity key for the exact device.
      *
-     * @apiNote
-     * Internal lookup used by
-     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)}
-     * to short-circuit re-validation when the device's stored identity already
-     * matches the claimed one.
+     * <p>This lookup is used by
+     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)} to
+     * short-circuit re-validation when the device's stored identity already matches the claimed one.
      *
      * @param deviceJid the device JID, including the device number
      * @return the identity key bytes, or empty when no key is stored
@@ -595,13 +558,11 @@ public final class DeviceADVValidator {
     /**
      * Returns the stored identity key for the user's primary device.
      *
-     * @apiNote
-     * Used as the verification key for the standard signed-key-index-list path
-     * (where the wire does not carry an embedded account signature key), and as
-     * a fallback for {@code accountSignatureKey} in
-     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)}
-     * when the protobuf field is missing or empty. The device number on
-     * {@code jid} is ignored.
+     * <p>This key serves as the verification key for the standard signed-key-index-list path (where
+     * the wire does not carry an embedded account signature key), and as a fallback for
+     * {@code accountSignatureKey} in
+     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)} when the
+     * protobuf field is missing or empty. The device number on {@code jid} is ignored.
      *
      * @param jid the JID; the device number is ignored
      * @return the identity key bytes, or empty when no key is stored
@@ -621,10 +582,9 @@ public final class DeviceADVValidator {
     /**
      * Returns whether the JID points to a device that requires ADV validation.
      *
-     * @apiNote
-     * Primary devices ({@code device == }{@link DeviceConstants#PRIMARY_DEVICE_ID})
-     * never carry an ADV envelope and skip validation entirely; only companion
-     * devices have a signed device identity to verify.
+     * <p>Primary devices ({@code device == }{@link DeviceConstants#PRIMARY_DEVICE_ID}) never carry
+     * an ADV envelope and skip validation entirely; only companion devices have a signed device
+     * identity to verify.
      *
      * @param jid the JID to test
      * @return {@code true} for companion devices

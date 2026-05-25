@@ -7,23 +7,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The M6 call-link descriptor — the joinable URL-style handle for a
- * lobby-style call. Created via {@link CallLinkPreview} and joined
- * through the call layer's {@code joinCallLink} signaling, which
- * eventually produces a {@link GroupCallSession}.
+ * Describes a joinable call link: the shareable handle for a
+ * lobby-style call.
  *
- * @param token       the opaque server-generated link token; used as
- *                    the lookup key by all link APIs
- * @param creator     the JID of the host who created the link
- * @param callId      the underlying call identifier the link refers
- *                    to; populated once the host starts the call
- *                    (may be empty before then)
- * @param createdAt   the wall-clock timestamp the link was created
- * @param videoEnabled whether the link is configured for a video
- *                    call (vs. audio-only)
- * @param requiresLobby whether joiners are queued in a lobby and the
- *                     host has to admit them — RFC-style "waiting
- *                     room"
+ * <p>A link is identified by an opaque server-generated {@link #token()}
+ * that every link operation uses as a lookup key. The link records its
+ * host, optional underlying call identifier, creation time, media kind,
+ * and whether joiners must pass through a host-admitted lobby. The same
+ * value type is surfaced to listeners through the call-link lobby
+ * callbacks on
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener}, such
+ * as
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onCallLinkAdmitted(com.github.auties00.cobalt.client.WhatsAppClient, CallLink)}.
+ *
+ * @param token         the opaque server-generated link token, used as
+ *                      the lookup key by every link operation
+ * @param creator       the JID of the host who created the link
+ * @param callId        the underlying call identifier the link refers
+ *                      to, populated once the host starts the call and
+ *                      empty before then
+ * @param createdAt     the wall-clock instant the link was created
+ * @param videoEnabled  whether the link is configured for a video call
+ *                      rather than audio-only
+ * @param requiresLobby whether joiners are queued in a lobby that the
+ *                      host must admit them from
  */
 public record CallLink(
         String token,
@@ -34,7 +41,13 @@ public record CallLink(
         boolean requiresLobby
 ) {
     /**
-     * Compact constructor — null-checks fields.
+     * Constructs a call link, rejecting {@code null} fields and an empty
+     * token.
+     *
+     * @throws NullPointerException     if {@code token}, {@code creator},
+     *                                  {@code callId}, or {@code createdAt}
+     *                                  is {@code null}
+     * @throws IllegalArgumentException if {@code token} is empty
      */
     public CallLink {
         Objects.requireNonNull(token, "token cannot be null");

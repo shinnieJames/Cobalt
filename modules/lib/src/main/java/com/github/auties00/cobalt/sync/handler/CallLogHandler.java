@@ -14,22 +14,20 @@ import com.alibaba.fastjson2.JSON;
 /**
  * Maintains the local VoIP call-log history from {@code call_log} sync mutations.
  *
- * @apiNote
- * Drives the Calls tab. When a call is placed, received, or missed on
- * another device, the server replays the resulting call-log record
- * here as a {@link CallLogAction}. Cobalt embedders observe the
- * result through the call-log accessors on
- * {@link com.github.auties00.cobalt.store.WhatsAppStore}.
+ * <p>When a call is placed, received, or missed on another device, the server
+ * replays the resulting call-log record here as a {@link CallLogAction}, and the
+ * record is mirrored into the store via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)}.
  *
  * @implNote
- * This implementation stores the protobuf record directly in
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#addCallLog}
- * keyed by the record's own {@code callId}, rather than running WA
- * Web's {@code generateCallLogFromCallSyncRecord} which writes a
- * VoIP-flavored chat message. The pairing-timestamp filter and the
- * one-minute {@code shouldHideInConversation} window are intentionally
- * dropped because they only control browser UI behaviour (whether the
- * call appears inline in the conversation view).
+ * This implementation stores the protobuf record directly via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)}
+ * keyed by the record's own {@link com.github.auties00.cobalt.model.call.CallLog#callId()},
+ * rather than running WA Web's {@code generateCallLogFromCallSyncRecord} which
+ * writes a VoIP-flavored chat message. The pairing-timestamp filter and the
+ * one-minute {@code shouldHideInConversation} window are intentionally dropped
+ * because they only control browser UI behaviour (whether the call appears
+ * inline in the conversation view).
  */
 @WhatsAppWebModule(moduleName = "WAWebCallLogSync")
 public final class CallLogHandler implements WebAppStateActionHandler {
@@ -37,9 +35,7 @@ public final class CallLogHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton call-log handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebCallLogSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public CallLogHandler() {
@@ -67,19 +63,17 @@ public final class CallLogHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * For SET mutations, validates that the
-     * {@link CallLogAction#log()} record is present, validates the
-     * four-element index {@code ["call_log", peerJid, callId, fromMe]},
-     * and stores the record. For REMOVE mutations, drops the record
-     * keyed by the {@code callId} from the index. Returns
-     * {@link MutationApplicationResult#unsupported()} for other
-     * operations and {@link MutationApplicationResult#failed()} on any
-     * thrown exception.
+     * <p>For {@link SyncdOperation#SET} mutations, validates that the
+     * {@link CallLogAction#log()} record is present, validates the four-element
+     * index {@code ["call_log", peerJid, callId, fromMe]}, and stores the record.
+     * For {@link SyncdOperation#REMOVE} mutations, drops the record keyed by the
+     * {@code callId} in index slot 2. Returns
+     * {@link MutationApplicationResult#unsupported()} for other operations and
+     * {@link MutationApplicationResult#failed()} on any thrown exception.
      *
      * @implNote
      * This implementation requires a non-empty
-     * {@link com.github.auties00.cobalt.model.call.CallLogRecord#callId()}
+     * {@link com.github.auties00.cobalt.model.call.CallLog#callId()}
      * on the action payload because the store keys call logs by
      * record-internal id. WA Web instead keys by the composite index
      * {@code peerJid|callId|fromMe} via

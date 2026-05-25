@@ -946,6 +946,30 @@ export class LiveWebSession {
     await this.debuggerBridge.removeBreakpoint(breakpointId);
   }
 
+  async setWasmBreakpoint(
+    scriptId: string,
+    byteOffset: number,
+    condition?: string
+  ): Promise<SetBreakpointResult> {
+    return this.debuggerBridge.setWasmBreakpoint(scriptId, byteOffset, condition);
+  }
+
+  async readWasmMemory(callFrameId: string, addr: number, len: number) {
+    return this.debuggerBridge.readWasmMemory(callFrameId, addr, len);
+  }
+
+  async evaluateOnCallFrame(callFrameId: string, expression: string) {
+    return this.debuggerBridge.evaluateOnCallFrame(callFrameId, expression);
+  }
+
+  async serveWasmReplacement(urlSubstring: string, filePath: string): Promise<void> {
+    await this.debuggerBridge.serveReplacement(urlSubstring, filePath);
+  }
+
+  async clearWasmReplacements(): Promise<void> {
+    await this.debuggerBridge.clearReplacements();
+  }
+
   async debuggerCommand(command: DebugCommand): Promise<void> {
     await this.debuggerBridge.command(command);
   }

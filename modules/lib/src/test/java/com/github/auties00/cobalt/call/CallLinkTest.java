@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.call;
 
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -16,21 +17,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for the M6 call-link record types — validation, defensive
- * copying, and Optional handling.
+ * Covers the M6 call-link record types {@link CallLink} and
+ * {@link CallLinkPreview}: field validation, defensive copying, and
+ * {@link Optional} handling.
  */
 public class CallLinkTest {
 
-    /**
-     * Reference creator JID.
-     */
     private static final Jid CREATOR = Jid.of("12345", JidServer.user());
 
-    /**
-     * A fresh call-link preview round-trips its fields and rejects
-     * negative participant counts + null fields.
-     */
     @Test
+    @DisplayName("a fresh call-link round-trips its fields")
     public void callLinkValidates() {
         var link = new CallLink("xyz123", CREATOR, Optional.empty(),
                 Instant.parse("2026-05-06T00:00:00Z"), false, true);
@@ -41,20 +37,15 @@ public class CallLinkTest {
         assertTrue(link.requiresLobby());
     }
 
-    /**
-     * The token cannot be empty.
-     */
     @Test
+    @DisplayName("an empty token is rejected")
     public void emptyTokenRejected() {
         assertThrows(IllegalArgumentException.class, () -> new CallLink("",
                 CREATOR, Optional.empty(), Instant.now(), false, false));
     }
 
-    /**
-     * {@link CallLinkPreview} defensively copies the participant
-     * list so callers can't mutate it after construction.
-     */
     @Test
+    @DisplayName("CallLinkPreview defensively copies the participant list")
     public void previewCopiesParticipantsDefensively() {
         var participants = new ArrayList<Jid>();
         participants.add(CREATOR);
@@ -67,10 +58,8 @@ public class CallLinkTest {
         assertEquals(CREATOR, preview.activeParticipants().get(0));
     }
 
-    /**
-     * Negative participant cap is rejected.
-     */
     @Test
+    @DisplayName("a negative participant cap is rejected")
     public void negativeParticipantCountRejected() {
         var link = new CallLink("t", CREATOR, Optional.empty(), Instant.now(),
                 false, false);

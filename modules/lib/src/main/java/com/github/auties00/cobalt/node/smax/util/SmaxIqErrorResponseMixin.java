@@ -9,23 +9,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Shared envelope-validation helper for the standard
- * {@code <iq from id type="error">} reply produced by every SMAX domain's
+ * Validates the standard {@code <iq from id type="error">} reply produced by every SMAX domain's
  * {@code ClientError}/{@code ServerError} response variant.
  *
- * @apiNote
- * Counterpart of {@link SmaxIqResultResponseMixin} for the error
- * envelope. {@link #validate(Node, Node)} checks the tag, the echoed
- * {@code id}, the {@code from}/{@code to} echo, and asserts
- * {@code type="error"}; {@link #parseError(Node)} pulls the
- * {@code <error code text/>} child into an {@link Envelope} record.
- * Every per-domain {@code WASmaxIn*IQErrorResponseMixin} delegates to
- * this single helper.
+ * <p>{@link #validate(Node, Node)} checks the tag, the echoed {@code id}, the {@code from}/{@code to}
+ * echo, and asserts {@code type="error"}; {@link #parseError(Node)} pulls the {@code <error code text/>}
+ * child into an {@link Envelope} record. This helper is the error-envelope counterpart of
+ * {@link SmaxIqResultResponseMixin}, and every per-domain {@code WASmaxIn*IQErrorResponseMixin}
+ * delegates to it.
  *
  * @implNote
- * This implementation deduplicates eleven byte-identical WA Web modules
- * (one per domain); the {@code @WhatsAppWebModule} list keeps the source
- * manifest pointing at every upstream module.
+ * This implementation deduplicates the byte-identical WA Web error-response mixins, one per domain;
+ * the {@code @WhatsAppWebModule} list keeps the source manifest pointing at every upstream module.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsIQErrorResponseMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInAbPropsIQErrorResponseMixin")
@@ -43,38 +38,35 @@ public final class SmaxIqErrorResponseMixin {
     /**
      * Refuses instantiation of the static-only utility.
      *
-     * @apiNote
-     * The class exposes only static helpers; the throwing constructor
-     * guards against reflective instantiation.
+     * <p>The class exposes only static helpers; the throwing constructor guards against reflective
+     * instantiation.
      */
     private SmaxIqErrorResponseMixin() {
         throw new AssertionError("SmaxIqErrorResponseMixin cannot be instantiated");
     }
 
     /**
-     * Validates that the supplied reply is a well-formed
-     * {@code <iq type="error">} echoing the request's {@code id} and
-     * {@code to} attributes.
+     * Validates that the supplied reply is a well-formed {@code <iq type="error">} echoing the
+     * request's {@code id} and {@code to} attributes.
      *
-     * @apiNote
-     * Called by {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-     * and {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-     * before they extract the {@code <error>} child; embedders that
-     * implement custom error parsers can call this directly to share
-     * the same envelope check.
+     * <p>Returns {@code true} only when {@code reply} has the {@code iq} description, carries
+     * {@code type="error"}, echoes the request's {@code id} verbatim, and carries a {@code from}
+     * attribute equal to the request's {@code to}. Any missing request {@code id} or {@code to}, or
+     * any mismatch, yields {@code false}.
+     * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} and
+     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} run this check before they extract
+     * the {@code <error>} child via {@link #parseError(Node)}.
      *
      * @implNote
-     * This implementation enforces the four WA Web invariants in order:
-     * tag is {@code iq}, type is {@code error}, the request carries an
-     * {@code id} (and the reply echoes it), and the reply's {@code from}
-     * matches the request's {@code to}.
+     * This implementation enforces the four WA Web invariants in order: the description is {@code iq},
+     * the type is {@code error}, the request carries an {@code id} the reply echoes, and the reply's
+     * {@code from} matches the request's {@code to}.
      *
      * @param reply   the inbound stanza
-     * @param request the outbound stanza, used to cross-check the echoed
-     *                {@code id} and {@code from} attributes
-     * @return {@code true} when {@code reply} is an error envelope
-     *         echoing {@code request}'s identifiers; {@code false}
-     *         otherwise
+     * @param request the outbound stanza, used to cross-check the echoed {@code id} and {@code from}
+     *                attributes
+     * @return {@code true} when {@code reply} is an error envelope echoing {@code request}'s
+     *         identifiers; {@code false} otherwise
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInGroupsIQErrorResponseMixin",
@@ -123,28 +115,23 @@ public final class SmaxIqErrorResponseMixin {
     }
 
     /**
-     * Extracts the {@code <error code text/>} child carried by an
-     * {@code <iq type="error">} envelope.
+     * Extracts the {@code <error code text/>} child carried by an {@code <iq type="error">} envelope.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the reply has no
-     * {@code <error>} child or when the child is missing the
-     * {@code code} attribute (or carries a negative code). Used by both
+     * <p>Returns {@link Optional#empty()} when the reply has no {@code <error>} child or when the
+     * child is missing the {@code code} attribute or carries a negative code; otherwise returns the
+     * parsed {@code (code, text)} pair as an {@link Envelope}.
      * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} and
-     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to
-     * read the {@code (code, text)} pair after envelope validation
-     * succeeds.
+     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} call this after
+     * {@link #validate(Node, Node)} succeeds.
      *
      * @implNote
-     * This implementation treats {@code text} as optional but
-     * {@code code} as mandatory; a negative or missing {@code code}
-     * triggers {@link Optional#empty()} so the caller can fall through
-     * to a different error branch.
+     * This implementation treats {@code text} as optional but {@code code} as mandatory; a negative
+     * or missing {@code code} yields {@link Optional#empty()} so the caller can fall through to a
+     * different error branch.
      *
      * @param reply the inbound error stanza
-     * @return an {@link Optional} carrying the parsed {@link Envelope},
-     *         or empty when the {@code <error>} child is missing or
-     *         malformed
+     * @return an {@link Optional} carrying the parsed {@link Envelope}, or empty when the
+     *         {@code <error>} child is missing or malformed
      * @throws NullPointerException if {@code reply} is {@code null}
      */
     public static Optional<Envelope> parseError(Node reply) {
@@ -162,28 +149,23 @@ public final class SmaxIqErrorResponseMixin {
     }
 
     /**
-     * Container for the {@code (code, text)} pair carried by every
-     * {@code <error>} child.
+     * Carries the {@code (code, text)} pair extracted from an {@code <error>} child.
      *
-     * @apiNote
-     * Surfaced by {@link #parseError(Node)} and consumed by every
-     * per-RPC {@code ClientError}/{@code ServerError} factory. The
-     * {@code code} is always non-negative; the {@code text} may be
-     * absent when the relay omitted it.
+     * <p>{@link #parseError(Node)} produces this record and every per-RPC
+     * {@code ClientError}/{@code ServerError} factory consumes it. The {@code code} is always
+     * non-negative; the {@code text} may be {@code null} when the relay omitted it.
      *
      * @param code the numeric error code
-     * @param text the optional human-readable error text
+     * @param text the human-readable error text, or {@code null} when the relay omitted it
      */
     public record Envelope(int code, String text) {
         /**
-         * Returns the {@code text} attribute as an {@link Optional}.
+         * Returns the {@code text} component wrapped in an {@link Optional}.
          *
-         * @apiNote
-         * Useful for embedders that prefer idiomatic null-safe access
-         * over the raw record accessor.
+         * <p>Provides null-safe access to {@link #text()} for callers that prefer an
+         * {@link Optional} over a possibly-{@code null} accessor.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> textAsOptional() {
             return Optional.ofNullable(text);

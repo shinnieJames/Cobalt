@@ -9,19 +9,16 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.util.List;
 
 /**
- * Carrier for the output of {@link MutationRequestBuilder#buildSyncRequest}: the IQ
- * {@link NodeBuilder} ready to be id-tagged and sent, paired with the upload metadata
- * needed by the post-response success path.
+ * Carries the output of {@link MutationRequestBuilder#buildSyncRequest(SyncPatchType, java.util.SequencedCollection)}.
  *
- * @apiNote
- * The {@link #node} field is intentionally a still-mutable {@link NodeBuilder} so the
- * caller (typically {@link com.github.auties00.cobalt.client.WhatsAppClient}'s send path)
- * can attach the auto-generated stanza id before serialising. The {@link #uploadInfo} is
- * {@code null} when no mutations were emitted (an empty-patches build), in which case
- * there is nothing for the post-response success path to apply.
+ * <p>The {@link #node} is the IQ {@link NodeBuilder} ready to be id-tagged and sent, and is
+ * left mutable so the send path can attach the auto-generated stanza id before serialising.
+ * The {@link #uploadInfo} is the metadata that the post-response success path consumes once
+ * the server ACKs the push; it is {@code null} when no mutations were emitted (an
+ * empty-patches build), in which case there is nothing for the success path to apply.
  *
  * @param node the IQ {@link NodeBuilder} carrying {@code <iq type="set" xmlns="w:sync:app:state">}
- * @param uploadInfo the metadata for {@code _uploadSuccessful}, or {@code null} when no mutations were emitted
+ * @param uploadInfo the post-response success metadata, or {@code null} when no mutations were emitted
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdServerSync")
 public record SyncRequest(
@@ -29,26 +26,23 @@ public record SyncRequest(
         UploadedPatchInfo uploadInfo
 ) {
     /**
-     * Per-collection upload metadata captured during patch encoding for the post-response
-     * success path.
+     * Captures the per-collection upload metadata produced during patch encoding.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code _uploadSuccessful} input. After the server ACKs an outgoing
-     * patch the success path persists the new sync action entries built from
-     * {@link #mutations}, advances the collection version to {@link #newVersion} and the
-     * LT-Hash to {@link #newLtHash}, and clears every pending mutation id listed in
-     * {@link #uploadedPendingMutationIds}.
+     * <p>After the server ACKs an outgoing patch the success path persists the new sync
+     * action entries built from {@link #mutations}, advances the collection version to
+     * {@link #newVersion} and the LT-Hash to {@link #newLtHash}, and clears every pending
+     * mutation id listed in {@link #uploadedPendingMutationIds}.
      *
      * @implNote
-     * The {@link #uploadedPendingMutationIds} is captured pre-compaction so the success
-     * path clears every original pending mutation, not just the deduplicated subset that
-     * actually rode the wire.
+     * This implementation captures {@link #uploadedPendingMutationIds} before compaction so
+     * the success path clears every original pending mutation, not just the deduplicated
+     * subset that actually rode the wire.
      *
      * @param patchType the collection type
-     * @param newLtHash the LT-Hash computed after applying outgoing mutations
-     * @param newVersion the expected new collection version (local + 1)
+     * @param newLtHash the LT-Hash computed after applying the outgoing mutations
+     * @param newVersion the expected new collection version (local version plus one)
      * @param uploadedPendingMutationIds the ids of every pending mutation (pre-compaction) included in the upload
-     * @param mutations the per-mutation metadata for sync action entry persistence
+     * @param mutations the per-mutation metadata used for sync action entry persistence
      */
     public record UploadedPatchInfo(
             SyncPatchType patchType,
@@ -60,15 +54,13 @@ public record SyncRequest(
     }
 
     /**
-     * Per-mutation metadata captured during patch encoding for the post-response success
-     * path.
+     * Captures the per-mutation metadata produced during patch encoding.
      *
-     * @apiNote
-     * Pairs the encrypted output ({@link #indexMac}, {@link #valueMac}, {@link #keyId},
+     * <p>Pairs the encrypted output ({@link #indexMac}, {@link #valueMac}, {@link #keyId},
      * {@link #operation}) with the plaintext source data ({@link #actionIndex},
-     * {@link #actionValue}, {@link #actionVersion}) so the success path can persist a
-     * matching {@link com.github.auties00.cobalt.model.sync.SyncActionEntry} without
-     * re-decrypting the patch.
+     * {@link #actionValue}, {@link #actionVersion}) so the success path can persist a matching
+     * {@link com.github.auties00.cobalt.model.sync.SyncActionEntry} without re-decrypting the
+     * patch.
      *
      * @param indexMac the HMAC of the mutation index, also used as the entry's primary key
      * @param valueMac the HMAC of the encrypted value, used as the LT-Hash add/remove input

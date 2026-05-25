@@ -17,30 +17,25 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that create, update, or delete a Business Broadcast list.
  *
- * @apiNote
- * Drives the WhatsApp Business broadcast-list feature: SMB users curate the
- * audience for a recurring broadcast through the Web UI, and the resulting
- * mutations populate the broadcast-list collection consistently across
- * linked devices via {@code WAWebBroadcastListStorageUtils}. The factory is
- * the outgoing-mutation counterpart of
+ * <p>SMB users curate the audience for a recurring broadcast through the Web
+ * UI, and the resulting mutations populate the broadcast-list collection
+ * consistently across linked devices. This factory builds the outgoing
+ * mutations; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.BusinessBroadcastListHandler}.
  *
  * @implNote
  * This implementation accepts the audience expression as an already-serialized
- * JSON string. WA Web's
- * {@code WAWebBroadcastListSync.getBroadcastListMutation} runs the object
- * through {@code WAWebAudienceExpressionTypes.serializeAudienceExpression}
- * before persisting; that AudienceExpression DSL is not ported to Cobalt,
- * so callers either supply the pre-serialized form or pass {@code null} to
- * leave the field clear.
+ * JSON string. WA Web runs the object through
+ * {@code WAWebAudienceExpressionTypes.serializeAudienceExpression} before
+ * persisting; that AudienceExpression DSL is not ported to Cobalt, so callers
+ * either supply the pre-serialized form or pass {@code null} to leave the
+ * field clear.
  */
 public final class BusinessBroadcastListMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public BusinessBroadcastListMutationFactory() {
 
@@ -49,17 +44,11 @@ public final class BusinessBroadcastListMutationFactory {
     /**
      * Returns a SET mutation for a broadcast list whose audience is described purely by its explicit participant snapshot.
      *
-     * @apiNote
-     * Convenience overload for the common call path where the broadcast list
+     * <p>Convenience overload for the common call path where the broadcast list
      * has no label-driven or DSL-driven audience predicate; delegates to
      * {@link #getBroadcastListMutation(String, List, String, Instant, String)}
-     * with {@code audienceExpression == null}.
-     *
-     * @implNote
-     * This implementation forwards the {@code null} audience expression to
-     * the five-arg overload; the receive-side handler then falls back to
-     * {@code WAWebAudienceExpressionTypes.createExplicitExpression} over
-     * the participant LID list.
+     * with a {@code null} audience expression, so the receive-side handler falls
+     * back to an explicit expression over the participant LID list.
      *
      * @param listId       the broadcast-list identifier used as the mutation index
      * @param participants the ordered list of recipients in LID form
@@ -80,23 +69,21 @@ public final class BusinessBroadcastListMutationFactory {
     /**
      * Returns a SET mutation that creates or updates a broadcast list with an explicit audience expression.
      *
-     * @apiNote
-     * Call this when the user saves a broadcast-list edit through the Web
-     * UI; the mutation index follows
+     * <p>Call this when the user saves a broadcast-list edit through the Web UI;
+     * the mutation index follows
      * {@snippet :
      *     ["businessBroadcastList", listId]
      * }
      * and the {@link BusinessBroadcastListAction} sub-message carries the
-     * participants snapshot, the list name, an always-empty
-     * {@code labelIds} field, and the serialized audience expression
-     * (or {@code null} to clear it).
+     * participants snapshot, the list name, an always-empty {@code labelIds}
+     * field, and the serialized audience expression (or {@code null} to clear
+     * it).
      *
      * @implNote
-     * This implementation pins {@code labelIds = List.of()} to match
-     * {@code WAWebBroadcastListSync.getBroadcastListMutation}, which hard
-     * codes the same empty list at the call site; receive-side audience
-     * resolution prefers {@code audienceExpression} over {@code labelIds}
-     * when both are present.
+     * This implementation pins {@code labelIds} to an empty list to match WA
+     * Web, which hardcodes the same empty list at the call site; receive-side
+     * audience resolution prefers {@code audienceExpression} over
+     * {@code labelIds} when both are present.
      *
      * @param listId             the broadcast-list identifier used as the mutation index
      * @param participants       the ordered list of recipients in LID form
@@ -137,19 +124,16 @@ public final class BusinessBroadcastListMutationFactory {
     /**
      * Returns a REMOVE mutation that deletes a broadcast list.
      *
-     * @apiNote
-     * Call this when the user deletes a broadcast list from the Web UI; the
+     * <p>Call this when the user deletes a broadcast list from the Web UI; the
      * mutation index follows
      * {@snippet :
      *     ["businessBroadcastList", listId]
      * }
-     * with an empty value. The receive-side handler responds by calling
-     * {@code WAWebBroadcastListStorageUtils.removeBroadcastListStorage}.
+     * with an empty value, which the receive-side handler uses to remove the
+     * list from the broadcast-list collection.
      *
      * @implNote
-     * This implementation mirrors
-     * {@code WAWebBroadcastListSync.getDeleteBroadcastListMutation} and
-     * emits a {@link SyncdOperation#REMOVE} with an empty
+     * This implementation emits a {@link SyncdOperation#REMOVE} with an empty
      * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}.
      *
      * @param listId    the broadcast-list identifier to delete

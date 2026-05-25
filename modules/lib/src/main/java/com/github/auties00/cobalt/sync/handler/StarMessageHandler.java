@@ -17,15 +17,13 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Toggles the starred flag on a single message in response to a
- * cross-device {@code star} mutation.
+ * Toggles the starred flag on a single message in response to a cross-device
+ * {@code star} mutation.
  *
- * @apiNote
- * Cobalt embedders never invoke this handler directly; the sync dispatcher
- * routes incoming {@code star} mutations here whenever the user stars or
- * unstars a message on another linked device (typical trigger: long-press
- * a message on the phone and tap "star"). The handler locates the matching
- * message in the unified store and sets the starred flag on it.
+ * <p>The sync dispatcher routes incoming {@code star} mutations here whenever
+ * the user stars or unstars a message on another linked device. The handler
+ * locates the matching message in the unified store and sets the starred flag
+ * on it.
  */
 @WhatsAppWebModule(moduleName = "WAWebStarMessageSync")
 public final class StarMessageHandler implements WebAppStateActionHandler {
@@ -33,8 +31,7 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
     /**
      * Constructs the handler.
      *
-     * @apiNote
-     * The handler is stateless; Cobalt's sync registry holds a single
+     * <p>The handler is stateless; Cobalt's sync registry holds a single
      * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebStarMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -72,30 +69,28 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation mirrors WA Web's per-mutation closure inside
-     * {@code WAWebStarMessageSync.applyMutations}. The mutation index is
-     * {@code ["star", chatJid, messageId, fromMe, participant]}; each slot
-     * is required, the value must carry a {@link StarAction}, and the
-     * message key is rebuilt via
-     * {@link SyncdIndexUtils#syncKeyToMsgKey} for the orphan branch only
-     * (the located message is otherwise looked up directly by chat JID
-     * and message id). The starred flag is then propagated through
+     * <p>A non-{@link SyncdOperation#SET} operation is reported as
+     * {@link MutationApplicationResult#unsupported()}. The mutation index is
+     * {@code ["star", chatJid, messageId, fromMe, participant]}; each of the four
+     * trailing slots is required, and a missing slot, an unparseable chat JID, or
+     * an absent {@link StarAction} value is reported as malformed. The message key
+     * is rebuilt via {@link SyncdIndexUtils#syncKeyToMsgKey} for the orphan branch;
+     * the message itself is otherwise looked up directly by chat JID and message
+     * id, returning {@link MutationApplicationResult#orphan(String, String)} when
+     * absent. The starred flag is then propagated through
      * {@link #starMessage(MessageInfo, boolean)}.
      *
-     * <p>WA Web's two-tier message resolution
-     * ({@code WAWebSyncdResolveMessages.resolveMessagesForMutations} batch
-     * pre-pass plus the {@code WAWebStarredMsgCollection.addStarredMsgs}
-     * snapshot collection plus the
-     * {@code WAWebDBProcessMessage.starMessages} persistence batch) is
-     * collapsed into a single per-mutation store update because Cobalt's
-     * flattened store keeps starred state directly on each message
-     * record. WA Web's
-     * {@code WAWebAssociationProcessor.detachAssociatedMsg} call is also
-     * dropped because the in-memory reactive-collection bookkeeping it
-     * performs has no Cobalt analogue. Any thrown exception maps to
-     * {@link MutationApplicationResult#failed()}, mirroring WA Web's
-     * inner {@code try/catch}.
+     * @implNote
+     * WA Web's two-tier message resolution (a
+     * {@code WAWebSyncdResolveMessages.resolveMessagesForMutations} batch pre-pass
+     * plus the {@code WAWebStarredMsgCollection} snapshot plus the
+     * {@code WAWebDBProcessMessage.starMessages} persistence batch) is collapsed
+     * into a single per-mutation store update because Cobalt's flattened store
+     * keeps starred state directly on each message record; WA Web's
+     * {@code WAWebAssociationProcessor.detachAssociatedMsg} call is dropped because
+     * its in-memory reactive-collection bookkeeping has no Cobalt analogue. Any
+     * thrown exception maps to {@link MutationApplicationResult#failed()}, mirroring
+     * WA Web's inner {@code try/catch}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebStarMessageSync", exports = {"applyMutations", "getMessageKey"}, adaptation = WhatsAppAdaptation.ADAPTED)
@@ -157,22 +152,19 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Sets the starred flag on a {@link MessageInfo} regardless of its
-     * concrete subtype.
+     * Sets the starred flag on a {@link MessageInfo} regardless of its concrete
+     * subtype.
      *
-     * @apiNote
-     * Used by {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * to write the resolved {@code starred} flag onto either a chat
-     * message or a newsletter message; the dispatch keeps the
-     * concrete-subtype detail inside this helper so the per-mutation
-     * pipeline stays uniform.
+     * <p>Dispatches the resolved {@code starred} flag onto either a chat message
+     * or a newsletter message, keeping the concrete-subtype detail inside this
+     * helper so the per-mutation pipeline stays uniform.
      *
      * @implNote
      * This implementation accepts the type-system asymmetry between
      * {@link ChatMessageInfo#setStarred(Boolean)} (boxed) and
      * {@link NewsletterMessageInfo#setStarred(boolean)} (primitive); both
-     * accessors perform the same logical assignment, the boxed signature
-     * just predates the primitive one.
+     * accessors perform the same logical assignment, the boxed signature just
+     * predates the primitive one.
      *
      * @param message the message whose flag is being updated
      * @param starred {@code true} to star, {@code false} to unstar

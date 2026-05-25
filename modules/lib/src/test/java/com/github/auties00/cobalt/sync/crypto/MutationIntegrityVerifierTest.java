@@ -33,65 +33,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Exercises both the MAC formulas and the stateful verification routines of
- * {@link MutationIntegrityVerifier}.
- *
- * @apiNote
- * Covers the production class that wraps {@code WAWebSyncdAntiTampering} and
- * {@code WAWebSyncdEncryptionManager}. The matrix splits into two halves:
- * <ul>
- *   <li>Static MAC formulas
- *       ({@link MutationIntegrityVerifier#computeSnapshotMac(SecretKeySpec, byte[], long, SyncPatchType) computeSnapshotMac},
- *       {@link MutationIntegrityVerifier#computePatchMac(SecretKeySpec, byte[], java.util.SequencedCollection, long, SyncPatchType) computePatchMac},
- *       {@link MutationIntegrityVerifier#computeOutgoingSnapshotAndPatchMacs(SecretKeySpec, SecretKeySpec, byte[], java.util.SequencedCollection, long, SyncPatchType) computeOutgoingSnapshotAndPatchMacs})
- *       are matched byte-for-byte against an independent HMAC-SHA256
- *       reference defined in this file.</li>
- *   <li>Stateful verification
- *       ({@link MutationIntegrityVerifier#verifySnapshotMac verifySnapshotMac},
- *       {@link MutationIntegrityVerifier#verifyPatchIntegrity verifyPatchIntegrity})
- *       is exercised against a temporary store seeded with one sync key, so
- *       every failure mode (missing key id, missing MAC, MAC mismatch) maps
- *       to its expected {@link WhatsAppWebAppStateSyncException} subtype.</li>
- * </ul>
- *
- * @implNote
- * The independent reference implementations
- * {@link #referenceSnapshotMac(SecretKeySpec, byte[], long, SyncPatchType)
- * referenceSnapshotMac} and
- * {@link #referencePatchMac(SecretKeySpec, byte[], List, long, SyncPatchType)
- * referencePatchMac} reproduce the WA Web formula directly from
- * {@code Mac.getInstance("HmacSHA256")} so neither side trusts the other.
+ * {@link MutationIntegrityVerifier}. The static formulas (snapshot MAC, patch
+ * MAC, and the chained outgoing pair) are matched byte-for-byte against the
+ * independent {@code referenceSnapshotMac} and {@code referencePatchMac}
+ * implementations defined in this file, which build the HMAC directly from
+ * {@code Mac.getInstance("HmacSHA256")} so neither side trusts the other. The
+ * stateful {@code verifySnapshotMac} and {@code verifyPatchIntegrity} routines
+ * run against a temporary store seeded with one sync key, so every failure mode
+ * (missing key id, missing MAC, MAC mismatch) maps to its expected
+ * {@link WhatsAppWebAppStateSyncException} subtype. A WA Web oracle pins the
+ * snapshot MAC to a captured vector when the fixture is present.
  */
 @DisplayName("MutationIntegrityVerifier")
 class MutationIntegrityVerifierTest {
-    /**
-     * The 32-byte sync key seeded into the temporary store.
-     */
     private static final byte[] SYNC_KEY_DATA = filled(32, 0x42);
 
-    /**
-     * The sync key id that resolves to {@link #SYNC_KEY_DATA} in the store.
-     */
     private static final byte[] SYNC_KEY_ID = new byte[]{1, 2, 3, 4};
 
-    /**
-     * The self phone-number JID the temporary store is created for.
-     */
     private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
 
-    /**
-     * The temporary store backing each per-test verifier.
-     */
     private WhatsAppStore store;
 
-    /**
-     * The verifier under test, bound to {@link #store}.
-     */
     private MutationIntegrityVerifier verifier;
 
-    /**
-     * Builds a fresh store seeded with {@link #SYNC_KEY_DATA} and a verifier
-     * bound to it before every test.
-     */
     @BeforeEach
     void setUp() {
         store = SyncFixtures.temporaryStoreWithSyncKey(SELF_PN, null, SYNC_KEY_ID, SYNC_KEY_DATA);
@@ -99,31 +63,14 @@ class MutationIntegrityVerifierTest {
         verifier = new MutationIntegrityVerifier(store);
     }
 
-    /**
-     * Builds a byte array filled with a single byte value.
-     *
-     * @param length the array length
-     * @param value  the fill value, truncated to a byte
-     * @return a freshly allocated array
-     */
     private static byte[] filled(int length, int value) {
         var out = new byte[length];
         for (var i = 0; i < length; i++) out[i] = (byte) value;
         return out;
     }
 
-    // TODO: remove or repurpose the dead reference64 helper below; the body returns
-    //       eight zero bytes regardless of input and no test calls it.
-    /**
-     * Returns an unused 8-byte zero buffer.
-     *
-     * @implNote
-     * This implementation is dead code retained pending cleanup; no test
-     * exercises it.
-     *
-     * @param v an unused input
-     * @return an 8-byte zero array
-     */
+    // TODO: remove the dead reference64 helper; the body returns eight zero
+    //       bytes regardless of input and no test calls it.
     @SuppressWarnings("unused")
     private static byte[] reference64(byte[] v) {
         var b = new byte[8];
@@ -132,27 +79,11 @@ class MutationIntegrityVerifierTest {
         return b;
     }
 
-    /**
-     * Computes the snapshot MAC directly from the JCE primitives.
-     *
-     * @apiNote
-     * The independent reference implementation that the parity tests
-     * cross-check {@link MutationIntegrityVerifier#computeSnapshotMac}
-     * against. Reproduces {@code WAWebSyncdEncryptionManager.generateSnapshotMac}
-     * byte for byte without sharing code with the production class.
-     *
-     * @param key     the snapshot MAC key
-     * @param ltHash  the LT-Hash to authenticate
-     * @param version the collection version
-     * @param type    the collection type
-     * @return the 32-byte MAC
-     * @throws GeneralSecurityException if the JCE HMAC primitive fails
-     */
     private static byte[] referenceSnapshotMac(SecretKeySpec key, byte[] ltHash, long version, SyncPatchType type) throws GeneralSecurityException {
         var mac = Mac.getInstance("HmacSHA256");
         mac.init(key);
         mac.update(ltHash);
-        // 8-byte big-endian version suffix (WAWebSyncdCryptoUtils.to64BitNetworkOrder)
+        // 8-byte big-endian version suffix
         for (var shift = 56; shift >= 0; shift -= 8) {
             mac.update((byte) (version >> shift));
         }
@@ -160,23 +91,6 @@ class MutationIntegrityVerifierTest {
         return mac.doFinal();
     }
 
-    /**
-     * Computes the patch MAC directly from the JCE primitives.
-     *
-     * @apiNote
-     * The independent reference implementation that the parity tests
-     * cross-check {@link MutationIntegrityVerifier#computePatchMac} against.
-     * Reproduces {@code WAWebSyncdEncryptionManager.generatePatchMac} byte
-     * for byte without sharing code with the production class.
-     *
-     * @param key         the patch MAC key
-     * @param snapshotMac the snapshot MAC, or {@code null} to omit
-     * @param valueMacs   the per-mutation value MACs, in order
-     * @param version     the collection version
-     * @param type        the collection type
-     * @return the 32-byte MAC
-     * @throws GeneralSecurityException if the JCE HMAC primitive fails
-     */
     private static byte[] referencePatchMac(SecretKeySpec key, byte[] snapshotMac, List<byte[]> valueMacs, long version, SyncPatchType type) throws GeneralSecurityException {
         var mac = Mac.getInstance("HmacSHA256");
         mac.init(key);
@@ -644,22 +558,10 @@ class MutationIntegrityVerifierTest {
         }
     }
 
-    /**
-     * Builds a {@link SyncdVersion} wrapping a single long.
-     *
-     * @param v the version value
-     * @return a fresh {@link SyncdVersion}
-     */
     private static SyncdVersion syncdVersion(long v) {
         return new SyncdVersionBuilder().version(v).build();
     }
 
-    /**
-     * Builds a {@link KeyId} wrapping the given raw bytes.
-     *
-     * @param id the key id bytes
-     * @return a fresh {@link KeyId}
-     */
     private static KeyId keyId(byte[] id) {
         return new KeyIdBuilder().id(id).build();
     }

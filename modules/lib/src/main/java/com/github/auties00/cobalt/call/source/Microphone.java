@@ -13,89 +13,115 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * An {@link AudioSource} backed by the OS microphone. Captures
- * 16 kHz mono signed-16-bit PCM by default — the exact profile
- * Cobalt's call wire uses, so no resampling is required when the
- * OS supports the rate (most do).
+ * Captures call audio from an operating-system microphone as an {@link AudioSource}.
  *
- * <p>Lifecycle: {@link #open()} acquires the OS mic line;
- * {@link #close()} releases it. Use with try-with-resources.
+ * <p>Opens a {@link TargetDataLine} on the configured (or JVM-default) mixer and reads signed
+ * 16-bit little-endian PCM from it. The default profile captures 16 kHz mono in 160-sample frames,
+ * which is exactly the format the call wire protocol expects, so a default microphone needs no
+ * resampling when the host supports the rate (most do). A custom {@link #Microphone(int, int, Mixer.Info)}
+ * may request another rate, frame size, or specific mixer; capturing at a rate other than 16 kHz
+ * still produces frames at the requested geometry but the caller is then responsible for
+ * downsampling before the frames reach the call, as {@link AudioFrame} documents.
  *
- * <p>Mono only — most platforms expose the default mic as mono;
- * the OS picks one channel of a stereo mic by mixing or selecting.
+ * <p>The capture line must be acquired with {@link #open()} before the first {@link #next()} call
+ * and released with {@link #close()} afterwards. Each {@link #next()} blocks until a full frame's
+ * worth of samples has been read from the line, then returns it with a monotonically increasing
+ * presentation timestamp.
+ *
+ * @apiNote Wire this source into a call to transmit live microphone audio. Prefer the no-argument
+ * {@link #Microphone()} constructor: it matches the call profile and needs no resampling. Always
+ * use the source inside a {@code try-with-resources} (or call {@link #close()} explicitly) so the
+ * operating-system capture line is released; an unclosed line stays held against other applications.
+ * The single channel is intentional, because most platforms expose the default microphone as mono
+ * and downmix or select one channel of a stereo device.
  */
 public final class Microphone implements AudioSource, AutoCloseable {
     /**
-     * Default capture sample rate matching the WhatsApp wire profile.
+     * Holds the default capture sample rate, in Hz, matching the call wire profile.
+     *
+     * @implNote This implementation uses 16000, the rate WhatsApp's Opus call configuration runs at,
+     * so a default-profile microphone feeds the encoder without resampling.
      */
     public static final int DEFAULT_SAMPLE_RATE = 16_000;
 
     /**
-     * Default samples per emitted frame (10 ms at 16 kHz).
+     * Holds the default sample count per emitted frame.
+     *
+     * @implNote This implementation uses 160, which is 10 ms at {@link #DEFAULT_SAMPLE_RATE}, the
+     * frame cadence the call layer consumes.
      */
     public static final int DEFAULT_FRAME_SIZE = 160;
 
     /**
-     * Sample rate of the underlying capture line.
+     * Holds the sample rate, in Hz, of the underlying capture line.
      */
     private final int sampleRate;
 
     /**
-     * Samples per emitted frame.
+     * Holds the number of samples in each emitted frame.
      */
     private final int frameSize;
 
     /**
-     * Frame duration in ms, cached for pts arithmetic.
+     * Holds the duration of one frame in milliseconds, derived from {@link #frameSize} and
+     * {@link #sampleRate} and cached for presentation-timestamp arithmetic.
      */
     private final long frameDurationMs;
 
     /**
-     * Optional mixer override; the JVM-default mic is used when
-     * {@code null}.
+     * Holds the mixer to open the capture line on, or {@code null} to use the JVM-default
+     * microphone.
      */
     private final Mixer.Info preferredMixer;
 
     /**
-     * Reusable read buffer for the line.
+     * Holds the reusable byte buffer that one frame is read into before conversion to PCM samples.
+     *
+     * <p>Sized to {@code frameSize * 2} bytes (two bytes per signed 16-bit sample) and allocated by
+     * {@link #open()}.
      */
     private byte[] readBuffer;
 
     /**
-     * The opened line — {@code null} before {@link #open()} and
-     * after {@link #close()}.
+     * Holds the opened capture line, or {@code null} before {@link #open()} and after
+     * {@link #close()}.
      */
     private TargetDataLine line;
 
     /**
-     * Monotonic timestamp of the next frame.
+     * Holds the presentation timestamp, in milliseconds, assigned to the next emitted frame.
      */
     private long ptsMs;
 
     /**
-     * Constructs a microphone for the WhatsApp default profile —
-     * 16 kHz mono, 160 samples per frame, JVM-default mixer.
+     * Constructs a microphone for the default call profile.
+     *
+     * <p>Equivalent to {@link #Microphone(int, int, Mixer.Info)} with {@link #DEFAULT_SAMPLE_RATE},
+     * {@link #DEFAULT_FRAME_SIZE}, and a {@code null} mixer, so it captures 16 kHz mono in 160-sample
+     * frames from the JVM-default microphone.
      */
     public Microphone() {
         this(DEFAULT_SAMPLE_RATE, DEFAULT_FRAME_SIZE, null);
     }
 
     /**
-     * Constructs a microphone with explicit format and mixer.
+     * Constructs a microphone with an explicit capture format and mixer.
      *
-     * @param sampleRate     sample rate in Hz (e.g. 16000, 48000)
-     * @param frameSize      samples per emitted frame
-     * @param preferredMixer specific mixer to use, or {@code null}
-     *                       for the JVM default
-     * @throws IllegalArgumentException if {@code sampleRate} or
-     *                                  {@code frameSize} is &lt; 1
+     * <p>The frame duration is computed once as {@code 1000 * frameSize / sampleRate} milliseconds
+     * and used to advance each frame's presentation timestamp. No capture line is acquired until
+     * {@link #open()} is called.
+     *
+     * @param sampleRate     the capture sample rate in Hz (for example {@code 16000} or {@code 48000})
+     * @param frameSize      the number of samples per emitted frame
+     * @param preferredMixer the specific mixer to open the line on, or {@code null} for the JVM default
+     * @throws IllegalArgumentException if {@code sampleRate} or {@code frameSize} is less than {@code 1}
      */
     public Microphone(int sampleRate, int frameSize, Mixer.Info preferredMixer) {
         if (sampleRate < 1) {
-            throw new IllegalArgumentException("sampleRate must be ≥ 1");
+            throw new IllegalArgumentException("sampleRate must be >= 1");
         }
         if (frameSize < 1) {
-            throw new IllegalArgumentException("frameSize must be ≥ 1");
+            throw new IllegalArgumentException("frameSize must be >= 1");
         }
         this.sampleRate = sampleRate;
         this.frameSize = frameSize;
@@ -104,12 +130,16 @@ public final class Microphone implements AudioSource, AutoCloseable {
     }
 
     /**
-     * Opens the underlying capture line and starts capture. Must
-     * be called before {@link #next()}.
+     * Opens the underlying capture line and begins capturing.
      *
-     * @throws LineUnavailableException if no compatible line is
-     *                                  available on the running
-     *                                  platform
+     * <p>Acquires a {@link TargetDataLine} matching the configured signed 16-bit mono format from
+     * the preferred mixer when one is set, or from the JVM-default device otherwise, opens it with a
+     * buffer holding several frames, and starts it. Allocates the reusable read buffer. Returns
+     * immediately if the line is already open, so the call is idempotent. Must be invoked before the
+     * first {@link #next()}.
+     *
+     * @throws LineUnavailableException if no line compatible with the requested format is available
+     *                                  on the running platform, or the device is in use
      */
     public synchronized void open() throws LineUnavailableException {
         if (line != null) {
@@ -130,6 +160,17 @@ public final class Microphone implements AudioSource, AutoCloseable {
         this.readBuffer = new byte[frameSize * 2];
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Reads from the open capture line until a full frame's worth of bytes is buffered, decodes
+     * them as little-endian signed 16-bit samples, and returns them with the next presentation
+     * timestamp. Returns {@code null} only when the line reports end-of-input.
+     *
+     * @return {@inheritDoc}
+     * @throws InterruptedException  {@inheritDoc}
+     * @throws IllegalStateException if {@link #open()} has not been called, or the line was closed
+     */
     @Override
     public AudioFrame next() throws InterruptedException {
         var l = line;
@@ -155,6 +196,13 @@ public final class Microphone implements AudioSource, AutoCloseable {
         return new AudioFrame(pcm, pts);
     }
 
+    /**
+     * Stops and releases the capture line.
+     *
+     * <p>Stops, then closes, the underlying line and clears the reference so the device is released
+     * back to the operating system. Returns immediately if no line is open, and any failure while
+     * stopping or closing is swallowed, so the call is idempotent and never throws.
+     */
     @Override
     public synchronized void close() {
         var l = line;

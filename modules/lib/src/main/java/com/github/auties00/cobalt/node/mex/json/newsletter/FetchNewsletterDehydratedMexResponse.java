@@ -24,37 +24,33 @@ import java.util.OptionalLong;
  * Parses the MEX response of the fetch-newsletter-dehydrated query built by
  * {@link FetchNewsletterDehydratedMexRequest}.
  *
- * @apiNote
- * Exposes the lightweight newsletter projection echoed under
- * {@code xwa2_newsletter}: the newsletter id, the verification-plus-subcount
- * portion of {@link ThreadMetadata} and the WAMo subscription portion of
- * {@link ViewerMetadata}. The shape is a strict subset of the full
- * {@code xwa2_newsletter} schema so the relay can serve it cheaply on
- * chat-list rendering paths and follow-suggestion paths.
+ * <p>Exposes the lightweight newsletter projection echoed under {@code xwa2_newsletter}: the
+ * newsletter id, the verification-plus-subcount portion of {@link ThreadMetadata} and the paid
+ * subscription portion of {@link ViewerMetadata}. The shape is a strict subset of the full
+ * {@code xwa2_newsletter} schema so the relay can serve it cheaply on chat-list rendering and
+ * follow-suggestion paths.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDehydratedJob")
 public final class FetchNewsletterDehydratedMexResponse implements MexOperation.Response.Json {
     /**
-     * The newsletter Jid string.
+     * Holds the newsletter Jid string.
      */
     private final String id;
 
     /**
-     * The dehydrated thread metadata projection.
+     * Holds the dehydrated thread metadata projection.
      */
     private final ThreadMetadata threadMetadata;
 
     /**
-     * The dehydrated viewer-side metadata projection.
+     * Holds the dehydrated viewer-side metadata projection.
      */
     private final ViewerMetadata viewerMetadata;
 
     /**
      * Constructs a response wrapping the parsed top-level fields.
      *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
+     * <p>Reserved for the static parser; external callers obtain instances via {@link #of(Node)}.
      *
      * @param id             the newsletter Jid string
      * @param threadMetadata the dehydrated thread metadata
@@ -69,15 +65,13 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser; the returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<FetchNewsletterDehydratedMexResponse> of(Node node) {
         return node.getChild("result")
@@ -97,8 +91,7 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
     /**
      * Returns the dehydrated thread metadata projection.
      *
-     * @return the parsed {@link ThreadMetadata}, or empty when the relay
-     *         omitted the field
+     * @return the parsed {@link ThreadMetadata}, or empty when the relay omitted the field
      */
     public Optional<ThreadMetadata> threadMetadata() {
         return Optional.ofNullable(threadMetadata);
@@ -107,8 +100,7 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
     /**
      * Returns the dehydrated viewer-side metadata projection.
      *
-     * @return the parsed {@link ViewerMetadata}, or empty when the relay
-     *         omitted the field
+     * @return the parsed {@link ViewerMetadata}, or empty when the relay omitted the field
      */
     public Optional<ViewerMetadata> viewerMetadata() {
         return Optional.ofNullable(viewerMetadata);
@@ -117,43 +109,40 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
     /**
      * Wraps the dehydrated {@code thread_metadata} sub-object.
      *
-     * @apiNote
-     * Carries only the subset of thread metadata the dehydrated query
-     * pulls: subscriber count, verification tier, per-channel
-     * {@link Settings} and the optional {@link WamoSub} subscription
+     * <p>Carries only the subset of thread metadata the dehydrated query pulls: subscriber count,
+     * verification tier, per-channel {@link Settings} and the optional {@link WamoSub} subscription
      * identifier.
      */
     public static final class ThreadMetadata {
         /**
-         * The follower count.
+         * Holds the follower count.
          */
         private final Long subscribersCount;
 
         /**
-         * The verification tier label.
+         * Holds the verification tier label.
          */
         private final String verification;
 
         /**
-         * The per-channel settings sub-object.
+         * Holds the per-channel settings sub-object.
          */
         private final Settings settings;
 
         /**
-         * The optional WAMo paid-subscription identifier sub-object.
+         * Holds the optional paid-subscription identifier sub-object.
          */
         private final WamoSub wamoSub;
 
         /**
          * Constructs a thread-metadata wrapper from the parsed sub-fields.
          *
-         * @apiNote
-         * Reserved for the static parser.
+         * <p>Reserved for the static parser.
          *
          * @param subscribersCount the follower count
          * @param verification     the verification tier label
          * @param settings         the per-channel settings sub-object
-         * @param wamoSub          the optional WAMo subscription sub-object
+         * @param wamoSub          the optional subscription sub-object
          */
         private ThreadMetadata(Long subscribersCount, String verification, Settings settings, WamoSub wamoSub) {
             this.subscribersCount = subscribersCount;
@@ -165,8 +154,7 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         /**
          * Returns the follower count.
          *
-         * @return the follower count, or empty when the relay omitted the
-         *         field
+         * @return the follower count, or empty when the relay omitted the field
          */
         public OptionalLong subscribersCount() {
             return subscribersCount != null ? OptionalLong.of(subscribersCount) : OptionalLong.empty();
@@ -175,8 +163,7 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         /**
          * Returns the verification tier label.
          *
-         * @return the verification label, or empty when the relay omitted
-         *         the field
+         * @return the verification label, or empty when the relay omitted the field
          */
         public Optional<String> verification() {
             return Optional.ofNullable(verification);
@@ -185,46 +172,40 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         /**
          * Returns the per-channel settings sub-object.
          *
-         * @return the parsed {@link Settings}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link Settings}, or empty when the relay omitted the field
          */
         public Optional<Settings> settings() {
             return Optional.ofNullable(settings);
         }
 
         /**
-         * Returns the optional WAMo paid-subscription sub-object.
+         * Returns the optional paid-subscription sub-object.
          *
-         * @apiNote
-         * Populated only when the request set {@code fetch_wamo_sub=true}
-         * and the newsletter carries a paid subscription plan.
+         * <p>Populated only when the request set {@code fetch_wamo_sub=true} and the newsletter
+         * carries a paid subscription plan.
          *
-         * @return the parsed {@link WamoSub}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link WamoSub}, or empty when the relay omitted the field
          */
         public Optional<WamoSub> wamoSub() {
             return Optional.ofNullable(wamoSub);
         }
 
         /**
-         * Wraps the {@code settings} sub-object embedded in the
-         * dehydrated {@code thread_metadata}.
+         * Wraps the {@code settings} sub-object embedded in the dehydrated {@code thread_metadata}.
          *
-         * @apiNote
-         * Holds the per-channel reaction-code policy that gates which
-         * emojis followers may use as message reactions.
+         * <p>Holds the per-channel reaction-code policy that gates which emojis followers may use as
+         * message reactions.
          */
         public static final class Settings {
             /**
-             * The reaction-code policy sub-object.
+             * Holds the reaction-code policy sub-object.
              */
             private final ReactionCodes reactionCodes;
 
             /**
              * Constructs a settings wrapper from the parsed sub-field.
              *
-             * @apiNote
-             * Reserved for the static parser.
+             * <p>Reserved for the static parser.
              *
              * @param reactionCodes the reaction-code policy sub-object
              */
@@ -235,8 +216,7 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             /**
              * Returns the reaction-code policy sub-object.
              *
-             * @return the parsed {@link ReactionCodes}, or empty when
-             *         the relay omitted the field
+             * @return the parsed {@link ReactionCodes}, or empty when the relay omitted the field
              */
             public Optional<ReactionCodes> reactionCodes() {
                 return Optional.ofNullable(reactionCodes);
@@ -245,23 +225,19 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             /**
              * Wraps the {@code reaction_codes} sub-object.
              *
-             * @apiNote
-             * Exposes the policy value verbatim; consumers map it to the
-             * corresponding {@code WAWebNewsletterReactionCodes} enum
-             * themselves.
+             * <p>Exposes the policy value verbatim; consumers map it to the corresponding
+             * reaction-codes enum themselves.
              */
             public static final class ReactionCodes {
                 /**
-                 * The textual policy value.
+                 * Holds the textual policy value.
                  */
                 private final String value;
 
                 /**
-                 * Constructs a reaction-codes wrapper from the parsed
-                 * sub-field.
+                 * Constructs a reaction-codes wrapper from the parsed sub-field.
                  *
-                 * @apiNote
-                 * Reserved for the static parser.
+                 * <p>Reserved for the static parser.
                  *
                  * @param value the textual policy value
                  */
@@ -272,24 +248,21 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
                 /**
                  * Returns the textual policy value.
                  *
-                 * @return the value, or empty when the relay omitted
-                 *         the field
+                 * @return the value, or empty when the relay omitted the field
                  */
                 public Optional<String> value() {
                     return Optional.ofNullable(value);
                 }
 
                 /**
-                 * Parses a {@link ReactionCodes} from the given JSON
-                 * object.
+                 * Parses a {@link ReactionCodes} from the given JSON object.
                  *
-                 * @apiNote
-                 * Used by {@link Settings#of(JSONObject)} to hydrate
-                 * the nested {@code reaction_codes} entry.
+                 * <p>Used by {@link Settings#of(JSONObject)} to hydrate the nested
+                 * {@code reaction_codes} entry.
                  *
                  * @param obj the JSON object to parse
-                 * @return the parsed {@link ReactionCodes}, or empty
-                 *         when {@code obj} is {@code null}
+                 * @return the parsed {@link ReactionCodes}, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<ReactionCodes> of(JSONObject obj) {
                     if (obj == null) {
@@ -301,15 +274,10 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
                 }
 
                 /**
-                 * Parses a list of {@link ReactionCodes} entries from
-                 * the given JSON array.
-                 *
-                 * @apiNote
-                 * Provided for symmetry.
+                 * Parses a list of {@link ReactionCodes} entries from the given JSON array.
                  *
                  * @param arr the JSON array to parse
-                 * @return the parsed list, empty when {@code arr} is
-                 *         {@code null}
+                 * @return the parsed list, empty when {@code arr} is {@code null}
                  */
                 static List<ReactionCodes> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -327,13 +295,11 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             /**
              * Parses a {@link Settings} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate
-             * the nested {@code settings} entry.
+             * <p>Used by {@link ThreadMetadata#of(JSONObject)} to hydrate the nested
+             * {@code settings} entry.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link Settings}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link Settings}, or empty when {@code obj} is {@code null}
              */
             static Optional<Settings> of(JSONObject obj) {
                 if (obj == null) {
@@ -345,15 +311,10 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             }
 
             /**
-             * Parses a list of {@link Settings} entries from the given
-             * JSON array.
-             *
-             * @apiNote
-             * Provided for symmetry.
+             * Parses a list of {@link Settings} entries from the given JSON array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Settings> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -369,26 +330,21 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         }
 
         /**
-         * Wraps the {@code wamo_sub} sub-object embedded in the
-         * dehydrated {@code thread_metadata}.
+         * Wraps the {@code wamo_sub} sub-object embedded in the dehydrated {@code thread_metadata}.
          *
-         * @apiNote
-         * Carries the WhatsApp Monetisation paid-subscription plan
-         * identifier; populated only when the request set
-         * {@code fetch_wamo_sub=true}.
+         * <p>Carries the monetisation paid-subscription plan identifier; populated only when the
+         * request set {@code fetch_wamo_sub=true}.
          */
         public static final class WamoSub {
             /**
-             * The subscription plan identifier.
+             * Holds the subscription plan identifier.
              */
             private final String planId;
 
             /**
-             * Constructs a WAMo-subscription wrapper from the parsed
-             * sub-field.
+             * Constructs a subscription wrapper from the parsed sub-field.
              *
-             * @apiNote
-             * Reserved for the static parser.
+             * <p>Reserved for the static parser.
              *
              * @param planId the subscription plan identifier
              */
@@ -399,8 +355,7 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             /**
              * Returns the subscription plan identifier.
              *
-             * @return the plan id, or empty when the relay omitted the
-             *         field
+             * @return the plan id, or empty when the relay omitted the field
              */
             public Optional<String> planId() {
                 return Optional.ofNullable(planId);
@@ -409,13 +364,11 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             /**
              * Parses a {@link WamoSub} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate
-             * the nested {@code wamo_sub} entry.
+             * <p>Used by {@link ThreadMetadata#of(JSONObject)} to hydrate the nested {@code wamo_sub}
+             * entry.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link WamoSub}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link WamoSub}, or empty when {@code obj} is {@code null}
              */
             static Optional<WamoSub> of(JSONObject obj) {
                 if (obj == null) {
@@ -427,15 +380,10 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
             }
 
             /**
-             * Parses a list of {@link WamoSub} entries from the given
-             * JSON array.
-             *
-             * @apiNote
-             * Provided for symmetry.
+             * Parses a list of {@link WamoSub} entries from the given JSON array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<WamoSub> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -453,13 +401,11 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         /**
          * Parses a {@link ThreadMetadata} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link FetchNewsletterDehydratedMexResponse#of(byte[])}
-         * to hydrate the {@code thread_metadata} entry.
+         * <p>Used by {@link FetchNewsletterDehydratedMexResponse#of(byte[])} to hydrate the
+         * {@code thread_metadata} entry.
          *
          * @param obj the JSON object to parse
-         * @return the parsed {@link ThreadMetadata}, or empty when
-         *         {@code obj} is {@code null}
+         * @return the parsed {@link ThreadMetadata}, or empty when {@code obj} is {@code null}
          */
         static Optional<ThreadMetadata> of(JSONObject obj) {
             if (obj == null) {
@@ -474,12 +420,10 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         }
 
         /**
-         * Parses a list of {@link ThreadMetadata} entries from the given
-         * JSON array.
+         * Parses a list of {@link ThreadMetadata} entries from the given JSON array.
          *
-         * @apiNote
-         * Provided for symmetry; the dehydrated envelope does not carry
-         * a {@code thread_metadata} array.
+         * <p>The dehydrated envelope does not carry a {@code thread_metadata} array; this overload
+         * exists for symmetry with the other sub-object parsers.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -500,34 +444,30 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
     /**
      * Wraps the dehydrated {@code viewer_metadata} sub-object.
      *
-     * @apiNote
-     * Carries only the WAMo subscription status label; the full
-     * {@code viewer_metadata} shape with role and settings is not
-     * projected by the dehydrated query.
+     * <p>Carries only the subscription status label; the full {@code viewer_metadata} shape with
+     * role and settings is not projected by the dehydrated query.
      */
     public static final class ViewerMetadata {
         /**
-         * The WAMo subscription status label.
+         * Holds the subscription status label.
          */
         private final String wamoSubStatus;
 
         /**
          * Constructs a viewer-metadata wrapper from the parsed sub-field.
          *
-         * @apiNote
-         * Reserved for the static parser.
+         * <p>Reserved for the static parser.
          *
-         * @param wamoSubStatus the WAMo subscription status label
+         * @param wamoSubStatus the subscription status label
          */
         private ViewerMetadata(String wamoSubStatus) {
             this.wamoSubStatus = wamoSubStatus;
         }
 
         /**
-         * Returns the WAMo subscription status label.
+         * Returns the subscription status label.
          *
-         * @return the status label, or empty when the relay omitted the
-         *         field
+         * @return the status label, or empty when the relay omitted the field
          */
         public Optional<String> wamoSubStatus() {
             return Optional.ofNullable(wamoSubStatus);
@@ -536,13 +476,11 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         /**
          * Parses a {@link ViewerMetadata} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link FetchNewsletterDehydratedMexResponse#of(byte[])}
-         * to hydrate the {@code viewer_metadata} entry.
+         * <p>Used by {@link FetchNewsletterDehydratedMexResponse#of(byte[])} to hydrate the
+         * {@code viewer_metadata} entry.
          *
          * @param obj the JSON object to parse
-         * @return the parsed {@link ViewerMetadata}, or empty when
-         *         {@code obj} is {@code null}
+         * @return the parsed {@link ViewerMetadata}, or empty when {@code obj} is {@code null}
          */
         static Optional<ViewerMetadata> of(JSONObject obj) {
             if (obj == null) {
@@ -554,12 +492,10 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
         }
 
         /**
-         * Parses a list of {@link ViewerMetadata} entries from the given
-         * JSON array.
+         * Parses a list of {@link ViewerMetadata} entries from the given JSON array.
          *
-         * @apiNote
-         * Provided for symmetry; the dehydrated envelope does not carry a
-         * {@code viewer_metadata} array.
+         * <p>The dehydrated envelope does not carry a {@code viewer_metadata} array; this overload
+         * exists for symmetry with the other sub-object parsers.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -578,20 +514,16 @@ public final class FetchNewsletterDehydratedMexResponse implements MexOperation.
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
+     * <p>Reserved for the public {@link #of(Node)} overload.
      *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter} root
      */
     private static Optional<FetchNewsletterDehydratedMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

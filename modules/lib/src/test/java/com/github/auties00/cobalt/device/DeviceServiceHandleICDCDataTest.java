@@ -23,22 +23,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link DeviceService#handleICDCData}.
+ * Tests for {@link DeviceService#handleICDCData}, exercising the three branches the handler
+ * distinguishes: a newer peer-sender snapshot updates the cached device list's
+ * {@code expectedTimestamp}, a missing cached device list is a no-op, and a primary-device sender
+ * with timestamp but no key-hash takes the minimal-sync path that bumps the cached timestamp by one
+ * second.
  *
- * @apiNote
- * Exercises the three branches the handler distinguishes: peer-sender messages
- * update the cached device list's {@code expectedTimestamp} when the sender's
- * snapshot is newer, messages with a missing cached device list are a no-op,
- * and primary-device sender with timestamp but no key-hash takes the
- * minimal-sync path that bumps the cached timestamp by one second.
- *
- * @implNote
- * This implementation constructs the {@link com.github.auties00.cobalt.model.device.DeviceListMetadata}
- * directly rather than capturing an inbound message stanza: capturing an
- * inbound message with this metadata is operator-dependent (someone has to
- * message the test session), and the metadata payload is identical to what
- * the Cobalt message receiver pipeline produces after decrypting an inbound
- * message.
+ * <p>Each test constructs the {@link com.github.auties00.cobalt.model.device.DeviceListMetadata}
+ * directly rather than capturing an inbound message stanza, since capturing such a message is
+ * operator-dependent and the metadata payload is identical to what the Cobalt message receiver
+ * pipeline produces after decryption.
  */
 @DisplayName("DeviceService.handleICDCData")
 class DeviceServiceHandleICDCDataTest {
@@ -47,28 +41,9 @@ class DeviceServiceHandleICDCDataTest {
     private static final Jid PEER = Jid.of("12025550100@s.whatsapp.net");
     private static final Jid PEER_DEVICE_1 = Jid.of("12025550100:1@s.whatsapp.net");
 
-    /**
-     * Bundles the constructed client and device service so each test can
-     * share the same wiring.
-     *
-     * @apiNote
-     * Local record; never exposed outside this class.
-     *
-     * @param client        the test client
-     * @param deviceService the constructed device service
-     */
     private record Harness(TestWhatsAppClient client, DeviceService deviceService) {
     }
 
-    /**
-     * Builds a fresh harness with all collaborators wired against a temporary
-     * store.
-     *
-     * @apiNote
-     * Called by every test for isolation; never reused across tests.
-     *
-     * @return the constructed harness
-     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -82,9 +57,6 @@ class DeviceServiceHandleICDCDataTest {
         return new Harness(client, deviceService);
     }
 
-    /**
-     * Verifies the handler is a no-op when the metadata is {@code null}.
-     */
     @Test
     @DisplayName("null metadata is a no-op")
     void nullMetadata() {
@@ -92,15 +64,7 @@ class DeviceServiceHandleICDCDataTest {
         h.deviceService.handleICDCData(PEER, null, null);
     }
 
-    /**
-     * Verifies the regular update flow is a no-op when no device list is
-     * cached for the sender.
-     *
-     * @implNote
-     * Sends from a peer companion (device id != 0) so the handler skips the
-     * minimal-sync path; with no cached list for the peer, the update loop
-     * has nothing to write.
-     */
+    // Sends from a peer companion (device id != 0) so the handler skips the minimal-sync path; with no cached list, the update loop has nothing to write
     @Test
     @DisplayName("metadata with no cached device list for the sender is a no-op")
     void senderWithNoCachedList() {
@@ -116,10 +80,6 @@ class DeviceServiceHandleICDCDataTest {
                 "no cached list before, none after");
     }
 
-    /**
-     * Verifies a newer sender timestamp lands as the cached list's new
-     * {@code expectedTimestamp} while leaving the snapshot timestamp alone.
-     */
     @Test
     @DisplayName("metadata with newer sender timestamp updates the cached expectedTimestamp")
     void newerSenderTimestampUpdatesExpected() {
@@ -150,16 +110,6 @@ class DeviceServiceHandleICDCDataTest {
                 "cached snapshot timestamp stays put; only expectedTimestamp moves");
     }
 
-    /**
-     * Verifies the primary-device minimal-sync path resets the cached list to
-     * primary-only and bumps the timestamp by one second.
-     *
-     * @implNote
-     * The handler routes sender = primary (device id 0) with metadata that
-     * carries only a timestamp (no key hash) through
-     * {@code handleMinimalTimestampOnlySync}; that path resets the cached
-     * list to primary-only and adds one second to the cached timestamp.
-     */
     @Test
     @DisplayName("primary-device sender with no key-hash takes the minimal-sync path (+1s bump)")
     void primaryDeviceMinimalSyncBumpsTimestamp() {

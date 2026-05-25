@@ -4,36 +4,31 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Plist {@code <data>} leaf, the binary plist {@code 0x40..0x4F}
- * marker family, stored as a slice over a backing buffer.
+ * Holds a plist {@code <data>} leaf as a slice over a backing buffer, the binary plist
+ * {@code 0x40..0x4F} marker family.
  *
- * @apiNote
- * Used wherever an APNS plist payload carries opaque bytes (for
- * example the FairPlay token or the device push token blob); call
- * {@link #toByteArray()} to obtain a defensive copy when ownership
- * outside the parser is required.
+ * <p>An instance represents opaque bytes carried by an APNS plist payload, such as the FairPlay
+ * token or the device push-token blob. The value is the {@code [offset, offset + length)} range of
+ * {@code source}; {@link #toByteArray()} returns an isolated copy when the bytes must outlive the
+ * parser's source buffer.
  *
- * @implNote
- * This implementation retains the parser's source buffer by reference
- * to allow zero-copy decoding of binary plists; mutating
- * {@link #source()} after construction would silently corrupt the
- * stored value.
- *
+ * @implNote This implementation retains the parser's source buffer by reference to allow zero-copy
+ *           decoding of binary plists; mutating {@link #source()} after construction would silently
+ *           corrupt the stored value.
  * @param source the backing buffer
  * @param offset the start offset within {@code source}
- * @param length the number of bytes
+ * @param length the number of bytes in the slice
  */
 public record PlistDataValue(byte[] source, int offset, int length) implements PlistValue {
     /**
-     * Canonical constructor that validates the slice bounds.
+     * Constructs a data leaf, rejecting a {@code null} buffer and validating the slice bounds.
      *
-     * @apiNote
-     * The constructor enforces {@code 0 <= offset && offset + length <= source.length}
-     * via {@link Objects#checkFromIndexSize(int, int, int)}.
+     * <p>The slice must satisfy {@code 0 <= offset} and {@code offset + length <= source.length},
+     * enforced via {@link Objects#checkFromIndexSize(int, int, int)}.
      *
      * @param source the backing buffer
      * @param offset the start offset within {@code source}
-     * @param length the number of bytes
+     * @param length the number of bytes in the slice
      * @throws NullPointerException      if {@code source} is {@code null}
      * @throws IndexOutOfBoundsException if the slice escapes the buffer
      */
@@ -43,15 +38,14 @@ public record PlistDataValue(byte[] source, int offset, int length) implements P
     }
 
     /**
-     * Wraps {@code bytes} as a full-buffer {@code PlistDataValue}
-     * without copying.
+     * Constructs a data leaf wrapping the whole of {@code bytes} without copying.
      *
-     * @apiNote
-     * Convenience for callers that own the backing array and want the
-     * whole array exposed as a data leaf; the caller must not mutate
-     * {@code bytes} after this call returns.
+     * <p>The slice spans the entire array, from offset {@code 0} for {@code bytes.length} bytes.
+     * The array is retained by reference, so the caller must not mutate {@code bytes} after this
+     * call returns.
      *
      * @param bytes the source bytes
+     * @throws NullPointerException if {@code bytes} is {@code null}
      */
     public PlistDataValue(byte[] bytes) {
         this(bytes, 0, bytes.length);
@@ -60,9 +54,8 @@ public record PlistDataValue(byte[] source, int offset, int length) implements P
     /**
      * Returns a freshly allocated copy of the stored bytes.
      *
-     * @apiNote
-     * Use when the caller needs an independent buffer it can mutate or
-     * persist outside the lifetime of the parser source.
+     * <p>The copy is independent of the backing buffer, so it may be mutated or persisted beyond
+     * the lifetime of the parser source.
      *
      * @return a copy of the slice
      */

@@ -19,174 +19,172 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * One usrsctp socket bound to one peer — the SCTP half of a single
- * WebRTC DataChannel association. Outbound SCTP packets are routed
- * through {@code outboundSink} (which the caller wires to the
- * underlying DTLS transport); inbound DTLS payloads are pushed in via
- * {@link #feedInboundPacket} and decoded by usrsctp's state machine.
+ * Wraps one usrsctp socket bound to one peer, modelling the SCTP half of a single WebRTC DataChannel association.
  *
- * <p>The class is {@link AutoCloseable}; teardown order is
- * deregister → close socket → close arena, which is the order
- * usrsctp itself documents to drain any in-flight conn_output
- * callbacks before the address segment is freed.
+ * <p>SCTP for WebRTC (RFC 8261, RFC 8831) runs over DTLS rather than over IP: usrsctp implements the SCTP state machine
+ * but never touches a real socket. Outbound SCTP packets this stack produces are routed through the {@code outboundSink}
+ * {@link Consumer} that the caller wires to the underlying DTLS transport, and inbound DTLS payloads are pushed back in
+ * through {@link #feedInboundPacket(byte[])}, which drives usrsctp's decoder and may synchronously deliver a decoded
+ * application message to {@link InboundListener#onMessage(InboundMessage)}.
  *
- * <p>Threading model follows Cobalt's standard virtual-thread,
- * direct-blocking pattern: this class is intended to be driven from a
- * single owning virtual thread that does {@link #feedInboundPacket}
- * for inbound DTLS records and {@link #send} for outbound DataChannel
- * messages. The {@code outboundSink} {@link Consumer} may be invoked
- * from that same thread (synchronously inside {@code send}) or from
- * the engine's tick driver thread; implementations must be
- * thread-safe.
+ * <p>The class is {@link AutoCloseable}; teardown order is deregister, then close socket, then close arena. Higher-level
+ * DataChannel framing (DCEP control messages, the PPID-tagged stream protocol of RFC 8831) lives in the DataChannel
+ * transport layered on top of this class, not here.
  *
- * <p>WebRTC defaults are pre-applied at construction:
- * {@code SCTP_NODELAY}, {@code SCTP_DISABLE_FRAGMENTS}, and an
- * {@code SCTP_INITMSG} with 1024 in/out streams as recommended by
- * RFC 8831. Higher-level DataChannel framing (PPIDs, RFC 8831 DCEP
- * messages) lives in the SCTP DataChannel transport (#60) layered on
- * top of this class.
+ * <p>The threading model follows Cobalt's standard virtual-thread, direct-blocking pattern: a single owning virtual
+ * thread calls {@link #feedInboundPacket(byte[])} for inbound DTLS records and {@link #send(int, int, byte[], boolean)}
+ * for outbound DataChannel messages. The {@code outboundSink} {@link Consumer} may be invoked from that same thread
+ * (synchronously inside {@link #send(int, int, byte[], boolean)}) or from the engine's tick driver thread, so
+ * implementations must be thread-safe.
+ *
+ * @implNote This implementation pre-applies the WebRTC defaults at construction: {@code SCTP_NODELAY},
+ * {@code SCTP_DISABLE_FRAGMENTS}, and an {@code SCTP_INITMSG} requesting 1024 inbound and 1024 outbound streams as
+ * recommended by RFC 8831. Teardown follows the order usrsctp documents so that any in-flight conn_output callbacks
+ * drain before the conn id segment backing them is freed.
  */
 public final class SctpAssociation implements AutoCloseable {
     /**
-     * RFC 8831 default number of inbound and outbound SCTP streams
-     * for a WebRTC DataChannel association.
+     * Holds the RFC 8831 default count of inbound and outbound SCTP streams for a WebRTC DataChannel association.
+     *
+     * @implNote This implementation requests 1024 streams in each direction via {@code SCTP_INITMSG}, the value RFC 8831
+     * specifies for WebRTC DataChannels.
      */
     private static final int WEBRTC_NUM_STREAMS = 1024;
 
     /**
-     * RFC 4960 §5.4 / usrsctp.h — bit set in
-     * {@link sctp_sndinfo#snd_flags} to request unordered delivery
-     * for a single message. Inlined here because jextract drops it
-     * from the {@link UsrSctp} bindings (the macro group it sits in
-     * is not parseable as a constant expression).
+     * Holds the per-message unordered-delivery flag for the {@code snd_flags} field of {@code sctp_sndinfo}.
+     *
+     * @implNote This implementation inlines the constant from RFC 4960 section 5.4 / usrsctp.h ({@code 0x0400}) because
+     * jextract drops it from the {@code UsrSctp} bindings; the macro group it belongs to is not parseable as a constant
+     * expression.
      */
     private static final short SCTP_UNORDERED = 0x0400;
 
     /**
-     * RFC 6458 §6.1.1 — {@code sac_state} value indicating the SCTP
-     * association handshake has completed and the socket is ready
-     * for application data.
+     * Holds the {@code sac_state} value reported when the SCTP association handshake has completed and the socket is
+     * ready for application data.
+     *
+     * @implNote This implementation uses the RFC 6458 section 6.1.1 value {@code 0x0001}.
      */
     private static final int SCTP_COMM_UP = 0x0001;
 
     /**
-     * RFC 6458 §6.1.1 — {@code sac_state} value indicating the
-     * association has been torn down by the peer or by a fault.
+     * Holds the {@code sac_state} value reported when the association has been torn down by the peer or by a fault.
+     *
+     * @implNote This implementation uses the RFC 6458 section 6.1.1 value {@code 0x0002}.
      */
     private static final int SCTP_COMM_LOST = 0x0002;
 
     /**
-     * RFC 6458 §6.1.1 — {@code sac_state} value indicating a
-     * graceful shutdown has completed.
+     * Holds the {@code sac_state} value reported when a graceful shutdown has completed.
+     *
+     * @implNote This implementation uses the RFC 6458 section 6.1.1 value {@code 0x0004}.
      */
     private static final int SCTP_SHUTDOWN_COMP = 0x0004;
 
     /**
-     * RFC 6458 §6.1.1 — {@code sac_state} value indicating the
-     * association could not be started (peer unreachable, INIT
-     * rejected, etc.).
+     * Holds the {@code sac_state} value reported when the association could not be started, such as when the peer is
+     * unreachable or the INIT was rejected.
+     *
+     * @implNote This implementation uses the RFC 6458 section 6.1.1 value {@code 0x0005}.
      */
     private static final int SCTP_CANT_STR_ASSOC = 0x0005;
 
     /**
-     * Byte offset of the {@code sac_state} field within a
-     * {@code sctp_assoc_change} notification: layout is
-     * {@code uint16_t sac_type; uint16_t sac_flags; uint32_t
-     * sac_length; uint16_t sac_state; ...}.
+     * Holds the byte offset of the {@code sac_state} field within a {@code sctp_assoc_change} notification.
+     *
+     * @implNote This implementation reads {@code sac_state} at offset {@code 8}: the notification layout is
+     * {@code uint16_t sac_type; uint16_t sac_flags; uint32_t sac_length; uint16_t sac_state; ...}, so the state word
+     * follows the two 16-bit fields and the 32-bit length.
      */
     private static final int SAC_STATE_OFFSET = 8;
 
     /**
-     * Per-association arena owning the {@code conn_id} segment, the
-     * receive-callback upcall stub, and any scratch buffers reused
-     * across calls.
+     * Holds the per-association arena that owns the {@code conn_id} segment, the receive-callback upcall stub, and the
+     * scratch buffers reused across calls.
      */
     private final Arena arena;
 
     /**
-     * Engine the association registered with — held so {@link #close}
-     * can deregister cleanly.
+     * Holds the engine this association registered with, so {@link #close()} can deregister cleanly.
      */
     private final SctpEngine engine;
 
     /**
-     * Unique opaque pointer this association registered with usrsctp
-     * to route outbound packets. The address (not the contents) is
-     * what matters; usrsctp treats it as a key.
+     * Holds the unique opaque pointer this association registered with usrsctp to route outbound packets.
+     *
+     * <p>The address, not the contents, is what matters; usrsctp treats the pointer as a routing key.
      */
     private final MemorySegment connId;
 
     /**
-     * Pointer to the {@code struct socket *} returned by
-     * {@code usrsctp_socket}; nulled on {@link #close}.
+     * Holds the pointer to the {@code struct socket *} returned by {@code usrsctp_socket}, nulled on {@link #close()}.
      */
     private MemorySegment socket;
 
     /**
-     * Receive-callback upcall stub. Lifetime is bounded by
-     * {@link #arena}.
+     * Holds the receive-callback upcall stub whose lifetime is bounded by {@link #arena}.
      */
     private final MemorySegment receiveCbStub;
 
     /**
-     * Sink for outbound SCTP packets; the caller wires this to its
-     * DTLS transport's send method.
+     * Holds the sink for outbound SCTP packets, which the caller wires to its DTLS transport's send method.
      */
     private final Consumer<byte[]> outboundSink;
 
     /**
-     * Listener invoked when usrsctp delivers an inbound application
-     * message — typed via {@link InboundMessage}. Notification
-     * messages (assoc state changes etc.) are surfaced separately
-     * via {@link #notificationListener} once the DataChannel
-     * transport (#60) needs them.
+     * Holds the listener invoked when usrsctp delivers an inbound application message, typed via {@link InboundMessage}.
+     *
+     * <p>Notification messages such as association-state changes are handled internally by
+     * {@link #handleNotification(MemorySegment, long)} rather than delivered to this listener.
      */
     private final InboundListener inboundListener;
 
     /**
-     * Reusable scratch segment for the {@link sctp_sndinfo} struct
-     * passed to {@code usrsctp_sendv}.
+     * Holds the reusable scratch segment for the {@code sctp_sndinfo} struct passed to {@code usrsctp_sendv}.
      */
     private final MemorySegment sndInfoScratch;
 
     /**
-     * Reusable scratch segment for the local-side
-     * {@link sockaddr_conn} struct passed to {@code usrsctp_bind}.
+     * Holds the reusable scratch segment for the local-side {@code sockaddr_conn} struct passed to
+     * {@code usrsctp_bind}.
      */
     private final MemorySegment localAddr;
 
     /**
-     * Reusable scratch segment for the remote-side
-     * {@link sockaddr_conn} struct passed to {@code usrsctp_connect}.
+     * Holds the reusable scratch segment for the remote-side {@code sockaddr_conn} struct passed to
+     * {@code usrsctp_connect}.
      */
     private final MemorySegment remoteAddr;
 
     /**
-     * Latch that fires when usrsctp delivers an
-     * {@code SCTP_ASSOC_CHANGE} notification with {@code sac_state ==
-     * SCTP_COMM_UP} (handshake complete) or any of the failure
-     * states. {@link #awaitConnected} blocks on this; the latch fires
-     * exactly once per association.
+     * Holds the latch that fires when the association handshake reaches a terminal state.
+     *
+     * <p>The latch counts down exactly once, when usrsctp delivers an {@code SCTP_ASSOC_CHANGE} notification carrying
+     * {@code SCTP_COMM_UP} (handshake complete) or any of the failure states. The blocking
+     * {@link #connect(int, long, TimeUnit)} call waits on it.
      */
     private final CountDownLatch connectLatch = new CountDownLatch(1);
 
     /**
-     * Set to {@code true} when the {@code SCTP_ASSOC_CHANGE}
-     * notification arrived with {@code sac_state == SCTP_COMM_UP}.
-     * {@link #awaitConnected} returns its final value.
+     * Holds whether the handshake completed successfully.
+     *
+     * <p>Set to {@code true} when the {@code SCTP_ASSOC_CHANGE} notification arrives with {@code sac_state} equal to
+     * {@code SCTP_COMM_UP}; {@link #connect(int, long, TimeUnit)} inspects it after the latch fires to distinguish
+     * success from a terminal failure state.
      */
     private final AtomicBoolean connected = new AtomicBoolean();
 
     /**
-     * Functional interface invoked when usrsctp delivers a DATA
-     * chunk to the receive callback. The payload is a fresh
-     * {@code byte[]} owned by the caller.
+     * Receives one application-data message decoded from the SCTP association.
+     *
+     * <p>The single callback fires synchronously from {@link #feedInboundPacket(byte[])} when usrsctp decodes a DATA
+     * chunk into a complete message.
      */
     @FunctionalInterface
     public interface InboundListener {
         /**
-         * Receives one application-data message from the SCTP
-         * association.
+         * Receives one application-data message from the SCTP association.
          *
          * @param msg the inbound message
          */
@@ -194,19 +192,18 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Decoded application-data message delivered to
-     * {@link InboundListener}.
+     * Carries one decoded application-data message delivered to {@link InboundListener}.
      *
      * @param streamId the SCTP stream the message arrived on
-     * @param ppid     the SCTP Payload Protocol Identifier (e.g.
-     *                 the WebRTC DataChannel-binary PPID 53)
+     * @param ppid     the SCTP Payload Protocol Identifier (for example the WebRTC DataChannel-binary PPID 53)
      * @param payload  the raw payload bytes
-     * @param flags    raw {@code msg_flags} from
-     *                 {@code usrsctp_recvv}
+     * @param flags    the raw {@code msg_flags} from {@code usrsctp_recvv}
      */
     public record InboundMessage(int streamId, int ppid, byte[] payload, int flags) {
         /**
-         * Compact constructor — null-checks the payload.
+         * Validates that the payload is non-null.
+         *
+         * @throws NullPointerException if {@code payload} is {@code null}
          */
         public InboundMessage {
             Objects.requireNonNull(payload, "payload cannot be null");
@@ -216,31 +213,20 @@ public final class SctpAssociation implements AutoCloseable {
     /**
      * Constructs and configures a new association.
      *
-     * <p>Steps performed:
+     * <p>The constructor allocates a per-association shared arena, allocates a unique one-byte segment to serve as the
+     * {@code conn_id}, registers that conn id with the {@link SctpEngine} so the global outbound upcall can route to
+     * this instance, builds the receive-callback upcall stub, creates the usrsctp socket via
+     * {@code usrsctp_socket(AF_CONN, SOCK_STREAM, IPPROTO_SCTP, recv_cb, NULL, 0, conn_id)}, and applies the WebRTC
+     * defaults ({@code SCTP_NODELAY}, {@code SCTP_DISABLE_FRAGMENTS}, {@code SCTP_INITMSG}), non-blocking mode, and the
+     * {@code SCTP_ASSOC_CHANGE} event subscription. On any failure it deregisters the conn id and closes the arena
+     * before rethrowing, so no native resources leak.
      *
-     * <ol>
-     *   <li>Allocates a per-association {@link Arena#ofShared() shared arena}.</li>
-     *   <li>Allocates a unique 1-byte segment as the {@code conn_id}.</li>
-     *   <li>Registers the conn id with the {@link SctpEngine} so the
-     *       global outbound upcall can route to this instance.</li>
-     *   <li>Builds the receive-callback upcall stub.</li>
-     *   <li>Calls {@code usrsctp_socket(AF_CONN, SOCK_STREAM,
-     *       IPPROTO_SCTP, recv_cb, NULL, 0, conn_id)}.</li>
-     *   <li>Applies the WebRTC defaults: {@code SCTP_NODELAY},
-     *       {@code SCTP_DISABLE_FRAGMENTS}, {@code SCTP_INITMSG}.</li>
-     * </ol>
-     *
-     * @param outboundSink    sink for SCTP packets the local stack
-     *                        wants to send out the wire — typically
-     *                        wired to the DTLS transport's send
-     *                        method; thread-safe
-     * @param inboundListener invoked synchronously from
-     *                        {@link #feedInboundPacket} when usrsctp
-     *                        decodes a DATA chunk from the inbound
-     *                        SCTP packet
-     * @throws NullPointerException if any argument is {@code null}
-     * @throws WhatsAppCallException.Sctp        if the socket cannot be created
-     *                              or configured
+     * @param outboundSink    the sink for SCTP packets the local stack wants to send out the wire, typically wired to
+     *                        the DTLS transport's send method; must be thread-safe
+     * @param inboundListener the listener invoked synchronously from {@link #feedInboundPacket(byte[])} when usrsctp
+     *                        decodes a DATA chunk from the inbound SCTP packet
+     * @throws NullPointerException       if any argument is {@code null}
+     * @throws WhatsAppCallException.Sctp if the socket cannot be created or configured
      */
     public SctpAssociation(Consumer<byte[]> outboundSink, InboundListener inboundListener) {
         this.outboundSink = Objects.requireNonNull(outboundSink, "outboundSink cannot be null");
@@ -284,11 +270,11 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Binds the association to a local SCTP port. Must be called
-     * before {@link #connect}.
+     * Binds the association to a local SCTP port.
      *
-     * @param localPort the local SCTP port (RFC 8831 specifies 5000
-     *                  for WebRTC DataChannels)
+     * <p>Must be called before {@link #connect(int)}. RFC 8831 specifies port 5000 for WebRTC DataChannels.
+     *
+     * @param localPort the local SCTP port
      * @throws WhatsAppCallException.Sctp if {@code usrsctp_bind} fails
      */
     public void bind(int localPort) {
@@ -308,48 +294,38 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Performs the SCTP handshake with the peer and blocks until
-     * {@code SCTP_COMM_UP} fires (or a failure / interrupt is
-     * observed). Equivalent to
-     * {@link #connect(int, long, TimeUnit)} with no timeout.
+     * Performs the SCTP handshake with the peer and blocks until it completes, fails, or the calling thread is
+     * interrupted.
      *
-     * <p>For WebRTC's "simultaneous open" pattern (RFC 4960 §5.2.4
-     * INIT-collision), both peers must call {@code connect}
-     * concurrently — typically each on its own thread — so that
-     * each side's INIT chunk reaches the other side after both
-     * sockets have entered {@code COOKIE_WAIT}.
+     * <p>Equivalent to {@link #connect(int, long, TimeUnit)} with an effectively unbounded timeout. For WebRTC's
+     * simultaneous-open pattern (RFC 4960 section 5.2.4 INIT collision), both peers call this concurrently, typically
+     * each on its own thread, so that each side's INIT chunk reaches the other after both sockets have entered
+     * {@code COOKIE_WAIT}.
      *
      * @param remotePort the peer's SCTP port (5000 in WebRTC)
-     * @throws WhatsAppCallException.Sctp if {@code usrsctp_connect} reports a
-     *                       hard failure or the calling thread is
-     *                       interrupted while waiting
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_connect} reports a hard failure or the calling thread is
+     *                                    interrupted while waiting
      */
     public void connect(int remotePort) {
         connect(remotePort, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
     }
 
     /**
-     * Performs the SCTP handshake and blocks until
-     * {@code SCTP_COMM_UP} fires, the handshake fails
-     * ({@code SCTP_COMM_LOST} / {@code SCTP_CANT_STR_ASSOC} /
-     * {@code SCTP_SHUTDOWN_COMP}), or the timeout expires.
+     * Performs the SCTP handshake and blocks until it reaches a terminal state or the timeout expires.
      *
-     * <p>The underlying socket is non-blocking, so {@code usrsctp_connect}
-     * returns {@code -1} with {@code EINPROGRESS} for the success
-     * case; that's treated as the start of the handshake here, with
-     * completion signalled via the {@code SCTP_ASSOC_CHANGE}
-     * notification.
+     * <p>The handshake completes successfully when an {@code SCTP_ASSOC_CHANGE} notification reports
+     * {@code SCTP_COMM_UP}, and fails when it reports {@code SCTP_COMM_LOST}, {@code SCTP_SHUTDOWN_COMP}, or
+     * {@code SCTP_CANT_STR_ASSOC}. Because the socket is non-blocking, {@code usrsctp_connect} returns {@code -1} with
+     * {@code EINPROGRESS} for the success case; this is treated as the start of the handshake, with completion
+     * signalled through the notification rather than the return value.
      *
      * @param remotePort the peer's SCTP port (5000 in WebRTC)
      * @param timeout    the maximum time to wait
      * @param unit       the timeout unit
-     * @throws WhatsAppCallException.Sctp        if {@code usrsctp_connect}
-     *                              reports a hard failure, the
-     *                              handshake completes with a
-     *                              non-{@code COMM_UP} state, the
-     *                              wait times out, or the calling
-     *                              thread is interrupted
-     * @throws NullPointerException if {@code unit} is {@code null}
+     * @throws NullPointerException       if {@code unit} is {@code null}
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_connect} reports a hard failure, the handshake completes with
+     *                                    a non-{@code COMM_UP} state, the wait times out, or the calling thread is
+     *                                    interrupted
      */
     public void connect(int remotePort, long timeout, TimeUnit unit) {
         Objects.requireNonNull(unit, "unit cannot be null");
@@ -382,13 +358,15 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Feeds one inbound SCTP packet (decoded from a DTLS record)
-     * into the local SCTP stack. The packet may produce zero or one
-     * synchronous calls into {@link InboundListener#onMessage} on
-     * the calling thread.
+     * Feeds one inbound SCTP packet, decoded from a DTLS record, into the local SCTP stack.
      *
-     * @param packet the SCTP packet bytes; never {@code null}
-     * @throws NullPointerException if {@code packet} is {@code null}
+     * <p>The packet is copied into native memory and handed to {@code usrsctp_conninput}, which drives the SCTP state
+     * machine and may produce zero or one synchronous calls into {@link InboundListener#onMessage(InboundMessage)} on
+     * the calling thread. An empty packet is ignored.
+     *
+     * @param packet the SCTP packet bytes
+     * @throws NullPointerException       if {@code packet} is {@code null}
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_conninput} fails
      */
     public void feedInboundPacket(byte[] packet) {
         Objects.requireNonNull(packet, "packet cannot be null");
@@ -408,16 +386,18 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Sends one application-data message on a specific SCTP stream
-     * with the given Payload Protocol Identifier.
+     * Sends one application-data message on a specific SCTP stream with the given Payload Protocol Identifier.
+     *
+     * <p>The message is queued through {@code usrsctp_sendv}; usrsctp then emits one or more SCTP packets through the
+     * conn_output upcall, which arrive at the caller's {@code outboundSink}. The call fails if usrsctp accepts fewer
+     * bytes than the payload length, since the WebRTC defaults disable fragmentation.
      *
      * @param streamId the SCTP stream index (0 .. 1023)
-     * @param ppid     the SCTP PPID (WebRTC uses 50/51/53/56/57)
+     * @param ppid     the SCTP PPID (WebRTC uses 50, 51, 53, 56, and 57)
      * @param payload  the message bytes
-     * @param ordered  {@code true} for ordered delivery,
-     *                 {@code false} for unordered
-     * @throws WhatsAppCallException.Sctp if {@code usrsctp_sendv} fails or sends
-     *                       fewer bytes than requested
+     * @param ordered  {@code true} for ordered delivery, {@code false} for unordered
+     * @throws NullPointerException       if {@code payload} is {@code null}
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_sendv} fails or sends fewer bytes than requested
      */
     public void send(int streamId, int ppid, byte[] payload, boolean ordered) {
         Objects.requireNonNull(payload, "payload cannot be null");
@@ -460,9 +440,10 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Forwards an outbound SCTP packet from usrsctp's conn_output
-     * upcall to the caller's {@code outboundSink}. Visible to
-     * {@link SctpEngine} only.
+     * Forwards an outbound SCTP packet from usrsctp's conn_output upcall to the caller's {@code outboundSink}.
+     *
+     * <p>Visible to {@link SctpEngine} only; the engine resolves the firing conn id back to this association and invokes
+     * this method.
      *
      * @param packet the packet bytes to ship to the peer
      */
@@ -471,30 +452,24 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * usrsctp receive callback — fires synchronously inside
-     * {@link #feedInboundPacket} when an inbound DATA chunk is
-     * decoded into a complete application message. Forwards the
-     * message to the caller's {@link InboundListener} after copying
-     * the native payload into a fresh {@code byte[]}.
+     * Dispatches one usrsctp receive-callback firing, the entry point usrsctp invokes synchronously inside
+     * {@link #feedInboundPacket(byte[])} once an inbound DATA chunk has decoded into a complete message.
      *
-     * <p>Notification messages (state changes, peer-addr events) are
-     * silently dropped here — the SCTP DataChannel transport (#60)
-     * will subscribe to those once needed.
+     * <p>Notification messages are routed to {@link #handleNotification(MemorySegment, long)}; null or empty data is
+     * ignored; otherwise the native payload is copied into a fresh {@code byte[]}, the stream id and PPID are read from
+     * the receive-info struct (the PPID converted from network to host byte order), and the result is delivered to the
+     * caller's {@link InboundListener}. Any exception thrown by the listener is swallowed so a single bad message
+     * cannot corrupt usrsctp's call stack.
      *
-     * @param sock     the firing socket pointer (unused — we have
-     *                 only one)
-     * @param addr     the peer's {@link sockaddr_conn} by value
-     *                 (unused for AF_CONN — the conn id alone
-     *                 identifies the peer)
-     * @param data     pointer to the native payload buffer; usrsctp
-     *                 frees this after the callback returns
-     * @param datalen  length in bytes of the native payload
-     * @param rcvinfo  receive metadata struct (stream, ppid, flags)
-     * @param flags    raw {@code MSG_*} flags
-     * @param ulpInfo  ulp_info pointer the socket was created with
-     *                 (always our {@link #connId})
-     * @return 0 to signal success — non-zero is treated by usrsctp
-     *         as "drop this message"
+     * @param sock    the firing socket pointer (unused, since there is only one)
+     * @param addr    the peer's {@code sockaddr_conn} by value (unused for {@code AF_CONN}, where the conn id alone
+     *                identifies the peer)
+     * @param data    the pointer to the native payload buffer, which usrsctp frees after the callback returns
+     * @param datalen the length in bytes of the native payload
+     * @param rcvinfo the receive-metadata struct carrying stream, PPID, and flags
+     * @param flags   the raw {@code MSG_*} flags
+     * @param ulpInfo the ulp_info pointer the socket was created with (always this association's {@link #connId})
+     * @return {@code 0} to signal success; a non-zero return is treated by usrsctp as a request to drop the message
      */
     private int onReceive(MemorySegment sock, MemorySegment addr, MemorySegment data, long datalen,
                           MemorySegment rcvinfo, int flags, MemorySegment ulpInfo) {
@@ -516,19 +491,17 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Decodes the leading bytes of an SCTP notification to surface
-     * association state changes. The {@code SCTP_ASSOC_CHANGE}
-     * notification carries an {@code sac_state} that maps to the
-     * {@code SCTP_COMM_UP} / {@code SCTP_COMM_LOST} /
-     * {@code SCTP_SHUTDOWN_COMP} / {@code SCTP_CANT_STR_ASSOC}
-     * states; reaching any of these fires {@link #connectLatch} so
-     * {@link #awaitConnected} can return.
+     * Decodes an SCTP notification to surface association state changes.
      *
-     * <p>Notification fields are in host byte order (not network).
+     * <p>Only {@code SCTP_ASSOC_CHANGE} notifications are acted on. Their {@code sac_state} maps to the
+     * {@code SCTP_COMM_UP}, {@code SCTP_COMM_LOST}, {@code SCTP_SHUTDOWN_COMP}, or {@code SCTP_CANT_STR_ASSOC} states;
+     * {@code SCTP_COMM_UP} marks success and any of the others marks a terminal failure, and reaching any of them fires
+     * {@link #connectLatch} so the blocking {@link #connect(int, long, TimeUnit)} call can return. Notifications shorter
+     * than the {@code sac_state} field, null data, and non-assoc-change types are ignored. Notification fields are read
+     * in host byte order rather than network byte order.
      *
-     * @param data    pointer to the notification payload (a
-     *                {@code union sctp_notification})
-     * @param datalen length of the payload in bytes
+     * @param data    the pointer to the notification payload, a {@code union sctp_notification}
+     * @param datalen the length of the payload in bytes
      */
     private void handleNotification(MemorySegment data, long datalen) {
         if (datalen < SAC_STATE_OFFSET + Short.BYTES || data.equals(MemorySegment.NULL)) {
@@ -552,9 +525,13 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Applies the standard WebRTC SCTP socket configuration —
-     * {@code SCTP_NODELAY}, {@code SCTP_DISABLE_FRAGMENTS},
-     * {@code SCTP_INITMSG} with 1024 streams each direction.
+     * Applies the standard WebRTC SCTP socket configuration to the freshly created socket.
+     *
+     * <p>Enables {@code SCTP_NODELAY} and {@code SCTP_DISABLE_FRAGMENTS}, then sets {@code SCTP_INITMSG} requesting
+     * {@link #WEBRTC_NUM_STREAMS} streams in each direction with the INIT attempt and timeout left at the usrsctp
+     * defaults.
+     *
+     * @throws WhatsAppCallException.Sctp if any of the {@code usrsctp_setsockopt} calls fails
      */
     private void applyWebRtcDefaults() {
         setIntSockopt(UsrSctp.SCTP_NODELAY(), 1);
@@ -583,11 +560,13 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Switches the socket into non-blocking mode. Required so the
-     * single-threaded usrsctp lock model used by
-     * {@code usrsctp_init_nothreads} does not deadlock when both
-     * peers call {@link #connect} simultaneously (the WebRTC pattern
-     * — see RFC 4960 §5.2.4).
+     * Switches the socket into non-blocking mode.
+     *
+     * @implNote This implementation requires non-blocking mode so that the single-threaded usrsctp lock model used by
+     * {@code usrsctp_init_nothreads} does not deadlock when both peers call {@link #connect(int)} simultaneously, which
+     * is the WebRTC simultaneous-open pattern of RFC 4960 section 5.2.4.
+     *
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_set_non_blocking} fails
      */
     private void applyNonBlocking() {
         int rc;
@@ -602,11 +581,13 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Subscribes the socket to {@code SCTP_ASSOC_CHANGE}
-     * notifications via the {@code SCTP_EVENT} setsockopt. The
-     * notification fires when the handshake reaches
-     * {@code SCTP_COMM_UP} or terminates, driving
-     * {@link #awaitConnected}.
+     * Subscribes the socket to {@code SCTP_ASSOC_CHANGE} notifications via the {@code SCTP_EVENT} socket option.
+     *
+     * <p>The subscribed notification fires when the handshake reaches {@code SCTP_COMM_UP} or terminates, which is what
+     * drives {@link #handleNotification(MemorySegment, long)} and ultimately unblocks
+     * {@link #connect(int, long, TimeUnit)}.
+     *
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_setsockopt} fails
      */
     private void subscribeAssocChangeNotifications() {
         try (var scratch = Arena.ofConfined()) {
@@ -636,6 +617,7 @@ public final class SctpAssociation implements AutoCloseable {
      *
      * @param optionName the {@code SCTP_*} option code
      * @param value      the integer payload
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_setsockopt} fails
      */
     private void setIntSockopt(int optionName, int value) {
         try (var scratch = Arena.ofConfined()) {
@@ -659,7 +641,9 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Throws if the socket has been closed.
+     * Verifies that the socket is still open.
+     *
+     * @throws IllegalStateException if the socket has been closed
      */
     private void requireOpen() {
         if (socket == null || socket.equals(MemorySegment.NULL)) {
@@ -668,16 +652,13 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Tears down the association. Idempotent. Order is fixed by
-     * usrsctp's contract:
+     * Tears down the association, releasing the usrsctp socket and the native memory backing it.
      *
-     * <ol>
-     *   <li>{@code usrsctp_deregister_address} — drains any
-     *       in-flight conn_output upcalls routed to this conn id.</li>
-     *   <li>{@code usrsctp_close} — destroys the socket.</li>
-     *   <li>{@link Arena#close()} — frees the conn id segment, the
-     *       upcall stub, and all scratch buffers.</li>
-     * </ol>
+     * <p>The method is idempotent: a second call returns immediately. The teardown order is fixed by usrsctp's
+     * contract: {@code usrsctp_deregister_address} first, to drain any in-flight conn_output upcalls routed to this
+     * conn id; then {@code usrsctp_close} to destroy the socket; then {@link Arena#close()} to free the conn id segment,
+     * the upcall stub, and all scratch buffers. The {@code usrsctp_close} call cannot raise, so the arena is always
+     * closed even if it throws.
      */
     @Override
     public void close() {
@@ -695,10 +676,10 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Host-to-network byte-order conversion for a 16-bit value, used
-     * when populating the {@code sin_port}/{@code sconn_port} field
-     * of a sockaddr (which the BSD API requires in network byte
-     * order).
+     * Converts a 16-bit value from host byte order to network byte order.
+     *
+     * <p>Applied when populating the {@code sconn_port} field of a {@code sockaddr_conn}, which the BSD socket API
+     * requires in network byte order.
      *
      * @param value the host-order short
      * @return the network-order short
@@ -708,8 +689,9 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Host-to-network byte-order conversion for a 32-bit value,
-     * applied to SCTP PPIDs in {@link sctp_sndinfo#snd_ppid}.
+     * Converts a 32-bit value from host byte order to network byte order.
+     *
+     * <p>Applied to the SCTP PPID written into the {@code snd_ppid} field of {@code sctp_sndinfo}.
      *
      * @param value the host-order int
      * @return the network-order int
@@ -719,7 +701,7 @@ public final class SctpAssociation implements AutoCloseable {
     }
 
     /**
-     * Inverse of {@link #htonl}.
+     * Converts a 32-bit value from network byte order to host byte order, the inverse of {@link #htonl(int)}.
      *
      * @param value the network-order int
      * @return the host-order int

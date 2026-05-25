@@ -40,18 +40,17 @@ import java.util.logging.Logger;
  * resolution, bot profile, username, modern text status, feature support)
  * about a list of peers in one round trip. Cobalt models the query as a
  * mutable fluent builder so call sites can compose the protocol mix and the
- * user list incrementally; {@link #toNode()} renders the IQ for dispatch
- * through {@code WhatsAppClient.sendNode} and
- * {@link #parseResponse(Node)} converts the
- * relay's reply into the typed {@link UsyncResult} surface. Backoff side
- * effects (waiting before send via {@link UsyncBackoff#waitForBackoff(UsyncQuery)}
- * and recording any {@code error_backoff} attached to a per-protocol error
- * via {@link UsyncBackoff#setProtocolBackoffMs(String, long)}) sit outside
- * this class so the builder can stay pure.
+ * user list incrementally; {@link #toNode()} renders the IQ for dispatch and
+ * {@link #parseResponse(Node)} converts the relay's reply into the typed
+ * {@link UsyncResult} surface. Backoff side effects (waiting before send via
+ * {@link UsyncBackoff#waitForBackoff(UsyncQuery)} and recording any
+ * {@code error_backoff} attached to a per-protocol error via
+ * {@link UsyncBackoff#setProtocolBackoffMs(String, long)}) sit outside this
+ * class so the builder can stay pure.
  *
- * <p>The "must have at least one protocol" invariant is enforced by the
- * type system: every entry point requires a starting protocol, so it is
- * impossible to build a query with zero protocols.
+ * <p>The "must have at least one protocol" invariant is enforced by the type
+ * system: every entry point requires a starting protocol, so it is impossible
+ * to build a query with zero protocols.
  *
  * <p><strong>Thread safety.</strong> A single instance is not safe to share
  * across threads. Construct the builder on the thread that dispatches it,
@@ -59,15 +58,15 @@ import java.util.logging.Logger;
  * {@code protocols} and {@code users} lists and the {@code lidProtocolAdded}
  * flag are unsynchronised, so concurrent {@code with*} mutations produce
  * {@link java.util.ConcurrentModificationException} or otherwise undefined
- * behaviour. Different threads may dispatch their own independent instances
- * in parallel because the underlying transport and the shared
- * {@link UsyncBackoff} registry are concurrency-safe.
+ * behaviour. Different threads may dispatch their own independent instances in
+ * parallel because the underlying transport and the shared {@link UsyncBackoff}
+ * registry are concurrency-safe.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public final class UsyncQuery {
     /**
-     * Logger that mirrors the {@code WALogger.LOG} parse-success trace
-     * emitted by the JS {@code usyncParser} callback.
+     * Logger that mirrors the parse-success trace emitted by the JS parser
+     * callback.
      */
     private static final Logger LOGGER = Logger.getLogger(UsyncQuery.class.getName());
 
@@ -100,13 +99,11 @@ public final class UsyncQuery {
     private boolean lidProtocolAdded;
 
     /**
-     * Hidden constructor invoked through the {@link #of(UsyncProtocol)}
-     * factory and the protocol-specific {@code of*} convenience factories.
+     * Hidden constructor invoked through the {@link #of(UsyncProtocol)} factory
+     * and the protocol-specific {@code of*} convenience factories.
      *
-     * @apiNote
-     * Forced through a factory so the "at least one protocol" invariant is
-     * impossible to violate at compile time, matching the JS runtime check
-     * in {@code USyncQuery.toWap}.
+     * <p>Forced through a factory so the "at least one protocol" invariant is
+     * impossible to violate at compile time.
      *
      * @param firstProtocol the first protocol attached to the query
      */
@@ -124,9 +121,8 @@ public final class UsyncQuery {
     /**
      * Creates a new query starting with the supplied protocol.
      *
-     * @apiNote
-     * Lowest-level factory; prefer one of the {@code of*} convenience
-     * factories when the starting protocol is a fixed type.
+     * <p>Lowest-level factory; one of the {@code of*} convenience factories is
+     * preferred when the starting protocol is a fixed type.
      *
      * @param firstProtocol the first protocol; must not be {@code null}
      * @return a fresh query
@@ -142,14 +138,11 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code contact} protocol.
      *
-     * @apiNote
-     * Used by contact-import flows (see {@code WAWebContactImportContactVerifier});
-     * the addressing mode picks between phone-number and LID identifier
-     * spaces and is reflected on the wire's {@code addressing_mode}
-     * attribute.
+     * <p>Used by contact-import flows; the addressing mode picks between
+     * phone-number and LID identifier spaces and is reflected on the wire's
+     * {@code addressing_mode} attribute.
      *
-     * @param addressingMode the addressing mode the contact protocol applies
-     *                       to
+     * @param addressingMode the addressing mode the contact protocol applies to
      * @return a fresh query
      */
     public static UsyncQuery ofContact(UsyncAddressingMode addressingMode) {
@@ -159,10 +152,9 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code devices} protocol.
      *
-     * @apiNote
-     * Used by device-list sync (see {@code WAWebAdvSyncDeviceListApi.syncDeviceList});
-     * pair each {@link UsyncUser} with the cached device hash so the relay
-     * can return an omit response when the local cache is still in sync.
+     * <p>Used by device-list sync; each {@link UsyncUser} is paired with the
+     * cached device hash so the relay can return an omit response when the
+     * local cache is still in sync.
      *
      * @return a fresh query
      */
@@ -173,9 +165,7 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code business} protocol.
      *
-     * @apiNote
-     * Used by verified-name fetch flows (see
-     * {@code WAWebGetOrQueryUsyncInfoContactAction.queryUsyncBusiness}).
+     * <p>Used by verified-name fetch flows.
      *
      * @return a fresh query
      */
@@ -186,8 +176,7 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code picture} protocol.
      *
-     * @apiNote
-     * Returns the peer's profile-picture id only; the JPEG payload is
+     * <p>Returns the peer's profile-picture id only; the JPEG payload is
      * fetched separately through the media URL.
      *
      * @return a fresh query
@@ -199,12 +188,10 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code status} protocol.
      *
-     * @apiNote
-     * Used by the legacy status string fetch (see
-     * {@code WAWebGetAboutQueryJob.getAbout}); pair each {@link UsyncUser}
-     * with a trusted-contact token through
-     * {@link UsyncUser#withTrustedContactToken(byte[])} when the relay
-     * requires one.
+     * <p>Used by the legacy status string fetch; each {@link UsyncUser} is
+     * paired with a trusted-contact token through
+     * {@link UsyncUser#withTrustedContactToken(byte[])} when the relay requires
+     * one.
      *
      * @return a fresh query
      */
@@ -213,12 +200,9 @@ public final class UsyncQuery {
     }
 
     /**
-     * Creates a query that starts with the {@code disappearing_mode}
-     * protocol.
+     * Creates a query that starts with the {@code disappearing_mode} protocol.
      *
-     * @apiNote
-     * Used by the disappearing-message timer fetch (see
-     * {@code WAWebGetDisappearingModeJob.getDisappearingMode}).
+     * <p>Used by the disappearing-message timer fetch.
      *
      * @return a fresh query
      */
@@ -229,10 +213,9 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code lid} protocol.
      *
-     * @apiNote
-     * Used to resolve a peer's LID identifier in isolation; most call sites
-     * combine the LID protocol with another via
-     * {@link #withLidProtocol()} instead.
+     * <p>Used to resolve a peer's LID identifier in isolation; most call sites
+     * combine the LID protocol with another via {@link #withLidProtocol()}
+     * instead.
      *
      * @return a fresh query
      */
@@ -243,11 +226,9 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code bot} protocol.
      *
-     * @apiNote
-     * Used by bot-profile fetches (see {@code WAWebRequestBotProfiles.requestBotProfiles});
-     * pair each {@link UsyncUser} with a persona id through
-     * {@link UsyncUser#withPersonaId(String)} when the bot exposes
-     * multiple personas.
+     * <p>Used by bot-profile fetches; each {@link UsyncUser} is paired with a
+     * persona id through {@link UsyncUser#withPersonaId(String)} when the bot
+     * exposes multiple personas.
      *
      * @return a fresh query
      */
@@ -258,8 +239,7 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code username} protocol.
      *
-     * @apiNote
-     * Used by username-lookup flows (see {@code WAWebQueryExistsJob.queryUsernameExists}).
+     * <p>Used by username-lookup flows.
      *
      * @return a fresh query
      */
@@ -270,9 +250,7 @@ public final class UsyncQuery {
     /**
      * Creates a query that starts with the {@code text_status} protocol.
      *
-     * @apiNote
-     * Used by the modern text-status fetch; gated server-side by
-     * {@code WAWebTextStatusGatingUtils.receiveTextStatusEnabled()}.
+     * <p>Used by the modern text-status fetch; gated server-side.
      *
      * @return a fresh query
      */
@@ -281,13 +259,12 @@ public final class UsyncQuery {
     }
 
     /**
-     * Creates a query that starts with the {@code feature} protocol
-     * restricted to the named feature keys.
+     * Creates a query that starts with the {@code feature} protocol restricted
+     * to the named feature keys.
      *
-     * @apiNote
-     * Used by debug and VoIP capability checks (see
-     * {@code WAWebDebugUsync}); the keys are the feature wire names the
-     * relay understands (see {@link UsyncFeatureProtocol.FeatureQuery}).
+     * <p>Used by debug and VoIP capability checks; the keys are the feature
+     * wire names the relay understands (see
+     * {@link UsyncFeatureProtocol.FeatureQuery}).
      *
      * @param queries the features to request
      * @return a fresh query
@@ -299,8 +276,7 @@ public final class UsyncQuery {
     /**
      * Sets the {@code mode} attribute emitted on the {@code <usync>} stanza.
      *
-     * @apiNote
-     * Defaults to {@link UsyncMode#QUERY}; switch to {@link UsyncMode#DELTA}
+     * <p>Defaults to {@link UsyncMode#QUERY}; switches to {@link UsyncMode#DELTA}
      * for diff-only contact syncs.
      *
      * @param mode the mode
@@ -315,13 +291,11 @@ public final class UsyncQuery {
     }
 
     /**
-     * Sets the {@code context} attribute emitted on the {@code <usync>}
-     * stanza.
+     * Sets the {@code context} attribute emitted on the {@code <usync>} stanza.
      *
-     * @apiNote
-     * Defaults to {@link UsyncContext#INTERACTIVE}; switch to
+     * <p>Defaults to {@link UsyncContext#INTERACTIVE}; switches to
      * {@link UsyncContext#BACKGROUND} for idle batch syncs or to
-     * {@link UsyncContext#MESSAGE}/{@link UsyncContext#VOIP} when the
+     * {@link UsyncContext#MESSAGE} / {@link UsyncContext#VOIP} when the
      * resulting device list is needed to encrypt an outbound send.
      *
      * @param context the context
@@ -338,11 +312,10 @@ public final class UsyncQuery {
     /**
      * Adds another protocol to this query.
      *
-     * @apiNote
-     * Generic counterpart of the protocol-specific {@code with*Protocol}
+     * <p>Generic counterpart of the protocol-specific {@code with*Protocol}
      * methods; delegates to {@link #withLidProtocol()} when the supplied
-     * protocol is a {@link UsyncLidProtocol} so the LID-already-added flag
-     * stays consistent.
+     * protocol is a {@link UsyncLidProtocol} so the LID-already-added flag stays
+     * consistent.
      *
      * @param protocol the protocol
      * @return this builder
@@ -360,8 +333,7 @@ public final class UsyncQuery {
     /**
      * Adds the {@code contact} protocol to this query.
      *
-     * @param addressingMode the addressing mode the contact protocol
-     *                       applies to
+     * @param addressingMode the addressing mode the contact protocol applies to
      * @return this builder
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
@@ -444,8 +416,8 @@ public final class UsyncQuery {
     }
 
     /**
-     * Adds the {@code feature} protocol to this query restricted to the
-     * named feature keys.
+     * Adds the {@code feature} protocol to this query restricted to the named
+     * feature keys.
      *
      * @param queries the features to request
      * @return this builder
@@ -460,11 +432,8 @@ public final class UsyncQuery {
     /**
      * Adds the {@code lid} protocol to this query.
      *
-     * @apiNote
-     * Idempotent: subsequent calls are no-ops, mirroring the
-     * {@code this.$1} guard in {@code USyncQuery.withLidProtocol} that
-     * prevents duplicate {@code <lid/>} elements inside the
-     * {@code <query>}.
+     * <p>Idempotent: subsequent calls are no-ops, preventing duplicate
+     * {@code <lid/>} elements inside the {@code <query>}.
      *
      * @return this builder
      */
@@ -505,10 +474,8 @@ public final class UsyncQuery {
     /**
      * Adds a user entry.
      *
-     * @apiNote
-     * The two-arg {@link #withUser(UsyncUser, Jid)} overload additionally
-     * pre-populates the LID slot when the LID protocol is part of the
-     * query.
+     * <p>The two-arg {@link #withUser(UsyncUser, Jid)} overload additionally
+     * pre-populates the LID slot when the LID protocol is part of the query.
      *
      * @param user the user
      * @return this builder
@@ -522,17 +489,14 @@ public final class UsyncQuery {
     }
 
     /**
-     * Adds a user entry and pre-populates its LID slot from the supplied
-     * hint when the LID protocol is part of this query.
+     * Adds a user entry and pre-populates its LID slot from the supplied hint
+     * when the LID protocol is part of this query.
      *
-     * @apiNote
-     * Mirrors the {@code USyncQuery.withUser(user, true)} branch in
-     * {@code WAWebUsync}: when the LID protocol has been added, the user's
-     * canonical id is already a LID, copy it into the LID slot; otherwise
-     * if the id is a regular phone-number user JID and the caller supplied
-     * a {@code currentLid} hint (typically from {@code WAWebApiContact.getCurrentLid}),
-     * copy that hint into the LID slot so the relay's LID resolution can
-     * proceed without a second round trip.
+     * <p>When the LID protocol has been added and the user's canonical id is
+     * already a LID, that id is copied into the LID slot; otherwise, if the id
+     * is a regular phone-number user {@link Jid} and the caller supplied a
+     * {@code currentLid} hint, that hint is copied into the LID slot so the
+     * relay's LID resolution can proceed without a second round trip.
      *
      * @param user       the user entry
      * @param currentLid the LID currently associated with the user's PN, or
@@ -559,8 +523,7 @@ public final class UsyncQuery {
     /**
      * Returns the configured {@link UsyncContext}.
      *
-     * @apiNote
-     * Read by {@link UsyncBackoff#waitForBackoff(UsyncQuery)} to decide
+     * <p>Read by {@link UsyncBackoff#waitForBackoff(UsyncQuery)} to decide
      * whether per-protocol backoff windows apply.
      *
      * @return the context
@@ -581,11 +544,9 @@ public final class UsyncQuery {
     /**
      * Returns an immutable snapshot of the registered protocols.
      *
-     * @apiNote
-     * Returned in registration order; consumed by
+     * <p>Returned in registration order; consumed by
      * {@link UsyncBackoff#waitForBackoff(UsyncQuery)} and by
-     * {@link #parseResponse(Node)} when
-     * matching per-protocol response children.
+     * {@link #parseResponse(Node)} when matching per-protocol response children.
      *
      * @return the protocols
      */
@@ -605,18 +566,15 @@ public final class UsyncQuery {
     /**
      * Builds the outbound USync IQ stanza.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} is
-     * ready to dispatch through {@code WhatsAppClient.sendNode}; the caller
-     * is expected to call {@link UsyncBackoff#waitForBackoff(UsyncQuery)}
-     * first to honour any active per-protocol backoff window.
+     * <p>The returned {@link NodeBuilder} is ready to dispatch; the caller is
+     * expected to call {@link UsyncBackoff#waitForBackoff(UsyncQuery)} first to
+     * honour any active per-protocol backoff window.
      *
      * @implNote
      * This implementation filters out users whose id is a legacy server
-     * JID before building the {@code <list>} element, matching the
-     * {@code WAWebWid.isServer} filter in {@code USyncQuery.toWap}; an
-     * empty post-filter list logs a warning rather than throwing so the
-     * relay still receives a well-formed IQ.
+     * {@link JidServer#legacyUser()} JID before building the {@code <list>}
+     * element; an empty post-filter list logs a warning rather than throwing so
+     * the relay still receives a well-formed IQ.
      *
      * @return the IQ builder
      */
@@ -677,23 +635,18 @@ public final class UsyncQuery {
     /**
      * Parses the relay's IQ response into a {@link UsyncResult}.
      *
-     * @apiNote
-     * Pure: no backoff registry is touched. The caller (typically
-     * {@code WhatsAppClient.executeUsyncQuery}) is expected to inspect each
-     * {@link UsyncProtocolError#errorBackoff()} on the returned result and
-     * call {@link UsyncBackoff#setProtocolBackoffMs(String, long)} as
-     * needed, mirroring the JS post-success hook in the {@code USyncQuery.execute}
-     * generator.
+     * <p>Pure: no backoff registry is touched. The caller is expected to
+     * inspect each {@link UsyncProtocolError#errorBackoff()} on the returned
+     * result and call {@link UsyncBackoff#setProtocolBackoffMs(String, long)} as
+     * needed.
      *
      * @implNote
      * This implementation routes every response whose {@code type} is not
-     * {@code "result"} to a top-level error envelope, mirroring the
-     * {@code error.all} branch the JS module returns on IQ failure. For
-     * success responses, per-protocol errors are populated from each
-     * {@code <error/>} child of the {@code <result>} block and per-protocol
-     * refresh windows from each {@code refresh} attribute; per-user
-     * parsing then delegates to each protocol's
-     * {@link UsyncProtocol#parseUserResult(Node)}.
+     * {@code "result"} to a top-level error envelope. For success responses,
+     * per-protocol errors are populated from each {@code <error/>} child of the
+     * {@code <result>} block and per-protocol refresh windows from each
+     * {@code refresh} attribute; per-user parsing then delegates to each
+     * protocol's {@link UsyncProtocol#parseUserResult(Node)}.
      *
      * @param response the relay's IQ response
      * @return the aggregated parse result
@@ -756,13 +709,11 @@ public final class UsyncQuery {
     }
 
     /**
-     * Builds a top-level error from a response whose {@code type} attribute
-     * is not {@code "result"}.
+     * Builds a top-level error from a response whose {@code type} attribute is
+     * not {@code "result"}.
      *
-     * @apiNote
-     * Mirrors the {@code error.all} envelope the JS module populates when
-     * the IQ fails wholesale; missing {@code <error/>} children fall back to
-     * {@code -1} / empty strings rather than throwing.
+     * <p>Missing {@code <error/>} children fall back to {@code -1} and empty
+     * strings rather than throwing.
      *
      * @param response the IQ response carrying the error envelope
      * @return the parsed top-level error

@@ -11,53 +11,53 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <ack class="notification">} stanza emitted to
- * acknowledge a server-pushed {@link SmaxQpQpNotificationResponse}.
+ * Models the outbound {@code <ack class="notification">} stanza that acknowledges a server-pushed
+ * {@link SmaxQpQpNotificationResponse}.
  *
- * @apiNote
- * Sent by the client back through the socket pipeline after consuming
- * a quick-promotion (QP) surfaces notification; WA Web's
- * {@code WAWebParseQPSurfacesNotification} invokes
- * {@code WASmaxQpSurfacesQPNotificationRPC.receiveQPNotificationRPC}
- * which returns the parsed request paired with a deferred
- * {@code makeQPNotificationResponseAck} factory, and the caller is
- * expected to flush the ack so the relay does not re-push the same
- * notification on the next reconnect.
+ * <p>This request is sent back through the socket pipeline after a quick-promotion (QP) surfaces
+ * notification has been consumed. It echoes the inbound {@code id}, {@code from}, and {@code type}
+ * triple so the relay can match the ack to the original push and stop re-delivering the same
+ * notification on the next reconnect. The stanza carries no body; it exists purely to confirm
+ * receipt. Callers obtain an instance from {@link #from(SmaxQpQpNotificationResponse)} when they
+ * hold a typed projection, or from {@link #from(Node)} when they hold only the raw stanza, then
+ * dispatch the {@link NodeBuilder} produced by {@link #toNode()}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutQpSurfacesQPNotificationResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutQpSurfacesNotificationClientAckMixin")
 public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.Request {
     /**
-     * The {@code id} of the notification being acknowledged.
+     * Holds the {@code id} of the notification being acknowledged.
+     *
+     * <p>This value is echoed verbatim into the ack's {@code id} attribute so the relay can pair
+     * the acknowledgement with the originating push.
      */
     private final String notificationId;
 
     /**
-     * The {@code from} of the notification, which becomes the ack's
-     * {@code to}.
+     * Holds the {@code from} of the notification being acknowledged.
+     *
+     * <p>This value becomes the ack's {@code to} attribute, addressing the acknowledgement back to
+     * the sender of the original notification.
      */
     private final Jid notificationFrom;
 
     /**
-     * The {@code type} of the notification, echoed verbatim into the
-     * ack.
+     * Holds the {@code type} of the notification being acknowledged.
+     *
+     * <p>This value is echoed verbatim into the ack's {@code type} attribute.
      */
     private final String notificationType;
 
     /**
-     * Constructs an acknowledgement for the given notification
-     * attributes.
+     * Constructs an acknowledgement from the three echoed notification attributes.
      *
-     * @apiNote
-     * Embedders that have a typed
-     * {@link SmaxQpQpNotificationResponse} should prefer
-     * {@link #from(SmaxQpQpNotificationResponse)}; this raw constructor
-     * exists so the ack can also be built from a captured stanza
-     * without round-tripping through the parser.
+     * <p>This raw constructor lets the ack be built directly from a captured stanza without
+     * round-tripping through the parser. Callers that already hold a typed
+     * {@link SmaxQpQpNotificationResponse} should prefer {@link #from(SmaxQpQpNotificationResponse)}
+     * instead.
      *
      * @param notificationId the notification id; never {@code null}
-     * @param notificationFrom the notification's sender JID; never
-     *                         {@code null}
+     * @param notificationFrom the notification's sender JID; never {@code null}
      * @param notificationType the notification type; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
@@ -68,13 +68,12 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Lifts the three echoed attributes off the given typed
-     * notification into a fresh acknowledgement.
+     * Lifts the three echoed attributes off the given typed notification into a fresh
+     * acknowledgement.
      *
-     * @apiNote
-     * Use after consuming a {@link SmaxQpQpNotificationResponse} so
-     * the ack carries the same {@code id}/{@code from}/{@code type}
-     * triple the relay expects.
+     * <p>This is the preferred factory once a {@link SmaxQpQpNotificationResponse} has been
+     * consumed, since it copies the same {@code id}, {@code from}, and {@code type} triple the
+     * relay expects to see reflected in the ack.
      *
      * @param inbound the inbound notification; never {@code null}
      * @return a new acknowledgement
@@ -87,23 +86,19 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Lifts the three echoed attributes off the given raw
-     * notification stanza into a fresh acknowledgement.
+     * Lifts the three echoed attributes off the given raw notification stanza into a fresh
+     * acknowledgement.
      *
-     * @apiNote
-     * Use when the consumer holds a raw {@link Node} but not a typed
-     * {@link SmaxQpQpNotificationResponse}; the three required
-     * attributes are read verbatim and a missing one is reported as
-     * {@link IllegalArgumentException} rather than silently absorbed
-     * (the relay expects every ack to round-trip the full triple).
+     * <p>This factory serves consumers that hold a raw {@link Node} but not a typed
+     * {@link SmaxQpQpNotificationResponse}. The {@code id}, {@code from}, and {@code type}
+     * attributes are read verbatim; a missing one raises {@link IllegalArgumentException} rather
+     * than being silently absorbed, because the relay requires every ack to round-trip the full
+     * triple.
      *
-     * @param notification the inbound notification stanza; never
-     *                     {@code null}
+     * @param notification the inbound notification stanza; never {@code null}
      * @return a new acknowledgement
-     * @throws NullPointerException if {@code notification} is
-     *                              {@code null}
-     * @throws IllegalArgumentException if the notification is missing
-     *                                  one of the required echoed
+     * @throws NullPointerException if {@code notification} is {@code null}
+     * @throws IllegalArgumentException if the notification is missing one of the required echoed
      *                                  attributes
      */
     public static SmaxQpQpNotificationAcknowledgement from(Node notification) {
@@ -147,10 +142,10 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     /**
      * Builds the outbound ack stanza ready for dispatch.
      *
-     * @apiNote
-     * Produces {@code <ack id to class="notification" type/>}; the
-     * stanza is fire-and-forget so no reply is expected and the
-     * envelope carries no body.
+     * <p>The produced builder describes {@code <ack id to class="notification" type/>}. The stanza
+     * is fire-and-forget: no reply is expected and the envelope carries no body. The notification's
+     * sender JID is written into the {@code to} attribute via
+     * {@link NodeBuilder#attribute(String, com.github.auties00.cobalt.model.jid.JidProvider)}.
      *
      * @return a {@link NodeBuilder} carrying the ack envelope
      */
@@ -168,9 +163,11 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxQpQpNotificationAcknowledgement} with equal echoed
-     * attributes.
+     * Returns whether the given object is a {@link SmaxQpQpNotificationAcknowledgement} with equal
+     * echoed attributes.
+     *
+     * <p>Two acknowledgements are equal when their {@code id}, {@code from}, and {@code type} fields
+     * all match.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when all three fields match
@@ -200,8 +197,7 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Returns a debug-friendly textual representation of this
-     * acknowledgement.
+     * Returns a debug-friendly textual representation of this acknowledgement.
      *
      * @return the textual representation
      */

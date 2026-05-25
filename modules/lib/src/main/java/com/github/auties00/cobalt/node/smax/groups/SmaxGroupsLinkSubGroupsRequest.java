@@ -18,9 +18,9 @@ import java.util.Optional;
  * The outbound {@code <iq xmlns="w:g2" type="set">} stanza that links one or more existing groups as sub-groups of a
  * community.
  *
- * @apiNote Drives the {@code WAWebGroupCommunityJob.sendLinkSubgroups} flow surfaced from the community admin
- * "Manage groups" page: pass the community parent JID as {@link #parentGroupJid()} and the list of candidate
- * sub-groups with their per-group hidden marker. The relay caps the batch at 1000 entries server-side.
+ * <p>Backs the community admin "Manage groups" page: pass the community parent JID as {@link #parentGroupJid()} and
+ * the list of candidate sub-groups with their per-group hidden marker. The relay caps the batch at 1000 entries
+ * server-side.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsLinkSubGroupsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -39,7 +39,7 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
     /**
      * Constructs a request.
      *
-     * @apiNote The relay rejects empty batches as a client error; build the list with at least one entry.
+     * <p>The relay rejects empty batches as a client error; build the list with at least one entry.
      *
      * @param parentGroupJid the parent community {@link Jid}; never {@code null}
      * @param groups         the list of groups to link as sub-groups; never {@code null} and must be non-empty
@@ -77,7 +77,7 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
      *         <links>
@@ -170,8 +170,8 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
     /**
      * Single sub-group entry inside the outbound {@code <links><link/></links>} payload.
      *
-     * @apiNote The {@link #hiddenGroup()} flag, when {@code true}, attaches a {@code <hidden_group/>} marker inside
-     * the matching {@code <group/>} child to indicate that the linked group is hidden from the community directory.
+     * <p>The {@link #hiddenGroup()} flag, when {@code true}, attaches a {@code <hidden_group/>} marker inside the
+     * matching {@code <group/>} child to indicate that the linked group is hidden from the community directory.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsLinkSubGroupsRequest")
     public static final class RequestedGroup {

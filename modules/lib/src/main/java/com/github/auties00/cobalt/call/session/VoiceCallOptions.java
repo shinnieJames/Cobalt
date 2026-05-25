@@ -6,19 +6,26 @@ import java.security.SecureRandom;
 import java.util.Objects;
 
 /**
- * Configuration for a {@link VoiceCallSession}. Bundles the local and
- * remote audio SSRCs, the RTP payload type to use for Opus, and the
- * underlying {@link AudioPipelineOptions} for the codec / AEC / VAD
- * stack.
+ * Configures a one-to-one voice call.
  *
- * @param localAudioSsrc       the 32-bit SSRC the local sender stamps
- *                             into outbound RTP packets — exchanged
- *                             with the peer via call signaling
- * @param remoteAudioSsrc      the SSRC the receiver accepts from the
- *                             peer
- * @param opusPayloadType      the RTP payload type to use for Opus —
- *                             WebRTC convention is 111
- * @param audio                the codec/AEC/VAD pipeline options
+ * <p>A value of this type bundles the local and remote audio synchronization sources (SSRCs), the
+ * RTP payload type to use for Opus, and the underlying {@link AudioPipelineOptions} that govern the
+ * codec, echo cancellation, and voice-activity-detection stack. The SSRCs identify the two audio
+ * streams of the call: the local sender stamps {@code localAudioSsrc} onto its outbound packets, and
+ * the receiver accepts only {@code remoteAudioSsrc} from the peer. The two SSRCs must differ.
+ *
+ * <p>Instances are constructed by the application and passed into the voice-call API. The
+ * {@link #defaults(int, int)} and {@link #randomDefaults()} factories produce a ready-to-use
+ * configuration that matches WhatsApp's voice profile, leaving only the SSRCs to fill in.
+ *
+ * @param localAudioSsrc   the 32-bit SSRC the local sender stamps onto outbound RTP packets, as
+ *                         exchanged with the peer via call signaling
+ * @param remoteAudioSsrc  the 32-bit SSRC the receiver accepts from the peer; must differ from
+ *                         {@code localAudioSsrc}
+ * @param opusPayloadType  the RTP payload type to use for Opus, in {@code [0, 127]} (the WebRTC
+ *                         convention is {@code 111})
+ * @param audio            the codec, echo-cancellation, and voice-activity-detection pipeline
+ *                         options
  */
 public record VoiceCallOptions(
         int localAudioSsrc,
@@ -27,13 +34,19 @@ public record VoiceCallOptions(
         AudioPipelineOptions audio
 ) {
     /**
-     * WebRTC convention for the Opus RTP payload type.
+     * Holds the RTP payload type WebRTC conventionally assigns to Opus.
+     *
+     * @implNote This implementation uses {@code 111}, the dynamic payload type WebRTC endpoints
+     * customarily negotiate for Opus.
      */
     public static final int DEFAULT_OPUS_PAYLOAD_TYPE = 111;
 
     /**
-     * Compact constructor — null-checks the audio sub-options and
-     * validates the payload-type range.
+     * Validates the audio sub-options, the payload-type range, and the SSRC distinctness invariant.
+     *
+     * @throws NullPointerException     if {@code audio} is {@code null}
+     * @throws IllegalArgumentException if {@code opusPayloadType} is outside {@code [0, 127]}, or if
+     *                                  {@code localAudioSsrc} equals {@code remoteAudioSsrc}
      */
     public VoiceCallOptions {
         Objects.requireNonNull(audio, "audio cannot be null");
@@ -48,14 +61,16 @@ public record VoiceCallOptions(
     }
 
     /**
-     * Builds a default options block with random SSRCs (the call
-     * layer typically overrides them with the values exchanged via
-     * signaling) and the WhatsApp-voice {@link AudioPipelineOptions}
-     * profile.
+     * Returns a default configuration with the given SSRCs.
      *
-     * @param localSsrc  the local SSRC
-     * @param remoteSsrc the remote SSRC
+     * <p>The returned options use {@link #DEFAULT_OPUS_PAYLOAD_TYPE} and the WhatsApp-voice
+     * {@link AudioPipelineOptions#defaults()} profile. The call layer typically overrides the SSRCs
+     * with the values exchanged via signaling.
+     *
+     * @param localSsrc  the local audio SSRC
+     * @param remoteSsrc the remote audio SSRC; must differ from {@code localSsrc}
      * @return the default options
+     * @throws IllegalArgumentException if {@code localSsrc} equals {@code remoteSsrc}
      */
     public static VoiceCallOptions defaults(int localSsrc, int remoteSsrc) {
         return new VoiceCallOptions(localSsrc, remoteSsrc, DEFAULT_OPUS_PAYLOAD_TYPE,
@@ -63,16 +78,18 @@ public record VoiceCallOptions(
     }
 
     /**
-     * Builds a default options block with the given local SSRC and a
-     * randomly-chosen remote SSRC — useful for tests that don't care
-     * about cross-peer SSRC alignment.
+     * Returns a default configuration with a random local SSRC and a derived, distinct remote SSRC.
+     *
+     * <p>The remote SSRC is the local SSRC with alternating bits flipped, which guarantees the two
+     * differ so the compact constructor's distinctness invariant always holds. This factory is
+     * useful for tests that do not care about cross-peer SSRC alignment.
      *
      * @return the default options
      */
     public static VoiceCallOptions randomDefaults() {
         var rng = new SecureRandom();
         var local = rng.nextInt();
-        var remote = local ^ 0x55555555;  // ensure non-equal
+        var remote = local ^ 0x55555555;  // alternating bits keep remote != local
         return defaults(local, remote);
     }
 }

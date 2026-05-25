@@ -8,19 +8,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke tests for the openh264 FFM bindings and the
- * {@link H264Encoder} / {@link H264Decoder} wrapper pair. The tests
- * fail loudly if libopenh264 is not loadable on the running platform
- * — silently skipping would let a broken native bundle ship green.
+ * Smoke tests for the openh264 FFM bindings and the {@link H264Encoder} / {@link H264Decoder} wrapper pair. The tests
+ * fail loudly if libopenh264 is not loadable on the running platform; silently skipping would let a broken native
+ * bundle ship green.
  */
 public class H264Test {
 
-    /**
-     * Encodes a forced keyframe and decodes it back, checking that
-     * the round-trip preserves frame dimensions. openh264 emits SPS
-     * and PPS NALs with the first IDR, so a single keyframe is
-     * enough for a fresh decoder to produce a complete picture.
-     */
     @Test
     public void encodeDecodeRoundTrip() {
         var width = 64;
@@ -31,6 +24,8 @@ public class H264Test {
             for (var i = 0; i < width * height; i++) {
                 yuv[i] = (byte) (i & 0xff);
             }
+            // openh264 emits SPS and PPS NALs with the first IDR, so a single forced keyframe is enough for a
+            // fresh decoder to produce a complete picture
             var pkt = enc.encode(yuv, 0L, true);
             assertNotNull(pkt, "encoder should emit a packet for a forced keyframe");
             assertTrue(pkt.keyFrame(), "first packet must be a keyframe");
@@ -43,10 +38,6 @@ public class H264Test {
         }
     }
 
-    /**
-     * Constructor argument validation — illegal frame sizes should
-     * fail before any openh264 call.
-     */
     @Test
     public void rejectsBadDimensions() {
         assertThrows(IllegalArgumentException.class, () -> new H264Encoder(0, 64, 1, 30));

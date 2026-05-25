@@ -6,20 +6,20 @@ import java.util.Optional;
  * Thrown when registering a phone number against the WhatsApp mobile
  * registration API fails.
  *
- * @apiNote
- * Registration is the flow that asks WhatsApp to issue a verification
+ * <p>Registration is the flow that asks WhatsApp to issue a verification
  * code (by SMS or voice call), submits the code the user typed, and
- * collects the credentials used by the mobile client to authenticate
- * subsequent sessions. Any rejection from the registration servers
- * (invalid number, rate limit, anti-spam block, wrong code, banned
- * account) raises this exception. When the server returned a body, the
- * raw response is available via {@link #erroneousResponse()} so the
- * caller can decode the specific reason and any retry hint, typically a
- * {@code retry_after} field for rate-limit driven rejections.
+ * collects the credentials the mobile client uses to authenticate later
+ * sessions. This exception covers every rejection along that path:
+ * an invalid number, a rate limit, an anti-spam block, a wrong code, or a
+ * banned account.
  *
- * @implNote
- * This implementation always reports the failure as fatal because
- * authentication never completed.
+ * @apiNote
+ * Raised whenever registration cannot complete; when the server returned
+ * a body, {@link #erroneousResponse()} exposes it so the caller can
+ * decode the specific reason and any retry hint (typically a
+ * {@code retry_after} field for rate-limit driven rejections).
+ * {@link #isFatal()} reports {@code true} because authentication never
+ * completed and no session can exist yet.
  */
 public final class WhatsAppRegistrationException extends WhatsAppException {
 

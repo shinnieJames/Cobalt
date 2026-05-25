@@ -14,15 +14,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants the relay produces in response
- * to an {@link IqQueryProductListCatalogRequest}.
+ * Models the inbound reply the relay produces in response to an {@link IqQueryProductListCatalogRequest}.
  *
- * @apiNote
- * Pattern-match the returned variant to drive the catalog grid:
- * {@link Success} carries the typed product entries (full body or
- * synthetic "INVALID_PRODUCT" marker), {@link ClientError} surfaces a
- * rejected request and {@link ServerError} surfaces a transient
- * internal failure.
+ * <p>The sealed family is pattern-matched to drive the catalog grid: {@link Success} carries the
+ * typed product entries (each a full body or a synthetic invalid marker), {@link ClientError}
+ * surfaces a rejected request and {@link ServerError} surfaces a transient internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryProductListCatalogJob")
 public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Response
@@ -31,10 +27,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
     /**
      * Tries each variant in priority order until one matches.
      *
-     * @apiNote
-     * Use this entry point on every IQ stanza tagged with the
-     * {@code <product_list/>} payload; the order is {@link Success},
-     * then {@link ClientError}, then {@link ServerError}.
+     * <p>The order is {@link Success}, then {@link ClientError}, then {@link ServerError}; call this
+     * on every IQ stanza tagged with the {@code <product_list/>} payload.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -56,149 +50,138 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
     }
 
     /**
-     * The {@code Success} variant carrying the typed product list.
+     * Models the {@code Success} variant, which carries the typed product list.
      *
-     * @apiNote
-     * Use {@link #products()} to drive the catalog grid; each
-     * {@link Product} entry is either a fully populated body or the
-     * synthetic {@link Product#invalid(String) invalid marker} for ids
-     * the relay flagged as no longer fetchable.
+     * <p>Each {@link Product} entry returned by {@link #products()} is either a fully populated body
+     * or the synthetic {@link Product#invalid(String) invalid marker} for ids the relay flagged as
+     * no longer fetchable.
      */
     final class Success implements IqQueryProductListCatalogResponse {
         /**
-         * One typed product entry decoded from a {@code <product/>}
-         * child of the {@code <product_list/>} payload.
+         * Carries one typed product entry decoded from a {@code <product/>} child of the
+         * {@code <product_list/>} payload.
          *
-         * @apiNote
-         * Pattern on {@link #invalid()} before reading the remaining
-         * fields; an invalid entry leaves every other field unset and
-         * surfaces only its id.
+         * <p>An invalid entry leaves every field other than its id unset, so test {@link #invalid()}
+         * before reading the remaining fields.
          */
         public static final class Product {
             /**
-             * The opaque product id.
+             * Holds the opaque product id.
              */
             private final String id;
 
             /**
-             * Whether this entry is the synthetic
-             * {@code "INVALID_PRODUCT"} marker; when {@code true} the
-             * remaining fields are unset and only {@code id} is
-             * meaningful.
+             * Holds whether this entry is the synthetic {@code "INVALID_PRODUCT"} marker; when
+             * {@code true} the remaining fields are unset and only {@code id} is meaningful.
              */
             private final boolean invalid;
 
             /**
-             * The optional product name.
+             * Holds the optional product name.
              */
             private final String name;
 
             /**
-             * The optional description body.
+             * Holds the optional description body.
              */
             private final String description;
 
             /**
-             * The optional canonical URL.
+             * Holds the optional canonical URL.
              */
             private final String url;
 
             /**
-             * The optional retailer-side identifier.
+             * Holds the optional retailer-side identifier.
              */
             private final String retailerId;
 
             /**
-             * The optional availability marker.
+             * Holds the optional availability marker.
              */
             private final String availability;
 
             /**
-             * The maximum cart quantity.
+             * Holds the maximum cart quantity.
              */
             private final int maxAvailable;
 
             /**
-             * The optional currency code.
+             * Holds the optional currency code.
              */
             private final String currency;
 
             /**
-             * The optional price (string-encoded major-units integer).
+             * Holds the optional price (string-encoded major-units integer).
              */
             private final String price;
 
             /**
-             * Whether the product is hidden from the catalog grid.
+             * Holds whether the product is hidden from the catalog grid.
              */
             private final boolean hidden;
 
             /**
-             * Whether the product is sanctioned by Meta enforcement.
+             * Holds whether the product is sanctioned by Meta enforcement.
              */
             private final boolean sanctioned;
 
             /**
-             * Whether the product is part of a featured set
-             * ({@code belongs_to=true}).
+             * Holds whether the product is part of a featured set ({@code belongs_to=true}).
              */
             private final boolean checkmark;
 
             /**
-             * The optional whatsapp-side approval status (e.g.
-             * {@code "APPROVED"}, {@code "PENDING"}).
+             * Holds the optional whatsapp-side approval status (e.g. {@code "APPROVED"},
+             * {@code "PENDING"}).
              */
             private final String whatsappStatus;
 
             /**
-             * Whether the product can be appealed from a rejection.
+             * Holds whether the product can be appealed from a rejection.
              */
             private final boolean canAppeal;
 
             /**
-             * The list of decoded image entries, in wire order.
+             * Holds the decoded image entries, in wire order.
              */
             private final List<Image> images;
 
             /**
-             * The list of decoded video entries, in wire order.
+             * Holds the decoded video entries, in wire order.
              */
             private final List<Video> videos;
 
             /**
-             * The optional sale-price block.
+             * Holds the optional sale-price block.
              */
             private final SalePrice salePrice;
 
             /**
-             * The optional compliance-info block.
+             * Holds the optional compliance-info block.
              */
             private final ComplianceInfo complianceInfo;
 
             /**
-             * The optional signed shimmed URL.
+             * Holds the optional signed shimmed URL.
              */
             private final String signedShimmedUrl;
 
             /**
-             * The optional compliance category marker (e.g.
-             * {@code "Default"}).
+             * Holds the optional compliance category marker (e.g. {@code "Default"}).
              */
             private final String complianceCategory;
 
             /**
-             * Constructs the synthetic invalid-product marker.
+             * Constructs the synthetic invalid-product marker for the given id.
              *
-             * @apiNote
-             * Call this factory when the relay echoes a
-             * {@code <product><status>INVALID_PRODUCT</status></product>}
-             * child; the resulting entry only carries the id and the
-             * invalid flag, every other field is unset.
+             * <p>The relay echoes a {@code <product><status>INVALID_PRODUCT</status></product>} child
+             * for ids it can no longer fetch; the resulting entry carries only the id and the invalid
+             * flag, every other field is unset.
              *
              * @param id the product id; never {@code null}
              * @return an invalid product entry; never {@code null}
-             * @throws NullPointerException if {@code id} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code id} is {@code null}
              */
             public static Product invalid(String id) {
                 Objects.requireNonNull(id, "id cannot be null");
@@ -209,13 +192,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Constructs a fully populated product entry.
+             * Constructs a fully populated product entry from the wire-decoded field set.
              *
-             * @apiNote
-             * Use this constructor only from the response parser; the
-             * field-by-field optional shape matches the wire echo so
-             * the catalog grid can render each entry without further
-             * normalisation.
+             * <p>The field-by-field optional shape matches the wire echo so the catalog grid can
+             * render each entry without further normalisation; called from the response parser.
              *
              * @param id                 see {@link #id()}
              * @param invalid            see {@link #invalid()}
@@ -236,13 +216,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
              * @param videos             see {@link #videos()}
              * @param salePrice          see {@link #salePrice()}
              * @param complianceInfo     see {@link #complianceInfo()}
-             * @param signedShimmedUrl   see
-             *                           {@link #signedShimmedUrl()}
-             * @param complianceCategory see
-             *                           {@link #complianceCategory()}
-             * @throws NullPointerException if {@code id},
-             *                              {@code images}, or
-             *                              {@code videos} is
+             * @param signedShimmedUrl   see {@link #signedShimmedUrl()}
+             * @param complianceCategory see {@link #complianceCategory()}
+             * @throws NullPointerException if {@code id}, {@code images}, or {@code videos} is
              *                              {@code null}
              */
             public Product(String id,
@@ -292,11 +268,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the opaque product id.
+             * Returns the opaque product id, used as the catalog-grid key.
              *
-             * @apiNote
-             * Use this getter as the catalog-grid key; the relay
-             * echoes the same id for both valid and invalid entries.
+             * <p>The relay echoes the same id for both valid and invalid entries.
              *
              * @return the id; never {@code null}
              */
@@ -305,28 +279,19 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the invalid-product flag.
+             * Returns the invalid-product flag that gates access to the remaining fields.
              *
-             * @apiNote
-             * Use this getter to gate access to the remaining fields;
-             * when {@code true} only {@link #id()} is meaningful and
-             * the catalog grid should render a "product no longer
-             * available" placeholder.
+             * <p>When {@code true} only {@link #id()} is meaningful and the catalog grid should
+             * render a "product no longer available" placeholder.
              *
-             * @return {@code true} when the relay marked this entry as
-             *         invalid
+             * @return {@code true} when the relay marked this entry as invalid
              */
             public boolean invalid() {
                 return invalid;
             }
 
             /**
-             * Returns the product display name.
-             *
-             * @apiNote
-             * Use this getter to drive the catalog-card title; the
-             * relay echoes the merchant-supplied raw string without
-             * normalisation.
+             * Returns the product display name driving the catalog-card title.
              *
              * @return an {@link Optional} carrying the name
              */
@@ -335,12 +300,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the description body.
-             *
-             * @apiNote
-             * Use this getter to drive the catalog-card body; the
-             * relay echoes the merchant-supplied raw string without
-             * normalisation.
+             * Returns the description body driving the catalog-card body.
              *
              * @return an {@link Optional} carrying the description
              */
@@ -349,11 +309,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the canonical product URL.
-             *
-             * @apiNote
-             * Use this getter to drive the "open in browser"
-             * affordance on the catalog card.
+             * Returns the canonical product URL backing the "open in browser" affordance.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -362,12 +318,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the retailer-side identifier.
-             *
-             * @apiNote
-             * Use this getter to map the entry back to the merchant's
-             * external ERP / commerce platform; the relay echoes the
-             * merchant-supplied SKU verbatim.
+             * Returns the retailer-side identifier that maps the entry back to the merchant's
+             * external commerce platform.
              *
              * @return an {@link Optional} carrying the id
              */
@@ -376,12 +328,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the availability marker.
-             *
-             * @apiNote
-             * Use this getter to drive the catalog-card stock badge;
-             * the relay echoes the merchant-supplied marker (e.g.
-             * {@code "in stock"}, {@code "out of stock"}) verbatim.
+             * Returns the availability marker driving the catalog-card stock badge (e.g.
+             * {@code "in stock"}, {@code "out of stock"}).
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -390,12 +338,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the maximum cart quantity.
+             * Returns the maximum cart quantity that caps the quantity selector.
              *
-             * @apiNote
-             * Use this getter to cap the quantity selector on the
-             * catalog card; the default is 99 when the relay omits
-             * the field.
+             * <p>The value defaults to 99 when the relay omits the field.
              *
              * @return the cap
              */
@@ -404,12 +349,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the currency code.
-             *
-             * @apiNote
-             * Use this getter together with {@link #price()} to
-             * format the catalog-card price string; the relay echoes
-             * the ISO 4217 code.
+             * Returns the ISO 4217 currency code, formatted with {@link #price()} into the
+             * catalog-card price string.
              *
              * @return an {@link Optional} carrying the code
              */
@@ -418,13 +359,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the price string.
+             * Returns the price string driving the catalog-card price label.
              *
-             * @apiNote
-             * Use this getter to drive the catalog-card price label;
-             * the relay echoes the price as a major-units integer
-             * string (e.g. {@code "1999"} for 19.99 in the
-             * {@link #currency()} unit).
+             * <p>The relay encodes the price as a major-units integer string (e.g. {@code "1999"} for
+             * 19.99 in the {@link #currency()} unit).
              *
              * @return an {@link Optional} carrying the price string
              */
@@ -435,10 +373,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             /**
              * Returns the hidden flag.
              *
-             * @apiNote
-             * Use this getter to filter the catalog grid; hidden
-             * entries are returned by id-list fetches but not by
-             * collection listings.
+             * <p>Hidden entries are returned by id-list fetches but not by collection listings.
              *
              * @return {@code true} when hidden
              */
@@ -449,10 +384,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             /**
              * Returns the sanctioned flag.
              *
-             * @apiNote
-             * Use this getter to hide the entry from the catalog
-             * grid; sanctioned products are flagged by Meta
-             * enforcement and cannot be checked out.
+             * <p>Sanctioned products are flagged by Meta enforcement, hidden from the catalog grid and
+             * cannot be checked out.
              *
              * @return {@code true} when sanctioned
              */
@@ -461,13 +394,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the featured-set flag (corresponds to the
-             * {@code <belongs_to/>} grandchild).
+             * Returns the featured-set flag, decoded from the {@code <belongs_to/>} grandchild.
              *
-             * @apiNote
-             * Use this getter to badge the entry on the catalog grid
-             * (the "featured" checkmark surface); WA Web maps it to
-             * the curated-collection membership flag.
+             * <p>It drives the "featured" checkmark badge on the catalog grid.
              *
              * @return {@code true} when featured
              */
@@ -476,13 +405,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the whatsapp-side approval status.
-             *
-             * @apiNote
-             * Use this getter to surface review-state badges to the
-             * merchant on the catalog-management surface (e.g.
-             * {@code "APPROVED"}, {@code "PENDING"},
-             * {@code "REJECTED"}).
+             * Returns the whatsapp-side approval status driving the review-state badge (e.g.
+             * {@code "APPROVED"}, {@code "PENDING"}, {@code "REJECTED"}).
              *
              * @return an {@link Optional} carrying the status
              */
@@ -491,11 +415,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the can-appeal flag.
-             *
-             * @apiNote
-             * Use this getter to enable the appeal CTA on the
-             * catalog-management surface for rejected products.
+             * Returns the can-appeal flag that enables the appeal CTA for rejected products.
              *
              * @return {@code true} when the product can be appealed
              */
@@ -504,11 +424,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the image list.
-             *
-             * @apiNote
-             * Use this getter to drive the catalog-card image
-             * carousel; the order matches the merchant-supplied
+             * Returns the image list driving the catalog-card image carousel, in merchant-supplied
              * upload order.
              *
              * @return an unmodifiable list; never {@code null}
@@ -518,11 +434,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the video list.
-             *
-             * @apiNote
-             * Use this getter to drive the catalog-card video
-             * carousel; the order matches the merchant-supplied
+             * Returns the video list driving the catalog-card video carousel, in merchant-supplied
              * upload order.
              *
              * @return an unmodifiable list; never {@code null}
@@ -532,12 +444,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the sale-price block.
+             * Returns the sale-price block driving the catalog-card "sale price" label.
              *
-             * @apiNote
-             * Use this getter to drive the catalog-card "sale price"
-             * label; an empty optional means the product is not on
-             * sale.
+             * <p>An empty optional means the product is not on sale.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -546,13 +455,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the compliance-info block.
-             *
-             * @apiNote
-             * Use this getter to render the regulatory disclosure
-             * block under the catalog card (country of origin,
-             * importer name / address); required in India and other
-             * markets.
+             * Returns the compliance-info block backing the regulatory disclosure under the catalog
+             * card (country of origin, importer name and address).
              *
              * @return an {@link Optional} carrying the block
              */
@@ -561,12 +465,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the signed shimmed URL.
+             * Returns the signed shimmed URL used when ad-shimlinking is enabled.
              *
-             * @apiNote
-             * Use this getter when ad-shimlinking is enabled; the URL
-             * is a signed proxy that surfaces ad-click telemetry
-             * before redirecting to {@link #url()}.
+             * <p>The URL is a signed proxy that surfaces ad-click telemetry before redirecting to
+             * {@link #url()}.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -575,13 +477,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the compliance-category marker.
-             *
-             * @apiNote
-             * Use this getter to dispatch on the product's compliance
-             * profile (e.g. {@code "Default"},
-             * {@code "BodyEnhancement"}); the value gates which
-             * disclosure fields the catalog card must display.
+             * Returns the compliance-category marker (e.g. {@code "Default"},
+             * {@code "BodyEnhancement"}) that gates which disclosure fields the catalog card displays.
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -590,7 +487,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this product with another for value equality across every decoded field.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal product
              */
             @Override
             public boolean equals(Object obj) {
@@ -625,7 +525,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code consistent with {@link #equals(Object)}.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -637,7 +539,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a diagnostic string naming the id, invalid flag, name, price and currency.
+             *
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -648,43 +552,36 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * One image entry on a {@link Product}: id, requested-resolution
-         * URL, and original-resolution URL.
+         * Carries one image entry on a {@link Product}: id, requested-resolution URL, and
+         * original-resolution URL.
          *
-         * @apiNote
-         * Use the requested-resolution URL on the catalog-card
-         * thumbnail and the full URL on the product-detail surface;
-         * both URLs are signed and short-lived.
+         * <p>Both URLs are signed and short-lived; the requested-resolution URL backs the
+         * catalog-card thumbnail and the full URL backs the product-detail surface.
          */
         public static final class Image {
             /**
-             * The image id.
+             * Holds the image id.
              */
             private final String id;
 
             /**
-             * The requested-resolution URL (per-request resized).
+             * Holds the requested-resolution URL (per-request resized).
              */
             private final String requestedUrl;
 
             /**
-             * The original-resolution URL.
+             * Holds the original-resolution URL.
              */
             private final String fullUrl;
 
             /**
-             * Constructs an image.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser; all
-             * three fields are read from the {@code <media><image/>}
-             * grandchild.
+             * Constructs an image from the {@code <media><image/>} grandchild fields; called from the
+             * response parser.
              *
              * @param id           the id; never {@code null}
              * @param requestedUrl the requested URL; never {@code null}
              * @param fullUrl      the full URL; never {@code null}
-             * @throws NullPointerException if any argument is
-             *                              {@code null}
+             * @throws NullPointerException if any argument is {@code null}
              */
             public Image(String id, String requestedUrl, String fullUrl) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -693,11 +590,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the image id.
-             *
-             * @apiNote
-             * Use this getter as a stable key for the catalog-card
-             * carousel; the relay keeps the id stable across uploads.
+             * Returns the image id, a stable key for the catalog-card carousel.
              *
              * @return the id; never {@code null}
              */
@@ -706,12 +599,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the requested-resolution URL.
+             * Returns the requested-resolution URL backing the catalog-card thumbnail.
              *
-             * @apiNote
-             * Use this getter to drive the catalog-card thumbnail;
-             * the URL is signed at the resolution the caller requested
-             * via {@link IqQueryProductListCatalogRequest#width()} and
+             * <p>The URL is signed at the resolution the caller requested via
+             * {@link IqQueryProductListCatalogRequest#width()} and
              * {@link IqQueryProductListCatalogRequest#height()}.
              *
              * @return the URL; never {@code null}
@@ -721,11 +612,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the original-resolution URL.
-             *
-             * @apiNote
-             * Use this getter to drive the product-detail surface;
-             * the URL is signed at the original upload resolution.
+             * Returns the original-resolution URL backing the product-detail surface.
              *
              * @return the URL; never {@code null}
              */
@@ -734,7 +621,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this image with another for value equality on the id and both URLs.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal image
              */
             @Override
             public boolean equals(Object obj) {
@@ -751,7 +641,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code consistent with {@link #equals(Object)}.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -759,7 +651,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a diagnostic string naming the id and requested URL.
+             *
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -769,44 +663,36 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * One video entry on a {@link Product}: id, original-resolution
-         * URL, and poster-frame thumbnail URL.
+         * Carries one video entry on a {@link Product}: id, original-resolution URL, and poster-frame
+         * thumbnail URL.
          *
-         * @apiNote
-         * Use the original URL to drive the in-line video player on
-         * the product-detail surface and the thumbnail URL as the
-         * carousel poster frame; both URLs are signed and short-lived.
+         * <p>Both URLs are signed and short-lived; the original URL backs the in-line video player on
+         * the product-detail surface and the thumbnail URL backs the carousel poster frame.
          */
         public static final class Video {
             /**
-             * The video id.
+             * Holds the video id.
              */
             private final String id;
 
             /**
-             * The original-resolution video URL.
+             * Holds the original-resolution video URL.
              */
             private final String originalVideoUrl;
 
             /**
-             * The thumbnail URL.
+             * Holds the thumbnail URL.
              */
             private final String thumbnailUrl;
 
             /**
-             * Constructs a video.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser; all
-             * three fields are read from the {@code <media><video/>}
-             * grandchild.
+             * Constructs a video from the {@code <media><video/>} grandchild fields; called from the
+             * response parser.
              *
              * @param id               the id; never {@code null}
              * @param originalVideoUrl the video URL; never {@code null}
-             * @param thumbnailUrl     the thumbnail URL; never
-             *                         {@code null}
-             * @throws NullPointerException if any argument is
-             *                              {@code null}
+             * @param thumbnailUrl     the thumbnail URL; never {@code null}
+             * @throws NullPointerException if any argument is {@code null}
              */
             public Video(String id, String originalVideoUrl, String thumbnailUrl) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -816,11 +702,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the video id.
-             *
-             * @apiNote
-             * Use this getter as a stable key for the catalog-card
-             * carousel.
+             * Returns the video id, a stable key for the catalog-card carousel.
              *
              * @return the id; never {@code null}
              */
@@ -829,11 +711,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the original-resolution video URL.
-             *
-             * @apiNote
-             * Use this getter to drive the in-line video player on
-             * the product-detail surface.
+             * Returns the original-resolution video URL backing the in-line video player on the
+             * product-detail surface.
              *
              * @return the URL; never {@code null}
              */
@@ -842,11 +721,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the poster-frame thumbnail URL.
-             *
-             * @apiNote
-             * Use this getter as the carousel poster frame before
-             * playback starts.
+             * Returns the poster-frame thumbnail URL shown in the carousel before playback starts.
              *
              * @return the URL; never {@code null}
              */
@@ -855,7 +730,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this video with another for value equality on the id and both URLs.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal video
              */
             @Override
             public boolean equals(Object obj) {
@@ -872,7 +750,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code consistent with {@link #equals(Object)}.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -880,7 +760,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a diagnostic string naming the id and original video URL.
+             *
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -890,47 +772,36 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * One sale-price block on a {@link Product}: discounted price
-         * plus optional sale date window.
+         * Carries one sale-price block on a {@link Product}: discounted price plus optional sale date
+         * window.
          *
-         * @apiNote
-         * Use this block to drive the "sale price" label on the
-         * catalog card; the start and end dates are optional and the
-         * catalog card surfaces an indefinite sale when both are
-         * absent.
+         * <p>The block backs the "sale price" label on the catalog card; the start and end dates are
+         * optional and the card surfaces an indefinite sale when both are absent.
          */
         public static final class SalePrice {
             /**
-             * The sale-price string (same major-units encoding as
-             * {@link Product#price()}).
+             * Holds the sale-price string (same major-units encoding as {@link Product#price()}).
              */
             private final String price;
 
             /**
-             * The optional sale start date in
-             * {@code YYYY-MM-DD'T'HH:MM:SS}.
+             * Holds the optional sale start date in {@code YYYY-MM-DD'T'HH:MM:SS}.
              */
             private final String startDate;
 
             /**
-             * The optional sale end date in
-             * {@code YYYY-MM-DD'T'HH:MM:SS}.
+             * Holds the optional sale end date in {@code YYYY-MM-DD'T'HH:MM:SS}.
              */
             private final String endDate;
 
             /**
-             * Constructs a block.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser;
-             * the start and end dates are independently optional on
-             * the wire.
+             * Constructs a block from the price and the independently-optional date window; called
+             * from the response parser.
              *
              * @param price     the price; never {@code null}
              * @param startDate the start date; may be {@code null}
              * @param endDate   the end date; may be {@code null}
-             * @throws NullPointerException if {@code price} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code price} is {@code null}
              */
             public SalePrice(String price, String startDate, String endDate) {
                 this.price = Objects.requireNonNull(price, "price cannot be null");
@@ -939,11 +810,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the sale price.
+             * Returns the sale price driving the catalog-card "sale price" label.
              *
-             * @apiNote
-             * Use this getter to drive the catalog-card "sale price"
-             * label; the encoding matches {@link Product#price()}.
+             * <p>The encoding matches {@link Product#price()}.
              *
              * @return the price; never {@code null}
              */
@@ -952,12 +821,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the start date.
+             * Returns the sale start date.
              *
-             * @apiNote
-             * Use this getter to gate the "sale price" label on the
-             * catalog card; an empty optional means the sale has no
-             * defined start.
+             * <p>An empty optional means the sale has no defined start.
              *
              * @return an {@link Optional} carrying the date
              */
@@ -966,12 +832,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the end date.
+             * Returns the sale end date.
              *
-             * @apiNote
-             * Use this getter to gate the "sale price" label on the
-             * catalog card; an empty optional means the sale has no
-             * defined end.
+             * <p>An empty optional means the sale has no defined end.
              *
              * @return an {@link Optional} carrying the date
              */
@@ -980,7 +843,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this block with another for value equality on the price and date window.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal block
              */
             @Override
             public boolean equals(Object obj) {
@@ -997,7 +863,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code consistent with {@link #equals(Object)}.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -1005,7 +873,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a diagnostic string naming the price and date window.
+             *
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -1015,47 +885,37 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * One compliance-info block on a {@link Product}: country of
-         * origin plus optional importer details.
+         * Carries one compliance-info block on a {@link Product}: country of origin plus optional
+         * importer details.
          *
-         * @apiNote
-         * Use this block to render the regulatory disclosure block
-         * under the catalog card; required for products imported into
-         * markets such as India where the importer name and address
-         * must be visible to the buyer.
+         * <p>The block backs the regulatory disclosure rendered under the catalog card, required for
+         * products imported into markets such as India where the importer name and address must be
+         * visible to the buyer.
          */
         public static final class ComplianceInfo {
             /**
-             * The ISO 3166-1 alpha-2 country code of origin.
+             * Holds the ISO 3166-1 alpha-2 country code of origin.
              */
             private final String countryCodeOrigin;
 
             /**
-             * The optional importer legal name.
+             * Holds the optional importer legal name.
              */
             private final String importerName;
 
             /**
-             * The optional importer address block.
+             * Holds the optional importer address block.
              */
             private final ImporterAddress importerAddress;
 
             /**
-             * Constructs a compliance-info block.
+             * Constructs a compliance-info block from the country code and the independently-optional
+             * importer fields; called from the response parser.
              *
-             * @apiNote
-             * Use this constructor only from the response parser;
-             * the country code is the only mandatory field and the
-             * importer fields are independently optional.
-             *
-             * @param countryCodeOrigin the country code; never
-             *                          {@code null}
-             * @param importerName      the importer name; may be
-             *                          {@code null}
-             * @param importerAddress   the importer address; may be
-             *                          {@code null}
-             * @throws NullPointerException if {@code countryCodeOrigin}
-             *                              is {@code null}
+             * @param countryCodeOrigin the country code; never {@code null}
+             * @param importerName      the importer name; may be {@code null}
+             * @param importerAddress   the importer address; may be {@code null}
+             * @throws NullPointerException if {@code countryCodeOrigin} is {@code null}
              */
             public ComplianceInfo(String countryCodeOrigin, String importerName,
                                   ImporterAddress importerAddress) {
@@ -1066,11 +926,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the country of origin code.
-             *
-             * @apiNote
-             * Use this getter to render the "Country of origin" line
-             * of the regulatory disclosure block.
+             * Returns the country of origin code rendered on the "Country of origin" disclosure line.
              *
              * @return the code; never {@code null}
              */
@@ -1079,12 +935,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the importer legal name.
+             * Returns the importer legal name rendered on the "Importer" disclosure line.
              *
-             * @apiNote
-             * Use this getter to render the "Importer" line of the
-             * regulatory disclosure block; an empty optional means
-             * the relay omitted the field.
+             * <p>An empty optional means the relay omitted the field.
              *
              * @return an {@link Optional} carrying the name
              */
@@ -1093,12 +946,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the importer address.
+             * Returns the importer address rendered on the disclosure address lines.
              *
-             * @apiNote
-             * Use this getter to render the importer address lines
-             * of the regulatory disclosure block; an empty optional
-             * means the relay omitted the block.
+             * <p>An empty optional means the relay omitted the block.
              *
              * @return an {@link Optional} carrying the address
              */
@@ -1107,7 +957,11 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this block with another for value equality on the country code and importer
+             * fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal block
              */
             @Override
             public boolean equals(Object obj) {
@@ -1124,7 +978,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code consistent with {@link #equals(Object)}.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -1132,7 +988,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a diagnostic string naming the country code and importer name.
+             *
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -1142,52 +1000,47 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * The importer address block on a {@link ComplianceInfo}:
-         * street, city, region, postcode, country.
+         * Carries the importer address block on a {@link ComplianceInfo}: street, city, region,
+         * postcode and country.
          *
-         * @apiNote
-         * Use this block to render the importer address lines of the
-         * regulatory disclosure block; street1, city and country
-         * code are mandatory while the remaining lines are optional.
+         * <p>The block backs the importer address lines of the regulatory disclosure; street1, city
+         * and country code are mandatory while the remaining lines are optional.
          */
         public static final class ImporterAddress {
             /**
-             * The street line 1.
+             * Holds the street line 1.
              */
             private final String street1;
 
             /**
-             * The optional street line 2.
+             * Holds the optional street line 2.
              */
             private final String street2;
 
             /**
-             * The optional postal code.
+             * Holds the optional postal code.
              */
             private final String postalCode;
 
             /**
-             * The city.
+             * Holds the city.
              */
             private final String city;
 
             /**
-             * The optional state, region or province.
+             * Holds the optional state, region or province.
              */
             private final String region;
 
             /**
-             * The ISO 3166-1 alpha-2 country code.
+             * Holds the ISO 3166-1 alpha-2 country code.
              */
             private final String countryCode;
 
             /**
-             * Constructs an address.
+             * Constructs an address from the wire-decoded fields; called from the response parser.
              *
-             * @apiNote
-             * Use this constructor only from the response parser;
-             * the wire schema requires street1, city and country
-             * code to be present.
+             * <p>The wire schema requires street1, city and country code to be present.
              *
              * @param street1     the line-1 street; never {@code null}
              * @param street2     the line-2 street; may be {@code null}
@@ -1195,9 +1048,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
              * @param city        the city; never {@code null}
              * @param region      the region; may be {@code null}
              * @param countryCode the country code; never {@code null}
-             * @throws NullPointerException if {@code street1},
-             *                              {@code city} or
-             *                              {@code countryCode} is
+             * @throws NullPointerException if {@code street1}, {@code city} or {@code countryCode} is
              *                              {@code null}
              */
             public ImporterAddress(String street1, String street2, String postalCode,
@@ -1211,11 +1062,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the line-1 street.
-             *
-             * @apiNote
-             * Use this getter to render the first street line of the
-             * importer address.
+             * Returns the line-1 street rendered as the first street line of the importer address.
              *
              * @return the street; never {@code null}
              */
@@ -1224,12 +1071,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the line-2 street.
+             * Returns the optional line-2 street.
              *
-             * @apiNote
-             * Use this getter to render the optional second street
-             * line of the importer address; an empty optional means
-             * the relay omitted the field.
+             * <p>An empty optional means the relay omitted the field.
              *
              * @return an {@link Optional} carrying the street
              */
@@ -1238,12 +1082,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the postal code.
+             * Returns the optional postal code.
              *
-             * @apiNote
-             * Use this getter to render the optional postal-code
-             * field of the importer address; an empty optional means
-             * the relay omitted the field.
+             * <p>An empty optional means the relay omitted the field.
              *
              * @return an {@link Optional} carrying the code
              */
@@ -1252,11 +1093,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the city.
-             *
-             * @apiNote
-             * Use this getter to render the city line of the
-             * importer address.
+             * Returns the city rendered on the importer address.
              *
              * @return the city; never {@code null}
              */
@@ -1265,12 +1102,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the state, region or province.
+             * Returns the optional state, region or province.
              *
-             * @apiNote
-             * Use this getter to render the optional region line of
-             * the importer address; an empty optional means the
-             * relay omitted the field.
+             * <p>An empty optional means the relay omitted the field.
              *
              * @return an {@link Optional} carrying the region
              */
@@ -1279,11 +1113,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the ISO 3166-1 alpha-2 country code.
-             *
-             * @apiNote
-             * Use this getter to render the country line of the
-             * importer address.
+             * Returns the ISO 3166-1 alpha-2 country code rendered on the importer address.
              *
              * @return the code; never {@code null}
              */
@@ -1292,7 +1122,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this address with another for value equality across every line.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal address
              */
             @Override
             public boolean equals(Object obj) {
@@ -1312,7 +1145,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code consistent with {@link #equals(Object)}.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -1320,7 +1155,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a diagnostic string naming street1, city and country code.
+             *
+             * @return the string form
              */
             @Override
             public String toString() {
@@ -1330,21 +1167,18 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * The decoded products in wire order.
+         * Holds the decoded products in wire order.
          */
         private final List<Product> products;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a success reply from the decoded products; called from {@link #of(Node, Node)}.
          *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)};
-         * the supplied list is defensively copied so the caller may
-         * mutate the source freely after construction.
+         * <p>The supplied list is defensively copied so the caller may mutate the source freely after
+         * construction.
          *
          * @param products the product list; never {@code null}
-         * @throws NullPointerException if {@code products} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code products} is {@code null}
          */
         public Success(List<Product> products) {
             Objects.requireNonNull(products, "products cannot be null");
@@ -1352,12 +1186,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the decoded products.
+         * Returns the decoded products driving the catalog grid.
          *
-         * @apiNote
-         * Use this getter to drive the catalog grid; the order
-         * matches the wire order, which matches the
-         * caller-supplied id order on the
+         * <p>The order matches the wire order, which matches the caller-supplied id order on the
          * {@link IqQueryProductListCatalogRequest}.
          *
          * @return an unmodifiable list; never {@code null}
@@ -1367,29 +1198,21 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method
-         * validates the {@code <iq type="result">} envelope, iterates
-         * over every {@code <product/>} child of the
-         * {@code <product_list/>} payload and dispatches to
-         * {@link #parseProduct(Node, String)} for non-invalid
-         * entries.
+         * <p>The method validates the {@code <iq type="result">} envelope, iterates over every
+         * {@code <product/>} child of the {@code <product_list/>} payload and dispatches to
+         * {@link #parseProduct(Node, String)} for non-invalid entries; called from
+         * {@link #of(Node, Node)}.
          *
          * @implNote
-         * This implementation matches the
-         * {@code WAWebQueryProductListCatalogJob.QueryProductListCatalog}
-         * WAP-IQ path; the synthetic invalid-product marker is
-         * detected by checking the {@code <status/>} grandchild for
-         * the literal {@code "INVALID_PRODUCT"} body, matching
-         * {@code WAWebProductMessageListConstant.INVALID_PRODUCT_TOKEN}.
+         * This implementation detects the synthetic invalid-product marker by checking the
+         * {@code <status/>} grandchild for the literal {@code "INVALID_PRODUCT"} body.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryProductListCatalogJob",
                 exports = "QueryProductListCatalog", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1423,21 +1246,15 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Decodes a single {@code <product/>} child into the typed
-         * {@link Product} projection.
+         * Decodes a single {@code <product/>} child into the typed {@link Product} projection.
          *
-         * @apiNote
-         * Helper for {@link #of(Node, Node)}; reads every supported
-         * grandchild and attribute of the product node and assembles
-         * a fully populated entry.
+         * <p>The helper reads every supported grandchild and attribute of the product node and
+         * assembles a fully populated entry for {@link #of(Node, Node)}.
          *
          * @implNote
-         * This implementation mirrors
-         * {@code WAWebBizCatalogParseProduct.parseProductNode}; the
-         * {@code max_available} field is read from either the
-         * attribute or the grandchild (the relay uses both shapes
-         * across snapshots) and the cap defaults to 99 when both are
-         * absent or unparseable.
+         * The {@code max_available} field is read from either the attribute or the grandchild (the
+         * relay uses both shapes across snapshots) and the cap defaults to 99 when both are absent or
+         * unparseable.
          *
          * @param productNode the {@code <product/>} child
          * @param id          the parsed product id
@@ -1560,7 +1377,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the products.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal success
          */
         @Override
         public boolean equals(Object obj) {
@@ -1575,7 +1395,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1583,7 +1405,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the products.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -1592,37 +1416,28 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
     }
 
     /**
-     * The {@code ClientError} variant emitted when the relay rejects
-     * the request as malformed or referencing an unknown merchant /
-     * catalog.
+     * Models the {@code ClientError} variant, emitted when the relay rejects the request as
+     * malformed or referencing an unknown merchant or catalog.
      *
-     * @apiNote
-     * Use this variant to surface a user-facing 4xx-class error to
-     * the catalog grid.
+     * <p>Surface it as a user-facing 4xx-class error on the catalog grid.
      */
     final class ClientError implements IqQueryProductListCatalogResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a client-error reply from the relay's {@code <error/>} envelope; called from
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1630,11 +1445,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to dispatch on the relay-side error code
-         * when surfacing a localised message to the catalog grid.
+         * Returns the numeric error code, used to dispatch on the relay-side rejection reason.
          *
          * @return the error code
          */
@@ -1645,9 +1456,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging; the text is server-localised
-         * and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots, so it is suitable for
+         * logging only.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -1656,18 +1466,15 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>The method delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to
+         * extract the (code, text) envelope; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -1678,7 +1485,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal client error
          */
         @Override
         public boolean equals(Object obj) {
@@ -1693,7 +1503,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1701,7 +1513,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the error code and text.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -1711,38 +1525,29 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
     }
 
     /**
-     * The {@code ServerError} variant emitted when the relay returns
-     * a transient internal-failure status while processing the
-     * request.
+     * Models the {@code ServerError} variant, emitted when the relay returns a transient
+     * internal-failure status while processing the request.
      *
-     * @apiNote
-     * Use this variant to drive a backoff-and-retry path in the
-     * catalog grid; the relay returns this shape when the catalog
-     * backend is temporarily unavailable.
+     * <p>The relay returns this shape when the catalog backend is temporarily unavailable; use it to
+     * drive a backoff-and-retry path on the catalog grid.
      */
     final class ServerError implements IqQueryProductListCatalogResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a server-error reply from the relay's {@code <error/>} envelope; called from
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1750,11 +1555,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to log the relay-side error code; a
-         * 5xx-class value is the canonical retry trigger.
+         * Returns the numeric error code; a 5xx-class value is the canonical retry trigger.
          *
          * @return the error code
          */
@@ -1765,9 +1566,8 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging only; the text is
-         * server-localised and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots, so it is suitable for
+         * logging only.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -1776,18 +1576,15 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>The method delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to
+         * extract the (code, text) envelope; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -1798,7 +1595,10 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal server error
          */
         @Override
         public boolean equals(Object obj) {
@@ -1813,7 +1613,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -1821,7 +1623,9 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the error code and text.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {

@@ -22,27 +22,25 @@ import java.util.Optional;
 import java.util.SequencedCollection;
 
 /**
- * Decoded reply to the privacy contact list fetch query.
+ * Decodes the reply to the privacy contact list fetch query.
  *
- * @apiNote Consume after dispatching {@link GetPrivacyListsMexRequest}. The
- * reply collapses the {@code xwa2_fetch_wa_users[0].privacy_contact_list}
- * projection into a flat ({@link #dhash()}, {@link #contacts()}) view; the
- * outer array always has length one because Cobalt's request only emits a
- * single {@code query_input} entry. The {@code dhash} value is the
- * server-side digest of the returned list and is used to drive subsequent
- * delta refreshes.
+ * <p>The reply collapses the {@code privacy_contact_list} projection of the first returned user into
+ * a flat ({@link #dhash()}, {@link #contacts()}) view; the outer array always has length one because
+ * the request only emits a single {@code query_input} entry. The {@code dhash} value is the
+ * server-side digest of the returned list and drives subsequent delta refreshes. Consume this type
+ * after dispatching {@link GetPrivacyListsMexRequest}.
  *
  * @see GetPrivacyListsMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexGetPrivacyList")
 public final class GetPrivacyListsMexResponse implements MexOperation.Response.Json {
     /**
-     * The server-side digest of the list, possibly {@code null}.
+     * Holds the server-side digest of the list, possibly {@code null}.
      */
     private final String dhash;
 
     /**
-     * The decoded contact entries, never {@code null}.
+     * Holds the decoded contact entries, never {@code null}.
      */
     private final List<PrivacyContact> contacts;
 
@@ -50,8 +48,7 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
      * Wraps the decoded fields of a privacy-list response.
      *
      * @param dhash the {@code dhash} digest of the list
-     * @param contacts the decoded contact entries; {@code null} is coerced
-     *                 to an empty list
+     * @param contacts the decoded contact entries; {@code null} is coerced to an empty list
      */
     private GetPrivacyListsMexResponse(String dhash, List<PrivacyContact> contacts) {
         this.dhash = dhash;
@@ -61,13 +58,12 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
     /**
      * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @apiNote Pass the IQ node received in reply to a stanza dispatched
-     * with {@link GetPrivacyListsMexRequest#toNode()}.
+     * <p>Pass the IQ node received in reply to a stanza dispatched with
+     * {@link GetPrivacyListsMexRequest#toNode()}.
      *
      * @param node the IQ reply stanza
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload is missing or does not carry a
-     *         {@code privacy_contact_list} projection for the first user
+     * @return the decoded reply, or {@link Optional#empty()} when the payload is missing or does not
+     *         carry a {@code privacy_contact_list} projection for the first user
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacyList", exports = "fetchPrivacyList",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -80,15 +76,17 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
     /**
      * Decodes the {@code <result>} payload bytes into a {@link GetPrivacyListsMexResponse}.
      *
-     * @implNote This implementation traps the {@link JSON#parseObject(byte[])}
-     * exception to honour the {@link Optional#empty()} contract advertised
-     * by {@link #of(Node)} when the bytes are not valid JSON. Missing
-     * intermediate envelope nodes ({@code xwa2_fetch_wa_users},
-     * {@code privacy_contact_list}) likewise yield empty.
+     * <p>The payload is projected from the {@code privacy_contact_list} of the first
+     * {@code xwa2_fetch_wa_users} entry. Missing intermediate envelope nodes yield
+     * {@link Optional#empty()}.
+     *
+     * @implNote This implementation traps the {@link JSON#parseObject(byte[])} exception to honour
+     * the {@link Optional#empty()} contract advertised by {@link #of(Node)} when the bytes are not
+     * valid JSON.
      *
      * @param payload the raw {@code <result>} payload bytes
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload does not parse or lacks the required envelope
+     * @return the decoded reply, or {@link Optional#empty()} when the payload does not parse or lacks
+     *         the required envelope
      */
     private static Optional<GetPrivacyListsMexResponse> parse(byte[] payload) {
         JSONObject envelope;
@@ -133,12 +131,11 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
     /**
      * Returns the server-side digest of the returned list.
      *
-     * @apiNote Pass this value as the {@code dhash} of a subsequent
-     * {@link GetPrivacyListsMexRequest} to receive a delta refresh against
-     * the same list.
+     * <p>Pass this value as the {@code dhash} of a subsequent {@link GetPrivacyListsMexRequest} to
+     * receive a delta refresh against the same list.
      *
-     * @return the digest wrapped in an {@link Optional}, or
-     *         {@link Optional#empty()} when the relay omitted the field
+     * @return the digest wrapped in an {@link Optional}, or {@link Optional#empty()} when the relay
+     *         omitted the field
      */
     public Optional<String> dhash() {
         return Optional.ofNullable(dhash);
@@ -147,7 +144,7 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
     /**
      * Returns the decoded contact entries.
      *
-     * @apiNote The returned view is unmodifiable; mutation attempts throw
+     * <p>The returned view is unmodifiable; mutation attempts throw
      * {@link UnsupportedOperationException}.
      *
      * @return the contact entries; may be empty, never {@code null}
@@ -157,29 +154,26 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
     }
 
     /**
-     * A decoded contact entry inside a privacy contact list response.
+     * Wraps a single contact entry inside a privacy contact list response.
      *
-     * @apiNote Mirrors the {@code XWA2ContactEntry} GraphQL type with shape
-     * {@code {jid, pn_jid, username_info: {username}}}. The {@link #pnJid()}
-     * alternate form is present only when the contact has a phone-number
-     * addressed identifier distinct from {@link #jid()} (typically a LID
-     * primary). The {@link #username()} is present only when the contact
-     * has claimed a WhatsApp username.
+     * <p>The {@link #pnJid()} alternate form is present only when the contact has a phone-number
+     * addressed identifier distinct from {@link #jid()}, typically a LID primary. The
+     * {@link #username()} is present only when the contact has claimed a WhatsApp username.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexGetPrivacyList")
     public static final class PrivacyContact {
         /**
-         * The {@code jid} field carrying the primary contact identifier.
+         * Holds the {@code jid} field carrying the primary contact identifier.
          */
         private final Jid jid;
 
         /**
-         * The {@code pn_jid} alternate identifier, possibly {@code null}.
+         * Holds the {@code pn_jid} alternate identifier, possibly {@code null}.
          */
         private final Jid pnJid;
 
         /**
-         * The {@code username_info.username} field, possibly {@code null}.
+         * Holds the {@code username_info.username} field, possibly {@code null}.
          */
         private final String username;
 
@@ -187,11 +181,10 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
          * Constructs a privacy contact entry from its decoded fields.
          *
          * @param jid the primary contact JID
-         * @param pnJid the phone-number addressed alternate JID, or
-         *              {@code null} when the contact has only the primary
-         *              form
-         * @param username the claimed WhatsApp username, or {@code null}
-         *                 when the contact has not claimed one
+         * @param pnJid the phone-number addressed alternate JID, or {@code null} when the contact has
+         *              only the primary form
+         * @param username the claimed WhatsApp username, or {@code null} when the contact has not
+         *                 claimed one
          * @throws NullPointerException if {@code jid} is {@code null}
          */
         public PrivacyContact(Jid jid, Jid pnJid, String username) {
@@ -203,8 +196,7 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
         /**
          * Decodes a single contact entry from a {@link JSONObject}.
          *
-         * @apiNote Used by {@link #parse(byte[])} while walking the
-         * {@code contacts} array; not part of the public API.
+         * <p>Invoked by {@link #parse(byte[])} while walking the {@code contacts} array.
          *
          * @param entry the JSON object to decode
          * @return the decoded entry
@@ -232,9 +224,8 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
         /**
          * Returns the phone-number addressed alternate identifier.
          *
-         * @return the alternate {@link Jid} wrapped in an {@link Optional},
-         *         or {@link Optional#empty()} when the contact has only the
-         *         primary form
+         * @return the alternate {@link Jid} wrapped in an {@link Optional}, or
+         *         {@link Optional#empty()} when the contact has only the primary form
          */
         public Optional<Jid> pnJid() {
             return Optional.ofNullable(pnJid);
@@ -243,9 +234,8 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
         /**
          * Returns the claimed WhatsApp username for this contact.
          *
-         * @return the username wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when the contact has not claimed
-         *         one
+         * @return the username wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+         *         contact has not claimed one
          */
         public Optional<String> username() {
             return Optional.ofNullable(username);

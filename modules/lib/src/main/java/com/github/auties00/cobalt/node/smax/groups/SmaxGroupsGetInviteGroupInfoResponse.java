@@ -11,29 +11,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsGetInviteGroupInfoRequest}.
+ * Models the inbound reply to a {@link SmaxGroupsGetInviteGroupInfoRequest} as a sealed variant family.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
- * cases: {@link Success} carries the inviting group's preview metadata (size plus the raw {@code <group/>} subtree),
- * the two error variants surface the relay's reason codes. The {@code WAWebGroupQueryJob.queryGroupInviteCode}
- * caller in WA Web uses the same dispatch shape.
+ * <p>{@link Success} carries the inviting group's preview metadata (size plus the raw {@code <group/>}
+ * subtree); {@link ClientError} and {@link ServerError} surface the relay's reason codes. Callers pattern-match
+ * the variant returned by {@link #of(Node)}.
  */
 public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperation.Response
         permits SmaxGroupsGetInviteGroupInfoResponse.Success, SmaxGroupsGetInviteGroupInfoResponse.ClientError, SmaxGroupsGetInviteGroupInfoResponse.ServerError {
 
     /**
-     * Dispatches the inbound IQ across each {@link SmaxGroupsGetInviteGroupInfoResponse} variant in priority order
-     * and returns the first that parses cleanly.
+     * Parses the inbound IQ stanza into the first matching variant.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsGetInviteGroupInfoRPC}:
-     * {@link Success} first, then {@link ClientError} (HTTP 4xx codes), then {@link ServerError} (HTTP 5xx codes).
+     * <p>The probes run in priority order: {@link Success}, then {@link ClientError} (HTTP-style 4xx codes),
+     * then {@link ServerError} (HTTP-style 5xx codes). An empty {@link Optional} signals a stanza shape outside
+     * the documented union.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote
+     * This implementation defers the recovery decision to the caller rather than throwing a parsing-failure
+     * exception, so the caller can apply its own error-handling policy.
      *
-     * @param node the inbound IQ stanza received from the relay
-     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
+     * @param node the inbound IQ stanza received from the relay; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented
+     *         variant matched
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsGetInviteGroupInfoRPC",
@@ -52,29 +52,28 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
     }
 
     /**
-     * The reply variant emitted when the relay accepted the invite code and returned the inviting group's preview.
+     * Reports that the relay accepted the invite code and returned the inviting group's preview.
      *
-     * @apiNote Surfaces as the {@code GetInviteGroupInfoResponseSuccess} case in {@code WAWebGroupQueryJob};
-     * the caller's "preview group from invite link" UI binds subject, picture, owner, and admin list from
-     * {@link #group()} and the participant count from {@link #groupSize()}.
+     * <p>The caller binds subject, picture, owner, and admin list from {@link #group()} and the participant
+     * count from {@link #groupSize()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetInviteGroupInfoResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsInviteLinkGroupInfoMixin")
     final class Success implements SmaxGroupsGetInviteGroupInfoResponse {
         /**
-         * The participant count reported by the relay; clamped server-side to {@code [0, 19999]}.
+         * Holds the participant count reported by the relay; clamped server-side to {@code [0, 19999]}.
          */
         private final int groupSize;
 
         /**
-         * The raw {@code <group/>} subtree carrying the {@code InviteLinkGroupInfoMixin} payload.
+         * Holds the raw {@code <group/>} subtree carrying the invite-link group-info payload.
          */
         private final Node group;
 
         /**
          * Constructs a {@link Success} reply.
          *
-         * @apiNote {@code groupSize} mirrors the relay's clamp; passing {@code 0} is valid for an empty preview.
+         * <p>{@code groupSize} mirrors the relay's clamp; {@code 0} is valid for an empty preview.
          *
          * @param groupSize the participant count
          * @param group     the {@code <group/>} sub-node; never {@code null}
@@ -99,10 +98,10 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Returns the raw {@code <group/>} sub-node carrying the {@code InviteLinkGroupInfoMixin} payload.
+         * Returns the raw {@code <group/>} sub-node carrying the invite-link group-info payload.
          *
-         * @apiNote Cobalt exposes the subtree verbatim so callers project subject, picture, owner, and admin list
-         * directly via {@link Node#getAttributeAsString(String)} without committing to the full mixin schema.
+         * <p>The subtree is exposed verbatim so callers project subject, picture, owner, and admin list
+         * directly via {@link Node#getAttributeAsString(String)} without committing to the full schema.
          *
          * @return the {@code <group/>} node; never {@code null}
          */
@@ -111,13 +110,14 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Tries to parse a {@link Success} variant from {@code node}.
+         * Parses the inbound stanza into a {@link Success} variant.
          *
-         * @apiNote Matches when the IQ is a {@code type="result"} envelope carrying a {@code <group>} child; the
+         * <p>Matches when the IQ is a {@code type="result"} envelope carrying a {@code <group>} child; the
          * {@code size} attribute defaults to {@code 0} when the relay omits it.
          *
          * @param node the inbound IQ stanza
-         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the stanza
+         *         does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetInviteGroupInfoResponseSuccess",
                 exports = "parseGetInviteGroupInfoResponseSuccess",
@@ -139,7 +139,7 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Compares this success to {@code obj} for value equality across every field.
+         * Compares this variant to {@code obj} for value equality across every field.
          *
          * @param obj the other object
          * @return {@code true} when {@code obj} is a {@link Success} with identical fields
@@ -179,21 +179,21 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request as malformed, unauthorised, or referencing a
-     * revoked or non-existent invite code.
+     * Reports that the relay rejected the request as malformed, unauthorised, or referencing a revoked or
+     * non-existent invite code.
      *
-     * @apiNote Surfaces as the {@code GetInviteGroupInfoResponseClientError} case in {@code WAWebGroupQueryJob};
-     * the caller's UI typically maps the {@link #errorCode()} into a "this invite link is no longer valid" toast.
+     * <p>The caller's UI typically maps {@link #errorCode()} into a "this invite link is no longer valid"
+     * surface.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetInviteGroupInfoResponseClientError")
     final class ClientError implements SmaxGroupsGetInviteGroupInfoResponse {
         /**
-         * The numeric error code echoed by the relay (HTTP-style 4xx).
+         * Holds the numeric error code echoed by the relay (HTTP-style 4xx).
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -227,12 +227,14 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from {@code node}.
+         * Parses the inbound stanza into a {@link ClientError} variant.
          *
-         * @apiNote Matches when the IQ is a {@code type="error"} envelope carrying an {@code <error code="4xx"/>} child.
+         * <p>Matches when the IQ is a {@code type="error"} envelope carrying an {@code <error code="4xx"/>}
+         * child.
          *
          * @param node the inbound IQ stanza
-         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the stanza
+         *         does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetInviteGroupInfoResponseClientError",
                 exports = "parseGetInviteGroupInfoResponseClientError",
@@ -258,7 +260,7 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Compares this error to {@code obj} for value equality across both fields.
+         * Compares this variant to {@code obj} for value equality across both fields.
          *
          * @param obj the other object
          * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
@@ -298,20 +300,19 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Reports a transient relay-side failure.
      *
-     * @apiNote Surfaces as the {@code GetInviteGroupInfoResponseServerError} case in {@code WAWebGroupQueryJob},
-     * where it is typically logged and surfaced as a retry-eligible relay outage rather than caller error.
+     * <p>Callers typically log it and surface a retry-eligible relay outage rather than a caller error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetInviteGroupInfoResponseServerError")
     final class ServerError implements SmaxGroupsGetInviteGroupInfoResponse {
         /**
-         * The numeric error code echoed by the relay (HTTP-style 5xx).
+         * Holds the numeric error code echoed by the relay (HTTP-style 5xx).
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -345,12 +346,14 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from {@code node}.
+         * Parses the inbound stanza into a {@link ServerError} variant.
          *
-         * @apiNote Matches when the IQ is a {@code type="error"} envelope carrying an {@code <error code="5xx"/>} child.
+         * <p>Matches when the IQ is a {@code type="error"} envelope carrying an {@code <error code="5xx"/>}
+         * child.
          *
          * @param node the inbound IQ stanza
-         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the stanza
+         *         does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetInviteGroupInfoResponseServerError",
                 exports = "parseGetInviteGroupInfoResponseServerError",
@@ -376,7 +379,7 @@ public sealed interface SmaxGroupsGetInviteGroupInfoResponse extends SmaxOperati
         }
 
         /**
-         * Compares this error to {@code obj} for value equality across both fields.
+         * Compares this variant to {@code obj} for value equality across both fields.
          *
          * @param obj the other object
          * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields

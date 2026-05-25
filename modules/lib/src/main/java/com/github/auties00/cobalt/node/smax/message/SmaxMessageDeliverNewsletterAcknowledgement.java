@@ -12,64 +12,50 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <ack class="message">} stanza the client emits
- * to confirm or NACK an inbound newsletter delivery; either the
- * positive {@link SuccessAck} or the negative {@link ErrorAck}.
+ * Closes the set of outbound {@code <ack class="message">} stanzas the client emits to confirm or
+ * reject an inbound newsletter delivery.
  *
- * @apiNote
- * Used by callers replying to a delivered
- * {@link SmaxMessageDeliverNewsletterResponse} stanza. {@link SuccessAck}
- * confirms the message was decoded and persisted; {@link ErrorAck}
- * stamps the fixed {@code error="406"} marker to signal a decryption,
- * shape, or schema failure that the relay should treat as
- * not-acknowledged.
+ * <p>A delivery surfaced as {@link SmaxMessageDeliverNewsletterResponse} is answered with exactly one
+ * variant: {@link SuccessAck} when the inbound message decoded and persisted cleanly, or
+ * {@link ErrorAck} when it failed to decrypt, was malformed, or did not match the expected schema.
+ * The error variant stamps the fixed {@code error="406"} marker so the relay treats the reply as a
+ * definitive not-acknowledged signal. Both variants carry the same correlation triplet copied from
+ * the inbound stanza: its id, its sender JID (which becomes the ack's {@code to}), and its type.
  */
 public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends SmaxOperation.Request
         permits SmaxMessageDeliverNewsletterAcknowledgement.SuccessAck, SmaxMessageDeliverNewsletterAcknowledgement.ErrorAck {
 
     /**
-     * The positive ack variant the client emits after successfully
-     * consuming a newsletter delivery.
+     * Represents the positive acknowledgement emitted after a newsletter delivery decoded and
+     * persisted cleanly.
      *
-     * @apiNote
-     * Pick this variant when the inbound message decoded and
-     * persisted cleanly; the relay treats it as a successful delivery
-     * receipt.
+     * <p>The relay treats this stanza as a successful delivery receipt for the inbound message named
+     * by the carried correlation triplet.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutMessageDeliverNewsletterResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxOutMessageDeliverCommonAckMixin")
     final class SuccessAck implements SmaxMessageDeliverNewsletterAcknowledgement {
         /**
-         * The {@code id} of the inbound message being acknowledged.
+         * Holds the {@code id} of the inbound message being acknowledged.
          */
         private final String stanzaId;
 
         /**
-         * The {@code from} of the inbound message; becomes the
-         * ack's {@code to}.
+         * Holds the {@code from} of the inbound message, which becomes the ack's {@code to}.
          */
         private final Jid notificationFrom;
 
         /**
-         * The {@code type} of the inbound message; echoed back as the
-         * ack's {@code type}.
+         * Holds the {@code type} of the inbound message, echoed back as the ack's {@code type}.
          */
         private final String stanzaType;
 
         /**
-         * Constructs a positive ack carrying the inbound stanza's
-         * correlation triplet.
+         * Constructs a positive ack carrying the inbound stanza's correlation triplet.
          *
-         * @apiNote
-         * Use this when assembling a {@link SuccessAck} to confirm a
-         * newsletter delivery the client decoded successfully.
-         *
-         * @param stanzaId         the inbound message id; never
-         *                         {@code null}
-         * @param notificationFrom the inbound sender JID; never
-         *                         {@code null}
-         * @param stanzaType       the inbound message type; never
-         *                         {@code null}
+         * @param stanzaId         the inbound message id; never {@code null}
+         * @param notificationFrom the inbound sender JID; never {@code null}
+         * @param stanzaType       the inbound message type; never {@code null}
          * @throws NullPointerException if any argument is {@code null}
          */
         public SuccessAck(String stanzaId, Jid notificationFrom, String stanzaType) {
@@ -106,16 +92,14 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
         }
 
         /**
-         * Builds the outbound {@code <ack class="message">} stanza
-         * ready for dispatch.
+         * Builds the outbound {@code <ack class="message">} stanza ready for dispatch.
          *
-         * @apiNote
-         * The stanza has shape
+         * <p>The resulting stanza has shape
          * {@snippet lang=xml :
          * <ack to="<notificationFrom>" class="message" id="<stanzaId>" type="<stanzaType>"/>
          * }
          *
-         * @return a {@link NodeBuilder} carrying the ack stanza
+         * @return a {@link NodeBuilder} carrying the ack stanza; never {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxOutMessageDeliverNewsletterResponseSuccess",
                 exports = "makeNewsletterResponseSuccess",
@@ -131,11 +115,10 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
         }
 
         /**
-         * Compares this ack to another for value equality.
+         * Compares this ack to another object for value equality across every field.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a {@link SuccessAck}
-         *         with identical fields
+         * @return {@code true} when {@code obj} is a {@link SuccessAck} with identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -164,9 +147,7 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
         /**
          * Returns a debug-friendly representation of this ack.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of any stable contract.
          *
          * @return the string form
          */
@@ -179,49 +160,37 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
     }
 
     /**
-     * The negative ack variant the client emits when it could not
-     * consume a newsletter delivery.
+     * Represents the negative acknowledgement emitted when a newsletter delivery could not be
+     * consumed.
      *
-     * @apiNote
-     * Pick this variant when the inbound message failed to decrypt,
-     * was malformed, or did not match the expected schema; the relay
-     * treats the fixed {@code error="406"} marker as a definitive
-     * not-acknowledged signal.
+     * <p>This variant is used when the inbound message failed to decrypt, was malformed, or did not
+     * match the expected schema. The fixed {@code error="406"} marker tells the relay to treat the
+     * delivery as definitively not acknowledged.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutMessageDeliverNewsletterResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxOutMessageDeliverCommonAckMixin")
     final class ErrorAck implements SmaxMessageDeliverNewsletterAcknowledgement {
         /**
-         * The {@code id} of the inbound message being NACK'd.
+         * Holds the {@code id} of the inbound message being rejected.
          */
         private final String stanzaId;
 
         /**
-         * The {@code from} of the inbound message; becomes the
-         * ack's {@code to}.
+         * Holds the {@code from} of the inbound message, which becomes the ack's {@code to}.
          */
         private final Jid notificationFrom;
 
         /**
-         * The {@code type} of the inbound message; echoed back as the
-         * ack's {@code type}.
+         * Holds the {@code type} of the inbound message, echoed back as the ack's {@code type}.
          */
         private final String stanzaType;
 
         /**
-         * Constructs a negative ack carrying the inbound stanza's
-         * correlation triplet.
+         * Constructs a negative ack carrying the inbound stanza's correlation triplet.
          *
-         * @apiNote
-         * Use this when assembling an {@link ErrorAck} to reject a
-         * newsletter delivery the client could not consume.
-         *
-         * @param stanzaId         the inbound message id; never
-         *                         {@code null}
-         * @param notificationFrom the inbound sender JID; never
-         *                         {@code null}
-         * @param stanzaType       the inbound message type; never
-         *                         {@code null}
+         * @param stanzaId         the inbound message id; never {@code null}
+         * @param notificationFrom the inbound sender JID; never {@code null}
+         * @param stanzaType       the inbound message type; never {@code null}
          * @throws NullPointerException if any argument is {@code null}
          */
         public ErrorAck(String stanzaId, Jid notificationFrom, String stanzaType) {
@@ -258,17 +227,14 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
         }
 
         /**
-         * Builds the outbound {@code <ack error="406">} stanza ready
-         * for dispatch.
+         * Builds the outbound {@code <ack error="406">} stanza ready for dispatch.
          *
-         * @apiNote
-         * The stanza has shape
+         * <p>The resulting stanza has shape
          * {@snippet lang=xml :
          * <ack error="406" to="<notificationFrom>" class="message" id="<stanzaId>" type="<stanzaType>"/>
          * }
          *
-         * @return a {@link NodeBuilder} carrying the negative-ack
-         *         stanza
+         * @return a {@link NodeBuilder} carrying the negative-ack stanza; never {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxOutMessageDeliverNewsletterResponseError",
                 exports = "makeNewsletterResponseError",
@@ -285,11 +251,10 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
         }
 
         /**
-         * Compares this ack to another for value equality.
+         * Compares this ack to another object for value equality across every field.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is an {@link ErrorAck}
-         *         with identical fields
+         * @return {@code true} when {@code obj} is an {@link ErrorAck} with identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -318,9 +283,7 @@ public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends Smax
         /**
          * Returns a debug-friendly representation of this ack.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of any stable contract.
          *
          * @return the string form
          */

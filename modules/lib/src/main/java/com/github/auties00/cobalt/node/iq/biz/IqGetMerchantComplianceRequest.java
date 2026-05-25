@@ -13,30 +13,37 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The typed outbound {@code <iq xmlns="w:biz:merchant_info" type="get">} stanza that requests the regulatory-compliance bundle for one or more merchants.
+ * Models the typed outbound {@code <iq xmlns="w:biz:merchant_info" type="get">} stanza that requests the regulatory-compliance bundle for one or more merchants.
  *
- * @apiNote
- * Use this request from the India e-commerce surfaces (compliance entry-point banner, post-thread legal-entity row, grievance officer details) to fetch the merchant's compliance bundle for rendering; one stanza can carry multiple merchant JIDs so a list view can fetch all entries at once. The matching {@link IqGetMerchantComplianceResponse} surfaces the entity name, the entity type, the registered flag, the customer-care contact triple and the grievance-officer block per merchant.
+ * <p>The India e-commerce surfaces (compliance entry-point banner, post-thread legal-entity row,
+ * grievance officer details) use this request to fetch the merchant's compliance bundle for
+ * rendering. One stanza can carry multiple merchant JIDs so a list view fetches all entries at
+ * once. The matching {@link IqGetMerchantComplianceResponse} surfaces the entity name, the entity
+ * type, the registered flag, the customer-care contact triple and the grievance-officer block per
+ * merchant.
  *
  * @implNote
- * This implementation targets the deprecated WAP path of {@code WAWebMerchantComplianceJob.getMerchantCompliance}; WA Web routes through {@code WAWebBizGetMerchantCompliance} first when {@code graphQLForGetComplianceInfo} is set and only falls back to this stanza shape when the GraphQL path is disabled.
+ * This implementation targets the deprecated WAP path of {@code WAWebMerchantComplianceJob.getMerchantCompliance};
+ * WA Web routes through {@code WAWebBizGetMerchantCompliance} first when {@code graphQLForGetComplianceInfo}
+ * is set and only falls back to this stanza shape when the GraphQL path is disabled.
  */
 @WhatsAppWebModule(moduleName = "WAWebMerchantComplianceJob")
 public final class IqGetMerchantComplianceRequest implements IqOperation.Request {
     /**
-     * The merchant JIDs whose compliance bundles are being queried, emitted as the {@code jid} attribute of one {@code <merchant_info/>} child per entry.
+     * Holds the merchant JIDs whose compliance bundles are being queried.
+     *
+     * <p>Each entry is emitted as the {@code jid} attribute of one {@code <merchant_info/>} child.
      */
     private final List<Jid> businessJids;
 
     /**
-     * Constructs a typed request.
+     * Constructs a typed request over the given merchant JIDs.
      *
-     * @apiNote
-     * Call this constructor with the merchant JIDs that should be queried; the list must contain at least one entry because the relay rejects an empty fan-out.
+     * <p>The list must contain at least one entry because the relay rejects an empty fan-out.
      *
      * @param businessJids the merchant JIDs; never {@code null} and must be non-empty
      * @throws NullPointerException     if {@code businessJids} is {@code null}
-     * @throws IllegalArgumentException when {@code businessJids} is empty
+     * @throws IllegalArgumentException if {@code businessJids} is empty
      */
     public IqGetMerchantComplianceRequest(List<Jid> businessJids) {
         Objects.requireNonNull(businessJids, "businessJids cannot be null");
@@ -49,8 +56,7 @@ public final class IqGetMerchantComplianceRequest implements IqOperation.Request
     /**
      * Returns the queried merchant JIDs.
      *
-     * @apiNote
-     * Use this getter to read back the merchant JIDs that the stanza will fan out to; the list preserves the caller-supplied order.
+     * <p>The list preserves the caller-supplied order, which the fan-out mirrors on the wire.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -62,7 +68,10 @@ public final class IqGetMerchantComplianceRequest implements IqOperation.Request
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by the legacy fallback branch of {@code WAWebMerchantComplianceJob.getMerchantCompliance}: one {@code <merchant_info jid/>} child per queried JID, wrapped in an {@code <iq xmlns="w:biz:merchant_info" type="get"/>} envelope routed to the WhatsApp service.
+     * This implementation materialises the WAP envelope produced by the legacy fallback branch of
+     * {@code WAWebMerchantComplianceJob.getMerchantCompliance}: one {@code <merchant_info jid/>}
+     * child per queried JID, wrapped in an {@code <iq xmlns="w:biz:merchant_info" type="get"/>}
+     * envelope routed to the WhatsApp service via {@link JidServer#user()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMerchantComplianceJob",

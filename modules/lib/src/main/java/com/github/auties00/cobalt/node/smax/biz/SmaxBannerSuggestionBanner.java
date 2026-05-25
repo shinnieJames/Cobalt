@@ -9,61 +9,52 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <banner/>} grandchild of the CTWA banner-suggestion notification,
- * bundling the {@link SmaxBannerSuggestionConfig}, {@link SmaxBannerSuggestionContent},
- * optional {@link SmaxBannerSuggestionAction}, and the
+ * Models the {@code <banner/>} grandchild of the CTWA banner-suggestion
+ * notification, bundling the {@link SmaxBannerSuggestionConfig},
+ * {@link SmaxBannerSuggestionContent}, optional
+ * {@link SmaxBannerSuggestionAction}, and the
  * {@link SmaxBannerSuggestionNativeAction native-action} list.
- *
- * @apiNote
+ * <p>
  * Carries the full rich-content payload that drives the WhatsApp Business
- * "suggested banner" panel rendered by
- * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion}: expiry, visual
- * style, headline/body/highlight copy, deep-link target, and per-platform
- * deep-link overrides.
- *
- * @implNote
- * This implementation delegates the {@code <native_action/>} cardinality
- * check (0..50) to {@link SmaxBannerSuggestionNativeActionsMixin#of(Node)}
- * so the mixin's bound fires before any individual entry is parsed,
- * matching WA Web's
- * {@code WASmaxInBizCtwaActionNativeActionsMixinMixin.parseNativeActionsMixinMixin}
- * sequence.
+ * "suggested banner" panel: expiry, visual style, headline, body, highlight
+ * copy, deep-link target, and per-platform deep-link overrides.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
 public final class SmaxBannerSuggestionBanner {
     /**
-     * The mandatory {@code <config/>} projection holding the banner
+     * Holds the mandatory {@code <config/>} projection carrying the banner
      * lifecycle attributes.
      */
     private final SmaxBannerSuggestionConfig config;
 
     /**
-     * The mandatory {@code <content/>} projection holding the banner copy.
+     * Holds the mandatory {@code <content/>} projection carrying the banner
+     * copy.
      */
     private final SmaxBannerSuggestionContent content;
 
     /**
-     * The optional {@code <action/>} projection holding the deep-link triple.
+     * Holds the optional {@code <action/>} projection carrying the deep-link
+     * triple.
      */
     private final SmaxBannerSuggestionAction action;
 
     /**
-     * The optional native-actions list (0..50 entries).
+     * Holds the optional native-actions list of 0 to 50 entries.
      */
     private final List<SmaxBannerSuggestionNativeAction> nativeActions;
 
     /**
      * Constructs a banner from already-validated sub-projections.
-     *
-     * @apiNote
-     * Cobalt callers normally obtain a banner by parsing a stanza via
+     * <p>
+     * Callers normally obtain a banner by parsing a stanza via
      * {@link #of(Node)}; this constructor is exposed for tests and for
      * hand-built fixtures.
      *
      * @param config        the {@link SmaxBannerSuggestionConfig} projection; never {@code null}
      * @param content       the {@link SmaxBannerSuggestionContent} projection; never {@code null}
      * @param action        the optional {@link SmaxBannerSuggestionAction} projection; may be {@code null}
-     * @param nativeActions the native actions list (0..50 entries); may be {@code null} (treated as empty)
+     * @param nativeActions the native actions list (0 to 50 entries); may be {@code null} (treated as empty)
      * @throws NullPointerException if {@code config} or {@code content} is {@code null}
      */
     public SmaxBannerSuggestionBanner(SmaxBannerSuggestionConfig config, SmaxBannerSuggestionContent content, SmaxBannerSuggestionAction action, List<SmaxBannerSuggestionNativeAction> nativeActions) {
@@ -75,8 +66,7 @@ public final class SmaxBannerSuggestionBanner {
 
     /**
      * Returns the {@link SmaxBannerSuggestionConfig} projection.
-     *
-     * @apiNote
+     * <p>
      * Carries the {@code expires_at}, {@code display}, and {@code revoked}
      * attributes; consumers check {@link SmaxBannerSuggestionConfig#revoked()}
      * first to short-circuit rendering when the banner has been pulled.
@@ -89,11 +79,10 @@ public final class SmaxBannerSuggestionBanner {
 
     /**
      * Returns the {@link SmaxBannerSuggestionContent} projection.
-     *
-     * @apiNote
+     * <p>
      * Carries the {@code locale} attribute, the {@code <heading>},
-     * {@code <body>}, and {@code <highlight>} mandatory copy, and the
-     * three optional localised parallels.
+     * {@code <body>}, and {@code <highlight>} mandatory copy, and the three
+     * optional localised parallels.
      *
      * @return the content projection; never {@code null}
      */
@@ -103,12 +92,10 @@ public final class SmaxBannerSuggestionBanner {
 
     /**
      * Returns the optional {@link SmaxBannerSuggestionAction} projection.
-     *
-     * @apiNote
-     * Empty when the banner ships no {@code <action/>} element; consumers
-     * fall back to the matching
-     * {@link SmaxBannerSuggestionNativeAction native action} entry for the
-     * client platform.
+     * <p>
+     * Empty when the banner ships no {@code <action/>} element; consumers fall
+     * back to the matching {@link SmaxBannerSuggestionNativeAction native action}
+     * entry for the client platform.
      *
      * @return an {@link Optional} carrying the action projection, or empty
      *         when the {@code <action/>} element is absent
@@ -120,13 +107,12 @@ public final class SmaxBannerSuggestionBanner {
     /**
      * Returns the {@link SmaxBannerSuggestionNativeAction native-action}
      * entries.
-     *
-     * @apiNote
+     * <p>
      * Each entry pairs a {@code platform} string with a deep link plus a
      * minimum app version; consumers pick the entry matching the local
      * platform.
      *
-     * @return an unmodifiable list of 0..50 entries; never {@code null}
+     * @return an unmodifiable list of 0 to 50 entries; never {@code null}
      */
     public List<SmaxBannerSuggestionNativeAction> nativeActions() {
         return nativeActions;
@@ -134,20 +120,16 @@ public final class SmaxBannerSuggestionBanner {
 
     /**
      * Parses the projection from a {@code <banner/>} node.
+     * <p>
+     * Returns empty whenever the node tag is wrong, either mandatory child is
+     * missing, the optional {@code <action/>} child fails to parse, or the
+     * {@code <native_action/>} cardinality bound (0 to 50) is breached.
      *
-     * @apiNote
-     * Returns empty whenever the node tag is wrong, either mandatory child
-     * is missing, the optional {@code <action/>} child fails to parse, or
-     * the {@code <native_action/>} cardinality bound (0..50) is breached.
-     *
-     * @implNote
-     * This implementation walks the children in WA Web's documented order:
+     * @implNote This implementation walks the children in order:
      * {@code config}, {@code content}, optional {@code action}, then the
      * {@link SmaxBannerSuggestionNativeActionsMixin} bound check. The
-     * cardinality is enforced by the mixin so it short-circuits before
-     * any {@code <native_action/>} child is parsed, matching the WA Web
-     * {@code mapChildrenWithTag(..., 0, 50, ...)} semantics.
-     *
+     * cardinality is enforced by the mixin so it short-circuits before any
+     * {@code <native_action/>} child is parsed.
      * @param node the candidate {@code <banner/>} node; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty when
      *         parsing fails at any step
@@ -195,8 +177,8 @@ public final class SmaxBannerSuggestionBanner {
     }
 
     /**
-     * Compares this banner to {@code obj} for structural equality on all
-     * four sub-projections.
+     * Compares this banner to {@code obj} for structural equality on all four
+     * sub-projections.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionBanner}

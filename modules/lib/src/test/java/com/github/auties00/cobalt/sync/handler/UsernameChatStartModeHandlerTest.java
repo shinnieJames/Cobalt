@@ -28,23 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link UsernameChatStartModeHandler}'s forward-looking
- * adapter for the {@code usernameChatStartMode} action.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * persists the resolved {@link ChatStartMode} on
- * {@link WhatsAppStore#setUsernameChatStartMode(ChatStartMode)}, the
- * malformed branches (missing value, missing
- * {@code chatStartMode} field), the {@link SyncdOperation#REMOVE}
- * unsupported branch, and the default conflict-resolution tiebreaker.
- * WA Web ships no concrete handler so the test surface enforces the
- * Cobalt-inferred shape.
- *
- * @implNote
- * Each test instantiates a fresh handler against a temporary store so
- * the {@code usernameChatStartMode} field starts at its default value
- * for every case.
+ * Verifies {@link UsernameChatStartModeHandler}: applying an incoming
+ * {@code usernameChatStartMode} mutation and asserting the resolved
+ * {@link ChatStartMode} persisted on
+ * {@link WhatsAppStore#setUsernameChatStartMode(ChatStartMode)}. Each test
+ * instantiates a fresh handler against a temporary store, so the
+ * {@code usernameChatStartMode} field starts unset.
  */
 @DisplayName("UsernameChatStartModeHandler")
 class UsernameChatStartModeHandlerTest {
@@ -55,14 +44,6 @@ class UsernameChatStartModeHandlerTest {
     private WhatsAppClient client;
     private UsernameChatStartModeHandler handler;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} so the
-     * username chat-start mode starts unset.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -70,19 +51,7 @@ class UsernameChatStartModeHandlerTest {
         handler = new UsernameChatStartModeHandler();
     }
 
-    /**
-     * Wraps the given action and operation into a trusted mutation
-     * under the canonical {@code [actionName]} index.
-     *
-     * @apiNote
-     * Pass {@code null} for {@code action} to exercise the
-     * missing-action malformed branch.
-     *
-     * @param action the {@code usernameChatStartMode} action, or {@code null} to omit
-     * @param op     the mutation operation
-     * @param ts     the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null action omits the payload to drive the missing-action malformed branch.
     private DecryptedMutation.Trusted build(UsernameChatStartModeAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {

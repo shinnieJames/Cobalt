@@ -19,15 +19,12 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that archive or unarchive a chat.
  *
- * @apiNote
- * Drives the chat-archive UI affordance through
- * {@link com.github.auties00.cobalt.client.WhatsAppClient}: when the user
- * archives or unarchives a chat the resulting {@link SyncPendingMutation}
- * values are queued for outbound app-state sync so linked devices reflect
- * the same archive state. The factory is the outgoing-mutation counterpart
- * of {@link com.github.auties00.cobalt.sync.handler.ArchiveChatHandler}; the
- * handler owns inbound application via {@code applyMutations} and
- * {@code resolveConflicts}.
+ * <p>When the user archives or unarchives a chat through
+ * {@link com.github.auties00.cobalt.client.WhatsAppClient}, the resulting
+ * {@link SyncPendingMutation} values are queued for outbound app-state sync so
+ * linked devices reflect the same archive state. This factory builds the
+ * outgoing mutations; the inbound counterpart is
+ * {@link com.github.auties00.cobalt.sync.handler.ArchiveChatHandler}.
  *
  * @implNote
  * This implementation accepts a pre-built {@link SyncActionMessageRange}
@@ -40,25 +37,20 @@ public final class ArchiveChatMutationFactory {
     /**
      * The pin-chat factory consulted to emit the companion unpin mutation when archiving.
      *
-     * @apiNote
-     * Held as a constructor-injected dependency rather than a service-locator
-     * lookup so this factory composes cleanly under Cobalt's DI pattern; see
-     * {@link #getMutationsForArchive} for the call site.
-     *
      * @implNote
      * This implementation mirrors WA Web's
-     * {@code WAWebArchiveChatSync.getMutationsForArchive} which calls
-     * {@code WAWebPinChatSync.PinChatSync.getPinMutation(timestamp, false, jid)};
-     * Cobalt routes the same call through {@link PinChatMutationFactory}.
+     * {@code WAWebArchiveChatSync.getMutationsForArchive}, which unpins the
+     * chat as a side effect of archiving it; Cobalt routes the unpin through
+     * {@link PinChatMutationFactory#getPinMutation} from
+     * {@link #getMutationsForArchive(Instant, boolean, Jid, SyncActionMessageRange)}.
      */
     private final PinChatMutationFactory pinChatMutationFactory;
 
     /**
-     * Creates an instance bound to the given pin-chat factory.
+     * Creates a factory bound to the given pin-chat factory.
      *
-     * @apiNote
-     * The constructor is the wiring seam for the
-     * archive-implies-unpin behaviour described on
+     * <p>The injected factory is the wiring seam for the archive-implies-unpin
+     * behaviour of
      * {@link #getMutationsForArchive(Instant, boolean, Jid, SyncActionMessageRange)};
      * a single instance is shared across the client.
      *
@@ -73,16 +65,15 @@ public final class ArchiveChatMutationFactory {
     /**
      * Returns a {@link SyncPendingMutation} that archives or unarchives the given chat.
      *
-     * @apiNote
-     * Call this when archiving or unarchiving a single chat. The mutation
+     * <p>Call this when archiving or unarchiving a single chat. The mutation
      * index follows
      * {@snippet :
      *     ["archive", chatJid.toString()]
      * }
      * and the {@link ArchiveChatAction} sub-message carries the
-     * {@code archived} flag plus the supplied {@link SyncActionMessageRange}
-     * so receive-side conflict resolution can compare ranges. Callers that
-     * want the archive-also-unpins behaviour should prefer
+     * {@code archived} flag plus the supplied {@link SyncActionMessageRange} so
+     * receive-side conflict resolution can compare ranges. Callers that want
+     * the archive-also-unpins behaviour should prefer
      * {@link #getMutationsForArchive(Instant, boolean, Jid, SyncActionMessageRange)}.
      *
      * @implNote
@@ -128,18 +119,17 @@ public final class ArchiveChatMutationFactory {
     /**
      * Returns the full set of {@link SyncPendingMutation} values that archive or unarchive a chat.
      *
-     * @apiNote
-     * Prefer this entry point over
+     * <p>Archiving a chat in WhatsApp Web always unpins it as a side effect, so
+     * this method emits both mutations in canonical order so linked devices see
+     * them in one batch. Prefer this entry point over
      * {@link #getArchiveChatMutation(Instant, boolean, Jid, SyncActionMessageRange)}
-     * when triggering the archive UI: archiving a chat in WhatsApp Web always
-     * unpins it as a side effect, and this method emits both mutations in the
-     * canonical order so linked devices see them in one batch.
+     * when triggering the archive UI. The unpin mutation is appended only when
+     * {@code archived} is {@code true}.
      *
      * @implNote
      * This implementation mirrors the {@code [archiveMutation, unpinMutation]}
-     * shape of WA Web's {@code WAWebArchiveChatSync.getMutationsForArchive};
-     * the unpin is appended only when {@code archived} is {@code true}, and
-     * is built via {@link PinChatMutationFactory#getPinMutation} with the
+     * shape of WA Web's {@code WAWebArchiveChatSync.getMutationsForArchive}; the
+     * unpin is built via {@link PinChatMutationFactory#getPinMutation} with the
      * shared {@code timestamp} so the two mutations are timestamp-paired.
      *
      * @param timestamp    the mutation timestamp shared by both mutations

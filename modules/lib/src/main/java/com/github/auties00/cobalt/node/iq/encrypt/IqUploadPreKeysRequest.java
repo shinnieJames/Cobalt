@@ -16,19 +16,17 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads the local Signal pre-key
- * bundle to the relay.
+ * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads the local Signal pre-key bundle
+ * to the relay.
  *
- * @apiNote
- * Used during steady-state operation to replenish the server-side stash of one-time pre-keys.
- * WA Web fires this on two triggers: (1) the relay's {@code <notification type="encrypt"><count
- * value="N"/></notification>} push handled by {@code WAWebHandlePreKeyLow}, which signals that the
- * server-side stash is low; (2) a {@link IqDigestKeyResponse digest mismatch} that invalidates the
- * local bundle and forces a fresh upload. WA Web's batch size is fixed at
- * {@code UPLOAD_KEYS_COUNT = 812}; Cobalt accepts any non-empty list. The request body packs five
- * flat children: {@code <registration/>} (four-byte big-endian), {@code <type/>} (one byte),
- * {@code <identity/>} (thirty-two bytes), {@code <list/>} (one {@code <key/>} per pre-key) and
- * {@code <skey/>} (the signed pre-key subtree).
+ * <p>This request replenishes the server-side stash of one-time pre-keys during steady-state
+ * operation. WA Web fires it on two triggers: a {@code <notification type="encrypt"><count
+ * value="N"/></notification>} push that signals the server-side stash is low, and a
+ * {@link IqDigestKeyResponse digest mismatch} that invalidates the local bundle and forces a fresh
+ * upload. WA Web's batch size is fixed at {@code UPLOAD_KEYS_COUNT = 812}; Cobalt accepts any
+ * non-empty list. The request body packs five flat children: {@code <registration/>} (four-byte
+ * big-endian), {@code <type/>} (one byte), {@code <identity/>} (thirty-two bytes), {@code <list/>}
+ * (one {@code <key/>} per pre-key) and {@code <skey/>} (the signed pre-key subtree).
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
 public final class IqUploadPreKeysRequest implements IqOperation.Request {
@@ -63,8 +61,7 @@ public final class IqUploadPreKeysRequest implements IqOperation.Request {
     /**
      * Constructs an upload request for the supplied key bundle.
      *
-     * @apiNote
-     * The {@code preKeys} list is defensively copied; the caller is responsible for marking each
+     * <p>The {@code preKeys} list is defensively copied; the caller is responsible for marking each
      * uploaded {@code id} against the local Signal store so identifiers are not reused.
      *
      * @param registrationId    the local device's registration id
@@ -138,14 +135,16 @@ public final class IqUploadPreKeysRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
+     * <p>Produces an {@code <iq>} addressed to {@link JidServer#user()} with {@code xmlns="encrypt"}
+     * and {@code type="set"}, carrying the five flat children ({@code <registration/>},
+     * {@code <type/>}, {@code <identity/>}, {@code <list/>}, {@code <skey/>}) in order. Each pre-key
+     * is rendered through {@link IqUploadPreKeysPreKey#toNode()} and appended to the {@code <list/>}
+     * payload.
+     *
      * @implNote
-     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
-     * {@code xmlns="encrypt"} and {@code type="set"}, carrying the five flat children
-     * ({@code <registration/>}, {@code <type/>}, {@code <identity/>}, {@code <list/>},
-     * {@code <skey/>}) in the order WA Web's {@code uploadPreKeys} writes them. The registration
-     * id is packed via {@link DataUtils#intToBytes(int, int) DataUtils.intToBytes(registrationId, 4)}
-     * so the wire content is four bytes regardless of magnitude. Each pre-key is rendered through
-     * {@link IqUploadPreKeysPreKey#toNode()} and appended to the {@code <list/>} payload.
+     * The registration id is packed via
+     * {@link DataUtils#intToBytes(int, int) DataUtils.intToBytes(registrationId, 4)} so the wire
+     * content is four bytes regardless of magnitude.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUploadPreKeysJob",

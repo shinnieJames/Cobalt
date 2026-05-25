@@ -13,31 +13,27 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Applies the {@code primary_feature} app-state action that distributes
- * the primary device's advertised feature flag set across linked devices.
+ * Applies the {@code primary_feature} app-state action that distributes the
+ * primary device's advertised feature flag set across linked devices.
  *
- * @apiNote
- * Drives the multi-device feature negotiation surface: every paired
- * device learns the union of feature strings the primary advertises so
- * companion devices can light up or hide UI affordances accordingly.
- * Within a batch only the latest mutation is persisted; per-mutation
- * results report the per-entry outcome. The mutation index is the
- * singleton {@snippet :
+ * <p>Every paired device learns the union of feature strings the primary
+ * advertises so companion devices can light up or hide UI affordances
+ * accordingly. Within a batch only the latest mutation by timestamp is
+ * persisted; per-mutation results report the per-entry outcome. The mutation
+ * index is the singleton {@snippet :
  *     ["primary_feature"]
  * }
  *
+ * <p>An empty {@link PrimaryFeatureAction#flags()} list is treated as success
+ * (the only malformed-value branch is a missing action payload).
+ *
  * @implNote
  * This implementation overrides
- * {@link #applyMutationBatch(WhatsAppClient, List)} to
- * implement the latest-wins semantics inside a single store write
- * (mirroring WA Web's batch loop that tracks the highest-timestamp
- * mutation and flushes only that one). The single-mutation
- * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
- * adapter persists the same mutation immediately for callers that
- * dispatch outside the batch path. WA Web's {@code WALogger.WARN}
- * batch counters are dropped; an empty {@link PrimaryFeatureAction#flags()}
- * list is treated as success here as in WA Web (the only
- * malformed-value branch is missing flags).
+ * {@link #applyMutationBatch(WhatsAppClient, List)} to implement the
+ * latest-wins semantics inside a single store write; the single-mutation
+ * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)} adapter
+ * persists the same mutation immediately for callers that dispatch outside the
+ * batch path. WA Web's {@code WARN} batch counters are dropped.
  */
 @WhatsAppWebModule(moduleName = "WAWebPrimaryFeatureSync")
 public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
@@ -45,13 +41,9 @@ public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton primary-feature sync handler.
      *
-     * @apiNote
-     * Used by the sync handler registry; consumers should never need to
-     * call this constructor directly.
-     *
      * @implNote
-     * This implementation is stateless; no AB-prop or store dependency
-     * is held.
+     * This implementation is stateless; no AB-prop or store dependency is
+     * held.
      */
     @WhatsAppWebExport(moduleName = "WAWebPrimaryFeatureSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public PrimaryFeatureHandler() {
@@ -90,18 +82,15 @@ public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
      *
      * @implNote
      * This implementation mirrors WA Web's
-     * {@code WAWebPrimaryFeatureSync.applyMutations}: it walks the
-     * batch and for each mutation appends an
-     * {@link MutationApplicationResult#unsupported()} (non-{@code SET}),
-     * a {@link SyncdIndexUtils#malformedActionValue(String)}
-     * (wrong action type), or a
-     * {@link MutationApplicationResult#success()} entry; in parallel
-     * it tracks the latest valid mutation by timestamp. After the
+     * {@code WAWebPrimaryFeatureSync.applyMutations}: it walks the batch and
+     * for each mutation appends an
+     * {@link MutationApplicationResult#unsupported()} (non-{@code SET}), a
+     * {@link SyncdIndexUtils#malformedActionValue(String)} (wrong action
+     * type), or a {@link MutationApplicationResult#success()} entry; in
+     * parallel it tracks the latest valid mutation by timestamp. After the
      * walk, the latest mutation's flags are persisted via
-     * {@code WhatsAppStore.setPrimaryFeatures}; an empty flags list is
-     * accepted as success per WA Web's
-     * {@code r == null ? Malformed : Success} check (only
-     * {@code null} flags trigger malformed).
+     * {@code WhatsAppStore.setPrimaryFeatures}; an empty flags list is accepted
+     * as success (only a missing action payload triggers malformed).
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPrimaryFeatureSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.DIRECT)
@@ -137,15 +126,14 @@ public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation collapses WA Web's batch loop to the
-     * single-mutation case: a non-{@code SET} mutation surfaces as
-     * {@link MutationApplicationResult#unsupported()}, a wrong action
-     * type as {@link SyncdIndexUtils#malformedActionValue(String)},
-     * and a valid mutation persists its
-     * {@link PrimaryFeatureAction#flags()} via
+     * This implementation collapses WA Web's batch loop to the single-mutation
+     * case: a non-{@code SET} mutation surfaces as
+     * {@link MutationApplicationResult#unsupported()}, a wrong action type as
+     * {@link SyncdIndexUtils#malformedActionValue(String)}, and a valid
+     * mutation persists its {@link PrimaryFeatureAction#flags()} via
      * {@code WhatsAppStore.setPrimaryFeatures} and returns
-     * {@link MutationApplicationResult#success()}. An empty flags list
-     * is accepted as success.
+     * {@link MutationApplicationResult#success()}. An empty flags list is
+     * accepted as success.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPrimaryFeatureSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

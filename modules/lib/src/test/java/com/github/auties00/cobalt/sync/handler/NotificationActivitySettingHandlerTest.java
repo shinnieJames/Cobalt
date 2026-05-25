@@ -28,28 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link NotificationActivitySettingHandler} against the
- * protobuf-only {@code "notificationActivitySetting"} action shape.
+ * Covers {@link NotificationActivitySettingHandler} for the protobuf-only
+ * {@code "notificationActivitySetting"} action: the handler accepts only {@link SyncdOperation#SET}
+ * with a non-empty {@link NotificationActivitySettingAction#notificationActivitySetting()} enum,
+ * persists it via {@link WhatsAppStore#setNotificationActivitySetting}, and rejects a wrong-typed
+ * value or an empty enum as {@link SyncActionState#MALFORMED}.
  *
- * @apiNote
- * Verifies the Cobalt forward-looking implementation: WA Web ships
- * the protobuf in {@code WAWebProtobufSyncAction.pb} (action index
- * 60, mapped to {@code REGULAR}) but no
- * {@code WAWebNotificationActivitySettingSync} handler module exists.
- * The Cobalt handler accepts only
- * {@link SyncdOperation#SET}
- * with a non-empty
- * {@link NotificationActivitySettingAction#notificationActivitySetting()}
- * enum, persists it via
- * {@link WhatsAppStore#setNotificationActivitySetting}, and rejects
- * a wrong-typed value or an empty enum as
- * {@link SyncActionState#MALFORMED}.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link NotificationActivitySettingHandler#applyMutation} with
- * hand-built {@link DecryptedMutation.Trusted} mutations because no
- * public outgoing-mutation factory exists for this action.
+ * <p>No public outgoing-mutation factory exists for this action, so each test drives the handler
+ * directly through {@link NotificationActivitySettingHandler#applyMutation} with hand-built
+ * {@link DecryptedMutation.Trusted} mutations.
  */
 @DisplayName("NotificationActivitySettingHandler")
 class NotificationActivitySettingHandlerTest {

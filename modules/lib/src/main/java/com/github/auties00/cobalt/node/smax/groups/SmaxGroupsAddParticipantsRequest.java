@@ -15,35 +15,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that adds participants to an existing group.
+ * Outbound {@code <iq type="set" xmlns="w:g2">} stanza that adds participants to an existing group.
  *
- * @apiNote Drives the "Add participants" affordance on the group info screen:
- * {@code WAWebGroupModifyParticipantsJob} maps the user's contact picks into one of these stanzas. The relay
- * accepts up to 1024 entries per request and returns a per-participant outcome list in the matching
- * {@link SmaxGroupsAddParticipantsResponse.Success#participants()}.
+ * This request backs the add-participants affordance on the group info screen. The relay accepts up to 1024
+ * entries per request and returns a per-participant outcome list in the matching
+ * {@link SmaxGroupsAddParticipantsResponse.Success#participants()}; callers should pre-batch larger contact lists.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsAddParticipantsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Request {
     /**
-     * The group {@link Jid} receiving the new participants.
+     * Holds the group {@link Jid} receiving the new participants.
      */
     private final Jid groupJid;
 
     /**
-     * The candidate participant {@link Jid}s.
+     * Holds the candidate participant {@link Jid}s.
      */
     private final List<Jid> participants;
 
     /**
      * Constructs an add-participants request.
      *
-     * @apiNote The relay enforces a 1..1024 cardinality on the {@code <participant>} children; callers should
-     * pre-batch larger contact lists.
+     * The relay enforces a 1..1024 cardinality on the {@code <participant>} children; callers should pre-batch
+     * larger contact lists. The supplied list is defensively copied.
      *
      * @param groupJid     the group {@link Jid}
-     * @param participants the candidate {@link Jid}s; defensively copied
+     * @param participants the candidate {@link Jid}s
      * @throws NullPointerException     if {@code groupJid} or {@code participants} is {@code null}
      * @throws IllegalArgumentException if {@code participants} is empty
      */
@@ -59,7 +58,7 @@ public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Req
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -79,7 +78,7 @@ public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Req
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <add>

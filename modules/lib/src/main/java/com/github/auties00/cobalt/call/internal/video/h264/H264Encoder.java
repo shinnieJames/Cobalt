@@ -21,33 +21,45 @@ import java.lang.invoke.MethodHandle;
 import java.util.Objects;
 
 /**
- * H.264 encoder backed by openh264's {@code ISVCEncoder} vtable. The
- * jextract bindings expose {@code WelsCreateSVCEncoder} /
- * {@code WelsDestroySVCEncoder} as plain functions; everything else
- * (Initialize, EncodeFrame, Uninitialize…) is dispatched through
- * function-pointer fields of the {@link ISVCEncoderVtbl} struct.
+ * Encodes raw I420 frames into H.264 video through the openh264 codec library.
  *
- * <p>Configured for WebRTC realtime use: {@code CAMERA_VIDEO_REAL_TIME}
- * usage type, {@code RC_BITRATE_MODE} rate control, single layer, no
- * SPS/PPS strategy reuse — matching what mainstream WebRTC stacks
- * configure for 1:1 H.264 calls.
+ * <p>Accepts one I420 (YUV 4:2:0 planar) frame per call and produces the
+ * concatenated NAL units the codec emitted for that frame, in bitstream order,
+ * ready for RTP NAL-unit-mode packetisation per RFC 6184. Each output
+ * {@link Packet} carries the frame type, so the caller can flag IDR frames as
+ * keyframes for RTP and signalling purposes.
  *
- * <p>I/O contract: input frames are I420 (YUV 4:2:0 planar), Y then U
- * then V. Output is the concatenated NAL units for the frame, ready
- * for RTP NALU-mode packetisation (RFC 6184). Each {@link Packet}
- * record carries its frame type so the caller can mark IDRs as
- * keyframes.
+ * <p>The encoder is configured once at construction for realtime conversational
+ * video: realtime camera usage, bitrate-targeted rate control, a single spatial
+ * layer, and the geometry and frame rate supplied to the constructor. The
+ * target bitrate may be retuned at runtime through {@link #setBitrate(int)} to
+ * follow a bandwidth estimate, and a keyframe may be requested per call.
  *
- * <p>Pipeline:
- *
- * <pre>{@code
+ * <p>The instance owns native resources for its whole lifetime and is not
+ * thread-safe: a single encoder must be driven from one thread, or externally
+ * serialised. Callers release the codec and its native memory through
+ * {@link #close()}. A typical capture loop:
+ * {@snippet :
  *   var enc = new H264Encoder(640, 480, 1_000_000, 30);
  *   for (long pts = 0; capturing; pts++) {
  *       byte[] yuv = capture.nextFrame();
  *       var pkt = enc.encode(yuv, pts, false);
- *       if (pkt != null) rtp.send(pkt.payload(), pkt.keyFrame());
+ *       if (pkt != null) {
+ *           rtp.send(pkt.payload(), pkt.keyFrame());
+ *       }
  *   }
- * }</pre>
+ * }
+ *
+ * @implNote This implementation drives the {@code ISVCEncoder} C++ object
+ * directly rather than through a thin C shim. {@code WelsCreateSVCEncoder} and
+ * {@code WelsDestroySVCEncoder} are plain exported functions, but every method
+ * on the codec instance ({@code Initialize}, {@code EncodeFrame},
+ * {@code ForceIntraFrame}, {@code SetOption}, {@code Uninitialize}) lives in the
+ * virtual table whose address sits in the first pointer-sized slot of the
+ * instance. Each such method is bound to a {@link MethodHandle} once at
+ * construction by reading the function pointer out of {@link ISVCEncoderVtbl},
+ * and the instance pointer is passed back as the implicit {@code this} (here
+ * named {@code self}) on every call.
  */
 public final class H264Encoder implements AutoCloseable {
     static {
@@ -55,109 +67,148 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * openh264's {@code RC_BITRATE_MODE} rate-control selector. The
-     * binding's typedef enum is anonymous so we hard-code the value
-     * here rather than chase {@code RC_BITRATE_MODE()}.
+     * Selects openh264's bitrate-targeted rate-control mode for
+     * {@code Initialize}.
+     *
+     * @implNote This implementation hard-codes the value {@code 1} because the
+     * matching {@code RC_BITRATE_MODE} constant lives in an anonymous typedef
+     * enum that jextract does not surface as a named binding. The value is the
+     * {@code RC_MODES} ordinal of {@code RC_BITRATE_MODE} in openh264's
+     * {@code codec_app_def.h}.
      */
     private static final int RC_BITRATE_MODE = 1;
 
     /**
-     * openh264's {@code CAMERA_VIDEO_REAL_TIME} usage type for
-     * realtime camera capture (vs. screen content / non-realtime).
+     * Selects openh264's realtime camera usage type for {@code Initialize}, as
+     * opposed to screen-content or non-realtime usage.
+     *
+     * @implNote This implementation hard-codes the value {@code 0} because the
+     * matching {@code CAMERA_VIDEO_REAL_TIME} constant lives in an anonymous
+     * typedef enum that jextract does not surface as a named binding. The value
+     * is the {@code EUsageType} ordinal of {@code CAMERA_VIDEO_REAL_TIME} in
+     * openh264's {@code codec_app_def.h}.
      */
     private static final int CAMERA_VIDEO_REAL_TIME = 0;
 
     /**
-     * openh264's {@code ENCODER_OPTION_BITRATE} selector for
-     * {@code SetOption} — its {@code SBitrateInfo*} payload carries
-     * the new target bitrate. The binding's typedef enum is anonymous
-     * so we hard-code the value here (mirrors the constant in
-     * {@code codec_app_def.h}'s {@code ENCODER_OPTION} enum).
+     * Selects the bitrate option for {@code SetOption}, whose payload is an
+     * {@code SBitrateInfo} pointer carrying the new target bitrate.
+     *
+     * @implNote This implementation hard-codes the value {@code 5} because the
+     * matching {@code ENCODER_OPTION_BITRATE} constant lives in an anonymous
+     * typedef enum that jextract does not surface as a named binding. The value
+     * is the {@code ENCODER_OPTION} ordinal of {@code ENCODER_OPTION_BITRATE}
+     * in openh264's {@code codec_app_def.h}.
      */
     private static final int ENCODER_OPTION_BITRATE = 5;
 
     /**
-     * openh264's {@code SPATIAL_LAYER_ALL} sentinel — applied to the
-     * {@link TagBitrateInfo#iLayer} field to mean "all layers" when the
-     * encoder is configured single-layer (Cobalt's WebRTC config).
+     * Targets all spatial layers when applying a bitrate change, written to the
+     * layer field of the {@code SBitrateInfo} payload.
+     *
+     * @implNote This implementation hard-codes the value {@code 4}, openh264's
+     * {@code SPATIAL_LAYER_ALL} sentinel. Although Cobalt configures the encoder
+     * single-layer, the bitrate option is addressed to all layers so the change
+     * applies regardless of the active layer count.
      */
     private static final int SPATIAL_LAYER_ALL = 4;
 
     /**
-     * Per-instance arena for the encoder pointer slot, the vtable
-     * slice, and the two reusable param/output structs.
+     * Backs the encoder instance pointer, the virtual-table slice, and the two
+     * reusable param/output structures for this encoder's whole lifetime.
+     *
+     * <p>Allocated as a shared arena so the native memory may be touched from
+     * any thread, and closed by {@link #close()} once teardown completes.
      */
     private final Arena arena;
 
     /**
-     * The {@code ISVCEncoder} pointer returned by
-     * {@code WelsCreateSVCEncoder} — a pointer to the encoder
-     * instance whose first 8 bytes hold the vtable address. Passed
-     * as the first argument ({@code self}) to every vtable method,
-     * and to {@code WelsDestroySVCEncoder} at teardown. Nulled by
-     * {@link #close}.
+     * Holds the {@code ISVCEncoder} instance pointer returned by
+     * {@code WelsCreateSVCEncoder}.
+     *
+     * <p>The instance's first pointer-sized slot holds the virtual table
+     * address. This pointer is passed as the implicit {@code this} argument to
+     * every virtual-table method and to {@code WelsDestroySVCEncoder} at
+     * teardown. Reset to {@link MemorySegment#NULL} once the codec is
+     * destroyed, which marks the encoder closed for {@link #requireOpen()}.
      */
     private MemorySegment self;
 
     /**
-     * Reusable {@link SSourcePicture} populated each
-     * {@link #encode} call.
+     * Holds the reusable {@code SSourcePicture} structure populated with the
+     * input plane pointers and strides on every {@link #encode(byte[], long, boolean)}
+     * call.
      */
     private final MemorySegment srcPicture;
 
     /**
-     * Reusable {@link SFrameBSInfo} the encoder writes per encode.
+     * Holds the reusable {@code SFrameBSInfo} structure the codec fills with the
+     * per-frame layer and NAL bitstream description on every encode.
      */
     private final MemorySegment bsInfo;
 
     /**
-     * Cached downcall handle for {@code ISVCEncoderVtbl.EncodeFrame}.
+     * Holds the cached downcall handle for the {@code EncodeFrame} virtual table
+     * method.
      */
     private final MethodHandle encodeFrameHandle;
 
     /**
-     * Cached downcall handle for {@code ISVCEncoderVtbl.ForceIntraFrame}.
+     * Holds the cached downcall handle for the {@code ForceIntraFrame} virtual
+     * table method.
      */
     private final MethodHandle forceIntraHandle;
 
     /**
-     * Cached downcall handle for {@code ISVCEncoderVtbl.SetOption}.
+     * Holds the cached downcall handle for the {@code SetOption} virtual table
+     * method.
      */
     private final MethodHandle setOptionHandle;
 
     /**
-     * Cached downcall handle for {@code ISVCEncoderVtbl.Uninitialize}.
+     * Holds the cached downcall handle for the {@code Uninitialize} virtual
+     * table method.
      */
     private final MethodHandle uninitHandle;
 
     /**
-     * Frame width in pixels.
+     * Holds the configured frame width in pixels.
      */
     private final int width;
 
     /**
-     * Frame height in pixels.
+     * Holds the configured frame height in pixels.
      */
     private final int height;
 
     /**
-     * Cached I420 byte size: {@code w*h + 2*(w/2)*(h/2)}.
+     * Holds the precomputed I420 frame byte size for the configured geometry.
+     *
+     * <p>Equal to {@snippet : width*height + 2 * (width/2)*(height/2) } and used
+     * to validate {@link #encode(byte[], long, boolean)} input and size the
+     * scratch buffer.
      */
     private final int yuvSize;
 
     /**
-     * One encoded H.264 frame — all NAL units for the picture
-     * concatenated in bitstream order, ready for RTP NALU
-     * packetisation.
+     * Represents one encoded H.264 frame as the concatenation of all its NAL
+     * units in bitstream order.
      *
-     * @param payload  the NAL bytes
-     * @param pts      the presentation timestamp the encoder was
-     *                 driven with
-     * @param keyFrame {@code true} if this frame is an IDR
+     * <p>The payload is ready for RTP NAL-unit-mode packetisation. The
+     * presentation timestamp echoes the value the frame was encoded with, and
+     * the keyframe flag is set when the frame is an IDR.
+     *
+     * @param payload  the concatenated NAL bytes for the frame; never
+     *                 {@code null}
+     * @param pts      the presentation timestamp the encoder was driven with
+     * @param keyFrame {@code true} if the frame is an IDR, {@code false}
+     *                 otherwise
      */
     public record Packet(byte[] payload, long pts, boolean keyFrame) {
         /**
-         * Compact constructor — null-checks the payload.
+         * Validates that the frame payload is present.
+         *
+         * @throws NullPointerException if {@code payload} is {@code null}
          */
         public Packet {
             Objects.requireNonNull(payload, "payload cannot be null");
@@ -165,16 +216,32 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Constructs and configures a new H.264 encoder.
+     * Creates an encoder, validates its geometry, and initialises the
+     * underlying openh264 instance.
      *
-     * @param width            frame width in pixels (must be even)
-     * @param height           frame height in pixels (must be even)
-     * @param targetBitrateBps target bitrate in bits per second
-     * @param fps              capture frame rate
-     * @throws IllegalArgumentException if any argument is invalid
-     * @throws WhatsAppCallException.H264            if openh264 rejects the
-     *                                  config or initialisation fails
-     * @throws UnsatisfiedLinkError     if libopenh264 cannot be loaded
+     * <p>Both dimensions must be even because I420 chroma planes are subsampled
+     * by two in each direction. Allocates the instance through
+     * {@code WelsCreateSVCEncoder}, binds the required virtual-table methods,
+     * and calls {@code Initialize} with the realtime configuration described on
+     * the class. On any failure the partially created native state and the
+     * arena are released before the triggering exception propagates, so a
+     * failed construction leaks nothing.
+     *
+     * @param width            the frame width in pixels; must be even and at
+     *                         least {@code 2}
+     * @param height           the frame height in pixels; must be even and at
+     *                         least {@code 2}
+     * @param targetBitrateBps the initial target bitrate in bits per second;
+     *                         must be at least {@code 1}
+     * @param fps              the capture frame rate; must be at least {@code 1}
+     * @throws IllegalArgumentException   if any dimension is not even and
+     *                                    positive, or if the bitrate or frame
+     *                                    rate is below {@code 1}
+     * @throws WhatsAppCallException.H264 if the codec cannot be created, the
+     *                                    virtual table is absent, or
+     *                                    {@code Initialize} fails
+     * @throws UnsatisfiedLinkError       if the openh264 native library cannot
+     *                                    be loaded
      */
     public H264Encoder(int width, int height, int targetBitrateBps, int fps) {
         if (width < 1 || width % 2 != 0) throw new IllegalArgumentException("width must be even and ≥ 2");
@@ -227,22 +294,32 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Encodes one I420 frame and returns the concatenated NAL units
-     * the codec produced for it, or {@code null} if the encoder
-     * skipped the frame (rare under realtime config).
+     * Encodes one I420 frame and returns its NAL units, or {@code null} when the
+     * codec skipped the frame.
      *
-     * @param yuvI420       the input frame bytes
-     * @param ptsTicks      presentation timestamp in encoder ticks
-     *                      (millisecond-scale; openh264 takes
-     *                      monotonically-increasing 90 kHz or ms
-     *                      timestamps — Cobalt uses ms by convention)
-     * @param forceKeyFrame request that this frame be an IDR
-     * @return the encoded packet, or {@code null} if no output was
-     *         produced
-     * @throws IllegalStateException    if the encoder is closed
-     * @throws IllegalArgumentException if {@code yuvI420.length} is
-     *                                  not the expected I420 size
-     * @throws WhatsAppCallException.H264            if openh264 returns non-zero
+     * <p>When a keyframe is requested, instructs the codec to emit the next
+     * frame as an IDR before encoding. Copies the frame into native scratch
+     * memory, drives {@code EncodeFrame}, and concatenates every NAL the codec
+     * produced. The codec skips a frame only rarely under realtime
+     * configuration, in which case no output is produced.
+     *
+     * @param yuvI420       the input frame bytes in packed I420 layout; never
+     *                      {@code null}, and exactly {@link #frameByteSize()}
+     *                      bytes long
+     * @param ptsTicks      the presentation timestamp for the frame, echoed back
+     *                      on the returned packet
+     * @param forceKeyFrame {@code true} to request that this frame be encoded as
+     *                      an IDR
+     * @return the encoded packet, or {@code null} if the codec produced no
+     *         output
+     * @throws NullPointerException       if {@code yuvI420} is {@code null}
+     * @throws IllegalStateException      if the encoder has been closed
+     * @throws IllegalArgumentException   if {@code yuvI420.length} differs from
+     *                                    {@link #frameByteSize()}
+     * @throws WhatsAppCallException.H264 if the codec reports an encode error
+     * @implNote This implementation feeds the codec a millisecond-scale
+     * timestamp. openh264 accepts a monotonically increasing 90 kHz or
+     * millisecond timestamp; Cobalt drives it in milliseconds by convention.
      */
     public Packet encode(byte[] yuvI420, long ptsTicks, boolean forceKeyFrame) {
         Objects.requireNonNull(yuvI420, "yuvI420 cannot be null");
@@ -277,27 +354,33 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Returns the number of bytes the encoder expects per
-     * {@link #encode} input.
+     * Returns the exact number of bytes an {@link #encode(byte[], long, boolean)}
+     * input frame must contain.
      *
-     * @return {@code w*h + 2*(w/2)*(h/2)}
+     * <p>The value is the packed I420 size for the configured geometry,
+     * {@snippet : width*height + 2 * (width/2)*(height/2) }
+     *
+     * @return the required input frame size in bytes
      */
     public int frameByteSize() {
         return yuvSize;
     }
 
     /**
-     * Updates the encoder's target bitrate at runtime by calling
-     * {@code ISVCEncoder.SetOption(ENCODER_OPTION_BITRATE, &SBitrateInfo)}.
-     * Used by the BWE feedback loop to track the current bandwidth
-     * estimate. Applies to all spatial layers
-     * ({@link #SPATIAL_LAYER_ALL}).
+     * Retunes the encoder's target bitrate at runtime.
      *
-     * @param targetBitrateBps the new target bitrate in bits per
-     *                         second; must be {@code >= 1}
-     * @throws IllegalArgumentException if {@code targetBitrateBps < 1}
-     * @throws IllegalStateException    if the encoder is closed
-     * @throws WhatsAppCallException.H264            if openh264 returns non-zero
+     * <p>Issues a {@code SetOption} bitrate change addressed to all spatial
+     * layers, allowing a bandwidth-estimation feedback loop to track the
+     * current bandwidth estimate without recreating the encoder. The change
+     * takes effect on subsequent frames.
+     *
+     * @param targetBitrateBps the new target bitrate in bits per second; must be
+     *                         at least {@code 1}
+     * @throws IllegalArgumentException   if {@code targetBitrateBps} is below
+     *                                    {@code 1}
+     * @throws IllegalStateException      if the encoder has been closed
+     * @throws WhatsAppCallException.H264 if the codec reports an error applying
+     *                                    the new bitrate
      */
     public void setBitrate(int targetBitrateBps) {
         if (targetBitrateBps < 1) throw new IllegalArgumentException("targetBitrateBps must be ≥ 1");
@@ -319,12 +402,21 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Calls {@code ISVCEncoder.Initialize(SEncParamBase *)} with
-     * Cobalt's WebRTC-realtime defaults.
+     * Calls the codec's {@code Initialize} method with Cobalt's realtime
+     * configuration.
      *
-     * @param initHandle       cached handle for the Initialize vtable slot
-     * @param targetBitrateBps target bitrate in bps
-     * @param fps              frame rate
+     * <p>Populates an {@code SEncParamBase} with realtime camera usage, the
+     * configured geometry, the supplied target bitrate and frame rate, and
+     * bitrate-targeted rate control, then invokes the cached {@code Initialize}
+     * handle. The parameter struct lives in a per-call confined arena that is
+     * released as soon as initialisation returns.
+     *
+     * @param initHandle       the cached downcall handle for the
+     *                         {@code Initialize} virtual table method
+     * @param targetBitrateBps the target bitrate in bits per second
+     * @param fps              the frame rate
+     * @throws WhatsAppCallException.H264 if the codec call fails or returns a
+     *                                    non-zero status
      */
     private void initialize(MethodHandle initHandle, int targetBitrateBps, int fps) {
         try (var scratch = Arena.ofConfined()) {
@@ -348,13 +440,17 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Populates the reusable {@link SSourcePicture} struct with the
-     * input I420 plane pointers and stride values, copying the YUV
-     * bytes into a per-call native scratch buffer.
+     * Loads the input frame into the reusable source-picture structure.
      *
-     * @param scratch  per-encode scratch arena
-     * @param yuvI420  the input frame bytes
-     * @param ptsTicks presentation timestamp
+     * <p>Copies the I420 bytes into a per-call native scratch buffer and points
+     * the source picture's three plane fields at the Y, U, and V slices, with
+     * strides of {@code width}, {@code width/2}, and {@code width/2}
+     * respectively; the fourth plane (unused by I420) is left null with a zero
+     * stride. The color format and timestamp are set on the same structure.
+     *
+     * @param scratch  the per-encode scratch arena owning the copied frame bytes
+     * @param yuvI420  the input frame bytes in packed I420 layout
+     * @param ptsTicks the presentation timestamp to attach to the frame
      */
     private void loadSourcePicture(Arena scratch, byte[] yuvI420, long ptsTicks) {
         var buf = scratch.allocate(yuvSize);
@@ -376,16 +472,19 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Walks the layer/NAL structure openh264 wrote into
-     * {@link #bsInfo} and concatenates every NAL into a single
-     * {@code byte[]}.
+     * Concatenates the NAL units the codec wrote for the most recent frame into
+     * one byte array.
      *
-     * @param ptsTicks the presentation timestamp the frame was
-     *                 encoded with — used to populate the returned
-     *                 packet
-     * @return the encoded packet, or {@code null} if openh264 emitted
-     *         no NALs ({@code videoFrameTypeSkip} or
-     *         {@code videoFrameTypeInvalid})
+     * <p>Inspects the frame type the codec recorded in {@link #bsInfo} and
+     * returns {@code null} when it indicates a skipped or invalid frame. Walks
+     * each emitted layer, sums its per-NAL lengths, and copies every layer's
+     * bitstream buffer into a single output array in layer order. The resulting
+     * packet is flagged as a keyframe when the frame type is IDR.
+     *
+     * @param ptsTicks the presentation timestamp the frame was encoded with,
+     *                 echoed onto the returned packet
+     * @return the encoded packet, or {@code null} if the codec emitted no NAL
+     *         units for the frame
      */
     private Packet drainPacket(long ptsTicks) {
         var frameType = SFrameBSInfo.eFrameType(bsInfo);
@@ -429,11 +528,12 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Builds a downcall handle from a vtable function-pointer slot.
+     * Binds a virtual-table function pointer to a downcall handle.
      *
-     * @param fnPtr the function pointer read from the vtable struct
-     * @param desc  the C-level signature descriptor
-     * @return a method handle suitable for {@code invokeExact}
+     * @param fnPtr the function pointer read from the virtual table struct
+     * @param desc  the native signature descriptor for the pointed-to function
+     * @return a method handle suitable for {@code invokeExact} dispatch
+     * @throws WhatsAppCallException.H264 if {@code fnPtr} is null
      */
     private static MethodHandle bindVtableFn(MemorySegment fnPtr, FunctionDescriptor desc) {
         if (fnPtr.equals(MemorySegment.NULL)) {
@@ -443,7 +543,9 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Throws if the encoder has been closed.
+     * Verifies that the encoder is still open.
+     *
+     * @throws IllegalStateException if the encoder has been closed
      */
     private void requireOpen() {
         if (self == null || self.equals(MemorySegment.NULL)) {
@@ -452,9 +554,12 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Calls {@code WelsDestroySVCEncoder} if the encoder pointer is
-     * still live. Used both by {@link #close} and by the constructor's
-     * failure path.
+     * Destroys the native encoder instance if it is still live.
+     *
+     * <p>Calls {@code WelsDestroySVCEncoder} and nulls {@link #self} so
+     * subsequent calls become no-ops. Used both by {@link #close()} and by the
+     * constructor's failure path. Any failure inside the native destroy call is
+     * swallowed because teardown must not raise.
      */
     private void destroyEncoder() {
         if (self == null || self.equals(MemorySegment.NULL)) {
@@ -468,9 +573,11 @@ public final class H264Encoder implements AutoCloseable {
     }
 
     /**
-     * Tears down the encoder: calls {@code Uninitialize} via the
-     * vtable, then {@code WelsDestroySVCEncoder}, then closes the
-     * arena. Idempotent.
+     * Releases the encoder and all native resources it holds.
+     *
+     * <p>Calls {@code Uninitialize} through the virtual table, destroys the
+     * codec instance, and closes the arena. The call is idempotent: once the
+     * encoder has been closed, further calls return immediately.
      */
     @Override
     public void close() {

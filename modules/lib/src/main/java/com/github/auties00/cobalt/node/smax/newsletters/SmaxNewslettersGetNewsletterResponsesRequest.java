@@ -15,19 +15,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza that fetches the per-subscriber responses to a
- * newsletter question post.
+ * Fetches the per-subscriber responses to a newsletter question post.
  *
- * @apiNote
- * Drives the Channels admin "question responses" panel surfaced
- * through
- * {@code WAWebNewsletterGetQuestionResponsesQuery.getQuestionResponsesQuery}.
- * Combine an optional
- * {@link SmaxNewslettersGetNewsletterResponsesFilter} (contacts /
- * replied) and an optional free-text search string of at least three
- * characters (WA Web's filter threshold). The relay echoes the
- * matching {@link SmaxNewslettersGetNewsletterResponsesResponse}. The
- * resulting IQ has shape:
+ * <p>Combine an optional {@link SmaxNewslettersGetNewsletterResponsesFilter} (contacts or replied)
+ * and an optional free-text search string. The relay echoes the matching
+ * {@link SmaxNewslettersGetNewsletterResponsesResponse}. The resulting IQ has shape:
  * {@snippet :
  *     <iq xmlns="newsletter" type="get" to="<newsletterJid>">
  *         <question_responses server_id="120" count="50" before="<cursor>">
@@ -35,7 +27,7 @@ import java.util.Optional;
  *             <search text="abc"/>
  *         </question_responses>
  *     </iq>
- * }
+ * }</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterResponsesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterIQGetRequestMixin")
@@ -45,61 +37,50 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersSearchQuestionResponseMixinMixin")
 public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxOperation.Request {
     /**
-     * The newsletter {@link Jid} being queried; routed verbatim into
-     * the IQ's {@code to} attribute.
+     * The newsletter {@link Jid} being queried; routed verbatim into the IQ's {@code to} attribute.
      */
     private final Jid newsletterJid;
 
     /**
-     * The server-id of the question message whose responses are being
-     * fetched.
+     * The server-id of the question message whose responses are being fetched.
      */
     private final long questionResponsesServerId;
 
     /**
-     * The cap on returned {@code <question_response>} entries per
-     * round-trip.
+     * The cap on returned {@code <question_response>} entries per round-trip.
      */
     private final int questionResponsesCount;
 
     /**
-     * The optional opaque pagination cursor, a previous slice's
-     * tail-cursor handed back verbatim by the caller.
+     * The optional opaque pagination cursor, a previous slice's tail-cursor handed back verbatim by
+     * the caller.
      */
     private final String questionResponsesBefore;
 
     /**
-     * The optional contacts / replied filter; {@code null} disables
-     * filtering.
+     * The optional contacts or replied filter; {@code null} disables filtering.
      */
     private final SmaxNewslettersGetNewsletterResponsesFilter filter;
 
     /**
-     * The optional free-text search string applied against the
-     * response payloads.
+     * The optional free-text search string applied against the response payloads.
      */
     private final String searchText;
 
     /**
      * Constructs a new request.
      *
-     * @apiNote
-     * WA Web only forwards {@code searchText} when its length is at
-     * least three; Cobalt does not enforce that bound here. Callers
-     * targeting WA Web parity should clamp before invoking.
+     * @implNote This implementation does not enforce a minimum {@code searchText} length; callers
+     * targeting WhatsApp Web parity should drop search strings shorter than three characters before
+     * invoking, since the relay only filters on three or more.
      *
-     * @param newsletterJid             the newsletter {@link Jid}; never
-     *                                  {@code null}
+     * @param newsletterJid             the newsletter {@link Jid}; never {@code null}
      * @param questionResponsesServerId the question's server-id
      * @param questionResponsesCount    the per-call entry cap
-     * @param questionResponsesBefore   the optional pagination cursor;
-     *                                  may be {@code null}
-     * @param filter                    the optional filter; may be
-     *                                  {@code null}
-     * @param searchText                the optional search string; may
-     *                                  be {@code null}
-     * @throws NullPointerException if {@code newsletterJid} is
-     *                              {@code null}
+     * @param questionResponsesBefore   the optional pagination cursor; may be {@code null}
+     * @param filter                    the optional filter; may be {@code null}
+     * @param searchText                the optional search string; may be {@code null}
+     * @throws NullPointerException if {@code newsletterJid} is {@code null}
      */
     public SmaxNewslettersGetNewsletterResponsesRequest(Jid newsletterJid, long questionResponsesServerId,
                    int questionResponsesCount, String questionResponsesBefore,
@@ -142,18 +123,16 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     /**
      * Returns the optional opaque pagination cursor.
      *
-     * @return an {@link Optional} carrying the cursor, or empty when
-     *         requesting the first slice
+     * @return an {@link Optional} carrying the cursor, or empty when requesting the first slice
      */
     public Optional<String> questionResponsesBefore() {
         return Optional.ofNullable(questionResponsesBefore);
     }
 
     /**
-     * Returns the optional contacts / replied filter.
+     * Returns the optional contacts or replied filter.
      *
-     * @return an {@link Optional} carrying the filter, or empty when
-     *         no filter is applied
+     * @return an {@link Optional} carrying the filter, or empty when no filter is applied
      */
     public Optional<SmaxNewslettersGetNewsletterResponsesFilter> filter() {
         return Optional.ofNullable(filter);
@@ -162,24 +141,19 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     /**
      * Returns the optional free-text search string.
      *
-     * @return an {@link Optional} carrying the search string, or empty
-     *         when no search is applied
+     * @return an {@link Optional} carrying the search string, or empty when no search is applied
      */
     public Optional<String> searchText() {
         return Optional.ofNullable(searchText);
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza carrying the
-     * {@code <question_responses>} payload.
+     * Builds the outbound {@code <iq>} stanza carrying the {@code <question_responses>} payload.
      *
-     * @apiNote
-     * The {@code <filters>} block is only emitted when {@link #filter()}
-     * is present; the {@code <search>} child is only emitted when
-     * {@link #searchText()} is present.
+     * <p>The {@code <filters>} block is emitted only when {@link #filter()} is present; the
+     * {@code <search>} child is emitted only when {@link #searchText()} is present.</p>
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <question_responses>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <question_responses>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutNewslettersGetNewsletterResponsesRequest",
@@ -227,8 +201,7 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
      * Compares two requests for value equality on every field.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a request with equal
-     *         field values
+     * @return {@code true} when {@code obj} is a request with equal field values
      */
     @Override
     public boolean equals(Object obj) {

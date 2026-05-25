@@ -13,16 +13,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound reply to a {@link SmaxLinkCreateRequest}, projecting the
- * relay's {@code <ack class="call">} stanza into one of two documented
- * variants: {@link Success} (token minted) and {@link ClientError}
- * (request refused).
+ * Projects the relay's reply to a {@link SmaxLinkCreateRequest} into a sealed
+ * pair of variants.
  *
- * @apiNote
- * Consumed by the Cobalt counterpart of {@code WAWebVoipCreateCallLinkJob}
- * to turn the relay reply into the public-facing
- * {@code https://call.whatsapp.com/{voice|video}/<token>} URL or to surface
- * the {@code 503}/{@code 400} error to the UI.
+ * <p>An inbound {@code <ack class="call">} stanza resolves to either
+ * {@link Success} (token minted) or {@link ClientError} (request refused). The
+ * call-link create flow turns a {@link Success} into the public-facing
+ * {@code https://call.whatsapp.com/{voice|video}/<token>} URL, and surfaces a
+ * {@link ClientError} (typically {@code 503} or {@code 400}) to the UI.
  */
 public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         permits SmaxLinkCreateResponse.Success, SmaxLinkCreateResponse.ClientError {
@@ -30,16 +28,16 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
     /**
      * Parses an inbound stanza into the first matching reply variant.
      *
-     * @apiNote
-     * Backs the Cobalt analogue of
-     * {@code WASmaxVoipLinkCreateRPC.sendLinkCreateRPC}: the JS dispatcher
-     * tries the Ack parser, then the Nack parser, then throws an
-     * {@code SmaxParsingFailure}; Cobalt instead returns
-     * {@link Optional#empty()} so the caller can map the parse miss to the
+     * <p>The {@link Success} parser is tried first, then {@link ClientError}.
+     *
+     * @implNote
+     * This implementation returns {@link Optional#empty()} when neither variant
+     * matches, where the WA Web dispatcher would instead throw an
+     * {@code SmaxParsingFailure}; the caller maps the empty result to the
      * configured error policy.
      *
      * @param node    the inbound stanza received from the relay; never {@code null}
-     * @param request the original outbound stanza; used to verify the echoed {@code id}; never {@code null}
+     * @param request the original outbound stanza, used to verify the echoed {@code id}; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
      *         {@link Optional#empty()} when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
@@ -60,14 +58,13 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
      * Validates the {@code <ack class="call">} envelope common to both reply
      * variants.
      *
-     * @implNote
-     * This implementation mirrors {@code WASmaxInVoipCallAckBaseMixin.parseCallAckBaseMixin}:
-     * it requires the {@code <ack>} description, the {@code class="call"} marker,
-     * the echoed request {@code id}, and the literal {@code from="call"} server.
+     * <p>The envelope matches when the node has the {@code <ack>} description,
+     * the {@code class="call"} marker, an {@code id} echoing the request's
+     * {@code id}, and the literal {@code from="call"} server.
      *
      * @param node    the inbound stanza
      * @param request the original outbound request
-     * @return {@code true} when the envelope matches; {@code false} otherwise
+     * @return {@code true} when the envelope matches, {@code false} otherwise
      */
     private static boolean validateAckEnvelope(Node node, Node request) {
         if (!node.hasDescription("ack")) {
@@ -93,18 +90,16 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
     /**
      * The successful reply carrying the freshly minted call-link token.
      *
-     * @apiNote
-     * The {@link #linkCreateToken()} value is the short suffix appended to
-     * {@code https://call.whatsapp.com/voice/} or {@code .../video/} to
-     * produce the shareable URL.
+     * <p>The {@link #linkCreateToken()} value is the opaque suffix appended to
+     * {@code https://call.whatsapp.com/voice/} or {@code .../video/} to produce
+     * the shareable URL; the remaining fields echo the request when it set them.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipLinkCreateResponseLinkCreateAck")
     final class Success implements SmaxLinkCreateResponse {
         /**
          * The minted call-link token.
          *
-         * @apiNote
-         * The token is opaque, server-issued, and forms the path suffix of
+         * <p>The token is opaque and server-issued; it forms the path suffix of
          * the shareable {@code https://call.whatsapp.com/{voice|video}/<token>}
          * URL.
          */
@@ -116,22 +111,23 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         private final String linkCreateMedia;
 
         /**
-         * The optional echoed creator-device JID.
+         * The optional echoed creator-device JID carried by the
+         * {@code call-creator} attribute.
          */
         private final Jid linkCreateCallCreator;
 
         /**
-         * The optional echoed call identifier.
+         * The optional echoed call identifier carried by the {@code call-id}
+         * attribute.
          */
         private final String linkCreateCallId;
 
         /**
          * Constructs a successful reply.
          *
-         * @apiNote
-         * The {@code linkCreateMedia}, {@code linkCreateCallCreator}, and
-         * {@code linkCreateCallId} echoes appear only when the original
-         * request set them; the relay does not synthesise defaults.
+         * <p>The {@code linkCreateMedia}, {@code linkCreateCallCreator}, and
+         * {@code linkCreateCallId} echoes appear only when the original request
+         * set them; the relay does not synthesise defaults.
          *
          * @param linkCreateToken       the minted token; never {@code null}
          * @param linkCreateMedia       the optional echoed media type; may be {@code null}
@@ -188,15 +184,14 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         /**
          * Parses an inbound stanza into a {@link Success} variant.
          *
-         * @apiNote
-         * Returns an empty {@link Optional} on schema mismatch so callers can
+         * <p>Returns an empty {@link Optional} on schema mismatch so callers can
          * fall through to {@link ClientError#of(Node, Node)}.
          *
          * @implNote
          * This implementation requires the shared ack envelope, the
          * {@code type="link_create"} marker, an inner {@code <link_create>}
-         * child, and a non-null {@code token} attribute; the other attributes
-         * are optional echoes of the request.
+         * child, and a non-null {@code token} attribute; the remaining
+         * attributes are optional echoes of the request.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
@@ -228,6 +223,13 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
             return Optional.of(new Success(token, media, callCreator, callId));
         }
 
+        /**
+         * Compares this reply to another object for value equality.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with equal
+         *         fields, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -243,11 +245,21 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
                     && Objects.equals(this.linkCreateCallId, that.linkCreateCallId);
         }
 
+        /**
+         * Returns a hash code derived from every field of this reply.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(linkCreateToken, linkCreateMedia, linkCreateCallCreator, linkCreateCallId);
         }
 
+        /**
+         * Returns a debug string listing every field of this reply.
+         *
+         * @return the string representation of this reply
+         */
         @Override
         public String toString() {
             return "SmaxLinkCreateResponse.Success[linkCreateToken=" + linkCreateToken
@@ -260,17 +272,16 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
     /**
      * The client-error reply produced when the relay rejects the request.
      *
-     * @apiNote
-     * {@code WAWebVoipCreateCallLinkJob} surfaces {@code 503} as
-     * "Service Unavailable" and {@code 400} as "Bad Request"; any other
-     * numeric code falls through to "Unknown Error". The non-numeric case
-     * is folded onto {@code errorCode == -1}.
+     * <p>The call-link create flow surfaces {@code 503} as "Service
+     * Unavailable" and {@code 400} as "Bad Request"; any other numeric code
+     * falls through to "Unknown Error", and a non-numeric raw value is folded
+     * onto {@link #errorCode()} of {@code -1}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipLinkCreateResponseLinkCreateNack")
     final class ClientError implements SmaxLinkCreateResponse {
         /**
-         * The numeric error code parsed from the {@code error} attribute,
-         * or {@code -1} when the raw value is non-numeric.
+         * The numeric error code parsed from the {@code error} attribute, or
+         * {@code -1} when the raw value is non-numeric.
          */
         private final int errorCode;
 
@@ -345,6 +356,13 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
             return Optional.of(new ClientError(code, errorAttr));
         }
 
+        /**
+         * Compares this reply to another object for value equality.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with
+         *         equal fields, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -357,11 +375,21 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from every field of this reply.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string listing every field of this reply.
+         *
+         * @return the string representation of this reply
+         */
         @Override
         public String toString() {
             return "SmaxLinkCreateResponse.ClientError[errorCode=" + errorCode

@@ -13,30 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises the outgoing-mutation wire shape produced by
- * {@link MuteChatMutationFactory}.
- *
- * @apiNote
- * Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.MuteChatHandler} whose
- * incoming-side coverage lives in {@code MuteChatHandlerTest}; the parity
- * target is {@code WAWebMuteChatSync.generateMuteMutation}, whose
- * {@code muteEndTimestamp} encoding preserves the {@code -1} sentinel
- * for indefinite mutes.
- *
- * @implNote
- * This implementation rebuilds the {@code muteAction} value from the
- * oracle's {@code muted} flag and {@code muteEndMillis} field rather
- * than invoking the production factory so the test runs without the
- * AB-props dependency; mention-everyone parity lives in the handler
- * tests.
+ * Covers the outgoing-mutation wire shape of {@link MuteChatMutationFactory} by
+ * re-encoding a {@link SyncActionValueSpec} and comparing it byte-for-byte against
+ * the captured WhatsApp Web oracle. The value is rebuilt from the oracle's
+ * {@code muted} flag and {@code muteEndMillis} field rather than through the
+ * production factory so the test runs without the AB-props dependency; each test
+ * returns early when its oracle fixture is absent.
  */
 @DisplayName("MuteChatMutationFactory")
 class MuteChatMutationFactoryTest {
-    /**
-     * Verifies that the encoded {@link SyncActionValueSpec} bytes match
-     * the captured WA Web oracle when the fixture is present.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
     void byteParityWithOracle() {

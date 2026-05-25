@@ -17,30 +17,23 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family discriminating each {@code <user/>} child in a LID-addressed disallowed-list reply.
+ * Discriminates each {@code <user/>} child in a LID-addressed disallowed-list reply.
  *
- * @apiNote
- * Consumed by {@code WAWebQueryPrivacyDisallowedListLidJob.queryPrivacyDisallowedListLid}: the
- * {@link Username} arm seeds {@code WAWebSetUsernameJob.setUsernamesJob} for username-only contacts; the
- * {@link PnJid} arm primes the LID-to-PN mapping store via
- * {@code WAWebDBCreateLidPnMappings.createLidPnMappingsInBatches}; the {@link Empty} arm is logged as a
- * benign LID entry the relay knows nothing else about.
+ * <p>The {@link Username} arm seeds the local username cache for username-only contacts; the {@link PnJid} arm
+ * primes the LID-to-PN mapping store; and the {@link Empty} arm marks a benign LID entry the relay knows nothing
+ * else about.
  *
- * @implNote
- * This implementation collapses the WA Web wire discriminator (the {@code Username} / {@code PnJid} /
- * {@code EmptyContactListIdentifier} tagged-union) into a sealed interface whose variant type is the
- * discriminator. Pattern matching replaces WA Web's {@code contactListIds.name === "..."} branches.
+ * @implNote This implementation collapses the WA Web wire discriminator (a username, phone-number, or empty
+ * tagged-union) into a sealed interface whose variant type is the discriminator, so pattern matching replaces a
+ * name comparison.
  */
 public sealed interface SmaxGetContactBlacklistContactListId
         permits SmaxGetContactBlacklistContactListId.Username, SmaxGetContactBlacklistContactListId.PnJid, SmaxGetContactBlacklistContactListId.Empty {
 
     /**
-     * The {@code Username} arm of the discriminator carrying a WhatsApp username string.
+     * Carries a WhatsApp username for a LID entry the relay tracks by username.
      *
-     * @apiNote
-     * Surfaced for LID entries the relay tracks by username (the username-displayed feature). Routed to
-     * {@code WAWebSetUsernameJob.setUsernamesJob} so the local username cache is primed before the user opens
-     * the privacy settings.
+     * <p>Routed into the local username cache so it is primed before the user opens the privacy settings.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyUsernameMixin")
     final class Username implements SmaxGetContactBlacklistContactListId {
@@ -52,10 +45,6 @@ public sealed interface SmaxGetContactBlacklistContactListId
         /**
          * Constructs a {@code Username} arm.
          *
-         * @apiNote
-         * Built by {@link SmaxGetContactBlacklistResponse} during the {@code <user/>} disjunction dispatch when
-         * the {@code username} attribute is present.
-         *
          * @param username the username; never {@code null}
          * @throws NullPointerException if {@code username} is {@code null}
          */
@@ -66,9 +55,7 @@ public sealed interface SmaxGetContactBlacklistContactListId
         /**
          * Returns the WhatsApp username.
          *
-         * @apiNote
-         * Use to drive the username-resolution path; the value is the literal echo from the relay and is not
-         * further validated by the parser.
+         * <p>The value is the literal echo from the relay and is not further validated by the parser.
          *
          * @return the username; never {@code null}
          */
@@ -76,6 +63,12 @@ public sealed interface SmaxGetContactBlacklistContactListId
             return username;
         }
 
+        /**
+         * Compares this arm with another for equality by username.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Username} with an equal username
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -88,11 +81,21 @@ public sealed interface SmaxGetContactBlacklistContactListId
             return Objects.equals(this.username, that.username);
         }
 
+        /**
+         * Returns a hash code derived from the username.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(username);
         }
 
+        /**
+         * Returns a debug representation carrying the username.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxGetContactBlacklistContactListId.Username[username=" + username + ']';
@@ -100,12 +103,10 @@ public sealed interface SmaxGetContactBlacklistContactListId
     }
 
     /**
-     * The {@code PnJid} arm of the discriminator carrying the legacy phone-number JID paired with the LID.
+     * Carries the legacy phone-number JID paired with a LID entry.
      *
-     * @apiNote
-     * Surfaced when the relay still remembers the original phone-number JID for the LID-addressed entry; routed
-     * to {@code WAWebDBCreateLidPnMappings.createLidPnMappingsInBatches} so the LID-to-PN cache is primed for
-     * later contact-resolution lookups.
+     * <p>Surfaced when the relay still remembers the original phone-number JID; routed into the LID-to-PN cache
+     * so later contact-resolution lookups resolve without a round-trip.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyPnJidMixin")
     final class PnJid implements SmaxGetContactBlacklistContactListId {
@@ -116,10 +117,6 @@ public sealed interface SmaxGetContactBlacklistContactListId
 
         /**
          * Constructs a {@code PnJid} arm.
-         *
-         * @apiNote
-         * Built by {@link SmaxGetContactBlacklistResponse} when the {@code <user/>} child carries the
-         * {@code pn_jid} attribute and the {@code username} attribute is absent.
          *
          * @param pnJid the echoed PN JID; never {@code null}
          * @throws NullPointerException if {@code pnJid} is {@code null}
@@ -137,6 +134,12 @@ public sealed interface SmaxGetContactBlacklistContactListId
             return pnJid;
         }
 
+        /**
+         * Compares this arm with another for equality by PN JID.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link PnJid} with an equal JID
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -149,11 +152,21 @@ public sealed interface SmaxGetContactBlacklistContactListId
             return Objects.equals(this.pnJid, that.pnJid);
         }
 
+        /**
+         * Returns a hash code derived from the PN JID.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(pnJid);
         }
 
+        /**
+         * Returns a debug representation carrying the PN JID.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxGetContactBlacklistContactListId.PnJid[pnJid=" + pnJid + ']';
@@ -161,24 +174,26 @@ public sealed interface SmaxGetContactBlacklistContactListId
     }
 
     /**
-     * The {@code Empty} arm of the discriminator for entries the relay has no PN echo for.
+     * Marks a LID-addressed entry the relay knows by LID only, with no PN echo.
      *
-     * @apiNote
-     * Surfaced for LID-addressed entries the relay knows by LID only; logged as a benign signal by
-     * {@code WAWebQueryPrivacyDisallowedListLidJob.queryPrivacyDisallowedListLid} and otherwise ignored.
+     * <p>Carries no state of its own; logged as a benign signal and otherwise ignored.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyEmptyContactListIdentifierMixin")
     final class Empty implements SmaxGetContactBlacklistContactListId {
         /**
          * Constructs an {@code Empty} arm.
          *
-         * @apiNote
-         * Built by {@link SmaxGetContactBlacklistResponse} when neither {@code username} nor {@code pn_jid} is
-         * present on the {@code <user/>} child; carries no state of its own.
+         * <p>Built when neither {@code username} nor {@code pn_jid} is present on the {@code <user/>} child.
          */
         public Empty() {
         }
 
+        /**
+         * Compares this arm with another for equality by runtime type.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an {@link Empty}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -187,11 +202,21 @@ public sealed interface SmaxGetContactBlacklistContactListId
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a constant hash code shared by every instance of this stateless arm.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Empty.class.hashCode();
         }
 
+        /**
+         * Returns a debug representation of this stateless arm.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxGetContactBlacklistContactListId.Empty[]";

@@ -13,13 +13,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that fetches the typed detail of a single business order.
+ * The typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that fetches the typed detail of a single
+ * business order.
  *
- * @apiNote
- * Use this request to materialise the order-details surface for a buyer who taps a merchant order receipt; the SMB profile and chat-order rails consume the matching {@link IqBizQueryOrderResponse} to render line items, subtotal, tax and total, alongside thumbnails sized to the requested {@code width} and {@code height}. The {@code token} is the merchant-supplied authentication token attached to the order; the optional direct-connection blob lets the relay route the query directly to the merchant when that path is enabled.
+ * <p>The request materialises the order-details surface for a buyer who taps a merchant order receipt; the matching
+ * {@link IqBizQueryOrderResponse} carries the line items, subtotal, tax and total, alongside thumbnails sized to the
+ * requested {@code width} and {@code height}. The {@code token} is the merchant-supplied authentication token attached
+ * to the order; the optional direct-connection blob lets the relay route the query directly to the merchant when that
+ * path is enabled.
  *
  * @implNote
- * This implementation targets the deprecated WAP path of {@code WAWebBizQueryOrderJob}; WA Web routes through a GraphQL query first when {@code graphQLForGetOrderInfoEnabled} is set and only falls back to this stanza shape when the GraphQL path is disabled. Cobalt ships only the wire-level WAP envelope.
+ * This implementation targets the deprecated WAP path; the WA Web job routes through a GraphQL query first when the
+ * GraphQL-for-order-info flag is set and only falls back to this stanza shape when the GraphQL path is disabled. Cobalt
+ * ships only the wire-level WAP envelope.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 public final class IqBizQueryOrderRequest implements IqOperation.Request {
@@ -44,15 +50,17 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     private final String token;
 
     /**
-     * The optional direct-connection encrypted info blob emitted as the {@code <direct_connection_encrypted_info/>} child content.
+     * The optional direct-connection encrypted info blob emitted as the {@code <direct_connection_encrypted_info/>}
+     * child content.
      */
     private final String directConnectionEncryptedInfo;
 
     /**
-     * Constructs a typed request.
+     * Constructs a typed request from an order id, a thumbnail size and a merchant token.
      *
-     * @apiNote
-     * Call this constructor when the order id and merchant token are already in hand; both arguments are mandatory because the relay rejects stanzas without an order target and without an authentication token. Pass {@code null} for {@code directConnectionEncryptedInfo} when the direct-merchant routing path is not in use.
+     * <p>The order id and the token are mandatory because the relay rejects stanzas without an order target and without
+     * an authentication token. Pass {@code null} for {@code directConnectionEncryptedInfo} when the direct-merchant
+     * routing path is not in use.
      *
      * @param orderId                       the order identifier; never {@code null}
      * @param width                         the requested thumbnail width in pixels
@@ -71,10 +79,10 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the order identifier.
+     * Returns the order identifier that the stanza names.
      *
-     * @apiNote
-     * Use this getter to read back the order target that the stanza will name; the value is the same opaque id returned by the merchant order pipeline and consumed by {@link IqBizQueryOrderResponse.Success}.
+     * <p>The value is the same opaque id returned by the merchant order pipeline and consumed by
+     * {@link IqBizQueryOrderResponse.Success}.
      *
      * @return the order identifier; never {@code null}
      */
@@ -83,10 +91,7 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the requested thumbnail width.
-     *
-     * @apiNote
-     * Use this getter to read back the pixel width that the relay will use when sizing product thumbnails carried in the success reply.
+     * Returns the requested thumbnail width that the relay uses when sizing product thumbnails in the success reply.
      *
      * @return the width in pixels
      */
@@ -95,10 +100,7 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the requested thumbnail height.
-     *
-     * @apiNote
-     * Use this getter to read back the pixel height that the relay will use when sizing product thumbnails carried in the success reply.
+     * Returns the requested thumbnail height that the relay uses when sizing product thumbnails in the success reply.
      *
      * @return the height in pixels
      */
@@ -107,10 +109,9 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the merchant-issued authentication token.
+     * Returns the merchant-issued authentication token that the relay verifies before serving the order detail.
      *
-     * @apiNote
-     * Use this getter to read back the authentication token that the relay verifies before serving the order detail; the value is opaque and unique to the merchant-order pair.
+     * <p>The value is opaque and unique to the merchant-order pair.
      *
      * @return the token; never {@code null}
      */
@@ -121,8 +122,8 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     /**
      * Returns the optional direct-connection routing blob.
      *
-     * @apiNote
-     * Use this getter to read back the encrypted routing payload that lets the relay forward the query directly to the merchant when direct-connection routing is enabled; the value is absent when classical relay routing applies.
+     * <p>The blob lets the relay forward the query directly to the merchant when direct-connection routing is enabled;
+     * the value is absent when classical relay routing applies.
      *
      * @return an {@link Optional} carrying the blob
      */
@@ -134,7 +135,8 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by the legacy fallback branch of {@code WAWebBizQueryOrderJob.queryOrder}: the {@code <order op="get" id/>} wrapper carries the {@code <image_dimensions>} pair, the {@code <token/>} child and, when supplied, the {@code <direct_connection_encrypted_info/>} child.
+     * This implementation emits an {@code <order op="get" id/>} wrapper carrying the {@code <image_dimensions>} pair,
+     * the {@code <token/>} child and, when supplied, the {@code <direct_connection_encrypted_info/>} child.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBizQueryOrderJob",

@@ -15,26 +15,21 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * USync {@code disappearing_mode} protocol descriptor.
+ * Describes the USync {@code disappearing_mode} protocol.
  *
- * @apiNote
- * Asks the relay for each peer's current disappearing-message timer; used
- * by {@code WAWebGetDisappearingModeJob.getDisappearingMode} and bundled
- * into the larger {@code WAWebContactSyncApi} contact sync.
+ * This descriptor asks the relay for each peer's current disappearing-message
+ * timer. The descriptor is stateless and carries no per-user request payload;
+ * pair it with any {@link UsyncUser} that carries an addressing slot.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncDisappearingMode")
 public final class UsyncDisappearingModeProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "disappearing_mode";
 
     /**
-     * Builds a default disappearing-mode-protocol descriptor.
-     *
-     * @apiNote
-     * The descriptor is stateless; pair it with any {@link UsyncUser} that
-     * carries an addressing slot.
+     * Creates a disappearing-mode-protocol descriptor.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDisappearingMode",
             exports = "USyncDisappearingModeProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -56,7 +51,7 @@ public final class UsyncDisappearingModeProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation emits an empty {@code <disappearing_mode/>}
-     * element, matching the JS {@code wap("disappearing_mode", null)} shape.
+     * element.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDisappearingMode",
@@ -69,10 +64,8 @@ public final class UsyncDisappearingModeProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation always returns {@link Optional#empty()} because
-     * the disappearing-mode protocol has no per-user payload on the request
-     * side, matching the JS {@code null} return in
-     * {@code USyncDisappearingModeProtocol.getUserElement}.
+     * This implementation always returns {@link Optional#empty()} because the
+     * disappearing-mode protocol has no per-user payload on the request side.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDisappearingMode",
@@ -84,14 +77,14 @@ public final class UsyncDisappearingModeProtocol implements UsyncProtocol {
     /**
      * {@inheritDoc}
      *
+     * This override parses the {@code duration} attribute (seconds, defaulting
+     * to zero), the {@code t} timestamp, and the {@code ephemerality_disabled}
+     * flag into a {@link DisappearingModeResult}.
+     *
      * @implNote
-     * This implementation parses the {@code duration} attribute (seconds,
-     * defaulting to zero), the {@code t} timestamp, and the
-     * {@code ephemerality_disabled} flag unconditionally; the JS parser
-     * only sets the flag when
-     * {@code WAWebPrivacyGatingUtils.isPAASupportForDisabledEphemeralityEnabled}
-     * returns true, but exposing the raw wire value here keeps the parser
-     * independent of client-side gating.
+     * This implementation reads {@code ephemerality_disabled} unconditionally;
+     * exposing the raw wire value keeps the parser independent of client-side
+     * gating that would otherwise suppress the flag.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDisappearingMode",

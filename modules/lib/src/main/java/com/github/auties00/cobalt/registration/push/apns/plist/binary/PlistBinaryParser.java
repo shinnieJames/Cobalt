@@ -18,88 +18,83 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 
 /**
- * A random-access parser for Apple's {@code bplist00} binary
- * property-list format.
+ * Parses Apple's {@code bplist00} binary property-list format into a {@link PlistValue} tree.
  *
- * @apiNote
- * Consumed indirectly via {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#parse(byte[])}.
- * The {@code bplist00} format puts a 32-byte trailer at the end of
- * the file carrying the offset-table location, the number of
- * objects, the top-object index, and the byte widths used for offset
- * and inter-object reference fields. Each object is identified by a
- * single marker byte whose high nibble selects the type and whose
- * low nibble carries either the count or {@code 1 << n} as the byte
- * width of the encoded scalar.
+ * <p>A binary plist closes with a fixed 32-byte trailer carrying the offset-table location, the
+ * number of objects, the index of the top-level object, and the byte widths used for offset-table
+ * entries and inter-object references. Every object is identified by a single marker byte whose high
+ * nibble selects the type and whose low nibble carries either an inline count or the {@code 1 << n}
+ * byte width of the encoded scalar. The parser reads the trailer once during construction and then
+ * decodes objects on demand, following the inter-object reference chains from the top object
+ * downward. Strings are materialised into Java {@link String}s and {@code <data>} payloads are
+ * exposed as offset/length slices over the source buffer via {@link PlistDataValue}; both arrays and
+ * dictionaries resolve their children through the object table rather than recursing on adjacent
+ * bytes. This is the binary half of the format-detecting facade reached through
+ * {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#parse(byte[])}.
  *
- * @implNote
- * This implementation walks the object tree on demand: the trailer
- * is read once in the constructor, then {@link #readObject(int)}
- * decodes each object the top-level reference chains into. Strings
- * are materialised into Java {@link String}s (the JVM has no
- * zero-copy alternative for arbitrary encodings) but {@code <data>}
- * payloads are exposed as zero-copy offset / length slices over the
- * source buffer via {@link PlistDataValue}.
+ * @implNote This implementation exposes {@code <data>} payloads as zero-copy slices over the source
+ *           buffer rather than copying them, because the APNS payloads decoded here are read once and
+ *           never outlive the source array; strings, by contrast, must be allocated since the JVM has
+ *           no zero-copy view over arbitrary-encoding bytes.
  */
 public final class PlistBinaryParser {
     /**
-     * The length in bytes of the trailer that closes a binary plist.
+     * Holds the byte length of the trailer that closes every binary plist.
+     *
+     * @implNote This implementation hard-codes 32 to match the fixed trailer layout defined by
+     *           Apple's {@code CFBinaryPList.c}: 5 unused bytes, a 1-byte sort-version, a 1-byte
+     *           offset width, a 1-byte reference width, and three 8-byte fields.
      */
     private static final int TRAILER_SIZE = 32;
 
     /**
-     * The magic header bytes that identify a binary plist.
+     * Holds the magic header bytes that identify a binary plist.
      *
-     * @apiNote
-     * Exposed package-private so {@link PlistBinaryWriter} can emit
-     * the same bytes and {@link #isBinary(byte[])} can probe for
-     * them.
+     * <p>Declared package-private so {@link PlistBinaryWriter} can emit the same prefix and
+     * {@link #isBinary(byte[])} can probe an input for it.
      */
     static final byte[] MAGIC = {'b', 'p', 'l', 'i', 's', 't', '0', '0'};
 
     /**
-     * The source bytes.
+     * Holds the source bytes the parser decodes.
      */
     private final byte[] src;
 
     /**
-     * The width in bytes of each offset-table entry.
+     * Holds the width in bytes of each offset-table entry.
      */
     private final int offsetSize;
 
     /**
-     * The width in bytes of each inter-object reference.
+     * Holds the width in bytes of each inter-object reference.
      */
     private final int refSize;
 
     /**
-     * The index of the top-level object within the object table.
+     * Holds the index of the top-level object within the object table.
      */
     private final int topObject;
 
     /**
-     * The absolute offset of the offset table within {@link #src}.
+     * Holds the absolute offset of the offset table within {@link #src}.
      */
     private final int offsetTableOffset;
 
     /**
-     * Constructs a parser bound to the source bytes and reads the
-     * trailer.
+     * Binds a parser to the source bytes and reads the trailer.
      *
-     * @apiNote
-     * Private; callers must route through {@link #parse(byte[])}.
+     * <p>Reads the offset width, reference width, object count, top-object index, and offset-table
+     * location from the trailer, validates that both widths fall in the inclusive range {@code [1, 8]},
+     * and bounds-checks that the offset table lies wholly within the source. Callers route through
+     * {@link #parse(byte[])} rather than constructing the parser directly.
      *
-     * @implNote
-     * This implementation reads the trailer fields at fixed offsets
-     * relative to {@code src.length - TRAILER_SIZE} per Apple's
-     * {@code CFBinaryPList.c}, validates the offset and reference
-     * widths are in {@code [1, 8]}, and bounds-checks the offset
-     * table before any object reads can run.
-     *
+     * @implNote This implementation reads the trailer fields at fixed offsets relative to
+     *           {@code src.length - TRAILER_SIZE} per Apple's {@code CFBinaryPList.c}: the offset
+     *           width at byte 6, the reference width at byte 7, the object count at byte 8, the
+     *           top-object index at byte 16, and the offset-table location at byte 24.
      * @param src the source bytes
-     * @throws IOException if the source is too short for a trailer,
-     *                     the offset or reference widths are out of
-     *                     range, or the offset table escapes the
-     *                     source
+     * @throws IOException if the source is too short to hold a trailer, the offset or reference widths
+     *                     are out of range, or the offset table escapes the source
      */
     private PlistBinaryParser(byte[] src) throws IOException {
         if (src.length < MAGIC.length + TRAILER_SIZE) {
@@ -123,16 +118,14 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Reports whether the source bytes start with the
-     * {@code bplist00} magic.
+     * Reports whether the source bytes start with the {@code bplist00} magic.
      *
-     * @apiNote
-     * Used by {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#parse(byte[])}
-     * to dispatch between the binary and XML parsers.
+     * <p>Returns {@code false} for any input shorter than the magic prefix, allowing the
+     * format-detecting facade {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#parse(byte[])}
+     * to dispatch between the binary and XML parsers without throwing.
      *
      * @param data the source bytes
-     * @return {@code true} if {@code data} starts with the binary
-     *         plist magic
+     * @return {@code true} if {@code data} starts with the binary plist magic
      */
     public static boolean isBinary(byte[] data) {
         if (data.length < MAGIC.length) {
@@ -149,9 +142,8 @@ public final class PlistBinaryParser {
     /**
      * Parses the source bytes into a {@link PlistValue} tree.
      *
-     * @apiNote
-     * Entry point; constructs an internal parser instance, reads the
-     * trailer and decodes the top object.
+     * <p>Constructs an internal parser instance, which reads and validates the trailer, then decodes
+     * the object at the top-object index and returns it as the root of the tree.
      *
      * @param data the binary plist bytes
      * @return the parsed root value
@@ -163,16 +155,15 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Resolves the on-disk offset of an object and decodes it.
+     * Resolves the on-disk offset of an object through the offset table and decodes it.
      *
-     * @apiNote
-     * The internal entry point used by the array and dictionary
-     * decoders to follow inter-object references.
+     * <p>Looks up the offset-table entry for {@code index}, reads the absolute object offset it holds,
+     * and decodes the object found there. This is the indirection the array and dictionary decoders use
+     * to follow inter-object references.
      *
      * @param index the index into the object table
      * @return the decoded value
-     * @throws IOException if the marker is unknown or the encoded
-     *                     payload escapes the source
+     * @throws IOException if the marker is unknown or the encoded payload escapes the source
      */
     private PlistValue readObject(int index) throws IOException {
         var entry = offsetTableOffset + index * offsetSize;
@@ -183,17 +174,16 @@ public final class PlistBinaryParser {
     /**
      * Decodes the object starting at the given absolute offset.
      *
-     * @apiNote
-     * Dispatches on the high nibble of the marker byte: {@code 0x0n}
-     * for singletons (true / false), {@code 0x1n} integers, {@code
-     * 0x2n} reals, {@code 0x3n} dates, {@code 0x4n} data,
-     * {@code 0x5n / 0x6n / 0x7n} strings,
-     * {@code 0xAn} arrays, {@code 0xDn} dicts.
+     * <p>Dispatches on the high nibble of the marker byte: {@code 0x0} for the boolean singletons,
+     * {@code 0x1} for integers, {@code 0x2} for reals, {@code 0x3} for dates, {@code 0x4} for data,
+     * {@code 0x5}/{@code 0x6}/{@code 0x7} for ASCII/UTF-16BE/UTF-8 strings, {@code 0xA} for arrays, and
+     * {@code 0xD} for dictionaries. Within the {@code 0x0} family the low nibble {@code 0x8} decodes
+     * {@code false} and {@code 0x9} decodes {@code true}. Any other type or singleton nibble is
+     * rejected.
      *
      * @param offset the absolute offset within {@link #src}
      * @return the decoded value
-     * @throws IOException if the marker is unknown or the encoded
-     *                     payload escapes the source
+     * @throws IOException if the marker is unknown or the encoded payload escapes the source
      */
     private PlistValue readObjectAt(int offset) throws IOException {
         var marker = src[offset] & 0xFF;
@@ -219,17 +209,16 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0x1n} integer marker.
+     * Decodes a {@code 0x1n} integer marker into a {@link PlistIntegerValue}.
      *
-     * @apiNote
-     * Apple's spec treats widths of 1, 2, and 4 bytes as unsigned
-     * and 8 bytes as signed two's-complement; 16-byte (uint128)
-     * integers are explicitly rejected because Cobalt has no
-     * 128-bit integer type to surface them as.
+     * <p>The low nibble {@code info} gives the byte count as {@code 1 << info}. Widths of 1, 2, and 4
+     * bytes are read unsigned and an 8-byte width is read as signed two's-complement; the 16-byte
+     * (uint128) width is rejected.
      *
+     * @implNote This implementation rejects the 16-byte width because Cobalt has no 128-bit integer
+     *           type to surface it through {@link PlistIntegerValue}, whose component is a {@code long}.
      * @param offset the marker offset
-     * @param info   the low nibble of the marker, where
-     *               {@code 1 << info} is the byte count
+     * @param info   the low nibble of the marker, where {@code 1 << info} is the byte count
      * @return the integer value
      * @throws IOException if the encoded width exceeds 8 bytes
      */
@@ -242,22 +231,17 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0x2n} floating-point marker.
+     * Decodes a {@code 0x2n} floating-point marker into a {@link PlistFloatingPointValue}.
      *
-     * @apiNote
-     * Apple's spec allows widths of 4 ({@code float32}) and 8
-     * ({@code float64}) bytes; other widths surface as
-     * {@link IOException}.
+     * <p>The low nibble {@code info} gives the byte count as {@code 1 << info}. A 4-byte width decodes
+     * an IEEE-754 {@code float32} and an 8-byte width decodes a {@code float64}; any other width is
+     * rejected.
      *
-     * @implNote
-     * This implementation uses
-     * {@link Float#intBitsToFloat(int)} / {@link Double#longBitsToDouble(long)}
-     * to reinterpret the big-endian bit pattern as the
-     * corresponding IEEE-754 value.
-     *
+     * @implNote This implementation reinterprets the big-endian bit pattern with
+     *           {@link Float#intBitsToFloat(int)} and {@link Double#longBitsToDouble(long)} rather than
+     *           computing the value arithmetically, matching how Apple stores reals as raw IEEE-754 bits.
      * @param offset the marker offset
-     * @param info   the low nibble of the marker, where
-     *               {@code 1 << info} is the byte count
+     * @param info   the low nibble of the marker, where {@code 1 << info} is the byte count
      * @return the floating-point value
      * @throws IOException if the encoded width is neither 4 nor 8
      */
@@ -271,17 +255,14 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0x33} date marker.
+     * Decodes a {@code 0x33} date marker into a {@link PlistDateValue}.
      *
-     * @apiNote
-     * Dates are IEEE-754 doubles holding seconds since
-     * 2001-01-01T00:00:00Z (the Apple reference date).
+     * <p>A date is stored as an 8-byte IEEE-754 double holding seconds (including a fractional part)
+     * relative to the Apple reference date 2001-01-01T00:00:00Z. The result is an {@link Instant}
+     * rebased onto the Unix epoch.
      *
-     * @implNote
-     * This implementation rebases the offset onto the Unix epoch by
-     * adding {@code 978307200} (the difference in seconds between
-     * the two epochs) and preserves fractional seconds in nanos.
-     *
+     * @implNote This implementation adds {@code 978307200} seconds, the difference between the Unix
+     *           epoch and the Apple reference date, and carries the fractional seconds through as nanos.
      * @param offset the marker offset
      * @return the date value
      */
@@ -293,16 +274,14 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0x4n} data marker.
+     * Decodes a {@code 0x4n} data marker into a {@link PlistDataValue}.
      *
-     * @apiNote
-     * The returned {@link PlistDataValue} is a zero-copy slice over
-     * {@link #src}; callers that need an isolated copy must call
-     * {@link PlistDataValue#toByteArray()}.
+     * <p>Resolves the payload length (inline when {@code info} is below {@code 0xF}, otherwise from the
+     * extended-length marker that follows) and returns a slice over {@link #src}. The returned value
+     * shares the source buffer; callers that need an isolated copy call {@link PlistDataValue#toByteArray()}.
      *
      * @param offset the marker offset
-     * @param info   the inline length, or {@code 0xF} when an
-     *               extended length follows the marker
+     * @param info   the inline length, or {@code 0xF} when an extended length follows the marker
      * @return the data value
      * @throws IOException if the slice escapes the source
      */
@@ -312,18 +291,15 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0x5n} / {@code 0x6n} / {@code 0x7n} string
-     * marker.
+     * Decodes a {@code 0x5n}, {@code 0x6n}, or {@code 0x7n} string marker into a {@link PlistStringValue}.
      *
-     * @apiNote
-     * The three string-type nibbles encode ASCII (1 byte per code
-     * unit), UTF-16BE (2 bytes per code unit) and UTF-8 (1 byte per
-     * code unit). Callers always receive a Java {@link String}; the
-     * cost of allocation is unavoidable.
+     * <p>The resolved length is a character count; multiplying it by {@code bytesPerUnit} yields the
+     * byte length of the payload, which is decoded with {@code charset}. The {@code 0x5} family is
+     * ASCII and {@code 0x7} is UTF-8 (one byte per code unit), while {@code 0x6} is UTF-16BE (two bytes
+     * per code unit). The decoded text is always returned as a Java {@link String}.
      *
      * @param offset       the marker offset
-     * @param info         the inline character count, or {@code 0xF}
-     *                     for an extended count
+     * @param info         the inline character count, or {@code 0xF} for an extended count
      * @param charset      the source encoding
      * @param bytesPerUnit the source bytes per code unit
      * @return the string value
@@ -336,15 +312,14 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0xAn} array marker.
+     * Decodes a {@code 0xAn} array marker into a {@link PlistArrayValue}.
      *
-     * @apiNote
-     * The on-disk layout is N inter-object references back-to-back;
-     * each reference is decoded via {@link #readObject(int)}.
+     * <p>The resolved length is the element count, and the payload is that many inter-object references
+     * laid back-to-back, each {@link #refSize} bytes wide. Each reference is resolved through
+     * {@link #readObject(int)} and the decoded values are collected in order.
      *
      * @param offset the marker offset
-     * @param info   the inline element count, or {@code 0xF} for an
-     *               extended count
+     * @param info   the inline element count, or {@code 0xF} for an extended count
      * @return the array value
      * @throws IOException if any element fails to decode
      */
@@ -360,21 +335,17 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Decodes a {@code 0xDn} dictionary marker.
+     * Decodes a {@code 0xDn} dictionary marker into a {@link PlistDictionaryValue}.
      *
-     * @apiNote
-     * The on-disk layout is N key references followed by N value
-     * references, both contiguous; keys must resolve to
-     * {@link PlistStringValue} per the spec.
+     * <p>The resolved length is the entry count, and the payload is that many key references followed
+     * by the same number of value references, all contiguous. Each key reference must resolve to a
+     * {@link PlistStringValue}, whose decoded text becomes the map key; the matching value reference is
+     * resolved to the entry value.
      *
-     * @implNote
-     * This implementation uses {@link LinkedHashMap} so the
-     * insertion order of the on-disk dictionary is preserved for
-     * downstream callers that walk the entries.
-     *
+     * @implNote This implementation backs the entries with a {@link LinkedHashMap} so the on-disk entry
+     *           order is preserved for downstream callers that iterate the dictionary.
      * @param offset the marker offset
-     * @param info   the inline entry count, or {@code 0xF} for an
-     *               extended count
+     * @param info   the inline entry count, or {@code 0xF} for an extended count
      * @return the dictionary value
      * @throws IOException if any key fails to decode as a string
      */
@@ -397,19 +368,17 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Resolves the count and the start offset of the payload for a
-     * variable-length marker.
+     * Resolves the count and the start offset of the payload for a variable-length marker.
      *
-     * @apiNote
-     * When the marker's low nibble is below {@code 0xF} the count is
-     * inline; otherwise the next byte is itself an integer marker
-     * carrying the actual count.
+     * <p>When the marker's low nibble {@code info} is below {@code 0xF} the count is inline and the
+     * payload begins immediately after the marker byte. Otherwise the byte after the marker is itself an
+     * integer marker ({@code 0x1n}) whose payload carries the real count, and the payload begins after
+     * that integer.
      *
      * @param markerOffset the offset of the original marker
      * @param info         the low nibble of the original marker
-     * @return the resolved {@code (length, dataOffset)} pair
-     * @throws IOException if the extended-length marker is not an
-     *                     integer or exceeds 8 bytes
+     * @return the resolved length and payload start offset
+     * @throws IOException if the extended-length marker is not an integer or its width exceeds 8 bytes
      */
     private LengthSpan readLength(int markerOffset, int info) throws IOException {
         if (info < 0xF) {
@@ -429,13 +398,14 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * Reads {@code byteCount} big-endian bytes as a {@code long}.
+     * Reads {@code byteCount} big-endian bytes starting at {@code offset} as a {@code long}.
      *
-     * @apiNote
-     * Used for offsets, reference indices, lengths and integer
-     * payloads. The natural overflow gives the correct two's-
-     * complement value for 8-byte signed integers per Apple's spec.
+     * <p>Serves every multi-byte field the format defines: offset-table entries, inter-object
+     * references, extended lengths, and integer payloads.
      *
+     * @implNote This implementation lets the left-shift accumulation overflow naturally, which yields
+     *           the correct two's-complement value when {@code byteCount} is 8 and the high bit is set,
+     *           matching how Apple encodes signed 8-byte integers.
      * @param offset    the start offset
      * @param byteCount the number of bytes from 1 to 8
      * @return the assembled value
@@ -449,11 +419,10 @@ public final class PlistBinaryParser {
     }
 
     /**
-     * The pair of {@code (length, dataOffset)} returned by
-     * {@link #readLength(int, int)}.
+     * Pairs a resolved count with the offset of the first payload byte.
      *
-     * @apiNote
-     * Internal helper record; not exposed beyond the parser.
+     * <p>Returned by {@link #readLength(int, int)} so the variable-length decoders know both how many
+     * elements or bytes follow and where they begin.
      *
      * @param length     the count or byte length
      * @param dataOffset the offset of the first payload byte

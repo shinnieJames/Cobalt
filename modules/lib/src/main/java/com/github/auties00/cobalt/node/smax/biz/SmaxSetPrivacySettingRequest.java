@@ -13,13 +13,9 @@ import java.util.Optional;
  * The outbound stanza that writes the SMB-to-Meta data-sharing
  * consent to the relay.
  *
- * @apiNote
- * Used by the CTWA biz-data-sharing surface in
- * {@code WAWebCTWABizDataSharingJob.setCtwaBizDataSharingSettingJob},
- * which propagates the user's choice on the SMB data-sharing
- * settings screen. The {@code dataSharingConsent} payload accepts
- * one of {@code "true"} / {@code "false"} / {@code "notset"};
- * passing {@code null} omits the inner consent child entirely.
+ * <p>Propagates the user's choice on the SMB data-sharing settings screen. The
+ * {@code dataSharingConsent} payload accepts one of {@code "true"} / {@code "false"} /
+ * {@code "notset"}; passing {@code null} omits the inner consent child entirely.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsSetPrivacySettingRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsSmbDataSharingSettingMixin")
@@ -35,11 +31,8 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
     /**
      * Constructs a new request optionally carrying a consent value.
      *
-     * @apiNote
-     * Pass {@code null} to clear the stored choice (the JS
-     * mixin's {@code optionalMerge} skips the inner child); pass
-     * one of {@code "true"} / {@code "false"} / {@code "notset"}
-     * to record the user's preference.
+     * <p>Pass {@code null} to clear the stored choice (the inner consent child is omitted); pass
+     * one of {@code "true"} / {@code "false"} / {@code "notset"} to record the user's preference.
      *
      * @param dataSharingConsent the consent value; may be
      *                           {@code null}
@@ -51,9 +44,7 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
     /**
      * Returns the optional consent value.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the request was built
-     * without a consent payload.
+     * <p>Returns {@link Optional#empty()} when the request was built without a consent payload.
      *
      * @return an {@link Optional} carrying the consent value
      */
@@ -64,22 +55,15 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Stamps {@code xmlns="w:biz"}, {@code type="set"},
-     * {@code to="s.whatsapp.net"} and emits a
-     * {@code <privacy>} child carrying the optional
-     * {@code <smb_data_sharing_with_meta_consent value="..."/>}
-     * inner. The IQ {@code id} is assigned by the dispatcher.
-     *
      * @implNote
-     * This implementation stamps the {@code value} attribute on the
-     * inner consent child directly, fusing the JS pair
-     * {@code mergeSmbDataSharingSettingMixin} +
-     * {@code mergeSmbDataSharingSettingValueMixin} into a single
-     * builder call. The JS pipeline materialises an intermediate
-     * {@code smax$any{value=CUSTOM_STRING(anyValue)}} stanza and
-     * folds it via {@code mergeStanzas}; the wire result is
-     * identical.
+     * This implementation stamps {@code xmlns="w:biz"}, {@code type="set"},
+     * {@code to="s.whatsapp.net"} and emits a {@code <privacy>} child carrying the optional
+     * {@code <smb_data_sharing_with_meta_consent value="..."/>} inner; the IQ {@code id} is
+     * assigned by the dispatcher. The {@code value} attribute is stamped on the inner consent child
+     * directly, fusing the JS pair {@code mergeSmbDataSharingSettingMixin} and
+     * {@code mergeSmbDataSharingSettingValueMixin} into a single builder call. The JS pipeline
+     * materialises an intermediate value-carrying stanza and folds it via {@code mergeStanzas}; the
+     * wire result is identical.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizSettingsSetPrivacySettingRequest",
@@ -108,6 +92,9 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
                 .content(privacyBuilder.build());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -120,11 +107,17 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
         return Objects.equals(this.dataSharingConsent, that.dataSharingConsent);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(dataSharingConsent);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxSetPrivacySettingRequest[dataSharingConsent=" + dataSharingConsent + ']';

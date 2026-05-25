@@ -12,59 +12,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound reply variants produced by the relay
- * in response to a {@link SmaxGetLinkedAccountsRequest}.
- *
- * @apiNote
- * Each variant projects a distinct outcome of the SMB
- * business-linking enumeration bridge: {@link Success} carries
- * up to four typed identity projections, {@link Forbidden} captures
- * the documented {@code (403, "forbidden")} rejection when SMB
- * linking is disabled, {@link ClientError} carries any other
- * {@code 4xx}, and {@link ServerError} carries a transient
- * {@code 5xx} relay failure.
- *
- * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxBizLinkingGetLinkedAccountsRPC.sendGetLinkedAccountsRPC}
- * by trying the four variants in priority order via {@link #of} and
- * returning the first successful parse; the
- * {@link Forbidden}/{@link ClientError} split is required because
- * the WA Web pipeline treats forbidden as a non-error null return
- * while admitting other {@code 4xx} as a failure.
+ * Models the sealed family of inbound reply variants produced by the relay in response to a
+ * {@link SmaxGetLinkedAccountsRequest}.
+ * <p>
+ * Each variant projects a distinct outcome of the SMB business-linking enumeration bridge:
+ * {@link Success} carries up to four typed identity projections, {@link Forbidden} captures
+ * the documented {@code (403, "forbidden")} rejection raised when SMB linking is disabled,
+ * {@link ClientError} carries any other {@code 4xx}, and {@link ServerError} carries a
+ * transient {@code 5xx} relay failure. The {@link Forbidden}/{@link ClientError} split is
+ * required because the WA Web pipeline treats forbidden as a non-error null return while
+ * admitting other {@code 4xx} as a failure.
  */
 public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Response
         permits SmaxGetLinkedAccountsResponse.Success, SmaxGetLinkedAccountsResponse.Forbidden,
         SmaxGetLinkedAccountsResponse.ClientError, SmaxGetLinkedAccountsResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetLinkedAccountsResponse} variant in
-     * priority order and returns the first that parses cleanly.
-     *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxGetLinkedAccountsRequest}; the priority order
-     * matches WA Web's {@code parsing} dispatch table so that a
-     * malformed {@code Success} stanza falls through to the error
-     * variants rather than masking them.
-     *
-     * @implNote
-     * This implementation invokes {@link Success#of(Node, Node)}
-     * first, then {@link Forbidden#of(Node, Node)},
-     * {@link ClientError#of(Node, Node)} and finally
-     * {@link ServerError#of(Node, Node)}; {@link Forbidden} must be
-     * tried before {@link ClientError} because the latter is a
+     * Tries each variant in priority order and returns the first that parses cleanly.
+     * <p>
+     * Attempts {@link Success#of(Node, Node)} first, then {@link Forbidden#of(Node, Node)},
+     * {@link ClientError#of(Node, Node)} and finally {@link ServerError#of(Node, Node)}, so
+     * that a malformed success stanza falls through to the error variants rather than masking
+     * them. {@link Forbidden} is tried before {@link ClientError} because the latter is a
      * catch-all that admits all non-forbidden {@code 4xx} pairs.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza, used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound stanza, used to validate echoed identifiers; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizLinkingGetLinkedAccountsRPC",
             exports = "sendGetLinkedAccountsRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -87,16 +62,12 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant carrying up to four
-     * optional typed projections of the linked external
-     * identities.
-     *
-     * @apiNote
-     * Each sub-projection is present only when the corresponding
-     * identity is currently linked to the active business account;
-     * the WA Web CTWA ad-creation pipeline consumes
-     * {@link #fbPage()} as the primary linked page, falling back to
-     * {@link #whatsAppAdIdentity()} for WAA ad accounts.
+     * Carries up to four optional typed projections of the linked external identities.
+     * <p>
+     * Each sub-projection is present only when the corresponding identity is currently linked
+     * to the active business account. The CTWA ad-creation pipeline consumes {@link #fbPage()}
+     * as the primary linked page, falling back to {@link #whatsAppAdIdentity()} for WhatsApp Ads
+     * accounts.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess")
     final class Success implements SmaxGetLinkedAccountsResponse {
@@ -121,23 +92,12 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         private final WhatsAppAdIdentity whatsAppAdIdentity;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply from the four already-parsed optional projections.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the relay's
-         * four optional projection children have been parsed
-         * individually.
-         *
-         * @param fbPage             the optional Facebook-page
-         *                           projection; may be {@code null}
-         * @param fbBiz              the optional Facebook-business
-         *                           projection; may be {@code null}
-         * @param igProfessional     the optional
-         *                           Instagram-professional
-         *                           projection; may be {@code null}
-         * @param whatsAppAdIdentity the optional WhatsApp
-         *                           ad-identity projection; may
-         *                           be {@code null}
+         * @param fbPage             the optional Facebook-page projection; may be {@code null}
+         * @param fbBiz              the optional Facebook-business projection; may be {@code null}
+         * @param igProfessional     the optional Instagram-professional projection; may be {@code null}
+         * @param whatsAppAdIdentity the optional WhatsApp ad-identity projection; may be {@code null}
          */
         public Success(FbPage fbPage, FbBiz fbBiz,
                        IgProfessional igProfessional,
@@ -151,9 +111,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional Facebook-page projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <fb_page/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <fb_page/>} child
          */
         public Optional<FbPage> fbPage() {
             return Optional.ofNullable(fbPage);
@@ -162,9 +120,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional Facebook-business projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <fb_biz/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <fb_biz/>} child
          */
         public Optional<FbBiz> fbBiz() {
             return Optional.ofNullable(fbBiz);
@@ -173,9 +129,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional Instagram-professional projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <ig_professional/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <ig_professional/>} child
          */
         public Optional<IgProfessional> igProfessional() {
             return Optional.ofNullable(igProfessional);
@@ -184,31 +138,23 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional WhatsApp ad-identity projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <whatsapp_ad_identity/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <whatsapp_ad_identity/>} child
          */
         public Optional<WhatsAppAdIdentity> whatsAppAdIdentity() {
             return Optional.ofNullable(whatsAppAdIdentity);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
-         *
-         * @implNote
-         * This implementation enforces the
-         * {@code SmaxIqResultResponseMixin} envelope check first,
-         * then walks the {@code <linked_accounts/>} parent and
-         * dispatches each optional child to its typed parser; if
-         * any present child fails to parse the success parse
-         * fails as a whole, but a missing child is admitted.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
+         * <p>
+         * Enforces the {@link SmaxIqResultResponseMixin#validate(Node, Node)} envelope check
+         * first, then walks the {@code <linked_accounts/>} parent and dispatches each optional
+         * child to its typed parser. A present child that fails to parse fails the whole parse
+         * while a missing child is admitted.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess",
                 exports = "parseGetLinkedAccountsResponseSuccess",
@@ -263,7 +209,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across the four projections.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with equal projections
          */
         @Override
         public boolean equals(Object obj) {
@@ -281,7 +230,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the four projections.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -289,7 +240,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the four projections.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -300,17 +253,11 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * The {@code <fb_page/>} child projection carrying the
-         * linked Facebook page identity and its assorted
-         * sub-states.
-         *
-         * @apiNote
-         * Drives the WA Web SMB linked-pages settings surface
-         * and the CTWA ad-creation pipeline's primary identity
-         * selection; the {@link #adStatus()} mixin is read by
-         * {@code WAWebBusinessAdCreationUtils} to short-circuit
-         * the binding nonce handshake when the page already has
-         * an active CTWA ad.
+         * Carries the linked Facebook page identity and its assorted sub-states.
+         * <p>
+         * Drives the SMB linked-pages settings surface and the CTWA ad-creation pipeline's
+         * primary identity selection; the {@link #adStatus()} mixin lets the ad-creation flow
+         * short-circuit the binding nonce handshake when the page already has an active CTWA ad.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess")
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingFBPageResponseBaseMixin")
@@ -324,16 +271,13 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             private final String id;
 
             /**
-             * The display-name element-content (from
-             * {@code WASmaxInBizLinkingHasDisplayNameMixin}).
+             * The display-name element-content.
              */
             private final String displayName;
 
             /**
-             * The mandatory ad-status mixin projection (from
-             * {@code WASmaxInBizLinkingAdStatusMixin}) carrying
-             * the two boolean flags {@code has_created_ad} and
-             * {@code has_active_ctwa_ad}.
+             * The mandatory ad-status mixin projection carrying the two boolean flags
+             * {@code has_created_ad} and {@code has_active_ctwa_ad}.
              */
             private final SmaxAdStatusMixin adStatus;
 
@@ -343,71 +287,39 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             private final SmaxGetLinkedAccountsDisableImportState profileSyncState;
 
             /**
-             * The mandatory
-             * {@code <whatsapp_as_page_button state/>} state.
+             * The mandatory {@code <whatsapp_as_page_button state/>} state.
              */
             private final SmaxGetLinkedAccountsOffOnState whatsAppAsPageButtonState;
 
             /**
-             * The optional
-             * {@code <profile_picture><url/></profile_picture>}
-             * element-content URL; {@code null} when the upstream
-             * profile-picture mixin failed and the result was
-             * swallowed.
+             * The optional profile-picture URL element-content; {@code null} when the upstream
+             * profile-picture mixin failed and the result was swallowed.
              */
             private final String profilePictureUrl;
 
             /**
-             * The optional
-             * {@code <profile_picture><bytes/></profile_picture>}
-             * blob; {@code null} when omitted.
+             * The optional profile-picture blob; {@code null} when omitted.
              */
             private final byte[] profilePictureBytes;
 
             /**
-             * The optional {@code <show_on_profile/>} content
-             * flag; {@code null} when the upstream
-             * show-on-profile mixin failed and the result was
-             * swallowed.
+             * The optional {@code <show_on_profile/>} content flag; {@code null} when the
+             * upstream show-on-profile mixin failed and the result was swallowed.
              */
             private final SmaxGetLinkedAccountsFalseTrueFlag showOnProfile;
 
             /**
-             * Constructs a new projection.
+             * Constructs a projection from the parsed page fields.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <fb_page/>} child has been validated.
-             *
-             * @param id                        the page id; never
-             *                                  {@code null}
-             * @param displayName               the display name;
-             *                                  never {@code null}
-             * @param adStatus                  the mandatory
-             *                                  ad-status mixin;
-             *                                  never {@code null}
-             * @param profileSyncState          the optional
-             *                                  profile-sync state;
-             *                                  may be {@code null}
-             * @param whatsAppAsPageButtonState the WA-as-page-button
-             *                                  state; never
-             *                                  {@code null}
-             * @param profilePictureUrl         the optional
-             *                                  profile picture URL;
-             *                                  may be {@code null}
-             * @param profilePictureBytes       the optional
-             *                                  profile picture
-             *                                  bytes; may be
-             *                                  {@code null}
-             * @param showOnProfile             the optional
-             *                                  show-on-profile
-             *                                  flag; may be
-             *                                  {@code null}
-             * @throws NullPointerException if {@code id},
-             *                              {@code displayName},
-             *                              {@code adStatus} or
-             *                              {@code whatsAppAsPageButtonState}
-             *                              is {@code null}
+             * @param id                        the page id; never {@code null}
+             * @param displayName               the display name; never {@code null}
+             * @param adStatus                  the mandatory ad-status mixin; never {@code null}
+             * @param profileSyncState          the optional profile-sync state; may be {@code null}
+             * @param whatsAppAsPageButtonState the WhatsApp-as-page-button state; never {@code null}
+             * @param profilePictureUrl         the optional profile picture URL; may be {@code null}
+             * @param profilePictureBytes       the optional profile picture bytes; may be {@code null}
+             * @param showOnProfile             the optional show-on-profile flag; may be {@code null}
+             * @throws NullPointerException if {@code id}, {@code displayName}, {@code adStatus} or {@code whatsAppAsPageButtonState} is {@code null}
              */
             public FbPage(String id, String displayName, SmaxAdStatusMixin adStatus,
                           SmaxGetLinkedAccountsDisableImportState profileSyncState,
@@ -446,12 +358,6 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the mandatory ad-status mixin projection.
              *
-             * @apiNote
-             * Read by
-             * {@code WAWebBusinessAdCreationUtils} to short-circuit
-             * the binding nonce handshake when
-             * {@code has_active_ctwa_ad} is set.
-             *
              * @return the projection; never {@code null}
              */
             public SmaxAdStatusMixin adStatus() {
@@ -461,9 +367,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional profile-sync state.
              *
-             * @return an {@link Optional} carrying the state, or
-             *         empty when the relay omitted the
-             *         {@code <profile_sync/>} child
+             * @return an {@link Optional} carrying the state, or empty when the relay omitted the {@code <profile_sync/>} child
              */
             public Optional<SmaxGetLinkedAccountsDisableImportState> profileSyncState() {
                 return Optional.ofNullable(profileSyncState);
@@ -480,16 +384,11 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
 
             /**
              * Returns the optional profile-picture URL.
+             * <p>
+             * Empty when the upstream profile-picture mixin branch failed; see {@link #of(Node)}
+             * for the swallow semantics inherited from the WA Web caller.
              *
-             * @apiNote
-             * Empty when the upstream WA Web
-             * {@code WASmaxInBizLinkingHasProfilePictureMixin}
-             * branch failed; see the {@link #of(Node)} implNote
-             * for the swallow semantics inherited from the JS
-             * caller.
-             *
-             * @return an {@link Optional} carrying the URL, or
-             *         empty
+             * @return an {@link Optional} carrying the URL, or empty
              */
             public Optional<String> profilePictureUrl() {
                 return Optional.ofNullable(profilePictureUrl);
@@ -498,8 +397,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional profile-picture bytes.
              *
-             * @return an {@link Optional} carrying the bytes, or
-             *         empty
+             * @return an {@link Optional} carrying the bytes, or empty
              */
             public Optional<byte[]> profilePictureBytes() {
                 return Optional.ofNullable(profilePictureBytes);
@@ -507,14 +405,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
 
             /**
              * Returns the optional show-on-profile flag.
+             * <p>
+             * Empty when the upstream show-on-profile mixin branch failed; see {@link #of(Node)}.
              *
-             * @apiNote
-             * Empty when the upstream
-             * {@code WASmaxInBizLinkingHasShowOnProfileMixin}
-             * branch failed; see the {@link #of(Node)} implNote.
-             *
-             * @return an {@link Optional} carrying the flag, or
-             *         empty
+             * @return an {@link Optional} carrying the flag, or empty
              */
             public Optional<SmaxGetLinkedAccountsFalseTrueFlag> showOnProfile() {
                 return Optional.ofNullable(showOnProfile);
@@ -522,28 +416,21 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
 
             /**
              * Tries to parse the projection from the given node.
+             * <p>
+             * Walks the four mandatory positions (tag assertion, {@code id} attribute,
+             * {@code <display_name>} content, {@code adStatus} mixin via
+             * {@link SmaxAdStatusMixin#of(Node)}) and the mandatory
+             * {@code <whatsapp_as_page_button state>} attribute, then admits three optional
+             * mixins. The profile-sync state is hard-required when its child is present, while
+             * the {@code <profile_picture>} and {@code <show_on_profile>} branches leave their
+             * fields {@code null} on any sub-failure.
              *
-             * @implNote
-             * This implementation walks the four mandatory
-             * positions (tag assertion, {@code id} attribute,
-             * {@code <display_name>} content, {@code adStatus}
-             * mixin) and the mandatory
-             * {@code <whatsapp_as_page_button state>} attribute,
-             * then admits three optional mixins whose failure is
-             * swallowed: the profile-sync state is hard-required
-             * if its child is present, but the
-             * {@code <profile_picture>} and
-             * {@code <show_on_profile>} mixin branches mirror WA
-             * Web's upstream {@code i.success ? i.value : null}
-             * wrapping by leaving the corresponding fields
-             * {@code null} on any sub-failure rather than
-             * propagating {@link Optional#empty()} to the parent
-             * parse.
-             *
+             * @implNote This implementation mirrors WA Web's upstream {@code i.success ? i.value : null}
+             * wrapping by leaving the {@code <profile_picture>} and {@code <show_on_profile>}
+             * fields {@code null} on sub-failure rather than propagating {@link Optional#empty()}
+             * to the parent parse.
              * @param node the {@code <fb_page/>} node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess",
                     exports = "parseGetLinkedAccountsResponseSuccessLinkedAccountsFbPage",
@@ -631,7 +518,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality across all fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an {@link FbPage} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -653,7 +543,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from all fields, folding the picture bytes via {@link Arrays#hashCode(byte[])}.
+             *
+             * @return the combined hash code
              */
             @Override
             public int hashCode() {
@@ -664,7 +556,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the page fields except the raw picture bytes.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -679,15 +573,11 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * The {@code <fb_biz/>} child projection carrying the
-         * linked Facebook-business identity plus its catalog
-         * sub-state.
-         *
-         * @apiNote
-         * Surfaced as the secondary linked-business identity on
-         * the SMB linked-pages settings surface; the optional
-         * {@link Catalog} sub-projection drives the catalog
-         * import-status badge.
+         * Carries the linked Facebook-business identity plus its catalog sub-state.
+         * <p>
+         * Surfaced as the secondary linked-business identity on the SMB linked-pages settings
+         * surface; the optional {@link Catalog} sub-projection drives the catalog import-status
+         * badge.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingFBBizResponseMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingHasDisplayNameMixin")
@@ -708,21 +598,12 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             private final Catalog catalog;
 
             /**
-             * Constructs a new projection.
+             * Constructs a projection from the parsed business fields.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <fb_biz/>} child has been validated.
-             *
-             * @param id          the business id; never
-             *                    {@code null}
-             * @param displayName the display name; never
-             *                    {@code null}
-             * @param catalog     the optional catalog projection;
-             *                    may be {@code null}
-             * @throws NullPointerException if {@code id} or
-             *                              {@code displayName} is
-             *                              {@code null}
+             * @param id          the business id; never {@code null}
+             * @param displayName the display name; never {@code null}
+             * @param catalog     the optional catalog projection; may be {@code null}
+             * @throws NullPointerException if {@code id} or {@code displayName} is {@code null}
              */
             public FbBiz(String id, String displayName, Catalog catalog) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -751,8 +632,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional catalog projection.
              *
-             * @return an {@link Optional} carrying the projection,
-             *         or empty
+             * @return an {@link Optional} carrying the projection, or empty
              */
             public Optional<Catalog> catalog() {
                 return Optional.ofNullable(catalog);
@@ -760,20 +640,15 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
 
             /**
              * Tries to parse the projection from the given node.
+             * <p>
+             * Asserts the {@code fb_biz} tag, projects the mandatory {@code id} attribute and
+             * the {@code <display_name>} child content, and only then delegates the optional
+             * {@code <catalog>} grandchild to {@link Catalog#of(Node)}.
              *
-             * @implNote
-             * This implementation asserts the {@code fb_biz} tag,
-             * projects the mandatory {@code id} attribute and the
-             * {@code <display_name>} child content, and only then
-             * delegates the optional {@code <catalog>} grandchild
-             * to {@link Catalog#of(Node)}; a present-but-malformed
-             * catalog is a hard failure (unlike the swallow
-             * semantics on {@link FbPage}'s optional mixins).
-             *
+             * @implNote This implementation treats a present-but-malformed catalog as a hard
+             * failure, unlike the swallow semantics on {@link FbPage}'s optional mixins.
              * @param node the {@code <fb_biz/>} node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess",
                     exports = "parseGetLinkedAccountsResponseSuccessLinkedAccountsFbBiz",
@@ -810,7 +685,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality across all three fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an {@link FbBiz} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -827,7 +705,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from all three fields.
+             *
+             * @return the combined hash code
              */
             @Override
             public int hashCode() {
@@ -835,7 +715,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the business fields.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -845,16 +727,12 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * The {@code <catalog/>} grandchild projection
-             * carrying the linked Facebook-business catalog
-             * identifier and sync-state toggle.
-             *
-             * @apiNote
-             * Drives the catalog import-status badge on the SMB
-             * linked-pages settings surface; the {@link #state()}
-             * value mirrors
-             * {@link SmaxGetLinkedAccountsDisableImportState} on
-             * the {@code <fb_page><profile_sync>} position.
+             * Carries the linked Facebook-business catalog identifier and sync-state toggle.
+             * <p>
+             * Drives the catalog import-status badge on the SMB linked-pages settings surface;
+             * the {@link #state()} value mirrors
+             * {@link SmaxGetLinkedAccountsDisableImportState} on the
+             * {@code <fb_page><profile_sync>} position.
              */
             @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingFBBizResponseMixin")
             public static final class Catalog {
@@ -869,16 +747,11 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
                 private final SmaxGetLinkedAccountsDisableImportState state;
 
                 /**
-                 * Constructs a new catalog projection.
-                 *
-                 * @apiNote
-                 * Invoked by {@link #of(Node)} after the
-                 * {@code <catalog/>} child has been validated.
+                 * Constructs a catalog projection from the parsed id and state.
                  *
                  * @param id    the catalog id; never {@code null}
                  * @param state the state; never {@code null}
-                 * @throws NullPointerException if either argument
-                 *                              is {@code null}
+                 * @throws NullPointerException if either argument is {@code null}
                  */
                 public Catalog(String id, SmaxGetLinkedAccountsDisableImportState state) {
                     this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -904,22 +777,15 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
                 }
 
                 /**
-                 * Tries to parse the projection from the given
-                 * node.
-                 *
-                 * @implNote
-                 * This implementation asserts the {@code catalog}
-                 * tag, projects the mandatory {@code id}
-                 * attribute and the mandatory {@code state}
-                 * attribute through
-                 * {@link SmaxGetLinkedAccountsDisableImportState#of(String)};
-                 * any missing or malformed mandatory is a parse
-                 * failure.
+                 * Tries to parse the projection from the given node.
+                 * <p>
+                 * Asserts the {@code catalog} tag and projects the mandatory {@code id} and
+                 * {@code state} attributes, validating the latter through
+                 * {@link SmaxGetLinkedAccountsDisableImportState#of(String)}; any missing or
+                 * malformed mandatory is a parse failure.
                  *
                  * @param node the {@code <catalog/>} node
-                 * @return an {@link Optional} carrying the
-                 *         projection, or empty when the node does
-                 *         not match the documented schema
+                 * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
                  */
                 @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingFBBizResponseMixin",
                         exports = "parseFBBizResponseCatalog", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -941,7 +807,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
                 }
 
                 /**
-                 * {@inheritDoc}
+                 * Compares this projection to another object for value equality across both fields.
+                 *
+                 * @param obj the object to compare against; may be {@code null}
+                 * @return {@code true} when {@code obj} is a {@link Catalog} with equal fields
                  */
                 @Override
                 public boolean equals(Object obj) {
@@ -956,7 +825,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
                 }
 
                 /**
-                 * {@inheritDoc}
+                 * Returns a hash code derived from both fields.
+                 *
+                 * @return the combined hash code
                  */
                 @Override
                 public int hashCode() {
@@ -964,7 +835,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
                 }
 
                 /**
-                 * {@inheritDoc}
+                 * Returns a debug rendering listing the catalog id and state.
+                 *
+                 * @return the string representation
                  */
                 @Override
                 public String toString() {
@@ -975,16 +848,11 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * The {@code <ig_professional/>} child projection carrying
-         * the linked Instagram-professional identity plus
-         * profile-picture, display-name and show-on-profile
-         * sub-states.
-         *
-         * @apiNote
-         * Surfaced on the SMB linked-pages settings surface and
-         * propagated through the CTWA ads pipeline alongside
-         * {@link FbPage} when the calling business has both
-         * platforms linked.
+         * Carries the linked Instagram-professional identity plus profile-picture, display-name
+         * and show-on-profile sub-states.
+         * <p>
+         * Surfaced on the SMB linked-pages settings surface and propagated through the CTWA ads
+         * pipeline alongside {@link FbPage} when the calling business has both platforms linked.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingIGProfessionalResponseBaseMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingHasDisplayNameMixin")
@@ -992,62 +860,42 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingHasShowOnProfileMixin")
         public static final class IgProfessional {
             /**
-             * The Instagram handle (element-content of the
-             * {@code <ig_handle/>} child).
+             * The Instagram handle (element-content of the {@code <ig_handle/>} child).
              */
             private final String igHandle;
 
             /**
-             * The optional profile-picture URL element-content;
-             * {@code null} when the upstream profile-picture
-             * mixin failed and the result was swallowed.
+             * The optional profile-picture URL element-content; {@code null} when the upstream
+             * profile-picture mixin failed and the result was swallowed.
              */
             private final String profilePictureUrl;
 
             /**
-             * The optional profile-picture bytes; {@code null}
-             * when omitted.
+             * The optional profile-picture bytes; {@code null} when omitted.
              */
             private final byte[] profilePictureBytes;
 
             /**
-             * The optional display-name element-content;
-             * {@code null} when the upstream display-name mixin
-             * failed and the result was swallowed.
+             * The optional display-name element-content; {@code null} when the upstream
+             * display-name mixin failed and the result was swallowed.
              */
             private final String displayName;
 
             /**
-             * The optional show-on-profile flag; {@code null}
-             * when the upstream show-on-profile mixin failed and
-             * the result was swallowed.
+             * The optional show-on-profile flag; {@code null} when the upstream show-on-profile
+             * mixin failed and the result was swallowed.
              */
             private final SmaxGetLinkedAccountsFalseTrueFlag showOnProfile;
 
             /**
-             * Constructs a new projection.
+             * Constructs a projection from the parsed Instagram fields.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <ig_professional/>} child has been
-             * validated.
-             *
-             * @param igHandle            the Instagram handle;
-             *                            never {@code null}
-             * @param profilePictureUrl   the optional profile
-             *                            picture URL; may be
-             *                            {@code null}
-             * @param profilePictureBytes the optional profile
-             *                            picture bytes; may be
-             *                            {@code null}
-             * @param displayName         the optional display
-             *                            name; may be
-             *                            {@code null}
-             * @param showOnProfile       the optional
-             *                            show-on-profile flag;
-             *                            may be {@code null}
-             * @throws NullPointerException if {@code igHandle} is
-             *                              {@code null}
+             * @param igHandle            the Instagram handle; never {@code null}
+             * @param profilePictureUrl   the optional profile picture URL; may be {@code null}
+             * @param profilePictureBytes the optional profile picture bytes; may be {@code null}
+             * @param displayName         the optional display name; may be {@code null}
+             * @param showOnProfile       the optional show-on-profile flag; may be {@code null}
+             * @throws NullPointerException if {@code igHandle} is {@code null}
              */
             public IgProfessional(String igHandle,
                                   String profilePictureUrl,
@@ -1073,8 +921,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional profile-picture URL.
              *
-             * @return an {@link Optional} carrying the URL, or
-             *         empty
+             * @return an {@link Optional} carrying the URL, or empty
              */
             public Optional<String> profilePictureUrl() {
                 return Optional.ofNullable(profilePictureUrl);
@@ -1083,8 +930,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional profile-picture bytes.
              *
-             * @return an {@link Optional} carrying the bytes, or
-             *         empty
+             * @return an {@link Optional} carrying the bytes, or empty
              */
             public Optional<byte[]> profilePictureBytes() {
                 return Optional.ofNullable(profilePictureBytes);
@@ -1093,8 +939,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional display name.
              *
-             * @return an {@link Optional} carrying the name, or
-             *         empty
+             * @return an {@link Optional} carrying the name, or empty
              */
             public Optional<String> displayName() {
                 return Optional.ofNullable(displayName);
@@ -1103,8 +948,7 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             /**
              * Returns the optional show-on-profile flag.
              *
-             * @return an {@link Optional} carrying the flag, or
-             *         empty
+             * @return an {@link Optional} carrying the flag, or empty
              */
             public Optional<SmaxGetLinkedAccountsFalseTrueFlag> showOnProfile() {
                 return Optional.ofNullable(showOnProfile);
@@ -1112,24 +956,17 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
 
             /**
              * Tries to parse the projection from the given node.
+             * <p>
+             * Walks the two mandatory positions (tag assertion and the {@code <ig_handle>}
+             * content) and admits three optional mixins; the {@code <profile_picture>},
+             * {@code <display_name>} and {@code <show_on_profile>} branches all leave their
+             * fields {@code null} on sub-failure.
              *
-             * @implNote
-             * This implementation walks the two mandatory
-             * positions (tag assertion and the
-             * {@code <ig_handle>} content) and admits three
-             * optional mixins whose failure is swallowed: the
-             * {@code <profile_picture>}, {@code <display_name>}
-             * and {@code <show_on_profile>} branches all mirror
-             * WA Web's upstream
-             * {@code r.success ? r.value : null} wrapping by
-             * leaving the corresponding fields {@code null} on
-             * sub-failure rather than propagating
-             * {@link Optional#empty()} to the parent parse.
-             *
+             * @implNote This implementation mirrors WA Web's upstream {@code r.success ? r.value : null}
+             * wrapping by leaving the optional mixin fields {@code null} on sub-failure rather
+             * than propagating {@link Optional#empty()} to the parent parse.
              * @param node the {@code <ig_professional/>} node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess",
                     exports = "parseGetLinkedAccountsResponseSuccessLinkedAccountsIgProfessional",
@@ -1193,7 +1030,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality across all fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is an {@link IgProfessional} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -1212,7 +1052,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from all fields, folding the picture bytes via {@link Arrays#hashCode(byte[])}.
+             *
+             * @return the combined hash code
              */
             @Override
             public int hashCode() {
@@ -1222,7 +1064,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the Instagram fields except the raw picture bytes.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -1234,15 +1078,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * The {@code <whatsapp_ad_identity/>} child projection
-         * carrying the linked WhatsApp ad-account identifier plus
-         * its ad-status mixin.
-         *
-         * @apiNote
-         * Drives the WAA (WhatsApp Ads) account-type branch in
-         * {@code WAWebResolveAccountTypeAndAdPage}, used as the
-         * fallback identity when the calling business has no
-         * linked Facebook page.
+         * Carries the linked WhatsApp ad-account identifier plus its ad-status mixin.
+         * <p>
+         * Drives the WhatsApp Ads account-type branch of the CTWA pipeline, used as the fallback
+         * identity when the calling business has no linked Facebook page.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingWhatsAppAdIdentityResponseMixin")
         public static final class WhatsAppAdIdentity {
@@ -1252,26 +1091,17 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             private final String id;
 
             /**
-             * The mandatory ad-status mixin projection (from
-             * {@code WASmaxInBizLinkingAdStatusMixin}) carrying
-             * the two boolean flags {@code has_created_ad} and
-             * {@code has_active_ctwa_ad}.
+             * The mandatory ad-status mixin projection carrying the two boolean flags
+             * {@code has_created_ad} and {@code has_active_ctwa_ad}.
              */
             private final SmaxAdStatusMixin adStatus;
 
             /**
-             * Constructs a new projection.
-             *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <whatsapp_ad_identity/>} child has been
-             * validated.
+             * Constructs a projection from the parsed id and ad-status mixin.
              *
              * @param id       the identifier; never {@code null}
-             * @param adStatus the mandatory ad-status mixin;
-             *                 never {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @param adStatus the mandatory ad-status mixin; never {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public WhatsAppAdIdentity(String id, SmaxAdStatusMixin adStatus) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -1298,20 +1128,13 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
 
             /**
              * Tries to parse the projection from the given node.
+             * <p>
+             * Asserts the {@code whatsapp_ad_identity} tag, projects the mandatory {@code id}
+             * attribute, and then delegates to {@link SmaxAdStatusMixin#of(Node)} for the
+             * mandatory {@code <ad_status/>} child; any missing mandatory is a parse failure.
              *
-             * @implNote
-             * This implementation asserts the
-             * {@code whatsapp_ad_identity} tag, projects the
-             * mandatory {@code id} attribute, and then delegates
-             * to {@link SmaxAdStatusMixin#of(Node)} for the
-             * mandatory {@code <ad_status/>} child; any missing
-             * mandatory is a parse failure.
-             *
-             * @param node the {@code <whatsapp_ad_identity/>}
-             *             node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @param node the {@code <whatsapp_ad_identity/>} node
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseSuccess",
                     exports = "parseGetLinkedAccountsResponseSuccessLinkedAccountsWhatsappAdIdentity",
@@ -1336,7 +1159,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality across both fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is a {@link WhatsAppAdIdentity} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -1352,7 +1178,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from both fields.
+             *
+             * @return the combined hash code
              */
             @Override
             public int hashCode() {
@@ -1360,7 +1188,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the id and ad-status mixin.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -1371,17 +1201,13 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Forbidden} reply variant carrying the documented
-     * {@code (403, "forbidden")} rejection.
-     *
-     * @apiNote
-     * Surfaced when the relay refuses the enumeration because the
-     * calling business is not authorised to query linked accounts
-     * (for example, because the SMB linking feature has not been
-     * enabled on the relay side); the WA Web
-     * {@code WAWebLinkedAccountsJob} treats this as a non-error
-     * null result, so this variant is intentionally separated from
-     * {@link ClientError} for that branch.
+     * Carries the documented {@code (403, "forbidden")} rejection.
+     * <p>
+     * Surfaced when the relay refuses the enumeration because the calling business is not
+     * authorised to query linked accounts, for example because the SMB linking feature has not
+     * been enabled on the relay side. The WA Web pipeline treats this as a non-error null
+     * result, so this variant is intentionally separated from {@link ClientError} for that
+     * branch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseForbidden")
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingIQErrorForbiddenMixin")
@@ -1392,22 +1218,15 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new forbidden reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code (403, "forbidden")} literal pair has been
-         * validated.
+         * Constructs a forbidden reply from a validated {@code (403, "forbidden")} literal pair.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public Forbidden(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1426,34 +1245,24 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link Forbidden} variant from the
-         * given inbound stanza.
-         *
-         * @implNote
-         * This implementation routes the {@code <iq>}/{@code <error>}
-         * extraction through
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * then enforces the literal pair
-         * ({@code code == 403 && text.equals("forbidden")})
-         * surfaced by
-         * {@code WASmaxInBizLinkingIQErrorForbiddenMixin.parseIQErrorForbiddenMixin};
-         * any other {@code 4xx} pair (including a {@code 403}
-         * with a non-{@code "forbidden"} text) falls through to
+         * Tries to parse a {@link Forbidden} variant from the given inbound stanza.
+         * <p>
+         * Routes the error extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, then enforces the
+         * literal pair {@code code == 403 && text.equals("forbidden")}. Any other {@code 4xx}
+         * pair, including a {@code 403} with a non-{@code "forbidden"} text, falls through to
          * {@link ClientError}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         {@code 403}/forbidden schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the {@code 403}/forbidden schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseForbidden",
                 exports = "parseGetLinkedAccountsResponseForbidden",
@@ -1472,7 +1281,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Forbidden} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -1487,7 +1299,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -1495,7 +1309,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -1505,41 +1321,29 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant carrying any other
-     * documented {@code 4xx} error code that did not match
-     * {@link Forbidden}.
-     *
-     * @apiNote
-     * Surfaced when the relay rejected the request with a
-     * {@code 4xx} that is not the specific
-     * {@code (403, "forbidden")} pair; callers treat this as a
-     * hard failure rather than the non-error null return reserved
-     * for {@link Forbidden}.
+     * Carries any other documented {@code 4xx} error code that did not match {@link Forbidden}.
+     * <p>
+     * Surfaced when the relay rejected the request with a {@code 4xx} that is not the specific
+     * {@code (403, "forbidden")} pair; callers treat this as a hard failure rather than the
+     * non-error null return reserved for {@link Forbidden}.
      */
     final class ClientError implements SmaxGetLinkedAccountsResponse {
         /**
-         * The numeric error code in the {@code 4xx} range
-         * (excluding the {@code (403, "forbidden")} pair).
+         * The numeric error code in the {@code 4xx} range, excluding the
+         * {@code (403, "forbidden")} pair.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 4xx} envelope has been validated and the
-         * forbidden literal pair has been excluded.
+         * Constructs a client-error reply from a validated {@code 4xx} envelope that is not the forbidden literal pair.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1558,32 +1362,23 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
-         *
-         * @implNote
-         * This implementation routes the {@code <iq>}/{@code <error>}
-         * extraction through
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * then explicitly excludes the {@code (403, "forbidden")}
-         * literal pair so that {@link Forbidden} retains exclusive
-         * ownership of that case in the orchestrator's priority
-         * order.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
+         * <p>
+         * Routes the error extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, then explicitly
+         * excludes the {@code (403, "forbidden")} literal pair so that {@link Forbidden} retains
+         * exclusive ownership of that case in the priority order of {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema, or when {@link Forbidden}
-         *         would have matched first
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema or when {@link Forbidden} would have matched first
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -1597,7 +1392,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -1612,7 +1410,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -1620,7 +1420,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -1630,39 +1432,29 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant carrying a transient
-     * {@code 5xx} relay failure.
-     *
-     * @apiNote
-     * Indicates the relay could not complete the linked-accounts
-     * enumeration for an internal reason; callers can re-issue
-     * the request with backoff.
+     * Carries a transient {@code 5xx} relay failure.
+     * <p>
+     * Indicates the relay could not complete the linked-accounts enumeration for an internal
+     * reason; callers can re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingIQErrorInternalServerErrorMixin")
     final class ServerError implements SmaxGetLinkedAccountsResponse {
         /**
-         * The numeric server-side error code in the {@code 5xx}
-         * range.
+         * The numeric server-side error code in the {@code 5xx} range.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 5xx} envelope has been validated.
+         * Constructs a server-error reply from a validated {@code 5xx} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1681,29 +1473,22 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
-         *
-         * @implNote
-         * This implementation delegates the {@code 5xx} range
-         * check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
-         * any stanza outside the {@code 5xx} range yields
-         * {@link Optional#empty()}.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
+         * <p>
+         * Delegates the {@code 5xx} range check to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}; a stanza outside the
+         * {@code 5xx} range yields {@link Optional#empty()}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetLinkedAccountsResponseError",
                 exports = "parseGetLinkedAccountsResponseError",
@@ -1717,7 +1502,10 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -1732,7 +1520,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -1740,7 +1530,9 @@ public sealed interface SmaxGetLinkedAccountsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

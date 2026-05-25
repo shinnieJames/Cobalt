@@ -15,10 +15,9 @@ import java.security.GeneralSecurityException;
 /**
  * A single mutation that has been encrypted and authenticated for upload.
  *
- * @apiNote
- * Produced by the outgoing patch builder that runs every time the local
+ * <p>Produced by the outgoing patch builder that runs every time the local
  * device wants to push an app-state change (chat archive, mute, pin, label,
- * etc.) up to the relay. The four fields are the subset of the WA Web
+ * and similar) up to the relay. The four fields are the subset of the
  * encryption-wrapper result that the patch serializer actually places on the
  * wire: {@link #indexMac} goes into the {@code SyncdRecord.index.blob} slot
  * and {@link #encryptedValue} into {@code SyncdRecord.value.blob}, while
@@ -42,13 +41,11 @@ public record EncryptedMutation(
     /**
      * Encrypts a pending mutation into its wire form.
      *
-     * @apiNote
-     * Called from the outgoing patch builder (the Cobalt counterpart of
-     * {@code WAWebSyncdRequestBuilderBuild.buildPatch}) once per pending
-     * mutation. SET mutations encrypt under the device's currently active
-     * sync key; REMOVE mutations re-encrypt under the original key id of the
-     * matching SET (the caller resolves that lookup before invoking this
-     * factory and passes the resolved {@code keys} and {@code keyId}).
+     * <p>Called from the outgoing patch builder once per pending mutation. SET
+     * mutations encrypt under the device's currently active sync key; REMOVE
+     * mutations re-encrypt under the original key id of the matching SET (the
+     * caller resolves that lookup before invoking this factory and passes the
+     * resolved {@code keys} and {@code keyId}).
      *
      * @implNote
      * This implementation merges three responsibilities that WA Web splits
@@ -56,7 +53,7 @@ public record EncryptedMutation(
      * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}, and
      * {@code WAWebSyncdRequestEncode.encodeSyncActionData}:
      * <ul>
-     *   <li>The protobuf encoding of {@link SyncActionData} via
+     *   <li>The protobuf encoding of {@link com.github.auties00.cobalt.model.sync.SyncActionData} via
      *       {@link SyncActionDataSpec#encode}; the WA Web fatal-error WAM
      *       counter is not emitted (Cobalt does not run WAM), but the
      *       throw on serialization failure is preserved as a
@@ -127,11 +124,10 @@ public record EncryptedMutation(
     /**
      * Returns the trailing 32 bytes of {@link #encryptedValue}.
      *
-     * @apiNote
-     * Helper for the outgoing-patch MAC chaining: the patch MAC is computed
-     * over the concatenation of the snapshot MAC and every mutation's value
-     * MAC, and the value MAC for an outgoing mutation lives at the tail of
-     * its own ciphertext. The result equals
+     * <p>Feeds the outgoing-patch MAC chaining: the patch MAC is computed over
+     * the concatenation of the snapshot MAC and every mutation's value MAC, and
+     * the value MAC for an outgoing mutation lives at the tail of its own
+     * ciphertext. The result equals
      * {@link MutationKeys#valueMacFromIndexAndValueCipherText(byte[])}
      * applied to {@link #encryptedValue}.
      *

@@ -16,26 +16,23 @@ import java.util.Optional;
 
 /**
  * The sealed reply family for a {@link SmaxGroupsGetMembershipApprovalRequestsRequest}.
- *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
- * cases: {@link Success} carries the pending {@code <membership_approval_request>} entries that drive the admin
- * "Pending requests" surface, the two error variants surface the relay's reason codes. The
- * {@code WAWebGroupGetMembershipApprovalRequestsJob} caller in WA Web uses the same dispatch shape.
+ * <p>
+ * Exactly one of three variants matches a given inbound stanza: {@link Success} carries the pending {@link Approval}
+ * entries, {@link ClientError} carries a caller-side rejection code, and {@link ServerError} carries a transient
+ * relay-side failure code.
  */
 public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends SmaxOperation.Response
         permits SmaxGroupsGetMembershipApprovalRequestsResponse.Success, SmaxGroupsGetMembershipApprovalRequestsResponse.ClientError, SmaxGroupsGetMembershipApprovalRequestsResponse.ServerError {
 
     /**
-     * Dispatches the inbound IQ across each {@link SmaxGroupsGetMembershipApprovalRequestsResponse} variant in priority
-     * order and returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsGetMembershipApprovalRequestsResponse} variant and returns
+     * the first that parses cleanly.
+     * <p>
+     * Variants are tried in priority order: {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     * The result is empty when the stanza matches none of the three variants.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in
-     * {@code WASmaxGroupsGetMembershipApprovalRequestsRPC}: {@link Success} first, then {@link ClientError}, then
-     * {@link ServerError}.
-     *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation defers the no-match decision to the caller by returning an empty {@link Optional}
+     * rather than throwing, so the caller can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound request
@@ -61,12 +58,9 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
 
     /**
      * The reply variant emitted when the relay returned the pending approval queue.
-     *
-     * @apiNote Surfaces as the {@code GetMembershipApprovalRequestsResponseSuccess} case in
-     * {@code WAWebGroupGetMembershipApprovalRequestsJob}; the admin "Pending requests" UI iterates {@link #approvals()}
-     * and uses {@link #requestorFetch()} to decide whether to render the rich requestor identity. WA Web normalises
-     * the request-method strings ({@code "InviteLink"}, {@code "LinkedGroupJoin"}, {@code "NonAdminAdd"}) into the
-     * {@code WAWebRequestMethodType.RequestMethod} enum.
+     * <p>
+     * {@link #approvals()} holds the pending entries and {@link #requestorFetch()} echoes whether the relay populated
+     * the rich requestor identity on each entry.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetMembershipApprovalRequestsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetMembershipApprovalRequestsRequestorFetchMixin")
@@ -115,10 +109,11 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
 
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxIqResultResponseMixin#validate(Node, Node)} for envelope validation, then
-         * matches the {@code <membership_approval_requests>} wrapper holding zero or more
-         * {@code <membership_approval_request/>} entries.
+         * <p>
+         * The envelope is validated through {@link SmaxIqResultResponseMixin#validate(Node, Node)} and the
+         * {@code <membership_approval_requests>} wrapper must be present; each
+         * {@code <membership_approval_request/>} child is parsed via {@link Approval#of(Node)} and a single failed
+         * child fails the whole parse. An empty wrapper yields an empty approval list.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -190,14 +185,14 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
     }
 
     /**
-     * Per-approval projection carrying the requesting user's JID plus the optional resolved identity attributes,
-     * the request timestamp, and the optional request-method enum token.
-     *
-     * @apiNote Mirrors the {@code MembershipApprovalRequestMixin} shape; the {@link #requestor()},
-     * {@link #requestorPn()}, {@link #requestorUsername()}, and {@link #parentGroupJid()} fields are populated only
-     * when the request was issued with {@code requestor_fetch="true"} and the requestor identity differs from the
-     * displayed {@link #jid()} (community sub-group join requests). The {@link #requestMethod()} token is one of
-     * {@code "InviteLink"}, {@code "LinkedGroupJoin"}, or {@code "NonAdminAdd"}.
+     * Per-approval projection carrying the requesting user's JID, the optional resolved identity attributes, the
+     * request timestamp, and the optional request-method token.
+     * <p>
+     * The {@link #requestor()}, {@link #requestorPn()}, {@link #requestorUsername()}, and {@link #parentGroupJid()}
+     * fields are populated only when the request was issued with {@code requestor_fetch="true"} and the requestor
+     * identity differs from the displayed {@link #jid()}, as happens with community sub-group join requests. The
+     * {@link #requestMethod()} token is one of {@code "InviteLink"}, {@code "LinkedGroupJoin"}, or
+     * {@code "NonAdminAdd"}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetMembershipApprovalRequestsMembershipApprovalRequestMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestMethodAttributeMixin")
@@ -209,22 +204,24 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
         private final Jid jid;
 
         /**
-         * The optional resolved requestor {@link Jid} surfaced on the rich projection.
+         * The optional resolved requestor {@link Jid} surfaced on the rich projection; {@code null} when omitted.
          */
         private final Jid requestor;
 
         /**
-         * The optional resolved requestor phone-number {@link Jid} surfaced on the rich projection.
+         * The optional resolved requestor phone-number {@link Jid} surfaced on the rich projection; {@code null} when
+         * omitted.
          */
         private final Jid requestorPn;
 
         /**
-         * The optional resolved requestor username surfaced on the rich projection.
+         * The optional resolved requestor username surfaced on the rich projection; {@code null} when omitted.
          */
         private final String requestorUsername;
 
         /**
-         * The optional parent-community {@link Jid} surfaced on the rich projection for community-link join requests.
+         * The optional parent-community {@link Jid} surfaced on the rich projection for community-link join requests;
+         * {@code null} when omitted.
          */
         private final Jid parentGroupJid;
 
@@ -234,8 +231,8 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
         private final long requestTime;
 
         /**
-         * The optional request-method enum token (one of {@code "InviteLink"}, {@code "LinkedGroupJoin"},
-         * {@code "NonAdminAdd"}).
+         * The optional request-method token, one of {@code "InviteLink"}, {@code "LinkedGroupJoin"}, or
+         * {@code "NonAdminAdd"}; {@code null} when omitted.
          */
         private final String requestMethod;
 
@@ -248,7 +245,7 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
          * @param requestorUsername the optional resolved requestor username; may be {@code null}
          * @param parentGroupJid    the optional parent-community {@link Jid}; may be {@code null}
          * @param requestTime       the unix-seconds timestamp
-         * @param requestMethod     the optional request-method enum token; may be {@code null}
+         * @param requestMethod     the optional request-method token; may be {@code null}
          * @throws NullPointerException     if {@code jid} is {@code null}
          * @throws IllegalArgumentException if {@code requestTime} is negative
          */
@@ -321,12 +318,11 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
         }
 
         /**
-         * Returns the request-method enum token when supplied by the relay.
+         * Returns the request-method token when supplied by the relay.
+         * <p>
+         * Tokens are one of {@code "InviteLink"}, {@code "LinkedGroupJoin"}, or {@code "NonAdminAdd"}.
          *
-         * @apiNote Tokens are one of {@code "InviteLink"}, {@code "LinkedGroupJoin"}, or {@code "NonAdminAdd"}; WA Web
-         * maps these onto its {@code WAWebRequestMethodType.RequestMethod} enum.
-         *
-         * @return an {@link Optional} carrying the enum token, or empty when omitted
+         * @return an {@link Optional} carrying the token, or empty when omitted
          */
         public Optional<String> requestMethod() {
             return Optional.ofNullable(requestMethod);
@@ -334,8 +330,8 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
 
         /**
          * Tries to parse an {@link Approval} from the given {@code <membership_approval_request/>} child.
-         *
-         * @apiNote Matches when the child carries the {@code jid} and {@code request_time} attributes; the
+         * <p>
+         * Parsing succeeds when the child carries the {@code jid} and {@code request_time} attributes; the
          * {@code requestor}/{@code requestor_pn}/{@code requestor_username}/{@code parent_group_jid}/
          * {@code request_method} attributes are optional and only populated on the rich projection.
          *
@@ -420,10 +416,9 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
     /**
      * The reply variant emitted when the relay rejected the request as malformed, unauthorised, or referencing a
      * non-existent group.
-     *
-     * @apiNote Surfaces as the {@code GetMembershipApprovalRequestsResponseClientError} case in
-     * {@code WAWebGroupGetMembershipApprovalRequestsJob}, which logs the {@link #errorCode()} as the HTTP-style
-     * status passed back to the "Pending requests" admin UI.
+     * <p>
+     * The {@link #errorCode()} carries the HTTP-style status assigned by the relay and {@link #errorText()} carries
+     * the optional human-readable reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetMembershipApprovalRequestsResponseClientError")
     final class ClientError implements SmaxGroupsGetMembershipApprovalRequestsResponse {
@@ -433,7 +428,7 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -468,9 +463,9 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
 
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which matches only client-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -529,10 +524,10 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
 
     /**
      * The reply variant emitted on transient relay-side failure.
-     *
-     * @apiNote Surfaces as the {@code GetMembershipApprovalRequestsResponseServerError} case in
-     * {@code WAWebGroupGetMembershipApprovalRequestsJob}, where it is logged at the same severity as
-     * {@link ClientError} but typically signals retry-eligible relay outages rather than caller error.
+     * <p>
+     * Unlike {@link ClientError} this code typically signals a retry-eligible relay outage rather than a malformed or
+     * unauthorised request; {@link #errorCode()} carries the server-range status and {@link #errorText()} the optional
+     * reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetMembershipApprovalRequestsResponseServerError")
     final class ServerError implements SmaxGroupsGetMembershipApprovalRequestsResponse {
@@ -542,7 +537,7 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -577,9 +572,9 @@ public sealed interface SmaxGroupsGetMembershipApprovalRequestsResponse extends 
 
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which matches only server-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

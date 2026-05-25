@@ -12,79 +12,62 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="bot" type="get">} stanza builder for
- * fetching the AI-bot directory.
+ * The outbound {@code <iq xmlns="bot" type="get">} stanza builder for fetching the
+ * AI-bot directory.
  *
- * @apiNote
- * Used by callers driving the WA Web bot-directory fetch surfaced by
- * {@code WAWebRequestBotList.requestBotList} (invoked from
- * {@code WAWebInitializeBots} on startup). The relay returns a
- * {@link SmaxBotBotListResponse} carrying either a V2 directory
- * (legacy shape, indexed bot entries with theme overrides), a V3
- * directory (current shape with section display-type hints and a
- * digest), or an error envelope.
+ * <p>Driving code uses this to fetch the WA Web bot directory. The relay answers with a
+ * {@link SmaxBotBotListResponse} carrying either a V2 directory (legacy shape, indexed
+ * bot entries with theme overrides), a V3 directory (current shape with section
+ * display-type hints and a digest), or an error envelope. The optional revision and
+ * digest fields tune whether the relay returns the legacy V2 shape and whether it may
+ * short-circuit an unchanged directory.
  *
  * @implNote
- * This implementation flattens the WA Web smax mixin chain
- * (botList-IQ + base-IQ-get) into a single {@link #toNode()} call;
- * the per-arg {@code <bot jid=...>} children are inlined as a loop
- * rather than going through a separate
- * {@code makeBotListRequestBotBot} factory.
+ * This implementation flattens the WA Web smax mixin chain (botList-IQ plus base-IQ-get)
+ * into a single {@link #toNode()} call; the per-arg {@code <bot jid=...>} children are
+ * inlined as a loop rather than going through a separate factory.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBotBotListRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBotBotListIQMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBotBaseIQGetRequestMixin")
 public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     /**
-     * The optional protocol revision; typically {@code "2"} or
-     * {@code "3"}.
+     * The optional protocol revision; typically {@code "2"} or {@code "3"}.
      *
-     * @apiNote
-     * The WA Web initialiser passes {@code "2"} when requesting the
-     * legacy V2 shape and omits the attribute to let the relay pick
-     * the latest revision; {@code null} preserves the latter
-     * behaviour.
+     * <p>The WA Web initialiser passes {@code "2"} when requesting the legacy V2 shape
+     * and omits the attribute to let the relay pick the latest revision; {@code null}
+     * preserves the latter behaviour.
      */
     private final String botV;
 
     /**
      * The optional client-side directory digest.
      *
-     * @apiNote
-     * Lets the relay short-circuit with an empty V3 reply when the
-     * local directory snapshot matches the server's; {@code null}
-     * forces a full fetch.
+     * <p>Lets the relay short-circuit with an empty V3 reply when the local directory
+     * snapshot matches the server's; {@code null} forces a full fetch.
      */
     private final String botBhash;
 
     /**
-     * The list of bot JIDs to scope the query to; empty for an
-     * unconstrained directory fetch.
+     * The list of bot JIDs to scope the query to; empty for an unconstrained directory
+     * fetch.
      *
-     * @apiNote
-     * Each JID is emitted as a {@code <bot jid=...>} child. WA Web
-     * uses the scoped form to refresh specific bots; an empty list
-     * is the standard directory-fetch case.
+     * <p>Each JID is emitted as a {@code <bot jid=...>} child. The scoped form refreshes
+     * specific bots; an empty list is the standard directory-fetch case.
      */
     private final List<Jid> botArgs;
 
     /**
-     * Constructs a bot-directory request.
-     *
-     * @apiNote
-     * Use this when assembling a {@link SmaxBotBotListRequest} for
-     * dispatch through the smax send pipeline.
+     * Constructs a bot-directory request for dispatch through the smax send pipeline.
      *
      * @implNote
      * This implementation defensively copies the bot-arg list via
-     * {@link List#copyOf(java.util.Collection)} so caller mutations
-     * do not affect the request.
+     * {@link List#copyOf(java.util.Collection)} so caller mutations do not affect the
+     * request.
      *
-     * @param botV     the optional protocol revision; may be
-     *                 {@code null}
+     * @param botV     the optional protocol revision; may be {@code null}
      * @param botBhash the optional digest; may be {@code null}
-     * @param botArgs  the bot-JID scope list; never {@code null}, may
-     *                 be empty
+     * @param botArgs  the bot-JID scope list; never {@code null}, may be empty
      * @throws NullPointerException if {@code botArgs} is {@code null}
      */
     public SmaxBotBotListRequest(String botV, String botBhash, List<Jid> botArgs) {
@@ -97,12 +80,11 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     /**
      * Returns the optional protocol revision.
      *
-     * @apiNote
-     * Read by {@link #toNode()} when deciding whether to stamp the
+     * <p>Read by {@link #toNode()} when deciding whether to stamp the
      * {@code <bot v=...>} attribute.
      *
-     * @return an {@link Optional} carrying the revision, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the revision, or {@link Optional#empty()}
+     *         when omitted
      */
     public Optional<String> botV() {
         return Optional.ofNullable(botV);
@@ -111,12 +93,11 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     /**
      * Returns the optional client-side directory digest.
      *
-     * @apiNote
-     * Read by {@link #toNode()} when deciding whether to stamp the
+     * <p>Read by {@link #toNode()} when deciding whether to stamp the
      * {@code <bot bhash=...>} attribute.
      *
-     * @return an {@link Optional} carrying the digest, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the digest, or {@link Optional#empty()} when
+     *         omitted
      */
     public Optional<String> botBhash() {
         return Optional.ofNullable(botBhash);
@@ -125,9 +106,8 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     /**
      * Returns the bot-JID scope list.
      *
-     * @apiNote
-     * Read by {@link #toNode()} when fanning the entries into
-     * {@code <bot jid=...>} children.
+     * <p>Read by {@link #toNode()} when fanning the entries into {@code <bot jid=...>}
+     * children.
      *
      * @return an unmodifiable list; never {@code null}, may be empty
      */
@@ -138,8 +118,7 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The stanza has shape
+     * <p>The stanza has shape
      * {@snippet lang=xml :
      * <iq xmlns="bot" type="get" to="s.whatsapp.net">
      *   <bot v="2"? bhash="..."?>
@@ -148,16 +127,15 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
      *   </bot>
      * </iq>
      * }
+     * The {@code v} and {@code bhash} attributes are stamped only when the corresponding
+     * field is present, and the {@code to} attribute addresses {@link JidServer#user()}.
      * The dispatch layer stamps the {@code id} attribute.
      *
      * @implNote
-     * This implementation inlines the per-arg
-     * {@code <bot jid=...>} fanout that WA Web factors out as the
-     * {@code makeBotListRequestBotBot} helper. The result is shape-
-     * equivalent.
+     * This implementation inlines the per-arg {@code <bot jid=...>} fanout that WA Web
+     * factors out into a helper; the result is shape-equivalent.
      *
-     * @return a {@link NodeBuilder} carrying the partially-built IQ
-     *         envelope
+     * @return a {@link NodeBuilder} carrying the partially-built IQ envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBotBotListRequest",
@@ -196,12 +174,11 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Compares this request to another for value equality on every
-     * payload field.
+     * Compares this request to another for value equality on every payload field.
      *
      * @param obj the object to compare against
-     * @return {@code true} when {@code obj} is a
-     *         {@link SmaxBotBotListRequest} with identical fields
+     * @return {@code true} when {@code obj} is a {@link SmaxBotBotListRequest} with
+     *         identical fields
      */
     @Override
     public boolean equals(Object obj) {
@@ -230,9 +207,7 @@ public final class SmaxBotBotListRequest implements SmaxOperation.Request {
     /**
      * Returns a debug-friendly representation of this request.
      *
-     * @apiNote
-     * Intended for logging; the format is not part of the public
-     * contract.
+     * <p>The format is intended for logging and is not part of the contract.
      *
      * @return the string form
      */

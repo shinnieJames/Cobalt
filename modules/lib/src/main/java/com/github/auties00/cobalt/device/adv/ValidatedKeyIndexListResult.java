@@ -12,16 +12,16 @@ import java.util.Optional;
 import java.util.SequencedSet;
 
 /**
- * Decoded payload of a signed key-index list after cryptographic validation.
+ * Holds the decoded payload of a signed key-index list after cryptographic validation.
  *
- * @apiNote
- * Returned by {@link DeviceADVValidator#decodeSignedKeyIndexBytes} and
- * {@link DeviceADVValidator#verifySKeyIndexWithAccSigKey}. Carries the fields
- * downstream device-list appliers need to reason about companion-device validity
- * (the {@link #validIndexes() validIndexes} set, the {@link #currentIndex()
- * currentIndex} counter, the {@link #accountType()} flag for hosted accounts,
- * and the {@link #timestamp()} / {@link #rawId()} pair that detects identity
- * rotation) without having to re-decode the protobuf or re-verify the signature.
+ * <p>An instance is produced by {@link DeviceADVValidator#decodeSignedKeyIndexBytes} and
+ * {@link DeviceADVValidator#verifySKeyIndexWithAccSigKey} once the account signature has been
+ * verified and the inner protobuf decoded. It carries the fields a downstream device-list applier
+ * needs to reason about companion-device validity without re-decoding the protobuf or re-verifying
+ * the signature: the {@link #validIndexes() validIndexes} set, the {@link #currentIndex()
+ * currentIndex} counter, the {@link #accountType() accountType} flag distinguishing standard
+ * end-to-end encrypted accounts from hosted business-coexistence accounts, and the
+ * {@link #timestamp() timestamp} / {@link #rawId() rawId} pair that detects identity rotation.
  *
  * @see DeviceADVValidator#decodeSignedKeyIndexBytes(com.github.auties00.cobalt.model.jid.Jid, byte[])
  * @see DeviceADVValidator#verifySKeyIndexWithAccSigKey(byte[])
@@ -29,59 +29,56 @@ import java.util.SequencedSet;
 @WhatsAppWebModule(moduleName = "WAWebHandleAdvDeviceNotificationUtils")
 public final class ValidatedKeyIndexListResult {
     /**
-     * The raw identity id lifted from the inner {@code ADVKeyIndexList.rawId}.
+     * Holds the raw identity id lifted from the inner {@code ADVKeyIndexList.rawId} field.
      */
     private final long rawId;
 
     /**
-     * The snapshot timestamp lifted from the inner
-     * {@code ADVKeyIndexList.timestamp}.
+     * Holds the snapshot timestamp lifted from the inner {@code ADVKeyIndexList.timestamp} field.
      */
     private final Instant timestamp;
 
     /**
-     * The set of key indexes the account currently considers valid.
+     * Holds the set of key indexes the account currently considers valid, in encounter order.
      */
     private final SequencedSet<Integer> validIndexes;
 
     /**
-     * The current key index counter.
+     * Holds the current key index counter.
      */
     private final int currentIndex;
 
     /**
-     * The account encryption type, defaulting to E2EE when absent.
+     * Holds the account encryption type, defaulting to {@link ADVEncryptionType#E2EE} when the
+     * inner protobuf omits it.
      */
     private final ADVEncryptionType accountType;
 
     /**
-     * The 32-byte account signature key from the outer signed wrapper, or
-     * {@code null} when the standard E2EE path verified against the
-     * locally-stored primary identity and therefore has no embedded key to
-     * forward.
+     * Holds the 32-byte account signature key lifted from the outer signed wrapper.
+     *
+     * <p>The value is {@code null} when the standard end-to-end encrypted path verified against the
+     * locally-stored primary identity and therefore has no embedded key to forward; it is non-null
+     * only on the hosted business-coexistence path.
      */
     private final byte[] accountSignatureKey;
 
     /**
-     * Constructs a new validated key-index list result.
+     * Constructs a validated key-index list result from the already-verified fields.
      *
-     * @apiNote
-     * Built by {@link DeviceADVValidator}'s verify-and-build helper after the
-     * signature has been verified and the inner protobuf decoded; callers do
-     * not normally construct one directly.
+     * <p>The instance is built by {@link DeviceADVValidator}'s verify-and-build helper after the
+     * signature has been verified and the inner protobuf decoded.
      *
      * @param rawId               the raw identity id
      * @param timestamp           the key-index list timestamp
      * @param validIndexes        the set of valid key indexes
      * @param currentIndex        the current key index counter
      * @param accountType         the account encryption type
-     * @param accountSignatureKey the 32-byte account signature key, or
-     *                            {@code null} when the standard E2EE path
-     *                            verified against the locally-stored primary
-     *                            identity
-     * @throws NullPointerException if any of {@code timestamp},
-     *                              {@code validIndexes} or {@code accountType}
-     *                              is {@code null}
+     * @param accountSignatureKey the 32-byte account signature key, or {@code null} when the
+     *                            standard end-to-end encrypted path verified against the
+     *                            locally-stored primary identity
+     * @throws NullPointerException if any of {@code timestamp}, {@code validIndexes} or
+     *                              {@code accountType} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "verifySKeyIndexWithAccSigKey",
@@ -105,10 +102,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the raw identity id from the key-index list.
      *
-     * @apiNote
-     * Compared against the cached device list's {@code rawId} by the device-list
-     * applier; a mismatch is interpreted as an identity rotation and the cached
-     * record is cleared.
+     * <p>The device-list applier compares this value against the cached device list's {@code rawId};
+     * a mismatch is interpreted as an identity rotation and clears the cached record.
      *
      * @return the raw identity id
      */
@@ -122,11 +117,9 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the snapshot timestamp from the key-index list.
      *
-     * @apiNote
-     * The device-list applier compares this timestamp against the cached
-     * snapshot timestamp; a backwards-going timestamp causes the slot to be
-     * dropped. Also fed into the expected-timestamp tracking that gates the ADV
-     * check job.
+     * <p>The device-list applier compares this timestamp against the cached snapshot timestamp and
+     * drops the slot when it goes backwards; the value also feeds the expected-timestamp tracking
+     * that gates the recurring ADV check.
      *
      * @return the timestamp
      */
@@ -140,12 +133,10 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the set of key indexes the account currently considers valid.
      *
-     * @apiNote
-     * Used to filter the cached device list down to companions whose key index
-     * still appears in the account's signed key-index list; companions whose
-     * index is no longer valid are evicted.
+     * <p>The device-list applier filters the cached device list down to companions whose key index
+     * still appears in this set, evicting companions whose index is no longer valid.
      *
-     * @return an unmodifiable view of the valid indexes
+     * @return an unmodifiable view of the valid indexes, in encounter order
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "verifySKeyIndexWithAccSigKey",
@@ -157,11 +148,9 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the current key index counter.
      *
-     * @apiNote
-     * Used by the device-list applier as the cutoff for accepting cached
-     * companion entries whose own key index is greater than the counter: those
-     * entries are retained because they represent rotations not yet reflected
-     * in the signed list.
+     * <p>The device-list applier uses this counter as the cutoff for accepting cached companion
+     * entries: an entry whose own key index exceeds the counter is retained because it represents a
+     * rotation not yet reflected in the signed list.
      *
      * @return the current index
      */
@@ -173,12 +162,12 @@ public final class ValidatedKeyIndexListResult {
     }
 
     /**
-     * Returns the account encryption type, either E2EE or HOSTED.
+     * Returns the account encryption type, either {@link ADVEncryptionType#E2EE} or
+     * {@link ADVEncryptionType#HOSTED}.
      *
-     * @apiNote
-     * Drives the hosted business-coexistence branch in the device-list applier:
-     * a HOSTED type signals that the user is a hosted business account and
-     * triggers cache invalidation when the cached and incoming types disagree.
+     * <p>The value drives the hosted business-coexistence branch in the device-list applier: a
+     * {@link ADVEncryptionType#HOSTED} type marks the user as a hosted business account and triggers
+     * cache invalidation when the cached and incoming types disagree.
      *
      * @return the account type
      */
@@ -192,12 +181,10 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the 32-byte account signature key from the outer signed wrapper.
      *
-     * @apiNote
-     * Populated only by the hosted business-coexistence path
-     * ({@link DeviceADVValidator#verifySKeyIndexWithAccSigKey(byte[])}); the
-     * standard E2EE path verifies against the locally-stored primary identity
-     * and leaves this empty. When present, callers persist the key as the
-     * primary identity for the user.
+     * <p>The key is present only on the hosted business-coexistence path
+     * ({@link DeviceADVValidator#verifySKeyIndexWithAccSigKey(byte[])}); the standard end-to-end
+     * encrypted path verifies against the locally-stored primary identity and leaves it empty. When
+     * present, callers persist the key as the primary identity for the user.
      *
      * @return the account signature key, or empty when not provided
      */

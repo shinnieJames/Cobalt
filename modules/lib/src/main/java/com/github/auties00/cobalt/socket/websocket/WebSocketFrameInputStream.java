@@ -37,42 +37,45 @@ import static com.github.auties00.cobalt.socket.websocket.WebSocketFrameConstant
  * stream is itself synchronized so the input thread's auto-PONG
  * cannot race the writer thread's data frame.
  *
- * @implNote
- * This implementation reuses the mask SIMD strategy from the
- * pre-refactor {@code WebSocketFrameDecoder}: scalar alignment
- * lead-in, {@link ByteVector#lanewise(VectorOperators.Binary, byte)}
- * bulk, {@link VarHandle} int tail, byte tail. Below
+ * @implNote This implementation unmasks with a three-tier strategy:
+ * a scalar alignment lead-in, a
+ * {@link ByteVector#lanewise(VectorOperators.Binary, byte)} bulk loop,
+ * an {@link VarHandle} int tail and a final byte tail. Below
  * {@link #VECTORIZE_THRESHOLD} the SIMD path is skipped so small
  * payloads pay no vector-setup cost.
  */
 public final class WebSocketFrameInputStream extends FilterInputStream {
 
     /**
-     * The preferred hardware vector species used for SIMD bulk
+     * Holds the preferred hardware vector species used for SIMD bulk
      * unmasking.
      */
     private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVector.SPECIES_PREFERRED;
 
     /**
-     * The preferred hardware integer vector species used for
+     * Holds the preferred hardware integer vector species used for
      * building the mask broadcast.
      */
     private static final VectorSpecies<Integer> INT_SPECIES = IntVector.SPECIES_PREFERRED;
 
     /**
-     * The number of bytes processed per SIMD iteration.
+     * Holds the number of bytes processed per SIMD iteration.
      */
     private static final int VECTOR_LENGTH = BYTE_SPECIES.length();
 
     /**
-     * The minimum number of mask-aligned bytes required before the
-     * SIMD path is entered.
+     * Holds the minimum number of mask-aligned bytes required before
+     * the SIMD path is entered.
+     *
+     * @implNote This implementation requires two full vectors' worth of
+     * bytes so the per-call cost of building the broadcast mask is
+     * amortised over at least two iterations.
      */
     private static final int VECTORIZE_THRESHOLD = VECTOR_LENGTH * 2;
 
     /**
-     * The {@link VarHandle} that reads and writes {@code int} values
-     * from a {@code byte[]} in big-endian order, matching the
+     * Holds the {@link VarHandle} that reads and writes {@code int}
+     * values from a {@code byte[]} in big-endian order, matching the
      * mask-byte layout produced by
      * {@link WebSocketFrameConstants#maskByte(int, int)}.
      */
@@ -80,97 +83,91 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
             MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
 
     /**
-     * The paired output stream used to send PONG replies to PING
+     * Holds the paired output stream used to send PONG replies to PING
      * frames and CLOSE acknowledgements.
      */
     private final WebSocketFrameOutputStream pairedOutput;
 
     /**
-     * The reusable buffer for control-frame payloads (at most 125
-     * bytes per RFC 6455 section 5.5).
+     * Holds the reusable buffer for control-frame payloads, sized at
+     * the RFC 6455 section 5.5 maximum of 125 bytes so it never needs
+     * to grow.
      */
     private final byte[] controlPayload = new byte[CONTROL_PAYLOAD_MAX_LENGTH];
 
     /**
-     * The reusable single-byte buffer used by {@link #read()} to
+     * Holds the reusable single-byte buffer used by {@link #read()} to
      * delegate to the bulk-read code path.
      */
     private final byte[] oneByteBuf = new byte[1];
 
     /**
-     * The bytes carried over from the WebSocket upgrade response
-     * (the first frame's bytes that arrived in the same TCP segment);
-     * {@code null} once fully drained.
+     * Holds the bytes carried over from the WebSocket upgrade response
+     * (the first frame's bytes that arrived in the same TCP segment),
+     * or {@code null} once they are fully drained.
      */
     private ByteBuffer leftover;
 
     /**
-     * The payload bytes still to be consumed from the current frame;
-     * zero when no frame is in flight, in which case the next read
-     * triggers a new header parse.
+     * Holds the number of payload bytes still to be consumed from the
+     * current frame.
+     *
+     * <p>The value is zero when no frame is in flight, in which case
+     * the next read triggers a new header parse.
      */
     private long frameRemaining;
 
     /**
-     * The opcode of the current frame, set by
+     * Holds the opcode of the current frame, set by
      * {@link #parseFrameHeader()}.
      */
     private byte currentOpcode;
 
     /**
-     * The four-byte masking key from the current frame's header.
+     * Holds the four-byte masking key from the current frame's header.
      */
     private int maskKey;
 
     /**
-     * The running offset into the mask cycle.
+     * Holds the running offset into the mask cycle.
      *
-     * @apiNote
-     * Incremented as payload bytes are consumed so the mask is
-     * applied continuously across multiple {@code read} calls inside
-     * a single frame.
+     * <p>The value is incremented as payload bytes are consumed so the
+     * mask is applied continuously across multiple {@code read} calls
+     * inside a single frame.
      */
     private int maskOffset;
 
     /**
-     * Whether the current frame's MASK bit is set.
+     * Indicates whether the current frame's MASK bit is set.
      *
-     * @apiNote
-     * WhatsApp's server never masks its frames, but the bit is
-     * honoured for RFC conformance so a strict intermediary that
-     * masks server-to-client frames would still decode correctly.
+     * <p>WhatsApp's server never masks its frames, but the bit is
+     * honoured for RFC conformance so a strict intermediary that masks
+     * server-to-client frames would still decode correctly.
      */
     private boolean masked;
 
     /**
-     * Whether a CLOSE frame has been received; once set, subsequent
-     * reads return {@code -1}.
+     * Indicates whether a CLOSE frame has been received; once set,
+     * subsequent reads return {@code -1}.
      */
     private boolean closed;
 
     /**
-     * Wraps an underlying input stream with the WebSocket frame
-     * parser.
+     * Wraps an underlying input stream with the WebSocket frame parser.
      *
-     * @apiNote
-     * Constructed by
-     * {@link com.github.auties00.cobalt.socket.WhatsAppSocketClient}
-     * directly above the TLS-decrypted byte stream, with the
-     * {@code leftover} buffer carrying any bytes the server
-     * piggybacked on the upgrade response.
+     * <p>The decoder sits directly above the TLS-decrypted byte stream,
+     * with the {@code leftover} buffer carrying any bytes the server
+     * piggybacked on the upgrade response so they are drained before
+     * the underlying stream is touched.
      *
-     * @param in           the underlying stream of TLS-decrypted
-     *                     bytes
+     * @param in           the underlying stream of TLS-decrypted bytes
      * @param leftover     any bytes already read past the upgrade
-     *                     response's {@code CRLF CRLF}, or
-     *                     {@code null} if the upgrade response was
-     *                     consumed exactly
+     *                     response's {@code CRLF CRLF}, or {@code null}
+     *                     if the upgrade response was consumed exactly
      * @param pairedOutput the paired output stream that PONG replies
-     *                     and CLOSE acknowledgements are sent
-     *                     through
-     * @throws NullPointerException if {@code in} or
-     *                              {@code pairedOutput} is
-     *                              {@code null}
+     *                     and CLOSE acknowledgements are sent through
+     * @throws NullPointerException if {@code in} or {@code pairedOutput}
+     *                              is {@code null}
      */
     public WebSocketFrameInputStream(InputStream in, ByteBuffer leftover, WebSocketFrameOutputStream pairedOutput) {
         super(Objects.requireNonNull(in, "in"));
@@ -181,10 +178,9 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation delegates to {@link #read(byte[], int, int)}
-     * through {@link #oneByteBuf} so the frame parser sees a single
-     * code path.
+     * @implNote This implementation delegates to
+     * {@link #read(byte[], int, int)} through {@link #oneByteBuf} so
+     * the frame parser sees a single code path.
      */
     @Override
     public int read() throws IOException {
@@ -195,13 +191,11 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation parses any pending frame header inline
-     * (recursing into control-frame handling as needed) and then
-     * reads payload bytes directly into {@code dst} with SIMD
-     * unmasking applied in place; no intermediate copy. Returns
-     * {@code -1} when the stream is closed or after a CLOSE frame is
-     * received.
+     * @implNote This implementation parses any pending frame header
+     * inline (recursing into control-frame handling as needed) and then
+     * reads payload bytes directly into {@code dst} with SIMD unmasking
+     * applied in place; no intermediate copy. It returns {@code -1}
+     * when the stream is closed or after a CLOSE frame is received.
      */
     @Override
     public int read(byte[] dst, int off, int len) throws IOException {
@@ -244,8 +238,7 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
      * @param dst the destination byte array
      * @param off the offset within {@code dst}
      * @param len the maximum number of bytes to read
-     * @return the number of bytes read, or {@code -1} on
-     *         end-of-stream
+     * @return the number of bytes read, or {@code -1} on end-of-stream
      * @throws IOException if the underlying read fails
      */
     private int readFromSource(byte[] dst, int off, int len) throws IOException {
@@ -261,8 +254,13 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     }
 
     /**
-     * Reads exactly one byte from {@link #leftover} or the
-     * underlying stream, used by the header parser.
+     * Reads exactly one byte from {@link #leftover} or the underlying
+     * stream, used by the header parser.
+     *
+     * <p>This variant treats end-of-stream as an error, since it is
+     * only called mid-header where a clean close cannot occur; the
+     * {@link #readByteOrEof()} variant tolerates end-of-stream at a
+     * frame boundary instead.
      *
      * @return the byte in {@code 0..255}
      * @throws IOException on end-of-stream or read failure
@@ -283,8 +281,8 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     }
 
     /**
-     * Reads exactly {@code count} bytes from {@link #leftover} or
-     * the underlying stream into {@code dst} at {@code off}.
+     * Reads exactly {@code count} bytes from {@link #leftover} or the
+     * underlying stream into {@code dst} at {@code off}.
      *
      * @param dst   the destination byte array
      * @param off   the offset within {@code dst}
@@ -307,13 +305,14 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
      * populates {@link #frameRemaining}, {@link #masked},
      * {@link #maskKey}, {@link #maskOffset} and the current opcode.
      *
-     * @apiNote
-     * Returns {@code false} only when end-of-stream is reached
-     * cleanly at the boundary between frames; a partial header
+     * <p>The method returns {@code false} only when end-of-stream is
+     * reached cleanly at the boundary between frames; a partial header
      * mid-read raises {@link IOException} via {@link #readByte()}.
+     * Reserved bits, an out-of-bounds length and an oversized control
+     * frame are all rejected as protocol errors.
      *
-     * @return {@code true} if a frame header was parsed,
-     *         {@code false} on clean end-of-stream
+     * @return {@code true} if a frame header was parsed, {@code false}
+     *         on clean end-of-stream
      * @throws IOException if the header is malformed or truncated
      */
     private boolean parseFrameHeader() throws IOException {
@@ -368,12 +367,11 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     }
 
     /**
-     * Returns one byte or {@code -1} on clean end-of-stream.
+     * Reads one byte, returning {@code -1} on clean end-of-stream.
      *
-     * @apiNote
-     * Used when reading the first byte of a new frame header where a
-     * peer disconnect is a normal close rather than an error; the
-     * mid-frame {@link #readByte()} variant raises
+     * <p>This is used when reading the first byte of a new frame header,
+     * where a peer disconnect is a normal close rather than an error;
+     * the mid-frame {@link #readByte()} variant raises
      * {@link IOException} instead.
      *
      * @return the byte in {@code 0..255}, or {@code -1} on
@@ -392,8 +390,8 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     }
 
     /**
-     * Returns whether the current frame's opcode identifies a
-     * control frame (CLOSE, PING, PONG).
+     * Returns whether the current frame's opcode identifies a control
+     * frame (CLOSE, PING, PONG).
      *
      * @return {@code true} if the current opcode is a control opcode
      */
@@ -404,14 +402,16 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
     }
 
     /**
-     * Drains the current control frame's payload into
-     * {@link #controlPayload} (unmasking if necessary) and
-     * dispatches: {@link WebSocketFrameConstants#OPCODE_PING} replies
-     * with a matching PONG through the paired output stream;
-     * {@link WebSocketFrameConstants#OPCODE_CLOSE} replies with a
-     * CLOSE acknowledgement (best effort) and marks the stream
-     * closed; {@link WebSocketFrameConstants#OPCODE_PONG} is silently
-     * dropped since outstanding pings are not tracked.
+     * Drains the current control frame's payload and dispatches on its
+     * opcode.
+     *
+     * <p>The payload is read into {@link #controlPayload} (unmasked if
+     * necessary). A {@link WebSocketFrameConstants#OPCODE_PING} is
+     * answered with a matching PONG through the paired output stream;
+     * a {@link WebSocketFrameConstants#OPCODE_CLOSE} is answered with a
+     * best-effort CLOSE acknowledgement and marks the stream closed;
+     * a {@link WebSocketFrameConstants#OPCODE_PONG} is silently dropped
+     * since outstanding pings are not tracked.
      *
      * @throws IOException if reading or replying fails
      */
@@ -437,17 +437,20 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
                 }
                 closed = true;
             }
-            case OPCODE_PONG -> { /* ignore */ }
+            case OPCODE_PONG -> {
+            }
             default -> throw new IOException("Unexpected control opcode: 0x"
                     + Integer.toHexString(currentOpcode));
         }
     }
 
     /**
-     * Applies the WebSocket XOR mask to a region of a {@code byte[]}
-     * using a three-tier strategy: scalar lead-in to align the mask
-     * offset to a four-byte boundary, SIMD bulk XOR via
-     * {@link ByteVector}, int-wise tail via {@link VarHandle} and a
+     * Applies the WebSocket XOR mask to a region of a {@code byte[]} in
+     * place.
+     *
+     * <p>The work is split into a scalar lead-in that aligns the mask
+     * offset to a four-byte boundary, a SIMD bulk XOR via
+     * {@link ByteVector}, an int-wise tail via {@link VarHandle} and a
      * final byte-wise sub-int tail.
      *
      * @param array      the byte array to mask in place
@@ -497,12 +500,11 @@ public final class WebSocketFrameInputStream extends FilterInputStream {
      * Builds a SIMD vector containing the four-byte mask pattern
      * repeated to fill every lane.
      *
-     * @implNote
-     * RFC 6455 masks use {@code maskKey[0]} as the highest-order
-     * byte (big-endian memory layout).
-     * {@link IntVector#reinterpretAsBytes()} always uses the
-     * platform's native byte order, so on little-endian hosts the
-     * int is reversed before broadcasting so the reinterpreted bytes
+     * @implNote RFC 6455 masks use {@code maskKey[0]} as the
+     * highest-order byte (big-endian memory layout).
+     * {@link IntVector#reinterpretAsBytes()} always uses the platform's
+     * native byte order, so on little-endian hosts this implementation
+     * reverses the int before broadcasting so the reinterpreted bytes
      * end up in the RFC 6455 order.
      *
      * @param maskKey the four-byte masking key

@@ -17,34 +17,32 @@ import java.time.Instant;
  * Applies the {@code marketingMessage} app-state sync action that creates,
  * edits or soft-deletes a premium message template.
  *
- * @apiNote
- * Drives the SMB premium-message template surface: when the primary
- * device authors, edits or deletes a marketing template the resulting
+ * <p>This handler backs the SMB premium-message template surface: when the
+ * primary device authors, edits or deletes a marketing template the resulting
  * row fans out across the {@link SyncPatchType#REGULAR} collection so
- * companion devices can render the same template list. The mutation
- * index keys each entry by the stable template id, formatted as
+ * companion devices can render the same template list. The mutation index
+ * keys each entry by the stable template id, formatted as
  * {@snippet :
  *     ["marketingMessage", messageId]
  * }
  *
  * @implNote
  * This implementation persists each template eagerly through
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#putMarketingMessage}
- * keyed by the template id, collapsing WA Web's two-stage
- * {@code WAWebPremiumMessageSchema.getPremiumMessageTable().bulkCreateOrMerge(n)}
- * + {@code PremiumMessageCollection.add(...)} flow into a single map
- * write because Cobalt's storage is a flat key/value map. The
- * {@code isDeleted} flag is preserved on the stored row so the rest
- * of the pipeline can filter the live-template view; per Cobalt's
- * pluggable error model, exceptions propagate to the orchestrator
- * instead of being mapped to
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#putMarketingMessage(com.github.auties00.cobalt.model.business.MarketingMessage)}
+ * keyed by the template id, collapsing WA Web's two-stage bulk-create-or-merge
+ * plus collection-add flow into a single map write because Cobalt's storage is
+ * a flat key/value map. The {@link MarketingMessageAction#isDeleted()} flag is
+ * preserved on the stored row so the rest of the pipeline can filter the
+ * live-template view; per Cobalt's pluggable error model, exceptions propagate
+ * to the orchestrator instead of being mapped to
  * {@link MutationApplicationResult#failed()} inline.
  */
 @WhatsAppWebModule(moduleName = "WAWebPremiumMessageSync")
 public final class MarketingMessageHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs a new singleton {@link MarketingMessageHandler}.
+     * Constructs a new {@link MarketingMessageHandler} for registration in
+     * the sync handler registry.
      */
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MarketingMessageHandler() {
@@ -81,18 +79,21 @@ public final class MarketingMessageHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>The index must carry the template id and only
+     * {@link SyncdOperation#SET} is accepted. A missing
+     * {@link MarketingMessageAction#type()} is rejected as
+     * {@link MutationApplicationResult#malformed()};
+     * {@link MarketingMessageAction#createdAt()} and
+     * {@link MarketingMessageAction#lastSentAt()} are converted from the
+     * wire's epoch milliseconds via {@link Instant#ofEpochMilli(long)}, and
+     * the {@link MarketingMessageAction#isDeleted()} flag is persisted
+     * verbatim so later readers can filter live templates.
+     *
      * @implNote
-     * This implementation classifies a missing index slot or a
-     * missing {@link MarketingMessageAction#type()} as
-     * {@link MutationApplicationResult#malformed()} so the
-     * orchestrator does not silently overwrite a template with a
-     * default-typed row. {@link MarketingMessageAction#createdAt()}
-     * and {@link MarketingMessageAction#lastSentAt()} are converted
-     * from the wire's epoch milliseconds to
-     * {@link Instant#ofEpochMilli(long)}; the
-     * {@link MarketingMessageAction#isDeleted()} flag is persisted
-     * verbatim, matching WA Web which never branches on it (later
-     * readers filter when listing live templates).
+     * This implementation classifies a missing index slot or missing
+     * {@link MarketingMessageAction#type()} as
+     * {@link MutationApplicationResult#malformed()} so the orchestrator does
+     * not silently overwrite a template with a default-typed row.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

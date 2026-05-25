@@ -22,20 +22,17 @@ import java.util.logging.Logger;
  * Parses incoming {@code <iq xmlns="w:sync:app:state">} response stanzas into
  * {@link MutationSyncResponse} records.
  *
- * <p>Two parse modes share the bulk of the body. Single-collection parses raise on a
- * collection-level error (used during the per-collection push-then-await loop in
- * {@code WAWebSyncdServerSync.E}); batched parses capture the same errors on the response
- * record so the caller can process the surviving collections (used when one IQ carries
- * multiple {@code <collection>} children). Both share the same IQ-level error router and
- * the same protobuf decoders for {@code <patch>} and {@code <snapshot>} children.
- *
- * @apiNote
- * Cobalt's {@link com.github.auties00.cobalt.sync.WebAppStateService} drives the parser
- * directly with the raw {@code <iq>} {@link Node} delivered by the WhatsApp socket; no
- * embedder integration is required.
+ * <p>Two parse modes share the bulk of the body. The single-collection mode
+ * ({@link #parseSyncResponse(Node)}) raises on a collection-level error so a failed push can
+ * roll back; the batched mode ({@link #parseBatchedSyncResponse(Node)}) captures the same
+ * errors on each response record so the caller can process the surviving collections. Both
+ * share the same IQ-level error router ({@link #handleIqLevelError(int, String, Node)}) and
+ * the same protobuf decoders for {@code <patch>} and {@code <snapshot>} children. The parser
+ * is driven directly with the raw {@code <iq>} {@link Node} delivered by the WhatsApp socket;
+ * no embedder integration is required.
  *
  * @implNote
- * This implementation skips the WAM/telemetry side effects WA Web fires from
+ * This implementation skips the WAM/telemetry side effects that WA Web fires from
  * {@code reportSyncdFatalError} per Cobalt's pluggable error model: the routed
  * {@link WhatsAppWebAppStateSyncException} subtypes carry the same classification, and the
  * caller decides whether to log or beacon them via the configured error handler.
@@ -45,27 +42,25 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebSyncdValidateServerSyncProtobuf")
 public final class MutationResponseParser {
     /**
-     * Diagnostic logger used for the FINE-level {@code clientDebugData} dump emitted by
-     * {@link #logClientDebugData(SyncdPatch)}.
+     * Holds the diagnostic logger used for the {@link Level#FINE FINE}-level
+     * {@code clientDebugData} dump emitted by {@link #logClientDebugData(SyncdPatch)}.
      */
     private static final Logger LOGGER = Logger.getLogger(MutationResponseParser.class.getName());
 
     /**
      * Parses a single-collection sync response.
      *
-     * @apiNote
-     * Used on the push response path where exactly one collection is expected and a
-     * collection-level error should propagate as a thrown exception so the push can roll
-     * back. Use {@link #parseBatchedSyncResponse(Node)} for pull responses that legitimately
-     * carry multiple collections.
+     * <p>Used on the push response path where exactly one collection is expected and a
+     * collection-level error should propagate as a thrown exception so the push can roll back.
+     * IQ-level errors are routed first via {@link #handleIqLevelError(int, String, Node)}, then
+     * collection-level errors via {@link #handleErrorResponse(Node)}.
+     * Use {@link #parseBatchedSyncResponse(Node)} for pull responses that legitimately carry
+     * multiple collections.
      *
      * @implNote
-     * This implementation routes IQ-level errors first
-     * ({@link #handleIqLevelError(int, String, Node)}), then collection-level errors
-     * ({@link #handleErrorResponse(Node)} via {@link #buildCollectionError(Node)}); the
-     * collection name is parsed before the error gate so the unknown-name path raises the
-     * same {@link WhatsAppWebAppStateSyncException.UnexpectedError} regardless of whether
-     * the response would otherwise have been an error.
+     * This implementation parses the collection name before the error gate so the
+     * unknown-name path raises the same {@link WhatsAppWebAppStateSyncException.UnexpectedError}
+     * regardless of whether the response would otherwise have been an error.
      *
      * @param responseNode the raw IQ response node from the server
      * @return the parsed {@link MutationSyncResponse}
@@ -131,16 +126,15 @@ public final class MutationResponseParser {
     /**
      * Parses a multi-collection sync response.
      *
-     * @apiNote
-     * Used on the pull response path where one IQ may carry several
-     * {@code <collection>} children, one per dirty collection. Per-collection errors are
-     * captured on the response object so the caller can apply successful collections and
-     * retry only the failed ones; IQ-level errors still throw.
+     * <p>Used on the pull response path where one IQ may carry several {@code <collection>}
+     * children, one per dirty collection. Per-collection errors are captured on the response
+     * object via {@link #parseCollectionNode(Node)} so the caller can apply the successful
+     * collections and retry only the failed ones; IQ-level errors still throw.
      *
      * @implNote
-     * This implementation iterates {@code syncNode.getChildren("collection")} in document
-     * order; the resulting list preserves that order so callers can correlate it positionally
-     * with their {@link com.github.auties00.cobalt.sync.WebAppStateService} push input.
+     * This implementation iterates the {@code <collection>} children in document order, and the
+     * resulting list preserves that order so callers can correlate it positionally with their
+     * push input.
      *
      * @param responseNode the raw IQ response node from the server
      * @return the per-collection {@link MutationSyncResponse} list
@@ -176,25 +170,24 @@ public final class MutationResponseParser {
     }
 
     /**
-     * Parses a single {@code <collection>} child into a {@link MutationSyncResponse},
-     * capturing any collection-level error on the response rather than throwing.
+     * Parses a single {@code <collection>} child into a {@link MutationSyncResponse}, capturing
+     * any collection-level error on the response rather than throwing.
      *
-     * @apiNote
-     * Used by {@link #parseBatchedSyncResponse(Node)} so the failure of one collection in a
-     * batch does not poison the rest. WA Web encodes the same pattern via
-     * {@code CollectionState.Conflict}/{@code .ErrorFatal}/{@code .ErrorRetry} return values
-     * from the inner {@code h} helper.
+     * <p>Used by {@link #parseBatchedSyncResponse(Node)} so the failure of one collection in a
+     * batch does not poison the rest. A collection in error state yields a response carrying the
+     * exception via {@link MutationSyncResponse#collectionError()}; an otherwise valid collection
+     * yields its decoded patches or snapshot reference.
      *
      * @implNote
-     * This implementation reuses {@link #buildCollectionError(Node)} so the
-     * collection-level routing (409 to {@link WhatsAppWebAppStateSyncException.Conflict},
-     * 400/404 to {@link WhatsAppWebAppStateSyncException.UnexpectedError}, anything else to
-     * {@link WhatsAppWebAppStateSyncException.RetryableServerError}) stays consistent
-     * between the throwing and capturing call paths.
+     * This implementation reuses {@link #buildCollectionError(Node)} so the collection-level
+     * routing (409 to {@link WhatsAppWebAppStateSyncException.Conflict}, 400/404 to
+     * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, anything else to
+     * {@link WhatsAppWebAppStateSyncException.RetryableServerError}) stays consistent between the
+     * throwing and capturing call paths.
      *
      * @param collectionNode the collection node to parse
-     * @return the parsed {@link MutationSyncResponse}; collection-level errors are surfaced
-     *         via {@link MutationSyncResponse#collectionError()}
+     * @return the parsed {@link MutationSyncResponse}; collection-level errors are surfaced via
+     *         {@link MutationSyncResponse#collectionError()}
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdResponseParser", exports = "syncResponseParser", adaptation = WhatsAppAdaptation.DIRECT)
     private MutationSyncResponse parseCollectionNode(Node collectionNode) {
@@ -229,14 +222,13 @@ public final class MutationResponseParser {
     }
 
     /**
-     * Builds the {@link WhatsAppWebAppStateSyncException} subtype that corresponds to a
-     * given collection-level error code.
+     * Builds the {@link WhatsAppWebAppStateSyncException} subtype that corresponds to a given
+     * collection-level error code.
      *
-     * @apiNote
-     * The error-code routing table is fixed: 409 maps to
+     * <p>The routing table is fixed: 409 maps to
      * {@link WhatsAppWebAppStateSyncException.Conflict}, 400 and 404 to
-     * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, and any other code to
-     * {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
+     * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, and any other code (including a
+     * missing code attribute) to {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
      *
      * @param collectionNode the collection node carrying the error
      * @return the exception that should be reported for this collection
@@ -262,10 +254,8 @@ public final class MutationResponseParser {
      * Throws the {@link WhatsAppWebAppStateSyncException} produced by
      * {@link #buildCollectionError(Node)}.
      *
-     * @apiNote
-     * Used only by the single-collection parse path
-     * ({@link #parseSyncResponse(Node)}). The batched path captures the same exception on
-     * the response record instead.
+     * <p>Used only by the single-collection parse path {@link #parseSyncResponse(Node)}; the
+     * batched path captures the same exception on the response record instead.
      *
      * @param collectionNode the collection node carrying the error
      * @throws WhatsAppWebAppStateSyncException.Conflict for 409 responses
@@ -277,11 +267,10 @@ public final class MutationResponseParser {
     }
 
     /**
-     * Routes an IQ-level error code to the appropriate
-     * {@link WhatsAppWebAppStateSyncException} subtype.
+     * Routes an IQ-level error code to the appropriate {@link WhatsAppWebAppStateSyncException}
+     * subtype and throws it.
      *
-     * @apiNote
-     * IQ-level errors affect every collection in the request and short-circuit the parse:
+     * <p>IQ-level errors affect every collection in the request and short-circuit the parse:
      * {@code 400}, {@code 404}, {@code 405} and {@code 406} are fatal; everything else is
      * retryable, with the optional {@code backoff} attribute preserved on the
      * {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
@@ -307,20 +296,20 @@ public final class MutationResponseParser {
     }
 
     /**
-     * Decodes the {@code <snapshot>} node content as an {@link ExternalBlobReference} the
+     * Decodes the {@code <snapshot>} node content into an {@link ExternalBlobReference} the
      * caller can later download from MMS.
      *
-     * @apiNote
-     * Snapshots are too large to ship inline; the server returns an external blob reference
+     * <p>Snapshots are too large to ship inline; the server returns an external blob reference
      * and the caller streams the actual {@code SyncdSnapshot} bytes from MMS via the media
-     * connection. A bare snapshot child without content is treated as a fatal error.
+     * connection. A bare snapshot child without content, or content that fails to deserialize,
+     * is treated as a fatal error.
      *
      * @implNote
      * This implementation collapses WA Web's separate
-     * {@code reportSyncdFatalError(EXTERNAL_BLOB_REFERENCE_PROTOBUF_DESERIALIZATION_FAILED)}
-     * WAM beacon plus {@code WALogger.ERROR} into a single thrown
-     * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, in line with Cobalt's
-     * pluggable error model.
+     * {@code reportSyncdFatalError(EXTERNAL_BLOB_REFERENCE_PROTOBUF_DESERIALIZATION_FAILED)} WAM
+     * beacon plus {@code WALogger.ERROR} into a single thrown
+     * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, in line with Cobalt's pluggable
+     * error model.
      *
      * @param snapshotNode the {@code <snapshot>} node
      * @return the parsed {@link ExternalBlobReference}
@@ -347,18 +336,16 @@ public final class MutationResponseParser {
      * Decodes every {@code <patch>} child of the supplied {@code <patches>} node into a
      * {@link SyncdPatch}, logging each patch's debug data at {@link Level#FINE FINE}.
      *
-     * @apiNote
-     * Used by both parse modes. Returns an empty collection when the {@code <patches>}
-     * parent has no children; a missing patch content or undecodable patch protobuf is
-     * fatal.
+     * <p>Used by both parse modes. Returns an empty collection when the {@code <patches>} parent
+     * has no children; a missing patch content or undecodable patch protobuf is fatal.
      *
      * @implNote
      * This implementation collapses WA Web's separate
      * {@code reportSyncdFatalError(PATCH_PROTOBUF_DESERIALIZATION_FAILED)} WAM beacon plus
      * {@code WALogger.ERROR} into a single thrown
      * {@link WhatsAppWebAppStateSyncException.UnexpectedError}; the per-patch
-     * {@link #logClientDebugData(SyncdPatch)} call surfaces the same diagnostic data WA
-     * Web's {@code _applyPatch} prints.
+     * {@link #logClientDebugData(SyncdPatch)} call surfaces the same diagnostic data WA Web's
+     * {@code _applyPatch} prints.
      *
      * @param patchesNode the parent {@code <patches>} node
      * @return the parsed patches in document order
@@ -395,15 +382,12 @@ public final class MutationResponseParser {
      * Logs the decoded {@code currentLthash} and {@code newLthash} of the supplied patch at
      * {@link Level#FINE FINE} for diagnostic cross-checking.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code _applyPatch} debug log; lets a developer correlate the
-     * server's reported LT-hash transition against Cobalt's locally computed
-     * {@link com.github.auties00.cobalt.sync.crypto.MutationLTHash} state when chasing a
-     * desync.
+     * <p>Lets a developer correlate the server's reported LT-hash transition against Cobalt's
+     * locally computed {@link com.github.auties00.cobalt.sync.crypto.MutationLTHash} state when
+     * chasing a desync.
      *
      * @implNote
-     * This implementation is a no-op when {@link Level#FINE FINE} is disabled; the
-     * decoder call still runs only because the patch is decoded once anyway. Decoding the
+     * This implementation is a no-op when {@link Level#FINE FINE} is disabled. Decoding the
      * debug data itself is best-effort and does not throw.
      *
      * @param patch the patch whose debug data should be logged; never {@code null}

@@ -16,56 +16,28 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Parity test for {@link WaRelayMessageIntegrity} against a captured
- * Allocate Request fixture.
+ * Parity suite for {@link WaRelayMessageIntegrity} against captured WA Web Allocate Request bytes.
  *
- * <p>Confirms two non-obvious invariants pinned by reversing the wasm
- * engine's STUN code (pjsip-derived
- * {@code wa_stun_finalize_integrity_and_fingerprint}):
+ * <p>Confirms two non-obvious invariants recovered by reversing the wasm engine's pjsip-derived
+ * STUN code: the HMAC algorithm is HMAC-SHA1, and the HMAC key is the {@code RelayListUpdate.relay_key}
+ * value used as raw ASCII bytes of its base64 string form (including the {@code "=="} padding), NOT
+ * the bytes obtained by base64-decoding it. WhatsApp passes the base64 string straight through to
+ * pjsip's {@code pj_stun_authenticate_request(password, password_len)}; the captured MAC verifies
+ * against {@code HMAC-SHA1(base64_string_bytes, prefix)} and not against the decoded form.
  *
- * <ol>
- *   <li>The HMAC algorithm is HMAC-SHA1.</li>
- *   <li>The HMAC key is the {@code RelayListUpdate.relay_key} value
- *       used as <em>raw ASCII bytes of its base64 string form</em>
- *       — including the {@code "=="} padding — NOT the binary bytes
- *       you'd get by decoding the base64. WhatsApp passes the base64
- *       string straight through to pjsip's
- *       {@code pj_stun_authenticate_request(password, password_len)}.
- *       This was confirmed by dumping the wasm linear memory of the
- *       active call worker, observing the relay_key only ever appears
- *       as a base64 string in heap, then verifying the captured MAC
- *       against {@code HMAC-SHA1(base64_string_bytes, prefix)}.</li>
- * </ol>
- *
- * <p>WhatsApp emits multiple {@code RelayListUpdate} events per call
- * (one per relay-list refresh). Each Allocate Request is keyed on the
- * RLU whose {@code relay_tokens[]} contains the packet's
- * {@code WA-RELAY-TOKEN} attribute value. This test resolves that
- * mapping per packet by scanning RLUs from
- * {@code relay-list-updates.json} and matching tokens.
+ * <p>WhatsApp emits multiple {@code RelayListUpdate} events per call (one per relay-list refresh).
+ * Each Allocate Request is keyed on the RLU whose {@code relay_tokens[]} contains the packet's
+ * {@code WA-RELAY-TOKEN} attribute value, resolved per packet by scanning the RLU stream and matching
+ * tokens. Fixtures are captured wasm-engine output under {@code src/test/resources/fixtures/relay/}:
+ * {@code stun-bytes-raw.json} (raw packet bytes) and {@code relay-list-updates.json} (the per-refresh
+ * {@code relay_key} stream).
  */
 public class WaRelayMessageIntegrityParityTest {
 
-    /**
-     * Classpath path of the captured-bytes fixture.
-     */
     private static final String FIXTURE = "fixtures/relay/stun-bytes-raw.json";
 
-    /**
-     * Classpath path of the relay-list-updates fixture (the engine
-     * event stream that delivers {@code relay_key} for each refresh
-     * during the call).
-     */
     private static final String RLU_FIXTURE = "fixtures/relay/relay-list-updates.json";
 
-    /**
-     * Verifies that every captured 344-byte Allocate Request carries a
-     * MESSAGE-INTEGRITY whose value is
-     * {@code HMAC-SHA1(relay_key_base64_string, prefix)} for the
-     * matching {@code RelayListUpdate}.
-     *
-     * @throws IOException if a fixture file cannot be read
-     */
     @Test
     public void everyAllocateRequestVerifiesAgainstRelayKey() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -89,13 +61,6 @@ public class WaRelayMessageIntegrityParityTest {
         assertTrue(checked >= 1, "expected at least 1 Allocate Request, got " + checked);
     }
 
-    /**
-     * Round-trips a stamped MESSAGE-INTEGRITY: zeros the MAC bytes,
-     * re-stamps them with {@link WaRelayMessageIntegrity#stamp}, and
-     * asserts byte-equality with the captured packet.
-     *
-     * @throws IOException if a fixture file cannot be read
-     */
     @Test
     public void stampReproducesCapturedMac() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -132,15 +97,6 @@ public class WaRelayMessageIntegrityParityTest {
         throw new AssertionError("no 344-byte Allocate Request found in fixture");
     }
 
-    /**
-     * Asserts that {@link WaRelayMessageIntegrity#locate} returns the
-     * correct offset for the first captured Allocate Request — the
-     * MESSAGE-INTEGRITY attribute must be the last attribute, which on
-     * a 344-byte packet starts at offset 320 (4-byte header + 20-byte
-     * value = 24 bytes; 344 - 24 = 320).
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void locateReturnsExpectedOffset() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -153,28 +109,18 @@ public class WaRelayMessageIntegrityParityTest {
 
             var packet = WaRelayPacket.decode(bytes);
             assertNotNull(packet);
+            // MESSAGE-INTEGRITY is the trailing attribute: 344 - (4-byte header + 20-byte MAC) = 320
             assertEquals(320, WaRelayMessageIntegrity.locate(bytes));
             return;
         }
         throw new AssertionError("no 344-byte Allocate Request found in fixture");
     }
 
-    /**
-     * Locates the {@code RelayListUpdate} whose {@code relay_tokens[]}
-     * contains the {@code WA-RELAY-TOKEN} attribute carried by the
-     * given packet, and returns its {@code relay_key} as raw ASCII
-     * bytes of the base64 string.
-     *
-     * @param packetBytes the encoded packet
-     * @param rlus        the array of captured {@code RelayListUpdate}
-     *                    event payloads
-     * @return the HMAC key bytes (ASCII of base64 string), or
-     *         {@code null} if no match
-     */
     private static byte[] resolveRelayKeyBytes(byte[] packetBytes, JSONArray rlus) {
         var packet = WaRelayPacket.decode(packetBytes);
         byte[] tokenInPacket = null;
         for (var attr : packet.attributes()) {
+            // 0x4000 is the WA-RELAY-TOKEN attribute type
             if (attr.type() == 0x4000) { tokenInPacket = attr.value(); break; }
         }
         if (tokenInPacket == null) return null;

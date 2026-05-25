@@ -11,38 +11,38 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound acknowledgement stanza emitted in response to a
+ * Models the outbound acknowledgement stanza emitted in response to a
  * {@link SmaxPsaResetSmbLastQpPrefetchTimestampResponse} notification.
  *
- * @apiNote
- * Closes the loop for the SMB quick-promotions prefetch-timestamp reset
- * handled by {@code WAWebHandleQPPrefetchTimestampNotification}: the
- * notification-handler builds and returns this ack, while the worker-safe
- * fire-and-forget {@code fetchQuickPromotionsNow} kicks off the actual
- * SMB quick-promotion GraphQL refresh.
+ * <p>Sending this ack closes the loop on the SMB quick-promotions
+ * prefetch-timestamp reset: it confirms receipt of the server-pushed
+ * notification by echoing its {@code id}, {@code from}, and {@code type} back
+ * to the relay. The actual quick-promotion refresh is a separate concern
+ * triggered by the notification handler, not by this ack.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaResetSmbLastQpPrefetchTimestampResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaNotificationClientAckMixin")
 public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement implements SmaxOperation.Request {
     /**
-     * The notification id being acknowledged; echoed verbatim back into the
-     * ack stanza.
+     * Holds the notification id being acknowledged, echoed verbatim into the
+     * ack stanza's {@code id} attribute.
      */
     private final String notificationId;
 
     /**
-     * The notification sender JID becomes the ack's {@code to} attribute.
+     * Holds the notification sender JID, echoed into the ack stanza's
+     * {@code to} attribute.
      */
     private final Jid notificationFrom;
 
     /**
-     * The notification type echoed back into the ack. Always
-     * {@code "psa"} for this RPC.
+     * Holds the notification type echoed into the ack stanza's {@code type}
+     * attribute, always {@code "psa"} for this RPC.
      */
     private final String notificationType;
 
     /**
-     * Constructs an acknowledgement.
+     * Constructs an acknowledgement around the given echoed attributes.
      *
      * @param notificationId   the notification id; never {@code null}
      * @param notificationFrom the notification sender JID; never {@code null}
@@ -56,14 +56,12 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement impleme
     }
 
     /**
-     * Constructs an acknowledgement from a parsed inbound notification
-     * stanza.
+     * Constructs an acknowledgement by lifting the echoed attributes from a
+     * parsed inbound notification stanza.
      *
-     * @apiNote
-     * Convenience factory mirroring the closure-builder returned by
-     * {@code WASmaxPsaResetSmbLastQpPrefetchTimestampRPC.receiveResetSmbLastQpPrefetchTimestampRPC};
-     * lifts {@code id}, {@code from}, and {@code type} verbatim from the
-     * source notification.
+     * <p>Reads the {@code id}, {@code from}, and {@code type} attributes from
+     * {@code notification} verbatim, throwing
+     * {@link IllegalArgumentException} when any of the three is absent.
      *
      * @param notification the inbound notification stanza; never {@code null}
      * @return a new acknowledgement
@@ -101,7 +99,7 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement impleme
     }
 
     /**
-     * Returns the notification type.
+     * Returns the notification type, always {@code "psa"} for this RPC.
      *
      * @return the type; never {@code null}
      */
@@ -112,12 +110,9 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement impleme
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation emits an {@code <ack class="notification">} stanza
-     * carrying the {@code id}, {@code to}, and {@code type} attributes
-     * lifted from the source notification, mirroring
-     * {@code makeResetSmbLastQpPrefetchTimestampResponseAck} +
-     * {@code mergeNotificationClientAckMixin}.
+     * <p>Builds an {@code <ack class="notification">} stanza carrying the
+     * {@code id}, {@code to}, and {@code type} attributes lifted from the
+     * source notification.
      *
      * @return a {@link NodeBuilder} carrying the {@code <ack/>} stanza
      */

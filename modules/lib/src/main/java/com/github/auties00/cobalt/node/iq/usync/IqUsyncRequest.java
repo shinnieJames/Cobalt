@@ -15,36 +15,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code <iq xmlns="usync" type="get">} stanza that issues a usync query against a
- * list of users for a set of per-user protocols.
- *
- * @apiNote
- * Use this to drive WA Web's typed-projection user queries: contact-sync (interactive
- * and background delta refreshes), device-sync (linked-device discovery for
- * Signal-session establishment), business-profile fetch, picture fetch, status fetch,
- * disappearing-mode lookup, LID-address resolution, channel-bot profile fetch, username
- * lookup, and text-status fetch. The relay returns a per-user projection plus
- * per-protocol error/refresh envelopes parsed by {@link IqUsyncResponse}.
+ * Issues a usync query against a list of users for a set of per-user protocols.
+ * <p>
+ * Models the outbound {@code <iq xmlns="usync" type="get">} stanza that drives the typed-projection
+ * user queries: contact-sync (interactive and background delta refreshes), device-sync (linked-device
+ * discovery for Signal-session establishment), business-profile fetch, picture fetch, status fetch,
+ * disappearing-mode lookup, LID-address resolution, channel-bot profile fetch, username lookup, and
+ * text-status fetch. The relay returns a per-user projection plus per-protocol error and refresh
+ * envelopes parsed by {@link IqUsyncResponse}.
  *
  * @implNote
- * This implementation mirrors WA Web's {@code USyncQuery.$3} builder verbatim: the
- * outbound payload is one {@code <usync>} child carrying a {@code <query>} list of
- * bare per-protocol grandchildren plus a {@code <list>} list of {@code <user>} subtrees
- * with optional {@code jid}/{@code pn_jid} attributes and per-protocol payload
- * grandchildren. The {@code sid}, {@code index="0"} and {@code last="true"}
- * attributes encode a single-iteration fan-out.
+ * This implementation emits one {@code <usync>} child carrying a {@code <query>} list of bare
+ * per-protocol grandchildren plus a {@code <list>} list of {@code <user>} subtrees with optional
+ * {@code jid} and {@code pn_jid} attributes and per-protocol payload grandchildren. The {@code sid},
+ * {@code index="0"} and {@code last="true"} attributes encode a single-iteration fan-out; the
+ * per-iteration fan-out path is not modelled here.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public final class IqUsyncRequest implements IqOperation.Request {
     /**
-     * Holds the {@link IqUsyncMode} that drives the relay's per-protocol caching
-     * strategy.
+     * Holds the {@link IqUsyncMode} that drives the relay's per-protocol caching strategy.
      */
     private final IqUsyncMode mode;
 
     /**
-     * Holds the {@code context} attribute string identifying why the query is being
-     * issued.
+     * Holds the {@code context} attribute string identifying why the query is being issued.
      */
     private final String context;
 
@@ -59,18 +54,14 @@ public final class IqUsyncRequest implements IqOperation.Request {
     private final List<User> users;
 
     /**
-     * Constructs a new usync request with the given mode, context, protocol list and
-     * user list.
-     *
-     * @apiNote
-     * Each entry in {@code protocols} becomes one bare grandchild of the outbound
-     * {@code <query>} child (e.g. {@code "devices"} yields {@code <devices/>}); the
-     * canonical protocol tags are enumerated in WA Web's {@code WAWebUsync} module
-     * (e.g. {@code feature}, {@code devices}, {@code contact}, {@code picture},
-     * {@code status}, {@code business}, {@code disappearing_mode}, {@code lid},
-     * {@code bot}, {@code username}, {@code text_status}). The {@code context}
-     * field is caller-defined; WA Web's {@code USyncQuery} defaults it to
-     * {@code "interactive"} and switches to {@code "background"} for warmup paths.
+     * Constructs a new usync request with the given mode, context, protocol list and user list.
+     * <p>
+     * Each entry in {@code protocols} becomes one bare grandchild of the outbound {@code <query>}
+     * child (e.g. {@code "devices"} yields {@code <devices/>}); the canonical protocol tags include
+     * {@code feature}, {@code devices}, {@code contact}, {@code picture}, {@code status},
+     * {@code business}, {@code disappearing_mode}, {@code lid}, {@code bot}, {@code username} and
+     * {@code text_status}. The {@code context} value is caller-defined and is typically
+     * {@code "interactive"} for foreground fetches or {@code "background"} for warmup paths.
      *
      * @param mode      the query mode; never {@code null}
      * @param context   the context tag; never {@code null}
@@ -129,18 +120,15 @@ public final class IqUsyncRequest implements IqOperation.Request {
 
     /**
      * Builds the outbound {@code <iq>} stanza wrapping the {@code <usync>} envelope.
-     *
-     * @apiNote
-     * The resulting {@link NodeBuilder} carries a freshly-generated IQ id and usync
-     * {@code sid}; the dispatch layer does not overwrite either.
+     * <p>
+     * The resulting {@link NodeBuilder} carries a freshly generated IQ id and usync {@code sid}; the
+     * dispatch layer does not overwrite either.
      *
      * @implNote
-     * This implementation always sets {@code index="0"} and {@code last="true"},
-     * matching WA Web's single-iteration fan-out (the per-iteration fan-out path
-     * exists in {@code WAWebUsync} only for {@code WAWebApiPendingDeviceSync}).
+     * This implementation always sets {@code index="0"} and {@code last="true"}, encoding a
+     * single-iteration fan-out rather than the multi-iteration pending-device-sync path.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <usync>}
-     *         payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <usync>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsync",
@@ -183,6 +171,13 @@ public final class IqUsyncRequest implements IqOperation.Request {
                 .content(usyncNode);
     }
 
+    /**
+     * Compares this request with the given object for value equality across all four bound fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an {@link IqUsyncRequest} with equal mode, context,
+     *         protocols and users
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -198,11 +193,21 @@ public final class IqUsyncRequest implements IqOperation.Request {
                 && Objects.equals(this.users, that.users);
     }
 
+    /**
+     * Returns a hash code derived from all four bound fields.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(mode, context, protocols, users);
     }
 
+    /**
+     * Returns a debug string listing the mode, context, protocols and users.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "IqUsyncRequest[mode=" + mode
@@ -212,48 +217,40 @@ public final class IqUsyncRequest implements IqOperation.Request {
     }
 
     /**
-     * Per-user entry inside the outbound {@code <list>} envelope, carrying optional
-     * primary and phone-number JIDs plus any per-protocol payload nodes.
-     *
-     * @apiNote
-     * Both {@link #userJid()} and {@link #pnJid()} are optional because some
-     * per-protocol queries (e.g. username-lookup, phone-only-lookup) carry exactly
-     * one of the two identifiers; at least one must be present otherwise WA Web's
-     * {@code USyncQuery.validate} drops the entry before dispatch. The
-     * {@link #userPayloads()} list carries per-protocol element nodes (e.g.
-     * {@code <contact>+15551234567</contact>}, {@code <devices device_hash ts/>})
-     * which the per-protocol {@code getUserElement(user)} contributors emit.
+     * Carries one per-user entry inside the outbound {@code <list>} envelope.
+     * <p>
+     * Each entry holds an optional primary JID emitted on {@code jid}, an optional phone-number JID
+     * emitted on {@code pn_jid}, and any per-protocol payload nodes routed as children of the
+     * {@code <user>} subtree. Both {@link #userJid()} and {@link #pnJid()} are optional because some
+     * per-protocol queries (e.g. username-lookup, phone-only-lookup) carry exactly one of the two
+     * identifiers; at least one is expected to be present. The {@link #userPayloads()} list carries
+     * per-protocol element nodes (e.g. {@code <contact>+15551234567</contact>},
+     * {@code <devices device_hash ts/>}) contributed by the per-protocol element emitters.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsync")
     @WhatsAppWebModule(moduleName = "WAWebUsyncUser")
     public static final class User {
         /**
-         * Holds the optional primary user JID emitted on the {@code jid}
-         * attribute when present.
+         * Holds the optional primary user JID emitted on the {@code jid} attribute when present.
          */
         private final Jid userJid;
 
         /**
-         * Holds the optional phone-number JID emitted on the {@code pn_jid}
-         * attribute when present.
+         * Holds the optional phone-number JID emitted on the {@code pn_jid} attribute when present.
          */
         private final Jid pnJid;
 
         /**
-         * Holds the per-protocol payload nodes routed as children of the
-         * {@code <user>} subtree.
+         * Holds the per-protocol payload nodes routed as children of the {@code <user>} subtree.
          */
         private final List<Node> userPayloads;
 
         /**
-         * Constructs a new user entry bound to the given JIDs and per-protocol
-         * payloads.
-         *
-         * @apiNote
-         * Pass {@code null} for {@code userJid} when only the phone-number JID
-         * is supplied (and vice versa) to encode the dual-jid LID+PN path; pass
-         * an empty {@code userPayloads} list when the per-protocol elements are
-         * contributed elsewhere.
+         * Constructs a new user entry bound to the given JIDs and per-protocol payloads.
+         * <p>
+         * Passing {@code null} for {@code userJid} when only the phone-number JID is supplied (and
+         * vice versa) encodes the dual-JID LID and PN path; an empty {@code userPayloads} list is
+         * valid when the per-protocol elements are contributed elsewhere.
          *
          * @param userJid      the optional primary JID; may be {@code null}
          * @param pnJid        the optional phone-number JID; may be {@code null}
@@ -270,8 +267,7 @@ public final class IqUsyncRequest implements IqOperation.Request {
         /**
          * Returns the optional primary user JID.
          *
-         * @return an {@link Optional} carrying the JID, or empty when only the
-         *         phone JID was supplied
+         * @return an {@link Optional} carrying the JID, or empty when only the phone JID was supplied
          */
         public Optional<Jid> userJid() {
             return Optional.ofNullable(userJid);
@@ -280,8 +276,8 @@ public final class IqUsyncRequest implements IqOperation.Request {
         /**
          * Returns the optional phone-number JID.
          *
-         * @return an {@link Optional} carrying the JID, or empty when only the
-         *         primary JID was supplied
+         * @return an {@link Optional} carrying the JID, or empty when only the primary JID was
+         *         supplied
          */
         public Optional<Jid> pnJid() {
             return Optional.ofNullable(pnJid);
@@ -297,17 +293,14 @@ public final class IqUsyncRequest implements IqOperation.Request {
         }
 
         /**
-         * Renders this entry as the {@code <user>} subtree routed inside the
-         * outbound {@code <list>} envelope.
-         *
-         * @apiNote
-         * The dispatch layer expects exactly this shape; callers do not invoke
-         * this method directly, {@link IqUsyncRequest#toNode()} drives it.
+         * Renders this entry as the {@code <user>} subtree routed inside the outbound
+         * {@code <list>} envelope.
+         * <p>
+         * Driven by {@link IqUsyncRequest#toNode()} rather than called directly.
          *
          * @implNote
-         * This implementation drops absent JID attributes by omitting them
-         * entirely, matching WA Web's {@code DROP_ATTR} sentinel inside the
-         * {@code USyncQuery.$3} fan-out.
+         * This implementation omits an absent JID attribute entirely rather than emitting an empty
+         * value.
          *
          * @return the rendered {@link Node}
          */
@@ -327,6 +320,13 @@ public final class IqUsyncRequest implements IqOperation.Request {
                     .build();
         }
 
+        /**
+         * Compares this entry with the given object for value equality across both JIDs and the
+         * payload list.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link User} with equal JIDs and payloads
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -341,11 +341,21 @@ public final class IqUsyncRequest implements IqOperation.Request {
                     && Objects.equals(this.userPayloads, that.userPayloads);
         }
 
+        /**
+         * Returns a hash code derived from both JIDs and the payload list.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(userJid, pnJid, userPayloads);
         }
 
+        /**
+         * Returns a debug string listing both JIDs and the payload list.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "Request.User[userJid=" + userJid

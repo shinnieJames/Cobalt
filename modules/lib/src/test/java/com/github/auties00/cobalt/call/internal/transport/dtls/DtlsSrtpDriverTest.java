@@ -18,19 +18,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Round-trip tests for {@link DtlsSrtpDriver} — handshakes a
- * client-side and a server-side driver against each other over a
- * loopback {@link DatagramTransport} pair, verifies the negotiated
- * {@code SrtpEndpoint}s on both sides, and exercises the RFC 7983
- * demux for inbound STUN / SRTP packets.
+ * Round-trip coverage for {@link DtlsSrtpDriver}: handshakes a client-side and a server-side
+ * driver against each other over a loopback {@link DatagramTransport} pair, verifies the negotiated
+ * {@code SrtpEndpoint} on both sides, and exercises the RFC 7983 byte-0 demultiplexer for inbound
+ * STUN and SRTP packets. The nested {@code LoopbackDatagramPair} is an in-memory transport whose
+ * pump thread dispatches each datagram synchronously to the peer's inbound listener, so no UDP
+ * socket is involved.
  */
 public class DtlsSrtpDriverTest {
 
-    /**
-     * Drives both sides of a DTLS-SRTP handshake to completion over a
-     * loopback transport and verifies both sides obtain a valid
-     * {@code SrtpEndpoint}.
-     */
     @Test
     public void handshakeRoundTrip() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -54,11 +50,6 @@ public class DtlsSrtpDriverTest {
         }
     }
 
-    /**
-     * A handshake against a peer whose fingerprint doesn't match the
-     * advertised one fails on both sides. (Simulates an MITM that
-     * substituted its own cert.)
-     */
     @Test
     public void mismatchedFingerprintFailsHandshake() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -67,7 +58,7 @@ public class DtlsSrtpDriverTest {
         var transports = LoopbackDatagramPair.pair();
 
         try (var clientDriver = new DtlsSrtpDriver(transports[0], SrtpRole.CLIENT,
-                clientCert, bogusCert.sha256Fingerprint());  // wrong!
+                clientCert, bogusCert.sha256Fingerprint());
              var serverDriver = new DtlsSrtpDriver(transports[1], SrtpRole.SERVER,
                      serverCert, clientCert.sha256Fingerprint())) {
             serverDriver.start();
@@ -75,19 +66,12 @@ public class DtlsSrtpDriverTest {
 
             assertThrows(IOException.class,
                     () -> clientDriver.awaitHandshake(10, TimeUnit.SECONDS));
-            // The server side surfaces the failure too — peer's TLS
-            // alert closes the connection.
+            // Server surfaces the failure too: the peer's TLS alert closes the connection.
             assertThrows(IOException.class,
                     () -> serverDriver.awaitHandshake(10, TimeUnit.SECONDS));
         }
     }
 
-    /**
-     * The RFC 7983 byte-0 demultiplexer routes STUN (0..3), DTLS
-     * (20..63), and SRTP (128..191) to the right handler. Verified by
-     * synthesising packets directly into a paired transport and
-     * checking which handler fires.
-     */
     @Test
     public void rfc7983DemuxRoutesByLeadingByte() throws Exception {
         var localCert = DtlsCertificate.generate();
@@ -101,20 +85,15 @@ public class DtlsSrtpDriverTest {
             driver.setStunHandler(stunCaptured::set);
             driver.setSrtpHandler(srtpCaptured::set);
 
-            // Inject a STUN-shaped packet (byte 0 = 0x00 — STUN
-            // binding request).
+            // byte 0 = 0x00 is a STUN binding request, in the RFC 7983 STUN range 0..3.
             var stunPacket = new byte[]{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, (byte) 0xA4, 0x42};
             transports[1].send(stunPacket);
 
-            // Inject an SRTP-shaped packet (byte 0 with version=2
-            // — high bit set — value 0x80 falls in 128..191).
+            // byte 0 = 0x80 (RTP version 2, high bit set) falls in the RFC 7983 SRTP range 128..191.
             var srtpPacket = new byte[]{(byte) 0x80, 0x00, 0x00, 0x01};
             transports[1].send(srtpPacket);
 
-            // Polling — the inbound listener fires synchronously
-            // when the LoopbackDatagramPair pumps, so by the time
-            // sendInverse returns the handler has been invoked.
-            // But sendInverse is async via a queue; small wait.
+            // The pump dispatches asynchronously via the inbound queue, so wait for both handlers.
             for (var i = 0; i < 50 && (stunCaptured.get() == null || srtpCaptured.get() == null); i++) {
                 Thread.sleep(10);
             }
@@ -126,11 +105,6 @@ public class DtlsSrtpDriverTest {
         }
     }
 
-    /**
-     * {@link DtlsSrtpDriver#close()} unblocks an in-flight
-     * {@link DtlsSrtpDriver#awaitHandshake} with an
-     * {@link IOException}.
-     */
     @Test
     public void closeUnblocksAwaitHandshake() throws Exception {
         var localCert = DtlsCertificate.generate();
@@ -140,8 +114,7 @@ public class DtlsSrtpDriverTest {
         var driver = new DtlsSrtpDriver(transports[0], SrtpRole.CLIENT,
                 localCert, peerCert.sha256Fingerprint());
         driver.start();
-        // Don't start a peer — handshake will block forever, so
-        // close() must unblock it.
+        // No peer is started, so the handshake blocks indefinitely until close() unblocks it.
         Thread.ofVirtual().start(() -> {
             try {
                 Thread.sleep(200);
@@ -154,9 +127,6 @@ public class DtlsSrtpDriverTest {
         assertNull(driver.srtpEndpoint());
     }
 
-    /**
-     * Constructing with a wrong-sized fingerprint is rejected.
-     */
     @Test
     public void wrongFingerprintLengthRejected() {
         var cert = DtlsCertificate.generate();
@@ -166,46 +136,21 @@ public class DtlsSrtpDriverTest {
     }
 
     /**
-     * In-memory pair of {@link DatagramTransport}s for unit-testing
-     * the driver without a real UDP socket. What one side sends, the
-     * other side's inbound listener receives.
+     * In-memory {@link DatagramTransport} pair for driving the handshake without a UDP socket: each
+     * side's {@link #send(byte[])} enqueues onto the peer's inbound queue, and a per-side virtual
+     * pump thread drains that queue into the registered {@code InboundListener}.
      */
     private static final class LoopbackDatagramPair implements DatagramTransport {
-        /**
-         * The inbound queue this side reads from (filled by the
-         * peer's outbound).
-         */
         private final LinkedBlockingQueue<byte[]> inbound;
 
-        /**
-         * The peer's inbound queue, which we feed via
-         * {@link #send(byte[])}.
-         */
         private final LinkedBlockingQueue<byte[]> peerInbound;
 
-        /**
-         * Listener registered by the driver — fires synchronously
-         * from the pump thread.
-         */
         private volatile InboundListener listener;
 
-        /**
-         * Pump thread that drains {@link #inbound} into the
-         * registered listener.
-         */
         private final Thread pump;
 
-        /**
-         * Closed flag.
-         */
         private volatile boolean closed;
 
-        /**
-         * Constructs a paired transport.
-         *
-         * @param inbound     this side's inbound queue
-         * @param peerInbound the peer side's inbound queue
-         */
         private LoopbackDatagramPair(LinkedBlockingQueue<byte[]> inbound,
                                      LinkedBlockingQueue<byte[]> peerInbound) {
             this.inbound = inbound;
@@ -213,11 +158,6 @@ public class DtlsSrtpDriverTest {
             this.pump = Thread.ofVirtual().name("loopback-pump").start(this::run);
         }
 
-        /**
-         * Constructs a paired set of two loopback transports.
-         *
-         * @return a 2-element array with cross-wired queues
-         */
         static LoopbackDatagramPair[] pair() {
             var q1 = new LinkedBlockingQueue<byte[]>();
             var q2 = new LinkedBlockingQueue<byte[]>();
@@ -256,10 +196,6 @@ public class DtlsSrtpDriverTest {
             pump.interrupt();
         }
 
-        /**
-         * Drains the inbound queue, dispatching each packet to the
-         * registered listener.
-         */
         private void run() {
             try {
                 while (!Thread.currentThread().isInterrupted()) {

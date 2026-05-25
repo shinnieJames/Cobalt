@@ -22,34 +22,17 @@ import com.github.auties00.cobalt.call.session.VoiceCallOptions;
 import com.github.auties00.cobalt.call.session.GroupCallParticipant;
 
 /**
- * Tests for the M5 {@link GroupCallSession} — pairs two sessions
- * over a loopback transport and verifies per-SSRC inbound demux,
- * per-peer audio listener routing, and add/remove participant
- * lifecycle.
- *
- * <p>The "SFU" of a real group call is replaced here by a direct
- * loopback between two sessions — that's enough to exercise the
- * SSRC-based demux path that's the only thing structurally new in
- * M5; multi-peer fan-out will be exercised end-to-end once the
- * companion SFU integration lands.
+ * Covers {@link GroupCallSession} by pairing two sessions over an in-memory loopback
+ * transport, exercising per-SSRC inbound demux, per-peer audio listener routing, and the
+ * add/remove participant lifecycle. The SFU of a real group call is stood in by a direct
+ * loopback between the two sessions, which is sufficient to drive the SSRC-based demux path.
  */
 public class GroupCallSessionTest {
 
-    /**
-     * Peer JID used by every test case.
-     */
     private static final Jid PEER = Jid.of("12345", JidServer.user());
 
-    /**
-     * Local self JID used by every test case.
-     */
     private static final Jid SELF = Jid.of("99999", JidServer.user());
 
-    /**
-     * Two group-call sessions handshake; each subscribes to the
-     * other's SSRC; PCM written into one's mic sink arrives at the
-     * other's per-peer audio listener.
-     */
     @Test
     public void twoPartyGroupSubscribeRoundTripsAudio() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -75,15 +58,12 @@ public class GroupCallSessionTest {
             clientSession.awaitConnected(15, TimeUnit.SECONDS);
             serverSession.awaitConnected(15, TimeUnit.SECONDS);
 
-            // Each side subscribes to the other's outbound SSRC.
             var receivedAtServer = new LinkedBlockingQueue<AudioFrame>();
             serverSession.addParticipant(new GroupCallParticipant(
                     PEER, clientOpts.localAudioSsrc(), receivedAtServer::offer));
 
             assertTrue(serverSession.subscribedSsrcs().contains(clientOpts.localAudioSsrc()));
 
-            // Client writes mic frames; server's per-peer listener
-            // should receive the decoded PCM.
             for (var i = 0; i < 5; i++) {
                 clientCall.localAudioSink().write(new AudioFrame(sineFrame(900), i * 10L));
             }
@@ -96,11 +76,6 @@ public class GroupCallSessionTest {
         }
     }
 
-    /**
-     * Subscribing to the same participant twice replaces (not
-     * stacks) the listener — verifies the subscriber map is
-     * keyed-on-SSRC-rather-than-list.
-     */
     @Test
     public void resubscribeReplacesListener() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -138,9 +113,7 @@ public class GroupCallSessionTest {
         }
     }
 
-    /**
-     * Generates a 16 kHz mono sine frame.
-     */
+    // 16 kHz mono sine frame.
     private static short[] sineFrame(int freqHz) {
         var pcm = new short[160];
         for (var i = 0; i < 160; i++) {
@@ -149,9 +122,7 @@ public class GroupCallSessionTest {
         return pcm;
     }
 
-    /**
-     * In-memory paired {@link DatagramTransport}s.
-     */
+    // In-memory paired DatagramTransports; what one side sends, the other's listener receives.
     private static final class LoopbackPair implements DatagramTransport {
         private final LinkedBlockingQueue<byte[]> inbound;
         private final LinkedBlockingQueue<byte[]> peerInbound;
@@ -219,9 +190,7 @@ public class GroupCallSessionTest {
         }
     }
 
-    /**
-     * Synthetic engine
-     */
+    // Synthetic CallService-shaped stand-in for the call engine.
     private static final class RecordingEngine extends CallService {
         RecordingEngine() {
             super(null, null);

@@ -3,12 +3,13 @@ package com.github.auties00.cobalt.client;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.call.ActiveCall;
-import com.github.auties00.cobalt.call.CallOptions;
-import com.github.auties00.cobalt.call.internal.CallService;
-import com.github.auties00.cobalt.call.IncomingCall;
 import com.github.auties00.cobalt.call.CallEndReason;
+import com.github.auties00.cobalt.call.CallOptions;
+import com.github.auties00.cobalt.call.IncomingCall;
+import com.github.auties00.cobalt.call.internal.CallService;
 import com.github.auties00.cobalt.call.internal.signaling.CallStanza;
 import com.github.auties00.cobalt.device.DefaultDeviceService;
 import com.github.auties00.cobalt.device.DeviceService;
@@ -18,7 +19,6 @@ import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.media.transcode.MediaTranscoderService;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.message.addon.EncMessageFactory;
-import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
 import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.message.send.stanza.NewsletterStanza;
@@ -68,21 +68,21 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessageBuilder;
 import com.github.auties00.cobalt.model.newsletter.*;
-import com.github.auties00.cobalt.model.payment.BrazilCustomPaymentMethod;
-import com.github.auties00.cobalt.model.payment.BrazilCustomPaymentMethodBuilder;
-import com.github.auties00.cobalt.model.payment.BrazilCustomPaymentMethodCreate;
-import com.github.auties00.cobalt.model.payment.BrazilCustomPaymentMethodMetadataEntry;
-import com.github.auties00.cobalt.model.payment.PaymentsTosV3ConsumerVariant;
+import com.github.auties00.cobalt.model.payment.*;
 import com.github.auties00.cobalt.model.preference.*;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.privacy.*;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.model.reporting.*;
 import com.github.auties00.cobalt.model.setting.*;
 import com.github.auties00.cobalt.model.setting.notice.UserNotice;
 import com.github.auties00.cobalt.model.setting.notice.UserNoticeBundle;
 import com.github.auties00.cobalt.model.setting.notice.UserNoticeStage;
 import com.github.auties00.cobalt.model.setting.notice.UserNoticeStageQuery;
-import com.github.auties00.cobalt.model.setting.privacy.*;
+import com.github.auties00.cobalt.model.setting.privacy.ContactBlacklistAddressingMode;
+import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
+import com.github.auties00.cobalt.model.setting.privacy.OptOutListUpdate;
+import com.github.auties00.cobalt.model.setting.privacy.OptOutTarget;
 import com.github.auties00.cobalt.model.setting.push.PushConfig;
 import com.github.auties00.cobalt.model.signal.*;
 import com.github.auties00.cobalt.model.sync.*;
@@ -94,25 +94,18 @@ import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastLi
 import com.github.auties00.cobalt.model.sync.action.business.CtwaPerCustomerDataSharingAction;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogAction;
 import com.github.auties00.cobalt.model.sync.action.chat.*;
+import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
 import com.github.auties00.cobalt.model.sync.action.chat.QuickReplyAction;
 import com.github.auties00.cobalt.model.sync.action.contact.*;
 import com.github.auties00.cobalt.model.sync.action.device.ExternalWebBetaAction;
 import com.github.auties00.cobalt.model.sync.action.device.NuxAction;
 import com.github.auties00.cobalt.model.sync.action.device.TimeFormatAction;
-import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethod;
-import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
-import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsActionBuilder;
-import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
-import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.*;
+import com.github.auties00.cobalt.model.sync.action.payment.*;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCalls;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
-import com.github.auties00.cobalt.model.sync.action.setting.DetectedOutcomesStatusAction;
-import com.github.auties00.cobalt.model.sync.action.setting.LocaleSetting;
-import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
-import com.github.auties00.cobalt.model.sync.action.setting.PushNameSetting;
-import com.github.auties00.cobalt.model.sync.action.setting.UnarchiveChatsSetting;
+import com.github.auties00.cobalt.model.sync.action.setting.*;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -216,7 +209,6 @@ import com.github.auties00.cobalt.node.usync.protocol.UsyncContactProtocol;
 import com.github.auties00.cobalt.node.usync.result.ContactResult;
 import com.github.auties00.cobalt.node.usync.result.UsyncProtocolError;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
-import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.DefaultABPropsService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
@@ -282,7 +274,7 @@ import java.util.stream.Stream;
  * socket, the Signal protocol ciphers, and the constellation of services
  * responsible for device management, message send/receive, sync, LID
  * migration, and telemetry. Callers obtain instances through
- * {@link #builder()} and drive them through
+ * {@link WhatsAppClient#builder()} and drive them through
  * {@link #connect()}, {@link #disconnect()},
  * {@link #reconnect()}, and {@link #logout()}; observation happens through
  * {@link WhatsAppClientListener} callbacks registered on the underlying
@@ -292,6 +284,7 @@ import java.util.stream.Stream;
  * the caller until a response is available. Errors are funneled through
  * the configured {@link WhatsAppClientErrorHandler} so recovery policy is
  * pluggable rather than hardcoded.
+ *
  * @see WhatsAppClientBuilder
  * @see WhatsAppClientListener
  * @see WhatsAppClientErrorHandler
@@ -376,7 +369,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private final WhatsAppStore store;
     /**
-     * The call engine that backs {@link #startCall(Jid, boolean)},
+     * The call engine that backs {@link #startCall(JidProvider, CallOptions)},
      * {@link #acceptCall(IncomingCall, CallOptions)}, and
      * {@link #rejectCall(IncomingCall, CallEndReason)}. Owned here,
      * threaded into the socket stream and call receiver via
@@ -738,15 +731,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         this.disconnecting = new AtomicBoolean();
     }
 
-    //<editor-fold desc="Data">
     /** {@inheritDoc} */
     @Override
     public WhatsAppStore store() {
         return store;
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Connection">
     /** {@inheritDoc} */
     @Override
     public WhatsAppClient connect() {
@@ -942,10 +932,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      *                              removed as part of this disconnect
      */
     private void disconnect0(WhatsAppClientDisconnectReason reason, boolean canRemoveShutdownHook) {
-        // Per WA Web WAWebSocketModel.sendLogout: flush pending sentinel
-        // mutations before disconnecting so key expiration is propagated.
-        // WA Web bounds the wait via Math.min(20, Math.max(0, getSyncdSentinelTimeoutSeconds())) * 1000
-        // so the logout cannot block indefinitely if a flush stalls.
+        // Flush pending sentinel mutations before disconnecting so key expiration is
+        // propagated; the wait is bounded so the logout cannot block indefinitely if a flush stalls.
         if (reason == WhatsAppClientDisconnectReason.LOGGED_OUT
                 || reason == WhatsAppClientDisconnectReason.DISCONNECTED) {
             flushDirtyCollectionsWithTimeout();
@@ -1167,7 +1155,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     private void commitMexEventV2(String queryId, String operationName, boolean isArgoPayload,
                                   long startTimeMs, long endTimeMs, boolean hasData,
                                   String errorsJson, String errorCodesJson) {
-        // WAWebMexNativeClient.fetchQuery -> MexPerfTracker.logEvent
         var durationMs = Math.max(0L, endTimeMs - startTimeMs);
         wamService.commit(new MexEventV2EventBuilder()
                 .mexEventV2IsMex(Boolean.TRUE)
@@ -1324,8 +1311,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         return this;
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Error handling">
     /** {@inheritDoc} */
     @Override
     public void handleFailure(WhatsAppException exception) {
@@ -1392,7 +1377,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void emitSyncdFatalErrorMetric(WhatsAppWebAppStateSyncException exception) {
         if (!exception.isFatal()) {
-            // WAWebSyncdUploadFatalErrorMetric only receives fatal errors; retryable
             // errors (SyncdRetryableError / SyncdMissingKeyError) short-circuit
             // before reaching uploadFatalErrorMetric.
             return;
@@ -1435,20 +1419,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private static MdSyncdFatalErrorCode mapSyncdFatalErrorCode(WhatsAppWebAppStateSyncException exception) {
         return switch (exception) {
-            // WAWebSyncdAntiTampering / MutationIntegrityVerifier: SyncdFatalError("unable to validate snapshot mac")
             case WhatsAppWebAppStateSyncException.SnapshotMacMismatch _ -> MdSyncdFatalErrorCode.MAC_MISMATCH_SNAPSHOT;
-            // WAWebSyncdAntiTampering.validatePatchMac / MutationIntegrityVerifier: SyncdFatalError("unable to validate patch mac")
             case WhatsAppWebAppStateSyncException.PatchMacMismatch _ -> MdSyncdFatalErrorCode.MAC_MISMATCH_PATCH;
-            // WAWebSyncdError / DecryptedMutation: SyncdFatalError("decryption failure: valueMAC mismatch")
             case WhatsAppWebAppStateSyncException.ValueMacMismatch _ -> MdSyncdFatalErrorCode.DECRYPTION_FAILED_VALUE_MAC_MISMATCH;
-            // WAWebSyncdError / DecryptedMutation: SyncdFatalError("decryption failure: indexMAC mismatch")
             case WhatsAppWebAppStateSyncException.IndexMacMismatch _ -> MdSyncdFatalErrorCode.DECRYPTION_FAILED_INDEX_MAC_MISMATCH;
-            // WAWebSyncdStoreMissingKeys: MISSING_KEY_ON_ALL_CLIENTS
             case WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices _ -> MdSyncdFatalErrorCode.MISSING_KEY_ON_ALL_CLIENTS;
             case WhatsAppWebAppStateSyncException.TimeoutWhileWaitingForMissingKey _ -> MdSyncdFatalErrorCode.TIMEOUT_WHILE_WAITING_FOR_MISSING_KEY;
-            // WASyncdKmpEncryptionManager: SyncdFatalError(e.message)
             case WhatsAppWebAppStateSyncException.DecryptionFailed _ -> MdSyncdFatalErrorCode.DECRYPTION_FAILED;
-            // WAWebSyncdError: MAC computation / encryption failures bucket under ENCRYPTION_FAILED
             case WhatsAppWebAppStateSyncException.MacComputationFailed _ -> MdSyncdFatalErrorCode.ENCRYPTION_FAILED;
             case WhatsAppWebAppStateSyncException.MissingActionTimestamp _ -> MdSyncdFatalErrorCode.MISSING_ACTION_TIMESTAMP;
             case WhatsAppWebAppStateSyncException.DuplicateIndexInPatch _ -> MdSyncdFatalErrorCode.SAME_INDEX_FOR_MULTIPLE_MUTATIONS_IN_PATCH;
@@ -1526,8 +1503,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             case REGULAR_LOW -> com.github.auties00.cobalt.wam.type.Collection.REGULAR_LOW;
         };
     }
-    //</editor-fold>
-    //<editor-fold desc="Web app state">
     /** {@inheritDoc} */
     @Override
     public void pushWebAppState(SyncPatchType type, List<SyncPendingMutation> patches) {
@@ -1576,8 +1551,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .orElse("");
         store.setVerifiedName(verifiedName);
     }
-    //</editor-fold>
-    //<editor-fold desc="Acknowledgements, receipts, and pre-keys">
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendAck",
@@ -1706,9 +1679,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .build();
         sendNodeWithNoResponse(receipt);
     }
-    //</editor-fold>
 
-    //<editor-fold desc="Chats, groups, and metadata queries">
     /** {@inheritDoc} */
     @Override
     public ChatMetadata queryChatMetadata(JidProvider chat) {
@@ -2432,7 +2403,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public Optional<BusinessOrder> queryOrder(String messageId, String tokenBase64) {
         Objects.requireNonNull(messageId, "messageId cannot be null");
         Objects.requireNonNull(tokenBase64, "tokenBase64 cannot be null");
-        var selfJid = store.jid() // WAWebUserPrefsMeUser.getMePnUserOrThrow_DO_NOT_USE().toString()
+        var selfJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("queryOrder requires a logged-in session"));
         var request = new QueryOrderMexRequest(
                 selfJid.toString(),
@@ -2452,7 +2423,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         Objects.requireNonNull(create, "create cannot be null");
         var shortcut = create.shortcut();
         var message = create.message();
-        var quickReplyId = DataUtils.randomHex(8); // ADAPTED: WA Web mints a client-side uuid inside the compose flow; randomHex(8) yields 16 uppercase hex chars
+        var quickReplyId = DataUtils.randomHex(8);
         var resolvedKeywords = List.copyOf(create.keywords());
         var timestamp = Instant.now();
         wamService.commit(new QuickReplyEventBuilder()
@@ -2461,8 +2432,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .build());
         var mutation = quickReplyMutationFactory.getQuickReplyAddOrEditMutation(
                 quickReplyId, shortcut, message, 0, resolvedKeywords, timestamp);
-        webAppStateService.pushPatches(QuickReplyAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync([], [mutation], ...)
-        // ADAPTED: WAWebSendQuickReplyAddOrEditMutation applies the entry locally after the sync round-trip;
+        webAppStateService.pushPatches(QuickReplyAction.COLLECTION_NAME, List.of(mutation));
         // Cobalt updates the store eagerly for consistent read-after-write semantics.
         var entry = new QuickReplyBuilder()
                 .id(quickReplyId)
@@ -2505,7 +2475,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .keywords(resolvedKeywords)
                 .count(currentCount)
                 .build();
-        store.addQuickReply(entry); // ADAPTED: createOrReplace eagerly mirrors WA Web's inbound apply branch
+        store.addQuickReply(entry);
         return existing;
     }
 
@@ -2525,7 +2495,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .build());
         var mutation = quickReplyMutationFactory.getQuickReplyDeleteMutation(quickReplyId, Instant.now());
         webAppStateService.pushPatches(QuickReplyAction.COLLECTION_NAME, List.of(mutation));
-        store.removeQuickReply(quickReplyId); // ADAPTED: WAWebQuickRepliesSync.applyMutations -> getQuickReplyTable().remove(l) applied eagerly
+        store.removeQuickReply(quickReplyId);
         return existing;
     }
 
@@ -2978,7 +2948,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         FetchAllNewslettersMetadataMexResponse.of(response).ifPresent(r -> {
             for (var item : r.items()) {
                 item.id().ifPresent(id -> {
-                    var jid = Jid.of(id); // WAJids.toNewsletterJid
+                    var jid = Jid.of(id);
                     if (store.findNewsletterByJid(jid).isEmpty()) {
                         store.addNewNewsletter(jid);
                     }
@@ -3003,26 +2973,26 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void refreshGroups() {
         var participantsMarker = new NodeBuilder()
-                .description("participants") // WASmaxOutGroupsGetParticipatingGroupsRequest.makeGetParticipatingGroupsRequestParticipatingParticipants
+                .description("participants")
                 .build();
         var participatingNode = new NodeBuilder()
-                .description("participating") // WASmaxOutGroupsGetParticipatingGroupsRequest: smax("participating", null, participants?, description?)
+                .description("participating")
                 .content(participantsMarker)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseGetServerMixin: xmlns: "w:g2"
-                .attribute("to", Jid.of(JidServer.groupOrCommunity())) // WASmaxOutGroupsBaseGetServerMixin: to: G_US
-                .attribute("type", "get") // WAWebSmaxBaseIQGetRequestMixin: type: "get"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", Jid.of(JidServer.groupOrCommunity()))
+                .attribute("type", "get")
                 .content(participatingNode);
-        var response = sendNode(iqNode); // WASmaxGroupsGetParticipatingGroupsRPC.sendGetParticipatingGroupsRPC
+        var response = sendNode(iqNode);
         var groups = new LinkedHashSet<Chat>();
-        response.streamChildren() // response "<groups>" wrapper (or direct "<group>" children)
+        response.streamChildren()
                 .flatMap(wrapper -> wrapper.hasDescription("group")
                         ? Stream.of(wrapper)
                         : wrapper.streamChildren("group"))
                 .forEach(groupNode -> {
-                    var metadata = parseChatMetadata(groupNode); // WAWebGroupsQueryApi.parseGroupSmax
+                    var metadata = parseChatMetadata(groupNode);
                     store.addChatMetadata(metadata);
                     var chat = store.findChatByJid(metadata.jid())
                             .orElseGet(() -> store.addNewChat(metadata.jid()));
@@ -3069,11 +3039,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Jid joinGroupViaInvite(String inviteCode) {
         Objects.requireNonNull(inviteCode, "inviteCode cannot be null");
-        // WAWebGroupInviteJob.joinGroupViaInvite times the IQ with self.performance.now() and in
-        // the finally block invokes WAWebGroupJoinRequestMetricUtils.logMembershipRequestCreate
         // ONLY when the caller anticipated a membership_approval_request response (the second
         // parameter `t`). Cobalt infers the same condition from the response shape: a
-        // <membership_approval_request> child indicates the join has been gated behind admin
         // approval, so the create-request metric applies.
         var request = new IqJoinGroupByInviteCodeRequest(inviteCode, false);
         var requestBuilder = request.toNode();
@@ -3106,8 +3073,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw e;
         } finally {
             if (approvalGated || !successful) {
-                // new WaFsGroupJoinRequestActionWamEvent({groupJid, groupJoinRequestAction:
-                // MEMBERSHIP_REQUEST_CREATE, responseTime, isSuccessful}).commit().
                 wamService.commit(new WaFsGroupJoinRequestActionEventBuilder()
                         .groupJid(resolvedGroup != null ? sanitizeGroupJidForWam(resolvedGroup) : "")
                         .groupJoinRequestAction(GroupJoinRequestActionType.MEMBERSHIP_REQUEST_CREATE)
@@ -3187,19 +3152,19 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var inviteCode = invite.inviteCode();
         var addRequestNode = new NodeBuilder()
                 .description("add_request")
-                .attribute("code", inviteCode) // addRequestCode
-                .attribute("expiration", inviteTimestamp.getEpochSecond()) // addRequestExpiration
-                .attribute("admin", sender) // addRequestAdmin
+                .attribute("code", inviteCode)
+                .attribute("expiration", inviteTimestamp.getEpochSecond())
+                .attribute("admin", sender)
                 .attribute("invitee", invitee)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseGetGroupMixin: xmlns: "w:g2"
-                .attribute("to", sender) // iqTo
+                .attribute("xmlns", "w:g2")
+                .attribute("to", sender)
                 .attribute("type", "get")
                 .content(addRequestNode);
-        var response = sendNode(iqNode); // WASmaxGroupsGetGroupInfoRPC.sendGetGroupInfoRPC
-        var metadata = handleChatMetadata(response); // WAWebGroupsQueryApi.parseGroupSmax
+        var response = sendNode(iqNode);
+        var metadata = handleChatMetadata(response);
         if (!(metadata instanceof GroupMetadata groupMetadata)) {
             throw new NoSuchElementException("Expected a group metadata, got %s".formatted(metadata));
         }
@@ -3220,16 +3185,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var acceptNode = new NodeBuilder()
                 .description("accept")
                 .attribute("code", "")
-                .attribute("expiration", inviteTimestamp.getEpochSecond()) // acceptExpiration
-                .attribute("admin", target) // acceptAdmin
+                .attribute("expiration", inviteTimestamp.getEpochSecond())
+                .attribute("admin", target)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetGroupMixin: xmlns: "w:g2"
-                .attribute("to", group) // iqTo
+                .attribute("xmlns", "w:g2")
+                .attribute("to", group)
                 .attribute("type", "set")
                 .content(acceptNode);
-        sendNode(iqNode); // WASmaxGroupsAcceptGroupAddRPC.sendAcceptGroupAddRPC
+        sendNode(iqNode);
     }
 
     /** {@inheritDoc} */
@@ -3243,26 +3208,26 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var membershipNode = new NodeBuilder()
-                .description("membership_approval_requests") // WASmaxOutGroupsGetMembershipApprovalRequestsRequest: smax("membership_approval_requests", null)
+                .description("membership_approval_requests")
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseGetGroupMixin: xmlns: "w:g2"
-                .attribute("to", group) // WASmaxOutGroupsBaseGetGroupMixin: to: GROUP_JID(t)
+                .attribute("xmlns", "w:g2")
+                .attribute("to", group)
                 .attribute("type", "get")
                 .content(membershipNode);
-        var response = sendNode(iqNode); // WASmaxGroupsGetMembershipApprovalRequestsRPC.sendGetMembershipApprovalRequestsRPC
+        var response = sendNode(iqNode);
         var result = new ArrayList<Jid>();
-        response.streamChildren() // response "<membership_approval_requests>" wrapper
+        response.streamChildren()
                 .flatMap(wrapper -> wrapper.streamChildren("membership_approval_request"))
                 .forEach(requestNode -> {
-                    var jid = requestNode.getAttributeAsJid("jid", null); // WAWebGroupGetMembershipApprovalRequestsJob: userJidToUserWid(e.jid)
+                    var jid = requestNode.getAttributeAsJid("jid", null);
                     if (jid != null) {
                         result.add(jid);
                     }
                 });
         wamService.commit(new WaFsGroupJoinRequestActionEventBuilder()
-                .groupJid(sanitizeGroupJidForWam(group)) // WAWebGroupJoinRequestMetricUtils.getSanitizedJid
+                .groupJid(sanitizeGroupJidForWam(group))
                 .groupJoinRequestAction(GroupJoinRequestActionType.VIEW_PENDING_PARTICIPANTS)
                 .isSuccessful(true)
                 .serverResponseTime(Instant.ofEpochMilli(0L))
@@ -3281,21 +3246,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void acceptGroupJoinRequest(JidProvider groupProvider, JidProvider applicantProvider) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var applicant = Objects.requireNonNull(applicantProvider, "applicant cannot be null").toJid();
-        // wraps the IQ emission in try/catch to emit WaFsGroupJoinRequestAction
-        // with action=MEMBERSHIP_REQUEST_APPROVE and an isSuccessful flag driven
-        // by whether the IQ threw. Cobalt mirrors that pattern.
         var start = Instant.now();
         var successful = true;
         try {
-            changeMembershipRequestState(group, applicant, "approve"); // WASmaxOutGroupsMembershipRequestsActionRequest: makeMembershipRequestsActionRequestMembershipRequestsActionApprove
+            changeMembershipRequestState(group, applicant, "approve");
         } catch (RuntimeException e) {
             successful = false;
             throw e;
         } finally {
-            // emitter which builds new WaFsGroupJoinRequestActionWamEvent({groupJid, groupJoinRequestAction,
-            // groupJoinRequestGroupsInCommon, serverResponseTime, isSuccessful}).commit().
             wamService.commit(new WaFsGroupJoinRequestActionEventBuilder()
-                    .groupJid(sanitizeGroupJidForWam(group)) // WAWebGroupJoinRequestMetricUtils.getSanitizedJid
+                    .groupJid(sanitizeGroupJidForWam(group))
                     .groupJoinRequestAction(GroupJoinRequestActionType.MEMBERSHIP_REQUEST_APPROVE)
                     .isSuccessful(successful)
                     .serverResponseTime(Instant.ofEpochMilli(Instant.now().toEpochMilli() - start.toEpochMilli()))
@@ -3314,21 +3274,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void rejectGroupJoinRequest(JidProvider groupProvider, JidProvider applicantProvider) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var applicant = Objects.requireNonNull(applicantProvider, "applicant cannot be null").toJid();
-        // wraps the IQ emission in try/catch/finally to emit WaFsGroupJoinRequestAction
-        // with action=MEMBERSHIP_REQUEST_REJECT and an isSuccessful flag driven by
-        // whether the IQ threw. Cobalt mirrors that pattern.
         var start = Instant.now();
         var successful = true;
         try {
-            changeMembershipRequestState(group, applicant, "reject"); // WASmaxOutGroupsMembershipRequestsActionRequest: makeMembershipRequestsActionRequestMembershipRequestsActionReject
+            changeMembershipRequestState(group, applicant, "reject");
         } catch (RuntimeException e) {
             successful = false;
             throw e;
         } finally {
-            // emitter which builds new WaFsGroupJoinRequestActionWamEvent({groupJid, groupJoinRequestAction,
-            // groupJoinRequestGroupsInCommon, serverResponseTime, isSuccessful}).commit().
             wamService.commit(new WaFsGroupJoinRequestActionEventBuilder()
-                    .groupJid(sanitizeGroupJidForWam(group)) // WAWebGroupJoinRequestMetricUtils.getSanitizedJid
+                    .groupJid(sanitizeGroupJidForWam(group))
                     .groupJoinRequestAction(GroupJoinRequestActionType.MEMBERSHIP_REQUEST_REJECT)
                     .isSuccessful(successful)
                     .serverResponseTime(Instant.ofEpochMilli(Instant.now().toEpochMilli() - start.toEpochMilli()))
@@ -3355,24 +3310,24 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var participantNode = new NodeBuilder()
-                .description("participant") // WASmaxOutGroupsMembershipRequestsActionRequest: makeMembershipRequestsActionRequestMembershipRequestsActionApproveParticipant / RejectParticipant
-                .attribute("jid", applicant) // smax("participant", {jid: JID(t)})
+                .description("participant")
+                .attribute("jid", applicant)
                 .build();
         var actionNode = new NodeBuilder()
-                .description(action) // WASmaxOutGroupsMembershipRequestsActionRequest: smax("approve" | "reject", null, REPEATED_CHILD(participant, ...))
+                .description(action)
                 .content(participantNode)
                 .build();
         var membershipActionNode = new NodeBuilder()
-                .description("membership_requests_action") // WASmaxOutGroupsMembershipRequestsActionRequest: smax("membership_requests_action", null, OPTIONAL_CHILD(approve), OPTIONAL_CHILD(reject))
+                .description("membership_requests_action")
                 .content(actionNode)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetGroupMixin: xmlns: "w:g2"
-                .attribute("to", group) // WASmaxOutGroupsBaseSetGroupMixin: to: GROUP_JID(t)
-                .attribute("type", "set") // WAWebSmaxBaseIQSetRequestMixin: type: "set"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", group)
+                .attribute("type", "set")
                 .content(membershipActionNode);
-        sendNode(iqNode); // WASmaxGroupsMembershipRequestsActionRPC.sendMembershipRequestsActionRPC
+        sendNode(iqNode);
     }
 
     /**
@@ -3406,7 +3361,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void sendPeerMessage(JidProvider chatJidProvider, ChatMessageInfo response) {
         var chatJid = Objects.requireNonNull(chatJidProvider, "chatJid cannot be null").toJid();
         Objects.requireNonNull(response, "response cannot be null");
-        messageService.sendPeer(chatJid, response); // WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg
+        messageService.sendPeer(chatJid, response);
     }
 
     /** {@inheritDoc} */
@@ -3421,9 +3376,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             return Map.of();
         }
 
-        // WAWebUsync.USyncQuery.$3: per-user element carries jid + <contact>+phone</contact>.
         // Build a UsyncQuery anchored on the contact protocol with background context, mirroring
-        // the WA Web bulk-availability lookup driven by WAWebContactSyncApi.syncContactList.
         var query = UsyncQuery.ofContact(UsyncAddressingMode.PN)
                 .withContext(UsyncContext.BACKGROUND);
         var hasUser = false;
@@ -3432,9 +3385,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             if (phoneNumber == null) {
                 continue;
             }
-            // via WAWebCommsWapMd.USER_JID, matching the live IQ shape exactly. The contact
-            // payload itself is rendered by UsyncContactProtocol.buildUserElement from the
-            // attached phoneNumber.
             query.withUser(UsyncUser.byPhoneNumber(phoneNumber).withId(jid.toUserJid()));
             hasUser = true;
         }
@@ -3444,7 +3394,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
 
         UsyncResult result;
         try {
-            result = sendNode(query); // WAWebUsync.USyncQuery.execute
+            result = sendNode(query);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new WhatsAppServerRuntimeException("hasWhatsapp interrupted while waiting on usync backoff", e);
@@ -3495,7 +3445,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public Optional<String> queryName(JidProvider jidProvider) {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
 
-        // ADAPTED: WAWebContactCollection lookup, Cobalt store is the cache equivalent.
         // Use chosenName() (push name) rather than Contact.name() because the latter
         // falls back to the JID user component, which would mask absent server data.
         var cached = store.findContactByJid(jid)
@@ -3510,15 +3459,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             return Optional.empty();
         }
 
-        // <user><contact>+phone</contact></user> entry whose response carries the push name as
-        // the <contact> child's text content.
         var query = UsyncQuery.ofContact(UsyncAddressingMode.PN)
                 .withContext(UsyncContext.BACKGROUND)
                 .withUser(UsyncUser.byPhoneNumber(phoneNumber));
 
         UsyncResult result;
         try {
-            result = sendNode(query); // WAWebUsync.USyncQuery.execute
+            result = sendNode(query);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new WhatsAppServerRuntimeException("queryName interrupted while waiting on usync backoff", e);
@@ -3550,18 +3497,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             return Map.of();
         }
 
-        // ADAPTED: WAWebContactSyncApi, flatten ContactCard phone numbers to phone JIDs
         var phoneJids = new ArrayList<Jid>();
         for (var card : contacts) {
             if (card instanceof ContactCard.Parsed parsed) {
-                phoneJids.addAll(parsed.phoneNumbers()); // ContactCard.Parsed exposes the default CELL list via phoneNumbers()
+                phoneJids.addAll(parsed.phoneNumbers());
             }
         }
         if (phoneJids.isEmpty()) {
             return Map.of();
         }
 
-        // WAWebUsyncContact.USyncContactProtocol.getUserElement: one <user><contact>+phone</contact></user> per entry
         var query = UsyncQuery.ofContact(UsyncAddressingMode.PN)
                 .withContext(UsyncContext.BACKGROUND);
         var byPhone = new HashMap<String, Jid>();
@@ -3579,16 +3524,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             return Map.of();
         }
 
-        // WAWebContactSyncLogger.contactSyncLogger.createEventContext: WAM start timestamp
         var syncStartTimestamp = Instant.now();
-        // WAWebContactSyncLogger PROTOCOL_BIT.CONTACT (0) - only protocol queried here
         var requestProtocolBitmask = 1;
-        // WAWebContactSyncLogger SYNC_REQUEST_ORIGIN.UNKNOWN (0) - public API has no explicit origin
         var requestOrigin = 0;
 
         UsyncResult result;
         try {
-            result = sendNode(query); // WAWebContactSyncApi.syncContactList -> USyncQuery.execute
+            result = sendNode(query);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             var endTs = Instant.now();
@@ -3608,8 +3550,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .build());
             throw new WhatsAppServerRuntimeException("syncContacts interrupted while waiting on usync backoff", e);
         } catch (RuntimeException e) {
-            // WAWebContactSyncLogger.contactSyncLogger.logFailure: emit ContactSyncEvent (id 1006)
-            // for the background contact-sync failure path.
             var endTs = Instant.now();
             wamService.commit(new ContactSyncEventEventBuilder()
                     .contactSyncType("BACKGROUND_QUERY")
@@ -3673,14 +3613,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             mapping.put(phoneJid, resolvedJid.toUserJid());
         }
 
-        // WAWebContactSyncLogger.contactSyncLogger.logSuccess: emit ContactSyncEvent (id 1006)
-        // for the background contact-sync success path.
         var endTimestamp = Instant.now();
         wamService.commit(new ContactSyncEventEventBuilder()
                 .contactSyncType("BACKGROUND_QUERY")
                 .contactSyncRequestOrigin(requestOrigin)
                 .contactSyncSuccess(true)
-                // WAWebContactSyncLogger: noop when requestedCount === 0
                 .contactSyncNoop(requestedCount == 0)
                 .contactSyncStartTimestamp(syncStartTimestamp)
                 .contactSyncEndTimestamp(endTimestamp)
@@ -3721,8 +3658,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .orElseGet(() -> store.addNewNewsletter(newsletterJid));
             var threadMetadata = parsed.flatMap(FetchNewsletterDehydratedMexResponse::threadMetadata).orElse(null);
             if (threadMetadata != null) {
-                // WAWebMexFetchNewsletterDehydratedJob folds the few dehydrated scalars
-                // back into the store-resident metadata so subsequent reads observe them.
                 var metadata = stored.metadata().orElseGet(() -> {
                     var fresh = new NewsletterMetadataBuilder().build();
                     stored.setMetadata(fresh);
@@ -3740,17 +3675,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             }
             return Optional.of(stored);
         }
-        // input = {key: t, type: u, view_role: a}
         var input = new FetchNewsletterMexRequest.Input(
                 newsletterJid.toString(),
                 "JID",
                 role != null ? role.name() : null
         );
         var request = new FetchNewsletterMexRequest(
-                Boolean.TRUE, // fetch_creation_time
-                Boolean.TRUE, // fetch_full_image (c = u !== "INVITE")
-                Boolean.TRUE, // fetch_viewer_metadata
-                Boolean.TRUE, // fetch_wamo_sub
+                Boolean.TRUE,
+                Boolean.TRUE,
+                Boolean.TRUE,
+                Boolean.TRUE,
                 input
         );
         var response = sendNode(request);
@@ -3833,17 +3767,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         sendNodeWithNoResponse(request);
         store.findNewsletterByJid(newsletter)
                 .orElseGet(() -> store.addNewNewsletter(newsletter));
-        // WAWebNewsletterSubscribeAction.subscribeToNewsletterAction ->
-        // WAWebNewsletterAttributionLogging.NewsletterCoreEventLogger.log({cid, channelCoreEventType: FOLLOW, ...})
-        // -> new ChannelCoreEventWamEvent({cid: s.user, channelCoreEventType, channelEntryPointApp: WHATSAPP, ...}).commit()
         wamService.commit(new ChannelCoreEventEventBuilder()
                 .cid(newsletter.user())
                 .channelCoreEventType(ChannelEventType.FOLLOW)
                 .channelEntryPointApp(ChannelEntryPointApp.WHATSAPP)
                 .build());
-        // WAWebNewsletterSubscribeAction.subscribeToNewsletterWidAction ->
-        // WAWebNewsletterMembershipActionLogger.logNewsletterMembershipActionEvent({cid, actionResult: FOLLOW_SUCCESS})
-        // -> new ChannelMembershipActionEventWamEvent({cid: n.user, actionResult}).commit()
         wamService.commit(new ChannelMembershipActionEventEventBuilder()
                 .cid(newsletter.user())
                 .actionResult(ChannelMembershipActionResult.FOLLOW_SUCCESS)
@@ -3859,17 +3787,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var request = new LeaveNewsletterMexRequest(newsletter.toString());
         sendNodeWithNoResponse(request);
         store.removeNewsletter(newsletter);
-        // WAWebNewsletterUnsubscribeAction.unsubscribeFromNewsletterAction ->
-        // WAWebNewsletterAttributionLogging.NewsletterCoreEventLogger.log({cid, channelCoreEventType: UNFOLLOW, ...})
-        // -> new ChannelCoreEventWamEvent({cid: s.user, channelCoreEventType, channelEntryPointApp: WHATSAPP, ...}).commit()
         wamService.commit(new ChannelCoreEventEventBuilder()
                 .cid(newsletter.user())
                 .channelCoreEventType(ChannelEventType.UNFOLLOW)
                 .channelEntryPointApp(ChannelEntryPointApp.WHATSAPP)
                 .build());
-        // WAWebNewsletterUnsubscribeAction.unsubscribeFromNewsletterAction ->
-        // WAWebNewsletterMembershipActionLogger.logNewsletterMembershipActionEvent({cid: t.id, actionResult: UNFOLLOW_SUCCESS})
-        // -> new ChannelMembershipActionEventWamEvent({cid: n.user, actionResult}).commit()
         wamService.commit(new ChannelMembershipActionEventEventBuilder()
                 .cid(newsletter.user())
                 .actionResult(ChannelMembershipActionResult.UNFOLLOW_SUCCESS)
@@ -3882,18 +3804,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void muteNewsletter(JidProvider newsletterProvider, boolean mute) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        // WAWebNewsletterUpdateUserSettingJob: passes {newsletter_id, type, value} as a NESTED input object,
-        // not a stringified JSON. WAWebMexClient.fetchQuery places it under variables.input.
         var request = new UpdateNewsletterUserSettingMexRequest(
-                newsletter.toString(),       // WAWebNewsletterUpdateUserSettingJob: newsletter_id
+                newsletter.toString(),
                 "MUTE_ADMIN_ACTIVITY",
-                // WAWebNewsletterUpdateUserSettingJob: ADMIN_NOTIFICATIONS -> "MUTE_ADMIN_ACTIVITY"
                 mute ? "ON" : "OFF");
-                // WAWebNewsletterUpdateUserSettingJob: MUTED_STATE -> "ON", else "OFF"
         sendNodeWithNoResponse(request);
-        // WAWebNewsletterUpdateUserSettingsAction.updateNewsletterUserSettingsAction ->
-        // NewsletterCoreEventLogger.log({cid, channelCoreEventType: MUTE|UNMUTE,
-        //   channelRequestMetadata: JSON.stringify(a.map(s => (mute?"mute":"unmute")+"_"+s))}).
         // Cobalt only toggles admin_activity so the list is always a single entry.
         wamService.commit(new ChannelCoreEventEventBuilder()
                 .cid(newsletter.user())
@@ -3933,14 +3848,14 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         Objects.requireNonNull(serverMessageId, "serverMessageId cannot be null");
         var adminRevokeNode = new NodeBuilder()
-                .description("admin_revoke") // WASmaxOutMessagePublishNewsletterRevokeMixin: admin_revoke child
+                .description("admin_revoke")
                 .build();
         var stanza = new NodeBuilder()
                 .description("message")
                 .attribute("id", DataUtils.randomHex(5)) // 10 uppercase hex chars
                 .attribute("to", newsletter)
                 .attribute("server_id", serverMessageId)
-                .attribute("edit", "3") // WAWebAck.EDIT_ATTR.NEWSLETTER_MSG_EDIT
+                .attribute("edit", "3")
                 .content(adminRevokeNode);
         sendNode(stanza);
     }
@@ -3985,9 +3900,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         Objects.requireNonNull(setting, "setting cannot be null");
         var reactionCodes = new JSONObject()
-                .fluentPut("value", setting.value().name()); // WAWebMexUpdateNewsletterJob: settings.reaction_codes.value
+                .fluentPut("value", setting.value().name());
         if (!setting.blockedCodes().isEmpty()) {
-            reactionCodes.fluentPut("blocked_codes", setting.blockedCodes()); // ADAPTED: propagate the BLOCKLIST payload
+            reactionCodes.fluentPut("blocked_codes", setting.blockedCodes());
         }
         var settings = new JSONObject()
                 .fluentPut("reaction_codes", reactionCodes);
@@ -4716,9 +4631,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var parsed = FetchNewsletterEnforcementsMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing newsletter enforcements response: %s".formatted(response)));
         var combined = new ArrayList<NewsletterEnforcement>();
-        // WAWebMexFetchNewsletterEnforcementsJob exposes four parallel arrays;
-        // the channel-info UI presents them as a single chronological list, so
-        // Cobalt flattens them into one list discriminated by category.
+        // The server exposes the enforcements as parallel per-category arrays; Cobalt
+        // flattens them into one list discriminated by category.
         parsed.profilePictureDeletions()
                 .stream()
                 .map(this::toProfilePictureDeletionEnforcement)
@@ -4983,9 +4897,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryAbout(JidProvider jidProvider) {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
-        //   -> WAWebMexUsersGetAboutStatus.getMexUsersAboutStatus (USync MEX)
-        //   -> WAWebMexFetchAboutStatusJob.mexGetAbout
-        //   else -> USyncQuery().withStatusProtocol() (USync MEX equivalent)
         if (jid.hasLidServer() || abPropsService.getBool(ABProp.MEX_USYNC_ABOUT_STATUS)) {
             return queryAboutViaUsyncMex(jid);
         }
@@ -5028,7 +4939,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .attribute("type", "get")
                 .content(statusQuery);
         var response = sendNode(iqNode);
-        // Response shape: <iq><status><user jid="..."><status>TEXT</status></user></status></iq>
         return response.getChild("status")
                 .flatMap(statusNode -> statusNode.getChild("user"))
                 .flatMap(userResp -> userResp.getChild("status"))
@@ -5054,7 +4964,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
             adaptation = WhatsAppAdaptation.DIRECT)
     public boolean editUsername(String username) {
-        // the reservation tuple (reserved/session_id/source) is part of the WA Web sign-up surface.
         var request = new SetUsernameMexRequest(username, null, null, null);
         var response = sendNode(request);
         return SetUsernameMexResponse.of(response)
@@ -5120,8 +5029,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Map<Jid, ContactTextStatus> queryUserTextStatuses(List<? extends JidProvider> usersProvider) {
         var users = Objects.requireNonNull(usersProvider, "users cannot be null").stream().map(JidProvider::toJid).toList();
-        // input is a JSON array of {jid, last_update_time?, privacy_token?} entries.
-        // WA Web sends a single entry per call; Cobalt batches the supplied user list.
         var inputBuilder = new StringBuilder("[");
         for (var i = 0; i < users.size(); i++) {
             var user = Objects.requireNonNull(users.get(i), "users cannot contain null entries");
@@ -5141,8 +5048,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         }
         var result = new LinkedHashMap<Jid, ContactTextStatus>(items.size());
         for (var item : items) {
-            // {id: WidFactory.createWid(jid), textStatusString: text, textStatusEmoji: emoji?.content,
-            //  textStatusEphemeralDuration: ephemeral_duration_sec, textStatusLastUpdateTime: Number(last_update_time)}
             var jidString = item.jid().orElse(null);
             if (jidString == null) {
                 continue;
@@ -5271,7 +5176,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 null
         );
         var response = sendNode(request);
-        // WAWebCatalogEventLogger.createCatalogEventLogger(GET_CATALOG): emit GraphqlCatalogRequest WAM event based on response
         logGraphqlCatalogRequest(response, GraphqlCatalogEndpoint.GET_CATALOG);
         return QueryCatalogMexResponse.of(response)
                 .map(QueryCatalogMexResponse::products)
@@ -5307,24 +5211,19 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         if (itemLimit <= 0) {
             throw new IllegalArgumentException("itemLimit must be positive");
         }
-        // The 10-arg constructor mirrors the JS request.collections object verbatim:
-        //   {biz_jid, collection_limit, item_limit, after, width, height,
-        //    direct_connection_encrypted_info, variant_info_fields,
-        //    variant_thumbnail_height, variant_thumbnail_width}.
         var request = new QueryProductCollectionsMexRequest(
-                businessJid.toString(),         // biz_jid: a.toString()
-                limit,                           // collection_limit: String(s)
-                itemLimit,                       // item_limit: String(c)
-                null,                            // after: r (no pagination cursor)
-                DEFAULT_CATALOG_IMAGE_WIDTH,     // width: String(_)
-                DEFAULT_CATALOG_IMAGE_HEIGHT,    // height: String(l)
-                null,                            // direct_connection_encrypted_info: i
-                null,                            // variant_info_fields: d
-                null,                            // variant_thumbnail_height: m != null ? String(m) : null
-                null                             // variant_thumbnail_width: p != null ? String(p) : null
+                businessJid.toString(),
+                limit,
+                itemLimit,
+                null,
+                DEFAULT_CATALOG_IMAGE_WIDTH,
+                DEFAULT_CATALOG_IMAGE_HEIGHT,
+                null,
+                null,
+                null,
+                null
         );
         var response = sendNode(request);
-        // WAWebCatalogEventLogger.createCatalogEventLogger(GET_COLLECTIONS): emit GraphqlCatalogRequest WAM event based on response
         logGraphqlCatalogRequest(response, GraphqlCatalogEndpoint.GET_COLLECTIONS);
         return QueryProductCollectionsMexResponse.of(response)
                 .map(QueryProductCollectionsMexResponse::collections)
@@ -5537,8 +5436,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var payload = response.getChild("result")
                 .flatMap(Node::toContentBytes);
         if (payload.isEmpty()) {
-            // WAWebMexNativeClient: a missing <result> payload results in MexPayloadParsingError
-            // which is caught before GraphQLServerError dispatch, so no eventLogger callback fires.
             return;
         }
         JSONObject root;
@@ -5550,7 +5447,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         if (root == null) {
             return;
         }
-        // WAWebGraphQLServerError: errors surface as a top-level array on the GraphQL payload
         var errors = root.getJSONArray("errors");
         var builder = new GraphqlCatalogRequestEventBuilder()
                 .graphqlCatalogEndpoint(endpoint);
@@ -5837,7 +5733,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var contact = Objects.requireNonNull(contactProvider, "contact cannot be null").toJid();
         updateBlockList(true, contact);
         store.addBlockedContact(contact);
-        // WAWebBlockContactAction.blockContact calls WAWebWamBlockEventReporter.logBlockEvent({contact, blockEntryPoint, isBlock:true})
         logBlockEvent(contact, BlockEventActionType.BLOCK);
         for (var listener : store.listeners()) {
             listener.onContactBlocked(this, contact);
@@ -5852,7 +5747,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var contact = Objects.requireNonNull(contactProvider, "contact cannot be null").toJid();
         updateBlockList(false, contact);
         store.removeBlockedContact(contact);
-        // WAWebBlockContactAction.unblockContact calls WAWebWamBlockEventReporter.logBlockEvent({contact, blockEntryPoint, isBlock:false})
         logBlockEvent(contact, BlockEventActionType.UNBLOCK);
         for (var listener : store.listeners()) {
             listener.onContactBlocked(this, contact);
@@ -5888,11 +5782,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             exports = "sendUpdateBlockListRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     private void updateBlockList(boolean block, Jid contact) {
         Objects.requireNonNull(contact, "contact cannot be null");
-        // WASmaxOutBlocklistsUpdateBlockListRequest.makeUpdateBlockListRequest
         var action = block ? SmaxUpdateBlockListAction.BLOCK : SmaxUpdateBlockListAction.UNBLOCK;
         var request = new SmaxUpdateBlockListRequest(action, contact.toUserJid(), null, null);
         var requestNode = request.toNode();
-        // WAComms.sendSmaxStanza
         var response = sendNode(requestNode);
         // Variant priority chain: see SmaxUpdateBlockListResponse.of
         var parsed = SmaxUpdateBlockListResponse.of(response, requestNode.build()).orElse(null);
@@ -6080,7 +5972,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      * {@code WAWebWamBlockEventReporter.logBlockEvent}.
      *
      * <p>The emission is gated on the
-     * {@link ABProp#BLOCK_ENTRY_POINT_LOGGING_ENABLED} AB-prop, matching
+     * {@code block_entry_point_logging_enabled} AB-prop, matching
      * WA Web's {@code getABPropConfigValue("block_entry_point_logging_enabled")}
      * check. When enabled, the event is populated as follows:
      * <ul>
@@ -6110,10 +6002,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     @WhatsAppWebExport(moduleName = "WAWebWamBlockEventReporter", exports = "logBlockEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private void logBlockEvent(Jid contact, BlockEventActionType action) {
-        // WAWebFrontendContactGetters.getIsMyContact(n): contact is considered "my contact" when saved in the address book
         var contactRecord = store.findContactByJid(contact).orElse(null);
         var isMyContact = contactRecord != null && contactRecord.fullName().isPresent();
-        // WAWebChatModel.isTrusted for 1:1 user chat: notSpam || getIsMyContact(contact) || hasMaybeSentMsgToChat()
         var chatIsTrusted = store.findChatByJid(contact)
                 .map(chat -> chat.notSpam() || isMyContact)
                 .orElse(false);
@@ -6161,10 +6051,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void editName(String newPushName) {
         Objects.requireNonNull(newPushName, "newPushName cannot be null");
         var mutation = pushNameSettingMutationFactory.getPushnameMutation(Instant.now(), newPushName);
-        webAppStateService.pushPatches(PushNameSetting.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync
-        // WASendPresenceStatusProtocol.sendPresenceStatusProtocol: smax("presence", {type: undefined, name: _})
+        webAppStateService.pushPatches(PushNameSetting.COLLECTION_NAME, List.of(mutation));
         var request = new SmaxAvailabilityRequest(null, newPushName);
-        sendNodeWithNoResponse(request.toNode().build()); // WAComms.castSmaxStanza - fire-and-forget
+        sendNodeWithNoResponse(request.toNode().build());
     }
 
     /** {@inheritDoc} */
@@ -6178,7 +6067,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var response = sendNode(requestBuilder);
         var parsed = IqSetAboutResponse.of(response, requestBuilder.build()).orElse(null);
         switch (parsed) {
-            case IqSetAboutResponse.Success _ -> { // ADAPTED: parser couldn't classify is treated as success-like, mirroring WA Web's cached Conn.about via Cobalt's single store field
+            case IqSetAboutResponse.Success _ -> {
                 var status = new ContactTextStatusBuilder()
                         .text(aboutText)
                         .build();
@@ -6199,7 +6088,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editProfilePicture(byte[] jpegBytes) {
         Objects.requireNonNull(jpegBytes, "jpegBytes cannot be null");
-        var selfJid = store.jid() // WAWebUserPrefsMeUser.getMeUser
+        var selfJid = store.jid()
                 .map(Jid::withoutData)
                 .orElseThrow(() -> new IllegalStateException("Missing self JID"));
         var thumbBytes = generatePreviewThumbnail(jpegBytes);
@@ -6230,7 +6119,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebContactProfilePicThumbBridge", exports = "requestDeletePicture",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void removeProfilePicture() {
-        var selfJid = store.jid() // WAWebUserPrefsMeUser.getMeUser
+        var selfJid = store.jid()
                 .map(Jid::withoutData)
                 .orElseThrow(() -> new IllegalStateException("Missing self JID"));
         var request = new IqSendProfilePictureRequest(selfJid, null);
@@ -6310,7 +6199,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw new IllegalArgumentException("status must be AVAILABLE or UNAVAILABLE, got " + status);
         }
         var request = new SmaxAvailabilityRequest(status.toString(), presenceName);
-        sendNodeWithNoResponse(request.toNode().build()); // WAComms.castSmaxStanza - fire-and-forget
+        sendNodeWithNoResponse(request.toNode().build());
     }
 
     /** {@inheritDoc} */
@@ -6328,18 +6217,14 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void editChatState(JidProvider chatProvider, ContactStatus state) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(state, "state cannot be null");
-        // WASendChatStateProtocol.sendChatStateProtocol: branches on "idle" / "typing" / "recording_audio"
         var stateType = switch (state) {
-            // WASmaxOutChatstateComposingMixin.mergeComposingMixin: smax("composing", {media: OPTIONAL_LITERAL("audio", false)})
             case COMPOSING -> new SmaxClientNotificationComposing(false);
-            // WASmaxOutChatstateComposingMixin: media: OPTIONAL_LITERAL("audio", hasComposingMediaAudio)
             case RECORDING -> new SmaxClientNotificationComposing(true);
-            // WASmaxOutChatstatePausedMixin.mergePausedMixin: smax("paused", null)
             case UNAVAILABLE -> new SmaxClientNotificationPaused();
             default -> throw new IllegalArgumentException("state must be COMPOSING, RECORDING or UNAVAILABLE, got " + state);
         };
         var request = new SmaxClientNotificationRequest(chat, stateType);
-        sendNodeWithNoResponse(request.toNode().build()); // WAComms.castSmaxStanza - fire-and-forget
+        sendNodeWithNoResponse(request.toNode().build());
     }
 
     /** {@inheritDoc} */
@@ -6367,7 +6252,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void unsubscribeFromPresence(JidProvider targetProvider) {
         var target = Objects.requireNonNull(targetProvider, "target cannot be null").toJid();
         var presence = new NodeBuilder()
-                .description("presence") // ADAPTED: mirrors subscribePresence stanza with type=unsubscribe
+                .description("presence")
                 .attribute("type", "unsubscribe")
                 .attribute("to", target)
                 .build();
@@ -6381,7 +6266,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void sendMessage(JidProvider jidProvider, MessageContainer container) {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
         Objects.requireNonNull(container, "container cannot be null");
-        messageService.send(jid, container); // WAWebSendMsgJob.encryptAndSendMsg
+        messageService.send(jid, container);
     }
 
     /** {@inheritDoc} */
@@ -6390,7 +6275,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void sendMessage(MessageInfo messageInfo) {
         Objects.requireNonNull(messageInfo, "messageInfo cannot be null");
-        messageService.send(messageInfo); // WAWebSendMsgJob.encryptAndSendMsg
+        messageService.send(messageInfo);
     }
 
     /** {@inheritDoc} */
@@ -6413,7 +6298,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         .timestampMs(Instant.now())
         .build();
         var wrapper = MessageContainer.of(protocol);
-        messageService.send(parentJid, wrapper); // WAWebSendMessageEditAction.sendMsgEditRecord -> WAWebSendMsgRecordAction.sendMsgRecord
+        messageService.send(parentJid, wrapper);
     }
 
     /** {@inheritDoc} */
@@ -6459,11 +6344,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             .type(ProtocolMessage.Type.REVOKE)
             .timestampMs(sendInstant)
             .build();
-            var wrapper = MessageContainer.of(protocol); // WAWebRevokeMsgAction._sendRevoke -> WAWebSendMsgRecordAction.sendMsgRecord
-            var ack = messageService.send(parentJid, wrapper); // WAWebRevokeMsgAction._sendRevoke -> sendMsgRecord
-            // WAWebActionListener._e.then(...): logMessageDeleteActionsMetric(t, a, true) fires after the revoke send completes successfully.
+            var wrapper = MessageContainer.of(protocol);
+            var ack = messageService.send(parentJid, wrapper);
             emitMessageDeleteActionsEvent(parentJid, DeleteActionType.DELETE_FOR_EVERYONE, mediaType);
-            // `new SendRevokeMessageWamEvent({messageType, messageMediaType, revokeSendDelay}).commit()`.
             if (ack != null && ack.isSuccess()) {
                 emitSendRevokeMessageEvent(parentJid, mediaType, revokeSendDelaySeconds);
             }
@@ -6484,18 +6367,15 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
 
         store.findChatByJid(parentJid)
                 .ifPresent(chat -> chat.removeMessage(messageId));
-        // emits a DeleteMessageForMe sync action to every linked device.
-        // [remote, id, fromMe, participant] tuple with `{legacy:true}` JID
-        // serialization and the !remote.isUser() && !fromMe participant gate.
         var keySegments = SyncdIndexUtils.constructMsgKeySegmentsFromMsgKey(key);
-        var indexJson = SyncdIndexUtils.buildIndex( // WAWebSyncdActionUtils.buildIndex
-                DeleteMessageForMeAction.ACTION_NAME, // "deleteMessageForMe"
+        var indexJson = SyncdIndexUtils.buildIndex(
+                DeleteMessageForMeAction.ACTION_NAME,
                 keySegments.get(0),
                 keySegments.get(1),
                 keySegments.get(2),
                 keySegments.get(3)        );
         var deleteAction = new DeleteMessageForMeActionBuilder()
-                .messageTimestamp(Instant.now()) // WAWebDeleteMessageForMeSync: deleteMessageForMeAction.messageTimestamp
+                .messageTimestamp(Instant.now())
                 .build();
         var value = new SyncActionValueBuilder()
                 .timestamp(Instant.now())
@@ -6512,9 +6392,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 DeleteMessageForMeAction.COLLECTION_NAME,
                 List.of(new SyncPendingMutation(mutation, 0))
         );
-        // WAWebActionListenerHelpers: if(getIsPSA(e)) for(r=0;r<t.list.length;r++) WAWebWamChatPSALogger.logChatPSADelete(t.list[r])
-        logPsaActionIfApplicable(key, PsaMessageActionType.DELETE); // WAWebWamChatPSALogger.logChatPSADelete -> PSA_MESSAGE_ACTION_TYPE.DELETE
-        // WAWebActionListener.pe.then(...): logMessageDeleteActionsMetric(a, i, false) fires after the delete-for-me
+        logPsaActionIfApplicable(key, PsaMessageActionType.DELETE);
         // send-result count equals the input count (full success).
         emitMessageDeleteActionsEvent(parentJid, DeleteActionType.DELETE_FOR_ME, mediaType);
     }
@@ -6555,16 +6433,14 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void emitMessageDeleteActionsEvent(Jid chatJid, DeleteActionType deleteActionType, MediaType mediaType) {
         var builder = new MessageDeleteActionsEventBuilder()
-        .deleteActionType(deleteActionType) // WAWebActionListenerHelpers: deleteActionType: n ? DELETE_FOR_EVERYONE : DELETE_FOR_ME
-                .isAGroup(chatJid.hasGroupOrCommunityServer()) // WAWebActionListenerHelpers: isAGroup: getIsGroup(e)
-                .messagesDeleted(1); // WAWebActionListenerHelpers: messagesDeleted: t.list.length (Cobalt deletes one message per API call)
-        // WAWebActionListenerHelpers: mediaType: y(t.list) - y returns undefined when the set is empty
+        .deleteActionType(deleteActionType)
+                .isAGroup(chatJid.hasGroupOrCommunityServer())
+                .messagesDeleted(1);
         if (mediaType != null) {
             builder.mediaType(mediaType);
         }
-        // WAWebActionListenerHelpers: threadId: yield getChatThreadID(e.id.toJid()) - WAWebChatThreadLogging
         // (HMAC-based thread id) is not adapted in Cobalt, so threadId is left unset.
-        wamService.commit(builder.build()); // WAWebActionListenerHelpers: .commitAndWaitForFlush()
+        wamService.commit(builder.build());
     }
 
     /**
@@ -6628,12 +6504,10 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public ChatMessageInfo sendStatus(MessageContainer content) {
         Objects.requireNonNull(content, "content cannot be null");
-        var statusJid = Jid.statusBroadcastAccount(); // WAJids.STATUS_JID
-        var selfJid = store.jid() // WAWebUserPrefsMeUser.getMeUser
+        var statusJid = Jid.statusBroadcastAccount();
+        var selfJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
-        // WAWebSendStatusMsgAction.createTextStatusMsgData/createMediaStatusMsgData:
-        // builds the MsgKey with a fresh id, populates from/to/participant, and wraps the container.
-        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid); // WAWebMsgKey.newId
+        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid);
         var key = new MessageKeyBuilder()
                 .id(messageId)
                 .parentJid(statusJid)
@@ -6641,16 +6515,14 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .senderJid(selfJid)
                 .build();
         var messageInfo = new ChatMessageInfoBuilder()
-                .status(MessageStatus.PENDING) // ADAPTED: mirrors MessagePreparer.prepareChat initial status
+                .status(MessageStatus.PENDING)
                 .senderJid(selfJid)
                 .key(key)
                 .message(content)
                 .timestamp(Instant.now())
-                .broadcast(true) // WAWebSendStatusMsgAction: status is a broadcast JID
+                .broadcast(true)
                 .build();
-        // The logger's constructor seeds a per-operation random sessionId that it
-        // re-uses across the REQUEST / SUCCESS / FAILURE emissions for this send.
-        var statusPostingSessionId = newStatusPostingSessionId(); // WAWebLogStatusPosterActions: this.sessionId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
+        var statusPostingSessionId = newStatusPostingSessionId();
         var statusContentType = resolveStatusContentType(content);
         wamService.commit(new StatusPosterActionsEventBuilder()
                 .statusEventType(StatusEventType.POST_STATUS_REQUEST)
@@ -6661,10 +6533,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         try {
             // Route through MessageService.send(MessageInfo) -> StatusMessageSender.send.
             // Reuses the public StatusMessageSender.send path per the delegation rule.
-            messageService.send(messageInfo); // WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg
+            messageService.send(messageInfo);
         } catch (RuntimeException error) {
-            // WAWebSendStatusMsgAction._sendStatusMessage catch block:
-            // m = getErrorSafe(t); i.logPostStatusFailure(l, m.message, a)
             wamService.commit(new StatusPosterActionsEventBuilder()
                     .statusEventType(StatusEventType.POST_STATUS_FAILURE)
                     .statusContentType(statusContentType)
@@ -6674,8 +6544,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .build());
             throw error;
         }
-        // WAWebStatusLoggingUtils.statusIdForLogging returns the plain msg id when no
-        // chat-thread logging secret (WAWebUserPrefsMultiDevice.getChatThreadLoggingSecretB64)
         // is configured; Cobalt does not maintain such a secret so we follow the same fallback.
         wamService.commit(new StatusPosterActionsEventBuilder()
                 .statusEventType(StatusEventType.POST_STATUS_SUCCESS)
@@ -6706,12 +6574,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private StatusContentType resolveStatusContentType(MessageContainer content) {
         return switch (content.content()) {
-            case ExtendedTextMessage _ -> StatusContentType.TEXT; // "chat" -> TEXT
-            case ImageMessage _ -> StatusContentType.PHOTO; // "image" -> PHOTO
+            case ExtendedTextMessage _ -> StatusContentType.TEXT;
+            case ImageMessage _ -> StatusContentType.PHOTO;
             case VideoMessage video ->
                     video.gifPlayback() ? StatusContentType.GIF : StatusContentType.VIDEO; // "gif"/"video"
-            case StickerMessage _ -> StatusContentType.GIF; // "sticker" -> GIF
-            case AudioMessage _ -> StatusContentType.VOICE; // "ptt"/"audio" -> VOICE
+            case StickerMessage _ -> StatusContentType.GIF;
+            case AudioMessage _ -> StatusContentType.VOICE;
             default -> StatusContentType.PHOTO;
             };
     }
@@ -6745,8 +6613,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void deleteStatus(String statusId) {
         Objects.requireNonNull(statusId, "statusId cannot be null");
-        var statusJid = Jid.statusBroadcastAccount(); // WAJids.STATUS_JID
-        var selfJid = store.jid() // WAWebUserPrefsMeUser.getMeUser
+        var statusJid = Jid.statusBroadcastAccount();
+        var selfJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
         var originalKey = new MessageKeyBuilder()
                 .id(statusId)
@@ -6760,19 +6628,14 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         .timestampMs(Instant.now())
         .build();
         var wrapper = MessageContainer.of(protocol);
-        // h.logDeleteStatusRequest() before the dispatch, then logDeleteStatusSuccess() or
-        // logDeleteStatusFailure(L.message) depending on the outcome; all three emissions
-        // share the logger's single sessionId.
-        var statusPostingSessionId = newStatusPostingSessionId(); // WAWebLogStatusPosterActions: this.sessionId
+        var statusPostingSessionId = newStatusPostingSessionId();
         wamService.commit(new StatusPosterActionsEventBuilder()
                 .statusEventType(StatusEventType.DELETE_STATUS_REQUEST)
                 .statusPostingSessionId(statusPostingSessionId)
                 .build());
         try {
-            messageService.send(statusJid, wrapper); // WAWebRevokeStatusAction.sendStatusRevokeMsgAction -> WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg
+            messageService.send(statusJid, wrapper);
         } catch (RuntimeException error) {
-            // WAWebRevokeStatusAction.sendStatusRevokeMsgAction catch block:
-            // L = getErrorSafe(e); h.logDeleteStatusFailure(L==null?void 0:L.message)
             wamService.commit(new StatusPosterActionsEventBuilder()
                     .statusEventType(StatusEventType.DELETE_STATUS_FAILURE)
                     .statusPostFailureReason(error.getMessage())
@@ -6797,9 +6660,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .key()
                 .senderJid()
                 .orElseThrow(() -> new NoSuchElementException("Status " + statusId + " has no sender JID"));
-        var me = store.jid().orElse(null); // WAWebUserPrefsMeUser.getMeUser
+        var me = store.jid().orElse(null);
         if (me == null) {
-            return; // ADAPTED: silently drop when unauthenticated, matching sendReceipt
+            return;
         }
         var receipt = new NodeBuilder()
         .description("receipt")
@@ -6816,7 +6679,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebUserPrefsStatus", exports = "getStatusPrivacySetting",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void refreshStatusPrivacy() {
-        // <iq xmlns="status" to="s.whatsapp.net" type="get"><privacy/></iq>
         var privacyQuery = new NodeBuilder()
                 .description("privacy")
                 .build();
@@ -6858,19 +6720,17 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void editStatusPrivacy(StatusPrivacyMode mode, Collection<? extends JidProvider> jidsProvider) {
         var jids = Objects.requireNonNull(jidsProvider, "jids cannot be null").stream().map(JidProvider::toJid).toList();
         Objects.requireNonNull(mode, "mode cannot be null");
-        var jidList = jids == null ? List.<Jid>of() : List.copyOf(jids); // WAWebStatusSetAndSyncPrivacy: Array.from(new Set(t.map(...)))
+        var jidList = jids == null ? List.<Jid>of() : List.copyOf(jids);
 
-        // WAWebStatusSetAndSyncPrivacy: emit the server-side IQ for the mutation.
-        // task spec: <iq xmlns="status" to="s.whatsapp.net" type="set"><privacy list="..."><user jid="..."/>...</privacy></iq>
         var listAttr = switch (mode) {
-            case CONTACTS -> "contacts"; // WAWebUserPrefsStatusType.StatusPrivacySettingType.Contact
-            case WHITELIST -> "contact_whitelist"; // WAWebUserPrefsStatusType.StatusPrivacySettingType.AllowList
-            case CONTACTS_EXCEPT -> "contact_blacklist"; // WAWebUserPrefsStatusType.StatusPrivacySettingType.DenyList
+            case CONTACTS -> "contacts";
+            case WHITELIST -> "contact_whitelist";
+            case CONTACTS_EXCEPT -> "contact_blacklist";
         };
         var userChildren = new ArrayList<Node>(jidList.size());
         for (var jid : jidList) {
             if (jid == null) {
-                continue; // ADAPTED: defensive skip
+                continue;
             }
             userChildren.add(new NodeBuilder()
                     .description("user")
@@ -6890,29 +6750,27 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .content(privacyNode);
         sendNode(iqNode);
 
-        // WAWebStatusSetAndSyncPrivacy: r("WAWebStatusPrivacySettingSync").getStatusPrivacySettingMutation(...)
         var protoMode = switch (mode) {
-            case CONTACTS -> StatusPrivacyAction.StatusDistributionMode.CONTACTS; // WAWebProtobufSyncAction.pb.SyncActionValue$StatusPrivacyAction$StatusDistributionMode.CONTACTS
-            case WHITELIST -> StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST; // WAWebProtobufSyncAction.pb...ALLOW_LIST
-            case CONTACTS_EXCEPT -> StatusPrivacyAction.StatusDistributionMode.DENY_LIST; // WAWebProtobufSyncAction.pb...DENY_LIST
+            case CONTACTS -> StatusPrivacyAction.StatusDistributionMode.CONTACTS;
+            case WHITELIST -> StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST;
+            case CONTACTS_EXCEPT -> StatusPrivacyAction.StatusDistributionMode.DENY_LIST;
         };
-        var mutation = statusPrivacyMutationFactory.getStatusPrivacyMutation(Instant.now(), protoMode, jidList); // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation
-        webAppStateService.pushPatches( // WAWebStatusSetAndSyncPrivacy: WAWebSyncdCoreApi.lockForSync(["user-prefs"], [d], ...)
+        var mutation = statusPrivacyMutationFactory.getStatusPrivacyMutation(Instant.now(), protoMode, jidList);
+        webAppStateService.pushPatches(
                 StatusPrivacyAction.COLLECTION_NAME,
                 List.of(mutation));
 
-        // WAWebStatusSetAndSyncPrivacy: r("WAWebUserPrefsStatus").setStatusPrivacyConfig({setting, list})
         var value = switch (mode) {
-            case CONTACTS -> PrivacySettingValue.CONTACTS; // ADAPTED: StatusPrivacySettingType.Contact -> PrivacySettingValue.CONTACTS
-            case WHITELIST -> PrivacySettingValue.CONTACTS_ONLY; // ADAPTED: StatusPrivacySettingType.AllowList -> PrivacySettingValue.CONTACTS_ONLY
-            case CONTACTS_EXCEPT -> PrivacySettingValue.CONTACTS_EXCEPT; // ADAPTED: StatusPrivacySettingType.DenyList -> PrivacySettingValue.CONTACTS_EXCEPT
+            case CONTACTS -> PrivacySettingValue.CONTACTS;
+            case WHITELIST -> PrivacySettingValue.CONTACTS_ONLY;
+            case CONTACTS_EXCEPT -> PrivacySettingValue.CONTACTS_EXCEPT;
         };
         var entry = new PrivacySettingEntryBuilder()
                 .type(PrivacySettingType.STATUS)
                 .value(value)
-                .excluded(jidList) // Cobalt overloads excluded() for both allow and deny lists
+                .excluded(jidList)
                 .build();
-        store.addPrivacySetting(entry); // WAWebUserPrefsStatus.setStatusPrivacyConfig
+        store.addPrivacySetting(entry);
     }
 
     /** {@inheritDoc} */
@@ -6928,12 +6786,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         .orElseThrow(() -> new IllegalArgumentException("sourceKey must carry a parentJid"));
         var messageId = sourceKey.id()
         .orElseThrow(() -> new IllegalArgumentException("sourceKey must carry an id"));
-        var source = store.findMessageById(parentJid, messageId) // WAWebMsgCollection.MsgCollection.get(e.id)
+        var source = store.findMessageById(parentJid, messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Source message not found in local store: " + messageId));
         var container = source.message();
-        logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD); // WAWebWamChatPSALogger.logChatPSAForward -> PSA_MESSAGE_ACTION_TYPE.FORWARD
+        logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD);
         emitForwardSendEvent(source, destination, container);
-        messageService.send(destination, container); // WAWebChatForwardMessage.forwardMessages -> sendMsgRecord
+        messageService.send(destination, container);
     }
 
     /** {@inheritDoc} */
@@ -6957,13 +6815,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .ifPresent(resolvedSources::add);
         }
         for (var source : resolvedSources) {
-            logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD); // WAWebWamChatPSALogger.logChatPSAForward -> PSA_MESSAGE_ACTION_TYPE.FORWARD
+            logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD);
         }
         for (var destination : destinations) {
             for (var source : resolvedSources) {
                 var container = source.message();
                 emitForwardSendEvent(source, destination, container);
-                messageService.send(destination, container); // WAWebChatForwardMessage.forwardMessages -> sendMsgRecord
+                messageService.send(destination, container);
             }
         }
     }
@@ -6985,7 +6843,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         .senderTimestampMs(Instant.now())
         .build();
         // The preparer auto converts to EncReactionMessage for CAG groups.
-        messageService.send(parentJid, MessageContainer.of(reaction)); // WAWebReactionsMsgAction -> sendMsgRecord
+        messageService.send(parentJid, MessageContainer.of(reaction));
     }
 
     /** {@inheritDoc} */
@@ -7006,8 +6864,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void starMessage(MessageKey key) {
         Objects.requireNonNull(key, "key cannot be null");
         pushStarMutation(key, true);
-        // WAWebActionListenerHelpers: if(getIsPSA(e)) for (var m=0; m<c; m++) WAWebWamChatPSALogger.logChatPSAStar(t[m])
-        logPsaActionIfApplicable(key, PsaMessageActionType.SAVE); // WAWebWamChatPSALogger.logChatPSAStar -> PSA_MESSAGE_ACTION_TYPE.SAVE
+        logPsaActionIfApplicable(key, PsaMessageActionType.SAVE);
     }
 
     /** {@inheritDoc} */
@@ -7060,12 +6917,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         .timestamp(Instant.now())
         .starAction(action)
                 .build();
-        var indexJson = SyncdIndexUtils.buildIndex( // WAWebSyncdActionUtils.buildIndex
+        var indexJson = SyncdIndexUtils.buildIndex(
                 StarAction.ACTION_NAME,
                 keySegments.get(0),
                 keySegments.get(1),
                 keySegments.get(2),
-                keySegments.get(3)  // WAWebSyncdUtils.extractParticipantForSync
+                keySegments.get(3)
         );
         var mutation = new DecryptedMutation.Trusted(
                 indexJson,
@@ -7154,16 +7011,15 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         if (messageIdOpt.isEmpty()) {
             return;
         }
-        // WAWebWamChatPSALogger: psaCampaignId: (t = e.campaignId) == null ? void 0 : t.toString()
         var campaignId = chatInfo.statusPsa()
                 .map(StatusPSA::campaignId)
                 .map(String::valueOf)
                 .orElse(null);
-        wamService.commit(new ChatPsaActionEventBuilder() // WAWebWamChatPSALogger: new ChatPsaActionWamEvent({...}).commit()
-                .messageMediaType(wamService.getWamMediaType(chatInfo)) // WAWebWamMsgUtils.getWamMediaType(e)
-                .psaCampaignId(campaignId) // WAWebWamChatPSALogger: (t=e.campaignId)==null?void 0:t.toString()
-                .psaMessageActionType(actionType) // WAWebWamChatPSALogger: PSA_MESSAGE_ACTION_TYPE.SAVE/DELETE/FORWARD/MEDIA_PLAY
-                .psaMsgId(messageIdOpt.get()) // WAWebWamChatPSALogger: e.id.id.toString()
+        wamService.commit(new ChatPsaActionEventBuilder()
+                .messageMediaType(wamService.getWamMediaType(chatInfo))
+                .psaCampaignId(campaignId)
+                .psaMessageActionType(actionType)
+                .psaMsgId(messageIdOpt.get())
                 .build());
     }
 
@@ -7211,7 +7067,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     private void emitForwardSendEvent(MessageInfo source, Jid destination, MessageContainer forwarded) {
         var mediaCaptionPresent = hasMediaCaption(forwarded);
         var numTimesForwarded = numTimesForwarded(source);
-        // WAWebConstantsDeprecated.FREQUENTLY_FORWARDED_SENTINEL = 127
         var isFrequentlyForwarded = numTimesForwarded >= 127;
         var isForwardedForward = numTimesForwarded > 1;
         var builder = new ForwardSendEventBuilder()
@@ -7295,9 +7150,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         }
         return ctx.isForwarded() ? 1 : 0;
     }
-    //</editor-fold>
 
-    //<editor-fold desc="Chat operations (archive, pin, mute, lock, labels, broadcast)">
     /**
      * Builds a minimal outgoing {@link SyncActionMessageRange} for the given
      * chat covering the chat's most recent message.
@@ -7318,7 +7171,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private SyncActionMessageRange buildOutgoingMessageRange(Chat chat) {
         var newest = chat.newestMessage().orElse(null);
-        if (newest == null) { // ADAPTED: no messages -> no meaningful range
+        if (newest == null) {
             return null;
         }
         var timestamp = newest.timestamp().orElse(null);
@@ -7335,10 +7188,10 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void archiveChat(JidProvider chatProvider, boolean archive) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
-        var timestamp = Instant.now(); // WAWebSetArchiveChatAction.setArchive -> WAWebChatArchiveBridge.sendConversationArchive: var l = unixTimeMs()
+        var timestamp = Instant.now();
         var chatModel = store.findChatByJid(chat).orElse(null);
         var messageRange = chatModel != null ? buildOutgoingMessageRange(chatModel) : null;
-        var mutations = archiveChatMutationFactory.getMutationsForArchive(timestamp, archive, chat, messageRange); // WAWebArchiveChatSync.getMutationsForArchive
+        var mutations = archiveChatMutationFactory.getMutationsForArchive(timestamp, archive, chat, messageRange);
         webAppStateService.pushPatches(ArchiveChatAction.COLLECTION_NAME, mutations);
         if (chatModel != null) {
             chatModel.setArchived(archive);
@@ -7358,7 +7211,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         wamService.commit(new MdSyncdDogfoodingFeatureUsageEventBuilder()
                 .mdSyncdDogfoodingFeature(MdFeatureCode.PIN_MUTATION)
                 .build());
-        var mutations = PinChatHandler.getMutationsForPin(timestamp, pin, chat); // WAWebPinChatSync.getMutationsForPin
+        var mutations = PinChatHandler.getMutationsForPin(timestamp, pin, chat);
         webAppStateService.pushPatches(PinAction.COLLECTION_NAME, mutations);
         store.findChatByJid(chat).ifPresent(chatModel -> {
             chatModel.setPinnedTimestamp(pin ? timestamp : null);
@@ -7375,54 +7228,40 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void muteChat(JidProvider chatProvider, Instant muteUntil) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         var muteEndSeconds = muteUntil == null ? 0L : muteUntil.getEpochSecond();
-        var mutation = muteChatMutationFactory.generateMuteMutation(this, chat, muteEndSeconds, null); // WAWebMuteChatSync.generateMuteMutation
-        webAppStateService.pushPatches(MuteAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdActionUtils.buildPendingMutation -> lockForSync
+        var mutation = muteChatMutationFactory.generateMuteMutation(this, chat, muteEndSeconds, null);
+        webAppStateService.pushPatches(MuteAction.COLLECTION_NAME, List.of(mutation));
         store.findChatByJid(chat).ifPresent(chatModel ->                chatModel.setMute(ChatMute.mutedUntil(muteEndSeconds)));
-        // WAWebActionListener (mute/unmute handler q):
-        //   !getIsPSA(t) && !getIsNewsletter(t) && logChatMute(t, e, l) / logChatUnmute(t, g)
-        // WAWebChatMuteLogger.logChatMute / logChatUnmute then builds a ChatMuteWamEvent with:
-        //   actionConducted = MUTE on mute, UNMUTE on unmute
-        //   muteChatType    = GROUP if getIsGroup(chat) else ONE_ON_ONE
-        //   muteDuration    = n (seconds, -1 = indefinite); mute path only
-        //   muteEntryPoint  = e (CHAT_LIST_SCREEN / CONTACT_INFO / CONVERSATION_SCREEN)
-        //   muteGroupSize   = chat.groupMetadata.participants.length ?? 0; group path only
         // Newsletters in Cobalt use the dedicated #muteNewsletter(Jid, boolean) API and never reach this method.
-        // PSA chats are not surfaced via Cobalt's public mute API (there is no WAWebWamChatPSALogger equivalent wired here).
         // muteEntryPoint is a UI-layer value (which screen the user tapped mute from); Cobalt has no UI so it is left unset.
-        if (!chat.hasNewsletterServer()) { // WAWebActionListener: !getIsNewsletter(t) (getIsPSA has no Cobalt equivalent at this layer)
-            var isGroup = chat.hasGroupOrCommunityServer(); // WAWebChatMuteLogger: var i = getIsGroup(e)
+        if (!chat.hasNewsletterServer()) {
+            var isGroup = chat.hasGroupOrCommunityServer();
             var muteChatType = isGroup                    ? MuteChatType.GROUP
                     : MuteChatType.ONE_ON_ONE;
             var eventBuilder = new ChatMuteEventBuilder()
-                    .muteChatType(muteChatType); // WAWebChatMuteLogger: muteChatType: u(e)
-            if (muteEndSeconds == 0L) { // WAWebActionListener: unmute branch -> logChatUnmute(t, g)
+                    .muteChatType(muteChatType);
+            if (muteEndSeconds == 0L) {
                 eventBuilder.actionConducted(ActionConducted.UNMUTE);
-                } else { // WAWebActionListener: mute branch -> logChatMute(t, e, l)
+                } else {
                 eventBuilder.actionConducted(ActionConducted.MUTE)
                 .muteDuration(Instant.ofEpochSecond(muteEndSeconds));
                 }
-            if (isGroup) { // WAWebChatMuteLogger: babelHelpers.extends({...}, i ? {muteGroupSize: ...} : {})
-                // WAWebChatMuteLogger: muteGroupSize: (r = (a = e.groupMetadata) == null || (a = a.participants) == null ? void 0 : a.length) != null ? r : 0
-                var groupSize = store.findChatByJid(chat) // WAWebChatMuteLogger: e.groupMetadata.participants.length
+            if (isGroup) {
+                var groupSize = store.findChatByJid(chat)
                         .map(c -> c.participant().size())
                         .orElse(0);
-                eventBuilder.muteGroupSize(groupSize); // WAWebChatMuteLogger: muteGroupSize: ... (group-only branch)
+                eventBuilder.muteGroupSize(groupSize);
             }
-            wamService.commit(eventBuilder.build()); // WAWebChatMuteLogger: new ChatMuteWamEvent({...}).commit()
+            wamService.commit(eventBuilder.build());
         }
-        // WAWebActionListener.c / WAWebActionListener.w (mute handlers): (t.isBusinessGroup() || t.contact.isBusiness) && new BusinessMuteWamEvent().commit()
-        // WAWebActionListener (unmute handler): (t.isBusinessGroup() || t.contact.isBusiness) && new BusinessUnmuteWamEvent().commit()
-        // Emitted only on one path per invocation: mute emits BusinessMuteWamEvent, unmute emits BusinessUnmuteWamEvent.
         // WA Web constructs both events with no arguments, so the defined muteT (mute only) and muteeId properties remain unset.
-        // ADAPTED: Cobalt's Contact model does not track an isBusiness flag and Cobalt cannot iterate a group's admin
         // contacts' per-contact business status, so the isBusinessGroup() branch of WA Web's guard is not reachable here.
         // The closest available proxy for contact.isBusiness is the presence of a verified business name for the chat JID.
-        var isBusinessChat = store.findVerifiedBusinessName(chat).isPresent(); // WAWebActionListener: t.contact.isBusiness (approximated via verifiedBusinessNames)
-        if (isBusinessChat) { // WAWebActionListener: (t.isBusinessGroup() || t.contact.isBusiness)
-            if (muteEndSeconds == 0L) { // WAWebActionListener: unmute branch (mute.unmute(...))
-                wamService.commit(new BusinessUnmuteEventBuilder().build()); // WAWebActionListener: new BusinessUnmuteWamEvent().commit() (WA Web does not set muteeId at this call site)
-            } else { // WAWebActionListener.c / WAWebActionListener.w: mute branch (mute.mute(...))
-                wamService.commit(new BusinessMuteEventBuilder().build()); // WAWebActionListener: new BusinessMuteWamEvent().commit() (WA Web does not set muteT or muteeId at this call site)
+        var isBusinessChat = store.findVerifiedBusinessName(chat).isPresent();
+        if (isBusinessChat) {
+            if (muteEndSeconds == 0L) {
+                wamService.commit(new BusinessUnmuteEventBuilder().build());
+            } else {
+                wamService.commit(new BusinessMuteEventBuilder().build());
             }
         }
     }
@@ -7464,18 +7303,18 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "getMarkChatAsReadMutation",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void pushMarkChatAsReadMutation(Jid chat, boolean read) {
-        var timestamp = Instant.now(); // WAWebChatSeenBridge.sendConversationSeen / sendConversationUnseen: var i = unixTimeMs()
-        var chatModel = store.findChatByJid(chat).orElse(null); // WAWebMarkChatAsReadSync: chat resolution for message-range construction
+        var timestamp = Instant.now();
+        var chatModel = store.findChatByJid(chat).orElse(null);
         var messageRange = chatModel != null ? buildOutgoingMessageRange(chatModel) : null;
-        var mutation = markChatAsReadMutationFactory.getMarkChatAsReadMutation(timestamp, read, chat, messageRange); // WAWebMarkChatAsReadSync.getMarkChatAsReadMutation
+        var mutation = markChatAsReadMutationFactory.getMarkChatAsReadMutation(timestamp, read, chat, messageRange);
         webAppStateService.pushPatches(MarkChatAsReadAction.COLLECTION_NAME, List.of(mutation));
-        if (chatModel != null) { // WAWebMarkChatAsReadSync.$MarkChatAsReadSync$p_1: backend updateChatReadStatus
+        if (chatModel != null) {
             if (read) {
                 chatModel.setMarkedAsUnread(false);
             chatModel.setUnreadCount(0);
             } else {
                 chatModel.setMarkedAsUnread(true);
-            chatModel.setUnreadCount(-1); // WAWebConstantsDeprecated.MARKED_AS_UNREAD = -1
+            chatModel.setUnreadCount(-1);
             }
         }
     }
@@ -7487,20 +7326,19 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void clearChat(JidProvider chatProvider, boolean keepStarred) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         var timestamp = Instant.now();
-        var chatModel = store.findChatByJid(chat).orElse(null); // WAWebSyncdGetChat.resolveChatForMutationIndex (at apply time)
+        var chatModel = store.findChatByJid(chat).orElse(null);
         var messageRange = chatModel != null ? buildOutgoingMessageRange(chatModel) : null;
         wamService.commit(new MdSyncdDogfoodingFeatureUsageEventBuilder()
                 .mdSyncdDogfoodingFeature(!keepStarred
                         ? MdFeatureCode.CLEAR_CHAT_REMOVE_STARRED_MUTATION
                         : MdFeatureCode.CLEAR_CHAT_KEEP_STARRED_MUTATION)
                 .build());
-        var mutation = clearChatMutationFactory.getClearChatMutation(timestamp, chat, !keepStarred, false, messageRange); // WAWebClearChatSync.getClearChatMutation
-        webAppStateService.pushPatches(ClearChatAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync -> push
+        var mutation = clearChatMutationFactory.getClearChatMutation(timestamp, chat, !keepStarred, false, messageRange);
+        webAppStateService.pushPatches(ClearChatAction.COLLECTION_NAME, List.of(mutation));
         if (chatModel != null) {
             // TODO: per-message range deletion is not yet supported; Cobalt drops all messages on clearChat
             chatModel.removeMessages();
         }
-        // WA Web defaults the entry point to CONVERSATION_LIST_BULK_EDIT when the caller omits it (r.entryPoint === void 0)
         wamService.commit(new ChatActionEventBuilder()
                 .chatActionEntryPoint(ChatActionEntryPoint.CONVERSATION_LIST_BULK_EDIT)
                 .chatActionType(ChatActionType.CLEAR)
@@ -7513,7 +7351,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<Chat> deleteChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
-        var chatModel = store.findChatByJid(chat).orElse(null); // WAWebSyncdGetChat.resolveChatForMutationIndex (at apply time)
+        var chatModel = store.findChatByJid(chat).orElse(null);
         if (chatModel == null) {
             return Optional.empty();
         }
@@ -7522,8 +7360,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         wamService.commit(new MdSyncdDogfoodingFeatureUsageEventBuilder()
                 .mdSyncdDogfoodingFeature(MdFeatureCode.DELETE_MUTATION)
                 .build());
-        var mutation = deleteChatMutationFactory.getDeleteChatMutation(timestamp, chat, false, messageRange); // WAWebDeleteChatSync.getDeleteChatMutation
-        webAppStateService.pushPatches(DeleteChatAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync -> push
+        var mutation = deleteChatMutationFactory.getDeleteChatMutation(timestamp, chat, false, messageRange);
+        webAppStateService.pushPatches(DeleteChatAction.COLLECTION_NAME, List.of(mutation));
         store.removeChat(chatModel);
         return Optional.of(chatModel);
     }
@@ -7558,8 +7396,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var timestamp = Instant.now();
         var chatModel = store.findChatByJid(chat).orElse(null);
         var messageRange = chatModel != null ? buildOutgoingMessageRange(chatModel) : null;
-        var mutations = lockChatMutationFactory.getMutationsForLock(timestamp, locked, chat, messageRange); // WAWebLockChatSync.sendLockMutation
-        webAppStateService.pushPatches(LockChatAction.COLLECTION_NAME, mutations); // WAWebSyncdCoreApi.lockForSync([], mutations, ...)
+        var mutations = lockChatMutationFactory.getMutationsForLock(timestamp, locked, chat, messageRange);
+        webAppStateService.pushPatches(LockChatAction.COLLECTION_NAME, mutations);
         if (chatModel != null) {
             chatModel.setLocked(locked);
         if (locked) {
@@ -7574,7 +7412,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizLabelEditingAction", exports = "labelAddAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public String createLabel(String name, int colorIndex) {
-        Objects.requireNonNull(name, "name cannot be null"); // ADAPTED: invariant guard; WA Web accepts any string
+        Objects.requireNonNull(name, "name cannot be null");
         var timestamp = Instant.now();
         var nextId = store.labels().stream()
                 .map(Label::id)
@@ -7598,7 +7436,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 false,                predefinedLabelId,                Boolean.TRUE,
                 LabelEditAction.ListType.CUSTOM,                timestamp
         );
-        webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync(["label"], [p], ...)
+        webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, List.of(mutation));
         var label = new LabelBuilder()
         .id(labelId)
                 .name(name)
@@ -7608,17 +7446,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .type(LabelEditAction.ListType.CUSTOM)
                 .build();
         store.addLabel(label);
-        // WAWebListsActions.createNewListAction -> WAWebListsLogging.logListUpdate (listAction: CREATE).
-        // Cobalt collapses the outer WAWebListsActions.createNewListAction wrapper (which carries
-        // the entryPoint and the set of chats being tagged) into this single createLabel method, so
-        // updateEntryPoint / groupsAdded / usersAdded / groupsAfterUpdate / usersAfterUpdate are
-        // omitted because the Cobalt API surface does not accept an entry point and does not tag
-        // chats as part of label creation (matches WA Web's {chatsBeforeUpdate: [], addedChats: [],
-        // removedChats: []} degenerate case where all counter fields are elided).
+        // The entry point and per-chat tagging counters are omitted because the Cobalt API
+        // does not accept an entry point and does not tag chats as part of label creation.
         wamService.commit(new ListUpdateEventBuilder()
                 .listAction(ListAction.CREATE)
                 .listId(nextId)
-                .listType(ListType.CUSTOM) // WAWebListsLogging.logListUpdate -> getListType(SchemaLabel.ListType.CUSTOM) = LIST_TYPE.CUSTOM (createLabel always inserts CUSTOM)
+                .listType(ListType.CUSTOM)
                 .build());
         return labelId;
     }
@@ -7630,7 +7463,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public Optional<Label> editLabel(String labelId, String name, int colorIndex) {
         Objects.requireNonNull(labelId, "labelId cannot be null");
         Objects.requireNonNull(name, "name cannot be null");
-        var existing = store.findLabel(labelId).orElse(null); // WAWebBizLabelEditingAction.labelEditAction uses the existing label for merge
+        var existing = store.findLabel(labelId).orElse(null);
         if (existing == null) {
             return Optional.empty();
         }
@@ -7647,18 +7480,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 isActive ? Boolean.TRUE : null,                type,
                 timestamp
         );
-        webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync(["label"], [p], ...)
+        webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, List.of(mutation));
         var renamed = !name.equals(existing.name());
         existing.setName(name);
         existing.setColor(colorIndex);
-        // WAWebListsActions.editListAction -> WAWebListsLogging.logListUpdate (listAction: RENAME).
         // WA Web only logs the RENAME event when the name actually changed (l === true); the
         // UPDATE_MEMBERS branch is not triggered from Cobalt's editLabel because the Cobalt API
         // does not bundle chat-membership changes into this call (those go through the separate
         // associateLabel / dissociateLabel entry points, whose WA Web counterparts do not log
         // a ListUpdate event on their own). updateEntryPoint is omitted because the Cobalt API
         // does not carry an entry point; listType / predefinedId come from the existing label
-        // as in WAWebListsLogging.logListUpdate's LabelCollection.get(""+l) lookup.
         if (renamed) {
             var listIdNumber = parseLabelIdToListId(labelId);
             if (listIdNumber != null) {
@@ -7700,18 +7531,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 timestamp
         ));
         for (var assignment : existing.assignments()) {
-            mutations.add(labelAssociationMutationFactory.createLabelAssociationMutation( // WAWebLabelJidSync.createLabelAssociationMutations
+            mutations.add(labelAssociationMutationFactory.createLabelAssociationMutation(
                     labelId,
                     assignment,
                     false,                    timestamp
             ));
         }
-        webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, mutations); // WAWebSyncdCoreApi.lockForSync(["label","label-association","chat"], [u].concat(c), ...)
+        webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, mutations);
         store.removeLabel(labelId);
-        // WAWebListsActions.deleteListAction -> WAWebListsLogging.logListUpdate (listAction: DELETE).
-        // updateEntryPoint is omitted because the Cobalt API does not accept an entry point;
-        // listType / predefinedId are read from the label snapshot captured before removal, mirroring
-        // WAWebListsLogging.logListUpdate's LabelCollection.get(""+l) lookup.
+        // The entry point is omitted because the Cobalt API does not accept one; the list type and
+        // predefined id are read from the label snapshot captured before removal.
         var listIdNumber = parseLabelIdToListId(labelId);
         if (listIdNumber != null) {
             var builder = new ListUpdateEventBuilder()
@@ -7743,12 +7572,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void reorderLabels(List<String> labelIds) {
         Objects.requireNonNull(labelIds, "labelIds cannot be null");
         var timestamp = Instant.now();
-        var intIds = new ArrayList<Integer>(labelIds.size()); // ADAPTED: WA Web stores labels by string id; the wire type of LabelReorderingAction.sortedLabelIds is INT32
+        var intIds = new ArrayList<Integer>(labelIds.size());
         for (var id : labelIds) {
             try {
                 intIds.add(Integer.parseInt(id));
             } catch (NumberFormatException _) {
-                // ADAPTED: skip non-numeric ids (predefined filters are not reorderable on the wire)
             }
         }
         var mutation = labelReorderingMutationFactory.getReorderLabelsMutation(intIds, timestamp);
@@ -7806,7 +7634,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void associateLabel(String labelId, MessageKey messageKey) {
         Objects.requireNonNull(labelId, "labelId cannot be null");
         Objects.requireNonNull(messageKey, "messageKey cannot be null");
-        var target = messageKey.parentJid() // ADAPTED: WA Web uses the message's chatId as the association target
+        var target = messageKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("messageKey is missing a parent/chat JID"));
         pushLabelAssociationMutation(labelId, target, true);
     }
@@ -7849,13 +7677,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void pushLabelAssociationMutation(String labelId, Jid target, boolean labeled) {
         var timestamp = Instant.now();
-        var mutation = labelAssociationMutationFactory.createLabelAssociationMutation( // WAWebLabelJidSync.createLabelAssociationMutations
+        var mutation = labelAssociationMutationFactory.createLabelAssociationMutation(
                 labelId,
                 target,
                 labeled,
                 timestamp
         );
-        webAppStateService.pushPatches(LabelAssociationAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync
+        webAppStateService.pushPatches(LabelAssociationAction.COLLECTION_NAME, List.of(mutation));
         store.findLabel(labelId).ifPresent(label -> {
             if (labeled) {
                 label.addAssignment(target);
@@ -7873,23 +7701,21 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var recipients = Objects.requireNonNull(recipientsProvider, "recipients cannot be null").stream().map(JidProvider::toJid).toList();
         Objects.requireNonNull(name, "name cannot be null");
         var timestamp = Instant.now();
-        // ADAPTED: WA Web allocates the list id via getBroadcastListStorage().getNextId();
         // Cobalt derives the next id as max(existing numeric user parts) + 1.
         var nextId = store.businessBroadcastLists().stream()
                 .mapToLong(list -> { try { return Long.parseLong(list.id()); } catch (NumberFormatException _) { return 0L; } })
                 .max()
                 .orElse(0L) + 1;
         var listId = String.valueOf(nextId);
-        var listJid = Jid.of(listId, JidServer.broadcast()); // ADAPTED: broadcast lists use `<id>@broadcast` as the routing JID
+        var listJid = Jid.of(listId, JidServer.broadcast());
         var participants = buildBroadcastParticipants(recipients);
-        var mutation = businessBroadcastListMutationFactory.getBroadcastListMutation( // WAWebBroadcastListSync.getBroadcastListMutation
+        var mutation = businessBroadcastListMutationFactory.getBroadcastListMutation(
                 listId,
                 participants,
                 name,
                 timestamp
         );
         webAppStateService.pushPatches(BusinessBroadcastListAction.COLLECTION_NAME, List.of(mutation));
-        // ADAPTED: WA Web seeds the broadcast list storage via updateBroadcastListStorage;
         // Cobalt mirrors the state into the flat store map.
         store.putBusinessBroadcastList(new BusinessBroadcastListBuilder()
                 .id(listId)
@@ -7908,9 +7734,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var broadcastListId = Objects.requireNonNull(broadcastListIdProvider, "broadcastListId cannot be null").toJid();
         Objects.requireNonNull(newName, "newName cannot be null");
         var timestamp = Instant.now();
-        var listId = broadcastListId.user(); // ADAPTED: extract the user part as the sync list id
+        var listId = broadcastListId.user();
         var participants = buildBroadcastParticipants(newRecipients);
-        var mutation = businessBroadcastListMutationFactory.getBroadcastListMutation( // WAWebBroadcastListSync.getBroadcastListMutation
+        var mutation = businessBroadcastListMutationFactory.getBroadcastListMutation(
                 listId,
                 participants,
                 newName,
@@ -7932,9 +7758,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var broadcastListId = Objects.requireNonNull(broadcastListIdProvider, "broadcastListId cannot be null").toJid();
         var timestamp = Instant.now();
         var listId = broadcastListId.user();
-        var mutation = businessBroadcastListMutationFactory.getDeleteBroadcastListMutation(listId, timestamp); // WAWebBroadcastListSync.getDeleteBroadcastListMutation
+        var mutation = businessBroadcastListMutationFactory.getDeleteBroadcastListMutation(listId, timestamp);
         webAppStateService.pushPatches(BusinessBroadcastListAction.COLLECTION_NAME, List.of(mutation));
-        store.removeBusinessBroadcastList(listId); // WAWebBroadcastListStorageUtils.removeBroadcastListStorage
+        store.removeBusinessBroadcastList(listId);
     }
 
     /** {@inheritDoc} */
@@ -7944,11 +7770,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public ChatMessageInfo sendBroadcast(JidProvider broadcastListIdProvider, MessageContainer message) {
         var broadcastListId = Objects.requireNonNull(broadcastListIdProvider, "broadcastListId cannot be null").toJid();
         Objects.requireNonNull(message, "message cannot be null");
-        var selfJid = store.jid() // WAWebUserPrefsMeUser.getMeUser
+        var selfJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
         // Build a canonical outgoing ChatMessageInfo so callers get a typed handle; MessageService.send
         // handles per-device encryption and fanout when the recipient JID carries the broadcast server.
-        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid); // WAWebMsgKey.newId
+        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid);
         var key = new MessageKeyBuilder()
                 .id(messageId)
                 .parentJid(broadcastListId)
@@ -7956,7 +7782,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .senderJid(selfJid)
                 .build();
         var messageInfo = new ChatMessageInfoBuilder()
-                .status(MessageStatus.PENDING) // ADAPTED: mirrors MessagePreparer.prepareChat initial status
+                .status(MessageStatus.PENDING)
                 .senderJid(selfJid)
                 .key(key)
                 .message(message)
@@ -8020,13 +7846,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var existingAssignment = store.findChatAssignment(chat).orElse(null);
         var hadPreviousAssignment = existingAssignment != null && existingAssignment.agentId().isPresent();
         var timestamp = Instant.now();
-        var mutation = chatAssignmentMutationFactory.createChatAssignmentMutation( // WAWebChatAssignmentSync.createChatAssignmentMutations
+        var mutation = chatAssignmentMutationFactory.createChatAssignmentMutation(
                 chat,
                 agentId,
                 timestamp
         );
         webAppStateService.pushPatches(ChatAssignmentAction.COLLECTION_NAME, List.of(mutation));
-        // ADAPTED: WAWebChatAssignmentSync.applyMutations writes via bulkCreateOrMerge; Cobalt updates the typed quintet
         if (agentId.isEmpty()) {
             store.removeChatAssignment(chat);
             } else {
@@ -8036,7 +7861,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .opened(existingAssignment != null && existingAssignment.opened())
                     .build());
         }
-        emitChatAssignmentEvent(chat, agentId, hadPreviousAssignment); // WAWebChatAssignmentLogEvents.logChatAssignment(n.chat, (a=n.agentId)!=null?a:"", i[r], t, e.length)
+        emitChatAssignmentEvent(chat, agentId, hadPreviousAssignment);
     }
 
     /**
@@ -8101,9 +7926,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         } else if (chat.hasNewsletterServer()) {
             chatType = ChatAssignmentChatType.CHANNEL;
         } else {
-            chatType = null; // WAWebChatModel.getChatAssignmentChatType throws TypeError; Cobalt omits the property instead of throwing from telemetry
+            chatType = null;
         }
-        var targetAgent = store.findAgentState(agentId).orElse(null); // lookup by agentId == record key (see AgentActionHandler.applyMutation)
+        var targetAgent = store.findAgentState(agentId).orElse(null);
         var chatAssignmentMdId = targetAgent != null && targetAgent.deviceId().isPresent()
                 ? targetAgent.deviceId().getAsInt()
                 : -1;
@@ -8113,7 +7938,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .map(AgentState::agentId)
                 .findFirst()
                 .orElse("");
-        wamService.commit(new MdChatAssignmentEventBuilder() // WAWebChatAssignmentLogEvents: new MdChatAssignmentWamEvent({...}).commit()
+        wamService.commit(new MdChatAssignmentEventBuilder()
                 .assignerAgentId(assignerAgentId)
                 .assignerBrowserId("")
                 .assignerMdId(meDeviceId)
@@ -8147,7 +7972,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw new IllegalStateException("Chat " + chat + " has no current agent assignment");
         }
         var timestamp = Instant.now();
-        var mutation = chatAssignmentOpenedStatusMutationFactory.createChatOpenedMutation( // WAWebChatAssignmentOpenedStatusSync.createChatOpenedMutations
+        var mutation = chatAssignmentOpenedStatusMutationFactory.createChatOpenedMutation(
                 chat,
                 agentId,
                 opened,
@@ -8169,7 +7994,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var request = new IqQueryDisappearingModeRequest();
         var requestNode = request.toNode();
         var response = sendNode(requestNode);
-        // WAWebQueryDisappearingModeJob dmParser: e.child("disappearing_mode") -> {duration: attrInt("duration"), t: attrInt("t")}
         var parsed = IqQueryDisappearingModeResponse.of(response, requestNode.build()).orElse(null);
         var mode = switch (parsed) {
             case null -> throw new NoSuchElementException("Missing <disappearing_mode> in disappearing-mode query response");
@@ -8199,29 +8023,29 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void editEphemeralTimer(JidProvider chatProvider, ChatEphemeralTimer timer) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(timer, "timer cannot be null");
-        var seconds = timer.periodSeconds(); // ChatEphemeralTimer.periodSeconds -> WAWebEphemeralConstants duration in seconds
+        var seconds = timer.periodSeconds();
         if (chat.hasGroupOrCommunityServer()) {
             var request = new SmaxGroupsSetPropertyRequest(
                     chat,
-                    false, // locked
-                    false, // announcement
-                    false, // noFrequentlyForwarded
-                    seconds > 0 ? seconds : null, // ephemeralExpiration: t > 0 -> ephemeral child with expiration
-                    null, // ephemeralTrigger
-                    false, // unlocked
-                    false, // notAnnouncement
-                    false, // frequentlyForwardedOk
-                    seconds <= 0, // notEphemeral: t == 0 -> not_ephemeral child
-                    null, // membershipApprovalGroupJoinMode
-                    false, // allowAdminReports
-                    false, // notAllowAdminReports
-                    false, // allowNonAdminSubGroupCreation
-                    false, // notAllowNonAdminSubGroupCreation
-                    false, // groupHistory
-                    false  // noGroupHistory
+                    false,
+                    false,
+                    false,
+                    seconds > 0 ? seconds : null,
+                    null,
+                    false,
+                    false,
+                    false,
+                    seconds <= 0,
+                    null,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false
             );
             var requestNode = request.toNode();
-            var response = sendNode(requestNode); // WASmaxGroupsSetPropertyRPC.sendSetPropertyRPC: deprecatedSendIq
+            var response = sendNode(requestNode);
             var parsed = SmaxGroupsSetPropertyResponse.of(response, requestNode.build()).orElse(null);
             switch (parsed) {
                 case null ->
@@ -8248,7 +8072,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             var iqNode = new NodeBuilder()
                     .description("iq")
                     .attribute("xmlns", "disappearing_mode")
-                    .attribute("to", chat) // ADAPTED: per-chat path addresses the chat itself, contrasting with the global path which targets S_WHATSAPP_NET
+                    .attribute("to", chat)
                     .attribute("type", "set")
                     .content(disappearing);
             var response = sendNode(iqNode);
@@ -8262,42 +8086,30 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             }
         }
         var chatModelOpt = store.findChatByJid(chat);
-        var previousSeconds = chatModelOpt // WAWebChangeEphemeralDurationChatAction: var i = calculateEphemeralDurationForChat(e) (captured before mutation so previousEphemeralityDuration is correct)
+        var previousSeconds = chatModelOpt
                 .flatMap(Chat::ephemeralExpiration)
                 .map(ChatEphemeralTimer::periodSeconds)
                 .orElse(null);
-        chatModelOpt.ifPresent(chatModel -> { // WAWebChangeEphemeralDurationChatAction: t.ephemeralDuration = d; updateChatTable(...)
-            chatModel.setEphemeralExpiration(timer == ChatEphemeralTimer.OFF ? null : timer); // WAWebChangeEphemeralDurationChatAction: ephemeralDuration = d
-            chatModel.setEphemeralSettingTimestamp(Instant.now()); // WAWebUpdateEphemeralSettingTimestampChatAction: t.ephemeralSettingTimestamp = ...
+        chatModelOpt.ifPresent(chatModel -> {
+            chatModel.setEphemeralExpiration(timer == ChatEphemeralTimer.OFF ? null : timer);
+            chatModel.setEphemeralSettingTimestamp(Instant.now());
         });
-        //   new(o("WAWebEphemeralSettingChangeWamEvent")).EphemeralSettingChangeWamEvent({
-        //     chatEphemeralityDuration: l ? void 0 : t,     // suppressed for after-read durations
-        //     threadId: yield getChatThreadID(e.id.toJid()), // HMAC-based thread id from WAWebChatThreadLogging
-        //     ephemeralSettingEntryPoint: n,                // UI entry point (CHAT_INFO / CHAT_OVERFLOW / ...)
-        //     isAfterRead: l,
-        //     afterReadDuration: l ? t : void 0,
-        //     previousEphemeralityDuration: i,              // set only when i != null
-        //     previousEphemeralityType: ...,                // set only when i > 0
-        //     ephemeralSettingGroupSize: numberToPreciseSizeBucket(participants.length) // groups only
-        //   }).commit()
-        // ADAPTED:
         //  - chatEphemeralityDuration is always set to `seconds` (Cobalt exposes no after-read API, so the WA Web `l` branch never applies).
-        //  - threadId is left unset because Cobalt does not implement WAWebChatThreadLogging (HMAC chat thread ids).
         //  - ephemeralSettingEntryPoint is left unset because Cobalt is headless and has no UI entry point to report.
         //  - Spec-level properties isAfterRead / afterReadDuration / previousEphemeralityType / isSuccess / errorCode
         //    are not declared on Cobalt's EphemeralSettingChangeEvent spec and therefore cannot be emitted.
         var eventBuilder = new EphemeralSettingChangeEventBuilder()
-                .chatEphemeralityDuration(seconds); // WAWebChangeEphemeralDurationChatAction: chatEphemeralityDuration: l ? void 0 : t (Cobalt always takes the non-after-read branch)
-        if (previousSeconds != null) { // WAWebChangeEphemeralDurationChatAction: if (i != null) s.previousEphemeralityDuration = i
+                .chatEphemeralityDuration(seconds);
+        if (previousSeconds != null) {
             eventBuilder.previousEphemeralityDuration(previousSeconds);
         }
-        if (chat.hasGroupOrCommunityServer()) { // WAWebChangeEphemeralDurationChatAction: if (getIsGroup(e)) s.ephemeralSettingGroupSize = numberToPreciseSizeBucket(participants.length ?? 0)
-            var participantCount = chatModelOpt // WAWebChangeEphemeralDurationChatAction: (u = (d = e.groupMetadata) == null ? void 0 : d.participants.length) != null ? u : 0
+        if (chat.hasGroupOrCommunityServer()) {
+            var participantCount = chatModelOpt
                     .map(c -> c.participant().size())
                     .orElse(0);
             eventBuilder.ephemeralSettingGroupSize(numberToPreciseSizeBucket(participantCount));
         }
-        wamService.commit(eventBuilder.build()); // WAWebChangeEphemeralDurationChatAction: new EphemeralSettingChangeWamEvent(s).commit()
+        wamService.commit(eventBuilder.build());
     }
 
     /**
@@ -8342,7 +8154,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.DIRECT)
     public TosNotices queryTosNotices(Collection<String> noticeIds) {
         Objects.requireNonNull(noticeIds, "noticeIds cannot be null");
-        // Routes through the typed IQ pair so the wire shape and reply parser stay in lockstep with WAWebTosJob.queryTosState
         var request = new IqQueryTosRequest(List.copyOf(noticeIds));
         var requestBuilder = request.toNode();
         var response = sendNode(requestBuilder);
@@ -8402,15 +8213,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetPushServerSettingsJob", exports = "getPushServerSettings",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryPushServerKey() {
-        // Routes through the typed IQ pair so the wire shape and reply parser stay in lockstep with WAWebGetPushServerSettingsJob
         var request = new IqGetPushServerSettingsRequest();
         var requestBuilder = request.toNode();
         var response = sendNode(requestBuilder);
         var parsed = IqGetPushServerSettingsResponse.of(response, requestBuilder.build()).orElse(null);
-        // WAWebGetPushServerSettingsJob parser: t.hasChild("error") -> error branch; otherwise t.child("settings").attrString("webserverkey")
         return switch (parsed) {
             case IqGetPushServerSettingsResponse.Success success -> Optional.of(success.webServerKey());
-            // ADAPTED: error branches surface as Optional.empty so callers can consult the WhatsAppClientErrorHandler for diagnostics
             case IqGetPushServerSettingsResponse.ClientError _ -> Optional.empty();
             case IqGetPushServerSettingsResponse.ServerError _ -> Optional.empty();
             case null -> Optional.empty();
@@ -8422,29 +8230,25 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebQueryPrivacySettingsJob", exports = "getPrivacySettings",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Map<PrivacySettingType, PrivacySettingValue> queryPrivacySettings() {
-        // WAWebGetPrivacySettingsJob: wap("iq", {xmlns: "privacy", to: S_WHATSAPP_NET, type: "get"}, wap("privacy", null))
         var privacyQuery = new NodeBuilder()
                 .description("privacy")
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "privacy")
-                .attribute("to", JidServer.user()) // WAWebGetPrivacySettingsJob: S_WHATSAPP_NET
+                .attribute("to", JidServer.user())
                 .attribute("type", "get")
                 .content(privacyQuery);
         var response = sendNode(iqNode);
-        // WAWebGetPrivacySettingsJob parser: e.child("privacy").mapChildrenWithTag("category", ...)
         var privacyNode = response.getChild("privacy")
                 .orElseThrow(() -> new NoSuchElementException("Missing <privacy> in privacy settings response"));
         var result = new EnumMap<PrivacySettingType, PrivacySettingValue>(PrivacySettingType.class);
         for (var category : privacyNode.getChildren("category")) {
-            // WAWebGetPrivacySettingsJob parser: e.attrString("name"), e.attrString("value")
             var name = category.getAttributeAsString("name").orElse(null);
             var value = category.getAttributeAsString("value").orElse(null);
             if (name == null || value == null) {
                 continue;
             }
-            // ADAPTED: WA Web returns {name, value, dhash} for every category, including unknown ones;
             //          Cobalt drops unknowns because the enum is the public API surface.
             var type = PrivacySettingType.of(name).orElse(null);
             var audience = PrivacySettingValue.of(value).orElse(null);
@@ -8494,7 +8298,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
 
         Node privacyNode;
         if (!hasList) {
-            // WAWebSetPrivacyJob._(name, value): wap("privacy", null, wap("category", {name, value}))
             var category = new NodeBuilder()
                     .description("category")
                     .attribute("name", type.data())
@@ -8505,7 +8308,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .content(category)
                     .build();
         } else if (lidAware) {
-            // WAWebSetPrivacyJob.f(name, value, users, dhash): wap("privacy", {addressing_mode: "lid"}, wap("category", {name, value, dhash: "none"}, users.map(h)))
             List<Node> userChildren;
             try {
                 userChildren = buildLidPrivacyUsers(excludedOrIncluded, action);
@@ -8538,7 +8340,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     .content(category)
                     .build();
         } else {
-            // WAWebSetPrivacyJob.g(name, value, users, dhash): wap("privacy", null, wap("category", {name, value, dhash}, users.map({action, jid})))
             var userChildren = buildPnPrivacyUsers(excludedOrIncluded, action);
             var category = new NodeBuilder()
                     .description("category")
@@ -8604,7 +8405,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var result = new ArrayList<Node>(users.size());
         for (var raw : users) {
             if (raw == null) {
-                continue; // ADAPTED: defensive skip
+                continue;
             }
             var lid = lidMigrationService.toLid(raw);
             if (lid == null) {
@@ -8640,7 +8441,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var result = new ArrayList<Node>(users.size());
         for (var raw : users) {
             if (raw == null) {
-                continue; // ADAPTED: defensive skip
+                continue;
             }
             result.add(new NodeBuilder()
                     .description("user")
@@ -8656,7 +8457,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebSetReadReceiptJob", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editReadReceipts(boolean enabled) {
-        // WAWebSetReadReceiptJob: wap("category", {name: "readreceipts", value: t ? "all" : "none"})
         editPrivacySetting(
                 PrivacySettingType.READ_RECEIPTS,
                 enabled ? PrivacySettingValue.EVERYONE : PrivacySettingValue.NOBODY);
@@ -8679,22 +8479,22 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             Objects.requireNonNull(tokenType, "tokenTypes element cannot be null");
             tokenNodes.add(new NodeBuilder()
                     .description("token")
-                    .attribute("jid", userJid) // WAWebSetPrivacyTokensJob: jid: USER_JID(t)
-                    .attribute("t", timestampValue) // WAWebSetPrivacyTokensJob: t: CUSTOM_STRING(String(r))
-                    .attribute("type", tokenType.wireValue()) // WAWebSetPrivacyTokensJob: type: CUSTOM_STRING(e)
+                    .attribute("jid", userJid)
+                    .attribute("t", timestampValue)
+                    .attribute("type", tokenType.wireValue())
                     .build());
         }
         var tokensContainer = new NodeBuilder()
-                .description("tokens") // WAWebSetPrivacyTokensJob: wap("tokens", null, i)
+                .description("tokens")
                 .content(tokenNodes)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "privacy") // WAWebSetPrivacyTokensJob: xmlns: "privacy"
-                .attribute("to", JidServer.user()) // WAWebSetPrivacyTokensJob: to: S_WHATSAPP_NET
-                .attribute("type", "set") // WAWebSetPrivacyTokensJob: type: "set"
+                .attribute("xmlns", "privacy")
+                .attribute("to", JidServer.user())
+                .attribute("type", "set")
                 .content(tokensContainer);
-        sendNode(iqNode); // WAWebSetPrivacyTokensJob: deprecatedSendIq(_, parser); throws ServerStatusCodeError on !success
+        sendNode(iqNode);
     }
 
     /**
@@ -8739,16 +8539,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
         Objects.requireNonNull(category, "category cannot be null");
         Objects.requireNonNull(type, "type cannot be null");
-        //   WAWebMexGetPrivacyList.fetchPrivacyList({jid:n, dhash:"", category:e(t), type:"DENYLIST"})
         var request = new GetPrivacyListsMexRequest(jid, dhash == null ? "" : dhash, category, type);
         var response = sendNode(request);
         var parsed = GetPrivacyListsMexResponse.of(response);
         if (parsed.isEmpty()) {
-            // missing privacy_contact_list -> empty contacts -> {status:"match"}
             return new PrivacyDisallowedListBuilder().match(true).users(List.of()).build();
         }
         var payload = parsed.get();
-        //   for (var c of contacts) { var m = c.jid ?? c.pn_jid; ... users.push(createUserWidOrThrow(m)) }
         var users = payload.contacts()
                 .stream()
                 .map(contact -> {
@@ -8757,10 +8554,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 })
                 .toList();
         if (users.isEmpty()) {
-            //   users.length === 0 -> {status:"match"}
             return new PrivacyDisallowedListBuilder().match(true).users(List.of()).build();
         }
-        //   {status:"mismatch", users, dhash: list.dhash ?? ""}
         var freshDhash = payload.dhash().orElse("");
         return new PrivacyDisallowedListBuilder().match(false).users(users).dhash(freshDhash).build();
     }
@@ -8770,7 +8565,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexFetchReachoutTimelockJob",
             exports = "mexFetchReachoutTimelock", adaptation = WhatsAppAdaptation.DIRECT)
     public Optional<ReachoutTimelock> queryReachoutTimelock() {
-        //   WAWebMexClient.fetchQuery(WAWebMexFetchReachoutTimelockJobQuery.graphql, {})
         var request = new FetchReachoutTimelockMexRequest();
         var response = sendNode(request);
         return FetchReachoutTimelockMexResponse.of(response)
@@ -8802,8 +8596,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewChatMessageCappingInfoJob",
             exports = "mexFetchNewChatMessageCapping", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<NewChatMessageCappingInfo> queryNewChatMessageCappingInfo() {
-        //   var i = {input: {type: "INDIVIDUAL_NEW_CHAT_THREAD"}}
-        //   WAWebMexClient.fetchQuery(WAWebMexFetchNewChatMessageCappingInfoJobQuery.graphql, i)
         var request = new FetchNewChatMessageCappingInfoMexRequest("INDIVIDUAL_NEW_CHAT_THREAD");
         var response = sendNode(request);
         return FetchNewChatMessageCappingInfoMexResponse.of(response)
@@ -8825,7 +8617,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             exports = "mexSubmitPasskeyChallengeResponse", adaptation = WhatsAppAdaptation.DIRECT)
     public void submitPasskeyIntegrityChallenge(byte[] signedChallenge, boolean prfAvailable) {
         Objects.requireNonNull(signedChallenge, "signedChallenge cannot be null");
-        //   variables = {input: {challenge_type:"PASSKEY", passkey_response:{signed_challenge: btoa(JSON.stringify(e)), prf_available: e.prf_output != null}}}
         var request = new IntegrityChallengeResponseMexRequest(signedChallenge, prfAvailable);
         var response = sendNode(request);
         var parsed = IntegrityChallengeResponseMexResponse.of(response).orElse(null);
@@ -8889,8 +8680,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                                                 Boolean includeCountryCode,
                                                 Boolean includeUsername,
                                                 String input) {
-        //   WAWebMexClient.fetchQuery(WAWebMexUsyncQuery.graphql,
-        //     {include_about_status, include_country_code, include_username, input})
         var request = new UsyncMexRequest(includeAboutStatus, includeCountryCode, includeUsername, input);
         var response = sendNode(request);
         return UsyncMexResponse.of(response);
@@ -8920,7 +8709,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexUsersGetAboutStatus",
             exports = "mexUsersGetAboutStatus", adaptation = WhatsAppAdaptation.ADAPTED)
     private Optional<String> queryAboutViaUsyncMex(Jid userJid) {
-        //   WAWebMexUsync.mexUsyncQuery({include_about_status:true, input: serializeUsyncContext([userJid])})
         var input = serializeUsyncMexInput(userJid);
         return executeUsyncMex(Boolean.TRUE, null, null, input)
                 .flatMap(response -> response.items().stream().findFirst())
@@ -8935,7 +8723,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             exports = "mexUsersGetCountryCode", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryUserCountryCode(JidProvider userJidProvider) {
         var userJid = Objects.requireNonNull(userJidProvider, "userJid cannot be null").toJid();
-        //   WAWebMexUsync.mexUsyncQuery({include_country_code:true, input: serializeUsyncContext([userJid])})
         var input = serializeUsyncMexInput(userJid);
         return executeUsyncMex(null, Boolean.TRUE, null, input)
                 .flatMap(response -> response.items().stream().findFirst())
@@ -8949,7 +8736,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             exports = "mexUsersGetUsername", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<UserUsername> queryUserUsername(JidProvider userJidProvider) {
         var userJid = Objects.requireNonNull(userJidProvider, "userJid cannot be null").toJid();
-        //   WAWebMexUsync.mexUsyncQuery({include_username:true, input: serializeUsyncContext([userJid])})
         var input = serializeUsyncMexInput(userJid);
         return executeUsyncMex(null, null, Boolean.TRUE, input)
                 .flatMap(response -> response.items().stream().findFirst())
@@ -9020,34 +8806,34 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         if (participants.isEmpty()) {
             throw new IllegalArgumentException("At least one participant is required");
         }
-        var createChildren = new ArrayList<Node>(participants.size() + 1); // WASmaxOutGroupsCreateRequest: REPEATED_CHILD(participant, ...) + OPTIONAL_CHILD(ephemeral, ...)
+        var createChildren = new ArrayList<Node>(participants.size() + 1);
         for (var participant : participants) {
             createChildren.add(new NodeBuilder()
-                    .description("participant") // WASmaxOutGroupsCreateRequest.makeCreateRequestCreateParticipant: smax("participant", ...)
-                    .attribute("jid", participant) // WASmaxOutGroupsCreateRequest: jid: JID(t)
+                    .description("participant")
+                    .attribute("jid", participant)
                     .build());
         }
         var ephemeralSeconds = ephemeralTimer.periodSeconds();
         if (ephemeralSeconds != 0) {
             createChildren.add(new NodeBuilder()
-                    .description("ephemeral") // WASmaxOutGroupsCreateRequest.makeCreateRequestCreateEphemeral: smax("ephemeral", {expiration: INT(t)})
+                    .description("ephemeral")
                     .attribute("expiration", ephemeralSeconds)
                     .build());
         }
         var createNode = new NodeBuilder()
-                .description("create") // WASmaxOutGroupsCreateRequest: smax("create", null, ...)
-                .attribute("subject", subject) // WASmaxOutGroupsNamedSubjectMixin.mergeNamedSubjectMixin: subject: CUSTOM_STRING(t)
+                .description("create")
+                .attribute("subject", subject)
                 .content(createChildren)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetServerMixin.mergeBaseSetServerMixin: xmlns: "w:g2"
-                .attribute("to", Jid.of(JidServer.groupOrCommunity())) // WASmaxOutGroupsBaseSetServerMixin: to: G_US
-                .attribute("type", "set") // WAWebSmaxBaseIQSetRequestMixin: type: "set"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", Jid.of(JidServer.groupOrCommunity()))
+                .attribute("type", "set")
                 .content(createNode);
-        var response = sendNode(iqNode); // WASmaxGroupsCreateRPC.sendCreateRPC: sendIQ(...)
+        var response = sendNode(iqNode);
         var metadata = handleChatMetadata(response);
-        if (!(metadata instanceof GroupMetadata groupMetadata)) { // WAWebGroupCreateJob: createGroup always creates a non-community group
+        if (!(metadata instanceof GroupMetadata groupMetadata)) {
             throw new NoSuchElementException("Expected a group metadata, got %s".formatted(metadata));
         }
         wamService.commit(new GroupCreateCEventBuilder().build());
@@ -9440,42 +9226,42 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public CommunityMetadata createCommunity(String name, String description, ChatEphemeralTimer ephemeralTimer) {
         Objects.requireNonNull(name, "name cannot be null");
         Objects.requireNonNull(ephemeralTimer, "ephemeralTimer cannot be null");
-        var createChildren = new ArrayList<Node>(4); // WASmaxOutGroupsCreateRequest: OPTIONAL_CHILD(description), OPTIONAL_CHILD(parent), OPTIONAL_CHILD(ephemeral)
+        var createChildren = new ArrayList<Node>(4);
         if (description != null && !description.isEmpty()) {
             createChildren.add(new NodeBuilder()
-                    .description("description") // WASmaxOutGroupsCreateRequest.makeCreateRequestCreateDescription: smax("description", {id}, smax("body", null, value))
+                    .description("description")
                     .attribute("id", RandomIdUtils.generateSid())
                     .content(new NodeBuilder()
                             .description("body")
-                            .content(description.getBytes(StandardCharsets.UTF_8)) // bodyElementValue: a
+                            .content(description.getBytes(StandardCharsets.UTF_8))
                             .build())
                     .build());
         }
         createChildren.add(new NodeBuilder()
-                .description("parent") // WASmaxOutGroupsCreateRequest.makeCreateRequestCreateParent: smax("parent", ...) with hasParentGroupDefaultMembershipApprovalMode
-                .attribute("default_membership_approval_mode", "request_required") // WASmaxOutGroupsParentGroupDefaultMembershipApprovalModeMixin: default_membership_approval_mode attr marks the closed parent
+                .description("parent")
+                .attribute("default_membership_approval_mode", "request_required")
                 .build());
         var ephemeralSeconds = ephemeralTimer.periodSeconds();
         if (ephemeralSeconds != 0) { // ephemeralArgs OPTIONAL_CHILD is only emitted when a non-zero timer is requested
             createChildren.add(new NodeBuilder()
-                    .description("ephemeral") // WASmaxOutGroupsCreateRequest.makeCreateRequestCreateEphemeral: smax("ephemeral", {expiration: INT})
+                    .description("ephemeral")
                     .attribute("expiration", ephemeralSeconds)
                     .build());
         }
         var createNode = new NodeBuilder()
-                .description("create") // WASmaxOutGroupsCreateRequest: smax("create", null, ...)
+                .description("create")
                 .attribute("subject", name)
                 .content(createChildren)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetServerMixin: xmlns: "w:g2"
-                .attribute("to", Jid.of(JidServer.groupOrCommunity())) // WASmaxOutGroupsBaseSetServerMixin: to: G_US
-                .attribute("type", "set") // WAWebSmaxBaseIQSetRequestMixin: type: "set"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", Jid.of(JidServer.groupOrCommunity()))
+                .attribute("type", "set")
                 .content(createNode);
-        var response = sendNode(iqNode); // WASmaxGroupsCreateRPC.sendCreateRPC
+        var response = sendNode(iqNode);
         var metadata = handleChatMetadata(response);
-        if (!(metadata instanceof CommunityMetadata communityMetadata)) { // WAWebGroupCommunityJob: the server always returns a parent group tree for this flow
+        if (!(metadata instanceof CommunityMetadata communityMetadata)) {
             throw new NoSuchElementException("Expected community metadata, got %s".formatted(metadata));
         }
         return communityMetadata;
@@ -9492,7 +9278,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         }
         var request = new SmaxGroupsDeleteParentGroupRequest(community);
         var requestNode = request.toNode();
-        var response = sendNode(requestNode); // WASmaxGroupsDeleteParentGroupRPC.sendDeleteParentGroupRPC
+        var response = sendNode(requestNode);
         switch (SmaxGroupsDeleteParentGroupResponse.of(response, requestNode.build()).orElse(null)) {
             case SmaxGroupsDeleteParentGroupResponse.Success _ -> { /* deactivation accepted */ }
             case SmaxGroupsDeleteParentGroupResponse.ClientError clientError ->
@@ -9577,7 +9363,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
         var suggestedSubgroup = Objects.requireNonNull(suggestedSubgroupProvider, "suggestedSubgroup cannot be null").toJid();
         var suggestionCreator = Objects.requireNonNull(suggestionCreatorProvider, "suggestionCreator cannot be null").toJid();
-        subgroupSuggestionsAction(community, suggestedSubgroup, suggestionCreator, true); // WAWebSubgroupSuggestionsActionJob: n === c.APPROVE
+        subgroupSuggestionsAction(community, suggestedSubgroup, suggestionCreator, true);
     }
 
     /** {@inheritDoc} */
@@ -9588,7 +9374,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
         var suggestedSubgroup = Objects.requireNonNull(suggestedSubgroupProvider, "suggestedSubgroup cannot be null").toJid();
         var suggestionCreator = Objects.requireNonNull(suggestionCreatorProvider, "suggestionCreator cannot be null").toJid();
-        subgroupSuggestionsAction(community, suggestedSubgroup, suggestionCreator, false); // WAWebSubgroupSuggestionsActionJob: n === c.REJECT
+        subgroupSuggestionsAction(community, suggestedSubgroup, suggestionCreator, false);
     }
 
     /**
@@ -9619,7 +9405,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 approve ? List.of() : List.of(entry),
                 List.of());
         var requestNode = request.toNode();
-        var response = sendNode(requestNode); // WASmaxGroupsSubGroupSuggestionsActionRPC.sendSubGroupSuggestionsActionRPC
+        var response = sendNode(requestNode);
         switch (SmaxGroupsSubGroupSuggestionsActionResponse.of(response, requestNode.build()).orElse(null)) {
             case SmaxGroupsSubGroupSuggestionsActionResponse.Success _ -> { /* per-suggestion outcomes are observational */ }
             case SmaxGroupsSubGroupSuggestionsActionResponse.ClientError clientError ->
@@ -9669,14 +9455,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var response = sendNode(request);
         var parsed = FetchAllSubgroupsMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Fetch all subgroups response did not parse"));
-        // WAWebMexFetchAllSubgroupsJob: throw ServerStatusCodeError(500, "missing announcement group in response")
         var defaultSubGroup = parsed.defaultSubGroup()
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Fetch all subgroups response is missing the default subgroup"));
-        // WAWebMexFetchAllSubgroupsJob: throw ServerStatusCodeError(500, "missing edges in response")
         var subGroups = parsed.subGroups()
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Fetch all subgroups response is missing the subgroup edges"));
         var result = new ArrayList<CommunityLinkedGroup>();
-        // WAWebMexFetchAllSubgroupsJob: c=[d(e,u,!0)] - default subgroup is prepended with defaultSubgroup=true
         result.add(new CommunityLinkedGroupBuilder()
                 .jid(defaultSubGroup.id().map(Jid::of).orElse(null))
                 .subject(defaultSubGroup.subject().flatMap(DefaultSubGroup.Subject::value).orElse(null))
@@ -9684,7 +9467,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .parentGroupJid(community)
                 .defaultSubgroup(true)
                 .build());
-        // WAWebMexFetchAllSubgroupsJob: m.forEach(...) - regular subgroups projected with d(e, r)
         subGroups.edges()
                 .stream()
                 .map(SubGroups.Edges::node)
@@ -9709,7 +9491,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public Map<Jid, GroupParticipantStatus> addGroupParticipants(JidProvider groupProvider, Collection<? extends JidProvider> toAddProvider) {
         var toAdd = Objects.requireNonNull(toAddProvider, "toAdd cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
-        return modifyGroupParticipants(group, toAdd, "add"); // WAWebGroupModifyParticipantsJob: switch on action -> smax("add", ...)
+        return modifyGroupParticipants(group, toAdd, "add");
     }
 
     /** {@inheritDoc} */
@@ -9763,7 +9545,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void promoteGroupParticipants(JidProvider groupProvider, Collection<? extends JidProvider> toPromoteProvider) {
         var toPromote = Objects.requireNonNull(toPromoteProvider, "toPromote cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
-        modifyGroupParticipants(group, toPromote, "promote"); // WAWebGroupModifyParticipantsJob: smax("promote", ...)
+        modifyGroupParticipants(group, toPromote, "promote");
     }
 
     /** {@inheritDoc} */
@@ -9773,21 +9555,21 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void demoteGroupParticipants(JidProvider groupProvider, Collection<? extends JidProvider> toDemoteProvider) {
         var toDemote = Objects.requireNonNull(toDemoteProvider, "toDemote cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
-        modifyGroupParticipants(group, toDemote, "demote"); // WAWebGroupModifyParticipantsJob: smax("demote", ...)
+        modifyGroupParticipants(group, toDemote, "demote");
     }
 
     /**
      * Sends a participant-modification IQ to the given group and parses
      * the per-participant response codes.
      *
-     * <p>This private helper backs {@link #addGroupParticipants(Jid, Collection)},
-     * {@link #promoteGroupParticipants(Jid, Collection)} and
-     * {@link #demoteGroupParticipants(Jid, Collection)}. The action name
+     * <p>This private helper backs {@link #addGroupParticipants(JidProvider, Collection)},
+     * {@link #promoteGroupParticipants(JidProvider, Collection)} and
+     * {@link #demoteGroupParticipants(JidProvider, Collection)}. The action name
      * is used as the body child description
      * ({@code "add"}/{@code "promote"}/{@code "demote"}) per WA Web's
      * {@code WASmaxOutGroups*Request} modules. Removal flows through the
      * SMAX-typed {@code WASmaxGroupsRemoveParticipantsRPC} via
-     * {@link #removeGroupParticipants(Jid, Collection, boolean)} instead.
+     * {@link #removeGroupParticipants(JidProvider, Collection, boolean)} instead.
      *
      * @param group         the target group JID
      * @param participants  the participants to modify
@@ -9803,25 +9585,25 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         if (participants.isEmpty()) {
             throw new IllegalArgumentException("At least one participant is required");
         }
-        var participantNodes = new ArrayList<Node>(participants.size()); // WASmaxOutGroupsAddParticipantsRequest: REPEATED_CHILD(participant, n, 1, 1024)
+        var participantNodes = new ArrayList<Node>(participants.size());
         for (var participant : participants) {
             participantNodes.add(new NodeBuilder()
-                    .description("participant") // WASmaxOutGroups*Request.make*Participant: smax("participant", {jid: ...})
+                    .description("participant")
                     .attribute("jid", participant)
                     .build());
         }
         var actionNode = new NodeBuilder()
-                .description(action) // WASmaxOutGroups*Request: smax("add"|"remove"|"promote"|"demote", null, [...])
+                .description(action)
                 .content(participantNodes)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetGroupMixin.mergeBaseSetGroupMixin: xmlns: "w:g2"
-                .attribute("to", group) // WASmaxOutGroupsBaseSetGroupMixin: to: GROUP_JID(t)
-                .attribute("type", "set") // WAWebSmaxBaseIQSetRequestMixin: type: "set"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", group)
+                .attribute("type", "set")
                 .content(actionNode);
-        var response = sendNode(iqNode); // WASmaxGroups*ParticipantsRPC: deprecatedSendIq
-        return parseParticipantStatus(response); // WAWebGroupModifyParticipantsJob: participants.map(e => ({code: ...}))
+        var response = sendNode(iqNode);
+        return parseParticipantStatus(response);
     }
 
     /**
@@ -9838,29 +9620,27 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private Map<Jid, GroupParticipantStatus> parseParticipantStatus(Node response) {
         var result = new LinkedHashMap<Jid, GroupParticipantStatus>();
-        response.streamChildren() // WAWebGroupModifyParticipantsJob: response body child (add/remove/promote/demote)
-                .flatMap(entry -> entry.streamChildren("participant")) // WAWebGroupModifyParticipantsJob: participants.map
+        response.streamChildren()
+                .flatMap(entry -> entry.streamChildren("participant"))
                 .forEach(participantNode -> {
-                    var jid = participantNode.getAttributeAsJid("jid", null); // WAWebGroupModifyParticipantsJob: userWid = userJidToUserWid(e.jid)
+                    var jid = participantNode.getAttributeAsJid("jid", null);
                     if (jid == null) {
                         return;
                     }
-                    var code = (int) participantNode.getAttributeAsLong("error", GroupParticipantStatus.OK.code()); // WAWebGroupModifyParticipantsJob: code: r != null ? r : "200"
+                    var code = (int) participantNode.getAttributeAsLong("error", GroupParticipantStatus.OK.code());
                     result.put(jid, GroupParticipantStatus.of(code));
                 });
         return result;
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Stickers">
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebStickersFavoriteSyncAction", exports = "applyMutations",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void favoriteSticker(String stickerHash) {
         Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
-        var mutation = favoriteStickerMutationFactory.getFavoriteStickerMutation(stickerHash, true); // WAWebStickersFavoriteSyncAction: isFavorite = true
-        webAppStateService.pushPatches(StickerAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync(["favorite_sticker"], [mutation], ...)
+        var mutation = favoriteStickerMutationFactory.getFavoriteStickerMutation(stickerHash, true);
+        webAppStateService.pushPatches(StickerAction.COLLECTION_NAME, List.of(mutation));
     }
 
     /** {@inheritDoc} */
@@ -9869,7 +9649,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void unfavoriteSticker(String stickerHash) {
         Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
-        var mutation = favoriteStickerMutationFactory.getFavoriteStickerMutation(stickerHash, false); // WAWebStickersFavoriteSyncAction: isFavorite = false
+        var mutation = favoriteStickerMutationFactory.getFavoriteStickerMutation(stickerHash, false);
         webAppStateService.pushPatches(StickerAction.COLLECTION_NAME, List.of(mutation));
     }
 
@@ -9879,12 +9659,10 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void removeRecentSticker(String stickerHash) {
         Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
-        var mutation = removeRecentStickerMutationFactory.getRemoveRecentStickerMutation(stickerHash); // WAWebStickersRemoveRecentSyncAction
+        var mutation = removeRecentStickerMutationFactory.getRemoveRecentStickerMutation(stickerHash);
         webAppStateService.pushPatches(RemoveRecentStickerAction.COLLECTION_NAME, List.of(mutation));
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Polls">
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPollsSendPollCreationMsgAction", exports = "sendPollCreation",
@@ -9902,15 +9680,15 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var messageSecret = new byte[32];
         ThreadLocalRandom.current().nextBytes(messageSecret);
         var pollOptions = options.stream()
-        .map(name -> new PollCreationMessageOptionBuilder().optionName(name).build()) // WAWebPollCreationUtils: {optionName: e}
+        .map(name -> new PollCreationMessageOptionBuilder().optionName(name).build())
                 .toList();
         var poll = new PollCreationMessageBuilder()
-        .name(question) // WAWebPollsSendPollCreationMsgAction: pollName: m
-                .options(pollOptions) // WAWebPollsSendPollCreationMsgAction: pollOptions: p
-                .selectableOptionsCount(selectableCount) // WAWebPollsSendPollCreationMsgAction: pollSelectableOptionsCount: _
+        .name(question)
+                .options(pollOptions)
+                .selectableOptionsCount(selectableCount)
                 .encKey(messageSecret)
                 .build();
-        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid); // WAWebMsgKey.newId
+        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid);
         var key = new MessageKeyBuilder()
         .id(messageId)
                 .parentJid(chat)
@@ -9918,13 +9696,13 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .senderJid(selfJid)
                 .build();
         var messageInfo = new ChatMessageInfoBuilder()
-                .status(MessageStatus.PENDING) // ADAPTED: MessagePreparer initial status
+                .status(MessageStatus.PENDING)
                 .senderJid(selfJid)
                 .key(key)
-                .message(MessageContainer.of(poll)) // WAWebPollsSendPollCreationMsgAction: wraps the PollCreationMessage into the message container
-                .timestamp(Instant.now()) // WAWebPollsSendPollCreationMsgAction: t: unixTime()
+                .message(MessageContainer.of(poll))
+                .timestamp(Instant.now())
                 .build();
-        messageService.send(messageInfo); // WAWebSendMsgChatAction.addAndSendMsgToChat
+        messageService.send(messageInfo);
         commitPollsActionsMetric(                chat,
                 PollActionType.CREATE_POLL,
                 messageInfo.timestamp().orElse(Instant.now()),
@@ -9940,30 +9718,27 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void votePoll(MessageKey pollKey, List<String> selectedOptions) {
         Objects.requireNonNull(pollKey, "pollKey cannot be null");
         Objects.requireNonNull(selectedOptions, "selectedOptions cannot be null");
-        var parentJid = pollKey.parentJid() // WAWebPollsSendVoteMsgAction: parentMsgKey.remote
+        var parentJid = pollKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("pollKey must carry a parentJid"));
         var pollCreationMessage = store.findMessageByKey(pollKey).orElse(null);
         if (!(pollCreationMessage instanceof ChatMessageInfo chatPoll)) {
             throw new IllegalArgumentException("Poll creation message not found in store for key " + pollKey);
         }
-        var voterJid = store.jid() // WAWebMsgGetters.getSender(t) on the outgoing vote
+        var voterJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("votePoll requires a connected user"));
-        // WAWebPollVoteEncryptMsgData.encryptPollVoteMsgData -> WAWebPollsVoteEncryption.encryptVote
         var vote = EncMessageFactory.encryptPollVote(selectedOptions, chatPoll, voterJid);
-        var pollUpdate = new PollUpdateMessageBuilder() // WAWebPollsSendVoteMsgAction: new PollUpdateMessage(...)
-                .pollCreationMessageKey(pollKey) // WAWebPollsSendVoteMsgAction: pollCreationMessageKey
-                .vote(vote) // WAWebPollsSendVoteMsgAction: vote: PollEncValue
-                .senderTimestampMs(Instant.now()) // WAWebPollsSendVoteMsgAction: senderTimestampMs
+        var pollUpdate = new PollUpdateMessageBuilder()
+                .pollCreationMessageKey(pollKey)
+                .vote(vote)
+                .senderTimestampMs(Instant.now())
                 .build();
-        messageService.send(parentJid, MessageContainer.of(pollUpdate)); // WAWebSendMsgChatAction.addAndSendMsgToChat
-        // WAWebPollsSendVoteMsgAction: y = t.size > 0 ? (p ? CHANGE_VOTE : VOTE) : REMOVE_VOTE;
+        messageService.send(parentJid, MessageContainer.of(pollUpdate));
         //   Cobalt does not maintain a PollVoteCollection keyed by parent+sender,
         //   so the CHANGE_VOTE branch (previous-vote lookup) cannot be distinguished
         //   here; we classify any non-empty selection as VOTE and empty as REMOVE_VOTE.
         var pollAction = selectedOptions.isEmpty()
                 ? PollActionType.REMOVE_VOTE
                 : PollActionType.VOTE;
-        // WAWebPollsSendVoteMsgAction: creationDateInSeconds: e.t, pollOptionsCount: e.pollOptions.length
         var pollCreationTimestamp = chatPoll.timestamp().orElse(Instant.now());
         var pollOptionsCount = 0;
         if (chatPoll.message().content() instanceof PollCreationMessage poll) {
@@ -9980,7 +9755,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         Objects.requireNonNull(pollKey, "pollKey cannot be null");
         var parentJid = pollKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("pollKey must carry a parentJid"));
-        // ADAPTED: WA Web's poll-close path emits a protocol message signaling
         // "pollInvalidated"; Cobalt approximates it with an empty-vote
         // PollUpdateMessage so the transport shape stays consistent with the
         // rest of the poll flow.
@@ -9994,7 +9768,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                 .senderTimestampMs(Instant.now())
                 .build();
         messageService.send(parentJid, MessageContainer.of(pollUpdate));
-        // WAWebPollsSendVoteMsgAction: empty selection -> REMOVE_VOTE
         //   closePoll is modelled in Cobalt as an empty-vote PollUpdate, which
         //   maps onto WA Web's REMOVE_VOTE metric classification.
         var pollCreationTimestamp = Instant.now();
@@ -10010,45 +9783,22 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     }
 
     /**
-     * Commits the {@link PollsActionsEvent} WAM event for a poll create / vote
-     * / remove-vote dispatch.
+     * Commits the {@link PollsActionsEvent} WAM event for a poll create,
+     * vote, or remove-vote dispatch.
      *
-     * <p>Adapts {@code WAWebPollsActionsMetricUtils.commitPollsActionsMetric}
-     * ({@code s(e)} in the bundled JS) and its internal event builder
-     * ({@code u(chat, action)}):
-     * <pre>
-     * function s(e) {
-     *   var t=e.action, n=e.chat, r=e.creationDateInSeconds, o=e.pollOptionsCount,
-     *       a=u(n,t);
-     *   a.pollCreationDs=c(r); a.pollOptionsCount=o; a.commit();
-     * }
-     * function u(e,t) {
-     *   var n = new PollsActionsWamEvent({pollAction: t});
-     *   if (WAWebChatGetters.getIsGroup(e)) {
-     *     n.groupSizeBucket = WAWebWamNumberToClientGroupSizeBucket(e.getParticipantCount());
-     *     n.isAdmin = e.iAmAdmin();
-     *   }
-     *   n.chatType = WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid(e.id);
-     *   return n;
-     * }
-     * function c(e) { // WAWeb-moment truncate-to-day helper
-     *   var t = moment.utc(e * 1e3);
-     *   t.startOf("day"); return t.unix();
-     * }
-     * </pre>
+     * <p>The creation timestamp is truncated to a UTC day boundary before
+     * it is recorded. For group and community chats the group size bucket,
+     * admin flag, and group type are populated; for other chats those
+     * fields are left unset.
      *
-     * <p>The {@code typeOfGroup} property is populated via
-     * {@code pollsWamTypeOfGroup} when the chat is a group / community,
-     * mirroring the way WA Web reads
-     * {@code groupData.wamTypeOfGroup} in the same set of flows (
-     * {@code WAWebPollsSendPollCreationMsgAction},
-     * {@code WAWebPollsSendVoteMsgAction}, and the newsletter counterparts).
+     * @implNote
+     * This implementation derives the chat type, group size bucket, and
+     * group type from the chat JID rather than from a live chat model.
      *
      * @param chatJid         the chat the poll is hosted in
      * @param action          the poll action being logged
-     * @param creationInstant the poll creation timestamp (WA Web's
-     *                        {@code creationDateInSeconds} input before the
-     *                        {@code startOf("day")} truncation)
+     * @param creationInstant the poll creation timestamp, truncated to a
+     *                        UTC day boundary before it is recorded
      * @param optionsCount    the number of options on the underlying poll
      */
     @WhatsAppWebExport(moduleName = "WAWebPollsActionsMetricUtils", exports = "commitPollsActionsMetric",
@@ -10070,7 +9820,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     builder.isAdmin(pollsWamIsAdmin(group, selfJid));
                     }
                 // because every poll-action call site in WA Web operates on a chat that also
-                // carries a WAM typeOfGroup classification via the shared WAWebGroupType helper.
                 builder.typeOfGroup(pollsWamTypeOfGroup(group));
             }
         }
@@ -10093,7 +9842,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebPollsActionsMetricUtils", exports = "c",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static int pollCreationDsFromInstant(Instant instant) {
-        // moment.utc(e*1e3).startOf("day").unix(): truncate to UTC day boundary
         var epochDays = instant.getEpochSecond() / 86400L;
         return (int) (epochDays * 86400L);
     }
@@ -10206,7 +9954,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     private static boolean pollsWamIsAdmin(GroupMetadata metadata, Jid selfJid) {
         return metadata.participants().stream()
                 .filter(participant -> Objects.equals(participant.userJid().toUserJid(), selfJid.toUserJid()))
-                .anyMatch(participant -> participant.rank().isPresent()); // ADMIN / FOUNDER -> true; USER (rank == null) -> false
+                .anyMatch(participant -> participant.rank().isPresent());
     }
 
     /**
@@ -10244,8 +9992,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         return TypeOfGroupEnum.GROUP;
     }
 
-    //</editor-fold>
-    //<editor-fold desc="AI bots">
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBotWelcomeRequestSync", exports = "getBotWelcomeRequestSetMutation",
@@ -10253,7 +9999,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void sendBotWelcomeRequest(JidProvider botJidProvider) {
         var botJid = Objects.requireNonNull(botJidProvider, "botJid cannot be null").toJid();
         var mutation = botWelcomeRequestMutationFactory.getBotWelcomeRequestSetMutation(botJid, true);
-        webAppStateService.pushPatches(BotWelcomeRequestAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync
+        webAppStateService.pushPatches(BotWelcomeRequestAction.COLLECTION_NAME, List.of(mutation));
     }
 
     /** {@inheritDoc} */
@@ -10268,7 +10014,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw new IllegalArgumentException("newName cannot be blank");
             }
         var jid = Jid.of(chatJid);
-        var mutation = aiThreadRenameMutationFactory.getAiThreadRenameMutation(jid, threadId, newName); // WAWebAiThreadRenameSync
+        var mutation = aiThreadRenameMutationFactory.getAiThreadRenameMutation(jid, threadId, newName);
         webAppStateService.pushPatches(AiThreadRenameAction.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.putAiThreadTitle(new AiThreadTitleBuilder().threadId(chatJid + "|" + threadId).title(newName).build());
@@ -10282,14 +10028,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         Objects.requireNonNull(chatJid, "chatJid cannot be null");
         Objects.requireNonNull(threadId, "threadId cannot be null");
         var jid = Jid.of(chatJid);
-        var mutation = aiThreadDeleteMutationFactory.getAiThreadDeleteMutation(jid, threadId); // WAWebAiThreadDeleteSync
+        var mutation = aiThreadDeleteMutationFactory.getAiThreadDeleteMutation(jid, threadId);
         webAppStateService.pushPatches(AiThreadDeleteHandler.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.removeAiThreadTitle(chatJid + "|" + threadId);
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Favorites, notes, and pin-in-chat">
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAddToFavoritesAction", exports = "addToFavoritesAction",
@@ -10297,11 +10041,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void favoriteChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         var current = new ArrayList<>(store.favoriteChats());
-        if (!current.contains(chat)) { // ADAPTED: WA Web client-side dedupes by orderIndex; Cobalt dedupes by JID equality
+        if (!current.contains(chat)) {
             current.add(chat);
         }
-        var mutation = favoritesMutationFactory.getFavoritesMutation(current, Instant.now()); // WAWebFavoritesSync.getFavoritesMutation
-        webAppStateService.pushPatches(FavoritesAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync
+        var mutation = favoritesMutationFactory.getFavoritesMutation(current, Instant.now());
+        webAppStateService.pushPatches(FavoritesAction.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.setFavoriteChats(current);
     }
@@ -10327,7 +10071,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(noteText, "noteText cannot be null");
         var noteId = UUID.randomUUID().toString();
-        var mutation = noteEditMutationFactory.getNoteEditMutation(noteId, chat, noteText, false); // WAWebNoteSync
+        var mutation = noteEditMutationFactory.getNoteEditMutation(noteId, chat, noteText, false);
         webAppStateService.pushPatches(NoteEditAction.COLLECTION_NAME, List.of(mutation));
         return noteId;
     }
@@ -10340,7 +10084,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(noteId, "noteId cannot be null");
         Objects.requireNonNull(newText, "newText cannot be null");
-        var mutation = noteEditMutationFactory.getNoteEditMutation(noteId, chat, newText, false); // WAWebNoteSync: edit path
+        var mutation = noteEditMutationFactory.getNoteEditMutation(noteId, chat, newText, false);
         webAppStateService.pushPatches(NoteEditAction.COLLECTION_NAME, List.of(mutation));
     }
 
@@ -10351,7 +10095,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     public void deleteNoteFromChat(JidProvider chatProvider, String noteId) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(noteId, "noteId cannot be null");
-        var mutation = noteEditMutationFactory.getNoteEditMutation(noteId, chat, "", true); // WAWebNoteSync: deleted = true
+        var mutation = noteEditMutationFactory.getNoteEditMutation(noteId, chat, "", true);
         webAppStateService.pushPatches(NoteEditAction.COLLECTION_NAME, List.of(mutation));
     }
 
@@ -10364,11 +10108,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var parentJid = msgKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("msgKey must carry a parentJid"));
         var pin = new PinInChatMessageBuilder()
-        .key(msgKey) // WAWebSendPinMessageAction: key: parentMsgKey
+        .key(msgKey)
                 .type(PinInChatMessage.Type.PIN_FOR_ALL)
-                .senderTimestampMs(Instant.now()) // WAWebSendPinMessageAction: senderTimestampMs
+                .senderTimestampMs(Instant.now())
                 .build();
-        messageService.send(parentJid, MessageContainer.of(pin)); // WAWebSendAddonMsgChatAction -> sendMsgRecord
+        messageService.send(parentJid, MessageContainer.of(pin));
         commitPinInChatMessageSendEvent(parentJid, msgKey, PinInChatType.PIN_FOR_ALL, null);
     }
 
@@ -10437,12 +10181,12 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                                                  PinInChatType pinInChatType,
                                                  Integer timeRemainingToExpirySecs) {
         var builder = new PinInChatMessageSendEventBuilder()
-                .pinInChatType(pinInChatType) // WAWebPinInChatMetricUtils: pinInChatType: u(WANullthrows(a.pinMessageType))
+                .pinInChatType(pinInChatType)
                 .isSelfPin(Boolean.TRUE)
                 .pinInChatExpirySecs(0);
-        var isAGroup = parentJid.hasGroupOrCommunityServer(); // WAWebChatGetters.getIsGroup(n)
-        builder.isAGroup(isAGroup); // WAWebPinInChatMetricUtils: isAGroup: m
-        if (isAGroup) { // WAWebPinInChatMetricUtils: if (m) { var f = WANullthrows(n.groupMetadata); ... }
+        var isAGroup = parentJid.hasGroupOrCommunityServer();
+        builder.isAGroup(isAGroup);
+        if (isAGroup) {
             var metadata = store.findChatMetadata(parentJid).orElse(null);
             if (metadata != null) {
                 var groupTypeClient = pinWamGroupTypeClient(metadata);
@@ -10455,18 +10199,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     }
             }
         }
-        // WAWebPinInChatMetricUtils: mediaType: WAWebWamMsgUtils.getWamMediaType(parentMsg)
-        // WAWebPinInChatMetricUtils: isSelfParentMessage: WAWebMsgGetters.getIsSentByMe(parentMsg)
         store.findMessageByKey(parentMsgKey).ifPresent(parentMessage -> {
             if (parentMessage instanceof ChatMessageInfo chatParent) {
                 builder.mediaType(wamService.getWamMediaType(chatParent));
             }
             builder.isSelfParentMessage(parentMessage.key().fromMe());
         });
-        if (timeRemainingToExpirySecs != null) { // WAWebPinInChatMetricUtils: timeRemainingToExpirySecs: s (defaulted to 0 when undefined)
+        if (timeRemainingToExpirySecs != null) {
             builder.timeRemainingToExpirySecs(timeRemainingToExpirySecs);
         }
-        wamService.commit(builder.build()); // WAWebPinInChatMetricUtils: new PinInChatMessageSendWamEvent({...}).commit()
+        wamService.commit(builder.build());
     }
 
     /**
@@ -10498,19 +10240,19 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private static GroupTypeClient pinWamGroupTypeClient(ChatMetadata metadata) {
         if (metadata instanceof CommunityMetadata) {
-            return GroupTypeClient.PARENT_GROUP; // WAWebGroupType: COMMUNITY -> PARENT_GROUP
+            return GroupTypeClient.PARENT_GROUP;
         }
         if (metadata instanceof GroupMetadata group) {
             if (group.isDefaultSubgroup()) {
-                return GroupTypeClient.DEFAULT_SUB_GROUP; // WAWebGroupType: LINKED_ANNOUNCEMENT_GROUP -> DEFAULT_SUB_GROUP
+                return GroupTypeClient.DEFAULT_SUB_GROUP;
             }
             if (group.isGeneralSubgroup()) {
-                return GroupTypeClient.SUB_GROUP; // WAWebGroupType: LINKED_GENERAL_GROUP -> SUB_GROUP
+                return GroupTypeClient.SUB_GROUP;
             }
             if (group.parentCommunityJid().isPresent()) {
-                return GroupTypeClient.SUB_GROUP; // WAWebGroupType: LINKED_SUBGROUP -> SUB_GROUP
+                return GroupTypeClient.SUB_GROUP;
             }
-            return GroupTypeClient.REGULAR_GROUP; // WAWebGroupType: DEFAULT -> REGULAR_GROUP
+            return GroupTypeClient.REGULAR_GROUP;
         }
         return null;
     }
@@ -10538,7 +10280,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     private static GroupRoleType pinWamGroupRole(ChatMetadata metadata, Jid selfJid) {
         var iAmAdmin = metadata.participants().stream()
                 .filter(participant -> Objects.equals(participant.userJid().toUserJid(), selfJid.toUserJid()))
-                .anyMatch(participant -> participant.rank().isPresent()); // ADMIN / FOUNDER -> true; USER (rank == null) -> false
+                .anyMatch(participant -> participant.rank().isPresent());
         return iAmAdmin ? GroupRoleType.ADMIN : GroupRoleType.MEMBER;
     }
 
@@ -10548,8 +10290,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editLocale(String locale) {
         Objects.requireNonNull(locale, "locale cannot be null");
-        var mutation = localeSettingMutationFactory.getLocaleMutation(Instant.now(), locale); // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation
-        webAppStateService.pushPatches(LocaleSetting.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync([], [mutation], ...)
+        var mutation = localeSettingMutationFactory.getLocaleMutation(Instant.now(), locale);
+        webAppStateService.pushPatches(LocaleSetting.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.setLocale(locale);
     }
@@ -10559,7 +10301,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebDisableLinkPreviewsSync", exports = "sendMutation",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editDisableLinkPreviews(boolean disabled) {
-        var mutation = disableLinkPreviewsMutationFactory.getDisableLinkPreviewsMutation(Instant.now(), disabled); // WAWebDisableLinkPreviewsSync.getMutation
+        var mutation = disableLinkPreviewsMutationFactory.getDisableLinkPreviewsMutation(Instant.now(), disabled);
         webAppStateService.pushPatches(PrivacySettingDisableLinkPreviewsAction.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.setDisableLinkPreviews(disabled);
@@ -10570,8 +10312,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebTimeFormatSync", exports = "applyMutations",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editTwentyFourHourFormat(boolean twentyFourHourFormat) {
-        var mutation = timeFormatMutationFactory.getTimeFormatMutation(Instant.now(), twentyFourHourFormat); // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation
-        webAppStateService.pushPatches(TimeFormatAction.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync([], [mutation], ...)
+        var mutation = timeFormatMutationFactory.getTimeFormatMutation(Instant.now(), twentyFourHourFormat);
+        webAppStateService.pushPatches(TimeFormatAction.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.setTwentyFourHourFormat(twentyFourHourFormat);
     }
@@ -10592,9 +10334,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "applyMutations",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editUnarchiveChatsOnNewMessage(boolean unarchive) {
-        var mutation = unarchiveChatsSettingMutationFactory.getUnarchiveChatsMutation(Instant.now(), unarchive); // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation
-        webAppStateService.pushPatches(UnarchiveChatsSetting.COLLECTION_NAME, List.of(mutation)); // WAWebSyncdCoreApi.lockForSync([], [mutation], ...)
-        store.setUnarchiveChats(unarchive); // ADAPTED: apply locally for eager consistency
+        var mutation = unarchiveChatsSettingMutationFactory.getUnarchiveChatsMutation(Instant.now(), unarchive);
+        webAppStateService.pushPatches(UnarchiveChatsSetting.COLLECTION_NAME, List.of(mutation));
+        store.setUnarchiveChats(unarchive);
     }
 
     /** {@inheritDoc} */
@@ -10606,8 +10348,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         store.setNotificationActivitySetting(setting); // NO_WA_BASIS: apply locally for eager consistency
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Smax: biz / account / mdcompanion / message / status">
 
     /** {@inheritDoc} */
     @Override
@@ -10828,23 +10568,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxBizSettingsGetPrivacySettingRPC",
             exports = "sendGetPrivacySettingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessDataSharingConsent> queryBusinessPrivacySetting() {
-        // WASmaxOutBizSettingsGetPrivacySettingRequest.makeGetPrivacySettingRequest
         var request = new SmaxGetPrivacySettingRequest();
         var requestNode = request.toNode();
-        // WAComms.sendSmaxStanza: dispatches the SMAX IQ and awaits the relay reply
         var response = sendNode(requestNode);
-        // Folds parseGetPrivacySettingResponseSuccess + parseGetPrivacySettingResponseError
         var parsed = SmaxGetPrivacySettingResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
-            // ADAPTED: WASmaxParsingFailure.SmaxParsingFailure throw collapsed to Optional.empty per Cobalt SMAX-RPC convention
             case null -> Optional.empty();
-            // {name:"GetPrivacySettingResponseSuccess", value:r.value}
             case SmaxGetPrivacySettingResponse.Success success ->
                     BusinessDataSharingConsent.ofWire(success.dataSharingConsent());
-            // ADAPTED: {name:"GetPrivacySettingResponseError", value:a.value} re-thrown as WhatsAppServerRuntimeException (4xx arm)
             case SmaxGetPrivacySettingResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException("Business privacy-setting query rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
-            // ADAPTED: {name:"GetPrivacySettingResponseError", value:a.value} re-thrown as WhatsAppServerRuntimeException (5xx arm)
             case SmaxGetPrivacySettingResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException("Business privacy-setting query server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
         };
@@ -10855,24 +10588,17 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxBizSettingsSetPrivacySettingRPC",
             exports = "sendSetPrivacySettingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public void editBusinessPrivacySetting(BusinessDataSharingConsent dataSharingConsent) {
-        // WASmaxOutBizSettingsSetPrivacySettingRequest.makeSetPrivacySettingRequest
         var request = new SmaxSetPrivacySettingRequest(dataSharingConsent == null ? null : dataSharingConsent.wireValue());
         var requestNode = request.toNode();
-        // WAComms.sendSmaxStanza: dispatches the SMAX IQ and awaits the relay reply
         var response = sendNode(requestNode);
-        // Folds parseSetPrivacySettingResponseSuccess + parseSetPrivacySettingResponseError
         var parsed = SmaxSetPrivacySettingResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
-            // ADAPTED: WASmaxParsingFailure.SmaxParsingFailure throw collapsed to no-op per Cobalt SMAX-RPC convention
             case null -> {
             }
-            // {name:"SetPrivacySettingResponseSuccess", value:a.value}
             case SmaxSetPrivacySettingResponse.Success _ -> {
             }
-            // ADAPTED: {name:"SetPrivacySettingResponseError", value:i.value} re-thrown as WhatsAppServerRuntimeException (4xx arm)
             case SmaxSetPrivacySettingResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException("Business privacy-setting change rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
-            // ADAPTED: {name:"SetPrivacySettingResponseError", value:i.value} re-thrown as WhatsAppServerRuntimeException (5xx arm)
             case SmaxSetPrivacySettingResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException("Business privacy-setting change server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
         }
@@ -11146,11 +10872,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             payload = new SmaxMessagePublishNewsletterPayload.WithServerId(
                     request.stanzaId(), targetServerId, plaintext);
         } else {
-            // WASmaxOutMessagePublishMsgMetaOriginMixin: <meta origin="<tag>"/>
             var originMarker = request.originTag()
                     .map(tag -> new NodeBuilder().description("meta").attribute("origin", tag).build())
                     .orElse(null);
-            // WASmaxOutMessagePublishSenderContentTypeMediaRCATMixin: <plaintext mediatype="url" content_id="<id>"/>
             var mediaSenderTag = request.mediaContentId()
                     .map(id -> new NodeBuilder().description("plaintext").attribute("mediatype", "url").attribute("content_id", id).build())
                     .orElse(null);
@@ -11202,8 +10926,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         };
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Typed legacy IQ wrappers">
 
     /** {@inheritDoc} */
     @Override
@@ -11798,8 +11520,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         return wireList;
     }
 
-    //</editor-fold>
-    //<editor-fold desc="Listeners">
     public WhatsAppClient addListener(WhatsAppClientListener listener) {
         store.addListener(listener);
         return this;
@@ -12151,7 +11871,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         return this;
     }
 
-    //</editor-fold>
 
     /**
      * Parses a label identifier into the integer {@code listId} used by the
@@ -12170,7 +11889,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private static Integer parseLabelIdToListId(String labelId) {
         try {
-            return Integer.parseInt(labelId); // WAWebListsActions: Number(n.id) / Number(e)
+            return Integer.parseInt(labelId);
         } catch (NumberFormatException _) {
             return null;
         }
@@ -12211,8 +11930,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             };
     }
 
-    //<editor-fold desc="SMAX: groups, communities, newsletters, AB props, bot, support">
-    // Each method below dispatches a typed Smax<Op>Request from
     // node/smax/groups/ or node/smax/newsletters/, blocks for the
     // relay's reply, and unwraps the Smax<Op>Response chain into the
     // Success projection. ClientError / ServerError variants are
@@ -12861,10 +12578,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         if (hasAnyGroupSettingsFlag(edit)) {
             sendGroupSettingsIq(edit);
         }
-        // WAWebSetPropertyGroupAction.setGroupProperty MEX-dispatched properties; each pair fires the
-        // matching MEX update plus, where applicable, the WAM commit WA Web emits after the mutation
-        // returns. Pairs are processed independently because both halves are set-only toggles whose
-        // dispatch shape differs (a single edit may only flip one half of a pair at a time).
+        // Each property pair is processed independently because both halves are set-only toggles
+        // whose dispatch shape differs; a single edit may only flip one half of a pair at a time.
         if (edit.limitSharingEnabled()) {
             sendMexGroupPropertyUpdate(group,
                     "{\"limit_sharing\":{\"limit_sharing_enabled\":true,\"limit_sharing_trigger\":\"CHAT_SETTING\"}}");
@@ -12894,10 +12609,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             sendMexGroupPropertyUpdate(group, "{\"member_share_group_history_mode\":\"ALL_MEMBER_SHARE\"}");
         }
         if (edit.allowNonAdminSubGroupCreation()) {
-            // WAWebSetPropertyGroupAction: {allow_non_admin_sub_group_creation: a===1}. allowNonAdminSubGroupCreation=true matches WA Web a===1.
             sendMexGroupPropertyUpdate(group, "{\"allow_non_admin_sub_group_creation\":true}");
-            // WAWebCommunityGroupJourneyEventImpl: a===0 (non-admins disallowed) => SELECT_COMMUNITY_ADMINS_CAN_ADD_GROUPS,
-            // a!==0 (non-admins allowed) => SELECT_EVERYONE_CAN_ADD_GROUPS. allowNonAdminSubGroupCreation=true => EVERYONE.
             commitCommunityGroupJourneyEvent(
                     ChatFilterActionTypes.SELECT_EVERYONE_CAN_ADD_GROUPS,
                     SurfaceType.COMMUNITY_SETTINGS,
@@ -12909,8 +12621,8 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
                     SurfaceType.COMMUNITY_SETTINGS,
                     group);
         }
-        // editGroupSetting.EPHEMERAL branch. ephemeralExpiration takes precedence over notEphemeral because a
-        // present expiration always means "enable with this duration".
+        // A present ephemeral expiration takes precedence over notEphemeral because it always
+        // means "enable with this duration".
         if (edit.ephemeralExpiration().isPresent()) {
             editEphemeralTimer(group, ChatEphemeralTimer.of(edit.ephemeralExpiration().getAsInt()));
         } else if (edit.notEphemeral()) {
@@ -12957,16 +12669,16 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private void sendGroupSubjectIq(Jid group, String newSubject) {
         var subjectNode = new NodeBuilder()
-                .description("subject") // WASmaxOutGroupsSetSubjectChangeSubjectMixin: smax("subject", null, t)
-                .content(newSubject) // subjectElementValue
+                .description("subject")
+                .content(newSubject)
                 .build();
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetGroupMixin: xmlns: "w:g2"
-                .attribute("to", group) // WASmaxOutGroupsBaseSetGroupMixin: to: GROUP_JID(t)
-                .attribute("type", "set") // WAWebSmaxBaseIQSetRequestMixin: type: "set"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", group)
+                .attribute("type", "set")
                 .content(subjectNode);
-        sendNode(iqNode); // WASmaxGroupsSetSubjectRPC.sendSetSubjectRPC
+        sendNode(iqNode);
     }
 
     /**
@@ -12983,11 +12695,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private void sendGroupDescriptionIq(Jid group, String body, boolean delete) {
         var descriptionBuilder = new NodeBuilder()
-                .description("description"); // WASmaxOutGroupsSetDescriptionRequest: smax("description", {id, prev, delete}, body)
+                .description("description");
         if (!delete) {
             var bodyNode = new NodeBuilder()
-                    .description("body") // WASmaxOutGroupsSetDescriptionRequest.makeSetDescriptionRequestDescriptionBody
-                    .content(body) // bodyElementValue
+                    .description("body")
+                    .content(body)
                     .build();
             descriptionBuilder.content(bodyNode);
         } else {
@@ -12995,11 +12707,11 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             }
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "w:g2") // WASmaxOutGroupsBaseSetGroupMixin: xmlns: "w:g2"
-                .attribute("to", group) // WASmaxOutGroupsBaseSetGroupMixin: to: GROUP_JID(t)
-                .attribute("type", "set") // WAWebSmaxBaseIQSetRequestMixin: type: "set"
+                .attribute("xmlns", "w:g2")
+                .attribute("to", group)
+                .attribute("type", "set")
                 .content(descriptionBuilder.build());
-        sendNode(iqNode); // WASmaxGroupsSetDescriptionRPC.sendSetDescriptionRPC
+        sendNode(iqNode);
     }
 
     /**
@@ -13016,7 +12728,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      */
     private void sendGroupPictureIq(Jid group, byte[] imageBytes) {
         if (imageBytes == null) {
-            // WAWebSendProfilePictureJob: a=null -> no picture body
             var iqBuilder = new NodeBuilder()
                     .description("iq")
                     .attribute("xmlns", "w:profile:picture")
@@ -13057,7 +12768,6 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         // Ephemeral fields and the allowNonAdminSubGroupCreation pair are deliberately omitted
         // here: the former are dispatched through editEphemeralTimer (so the in-memory chat
         // ephemerality state and EphemeralSettingChangeWamEvent commit also fire), and the latter
-        // is dispatched through the WAWebMexUpdateGroupPropertyJob endpoint plus a community-group
         // journey WAM commit.
         var request = new SmaxGroupsSetPropertyRequest(group, edit.locked(), edit.announcement(),
                 edit.noFrequentlyForwarded(), null, null, edit.unlocked(),
@@ -13094,9 +12804,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
      *                   never {@code null}
      */
     private void sendMexGroupPropertyUpdate(Jid group, String updateJson) {
-        var request = new UpdateGroupPropertyMexRequest(group.toString(), updateJson); // WAWebMexUpdateGroupPropertyJob: variables={group_id, update}
+        var request = new UpdateGroupPropertyMexRequest(group.toString(), updateJson);
         var response = sendNode(request);
-        UpdateGroupPropertyMexResponse.of(response); // WAWebMexUpdateGroupPropertyJob: checks data.xwa2_group_update_property.state
+        UpdateGroupPropertyMexResponse.of(response);
     }
 
     /**
@@ -13136,32 +12846,30 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetUserRole", exports = "getUserRole",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void commitCommunityGroupJourneyEvent(ChatFilterActionTypes action, SurfaceType surface, Jid group) {
-        var metadata = store.findChatMetadata(group).orElse(null); // WAWebCommunityGroupJourneyEventImpl: this.chat
+        var metadata = store.findChatMetadata(group).orElse(null);
         var builder = new GroupJourneyEventBuilder()
-                .actionType(action) // WAWebCommunityGroupJourneyEventImpl: actionType: this.action
-                .surface(surface); // WAWebCommunityGroupJourneyEventImpl: surface: this.surface
+                .actionType(action)
+                .surface(surface);
         var groupSize = metadata == null ? 0 : metadata.participants().size();
-        builder.groupSize(groupSize); // WAWebCommunityGroupJourneyEventImpl: groupSize: this.getGroupSize()
+        builder.groupSize(groupSize);
         if (metadata != null && shouldLogCommunityJourneyThreadType(surface)) {
-            // WAWebGetThreadType: COMMUNITY => PARENT_GROUP; DEFAULT => GROUP (Cobalt only has these two ChatMetadata variants)
             var threadType = metadata instanceof CommunityMetadata ? ThreadType.PARENT_GROUP : ThreadType.GROUP;
-            builder.threadType(threadType); // WAWebCommunityGroupJourneyEventImpl: if (t != null) e.threadType = t
+            builder.threadType(threadType);
         }
-        // WAWebGetUserRole: iAmAdmin && isParentGroup -> CADMIN; iAmAdmin -> ADMIN; else MEMBER
         if (metadata != null) {
-            var selfJid = store.jid().orElse(null); // WAWebGetUserRole: t.participants.iAmAdmin() compares the local user against the participant set
+            var selfJid = store.jid().orElse(null);
             if (selfJid != null) {
                 var iAmAdmin = metadata.participants().stream()
                         .filter(participant -> Objects.equals(participant.userJid().toUserJid(), selfJid.toUserJid()))
-                        .anyMatch(participant -> participant.rank().isPresent()); // ADMIN / FOUNDER -> admin; USER (rank == null) -> member
-                var isParentGroup = metadata instanceof CommunityMetadata; // WAWebGroupMetadataBase.isParentGroup === groupType === COMMUNITY
+                        .anyMatch(participant -> participant.rank().isPresent());
+                var isParentGroup = metadata instanceof CommunityMetadata;
                 var userRole = iAmAdmin
                         ? (isParentGroup ? UserRoleType.CADMIN : UserRoleType.ADMIN)
                         : UserRoleType.MEMBER;
-                builder.userRole(userRole); // WAWebCommunityGroupJourneyEventImpl: if (n != null) e.userRole = n
+                builder.userRole(userRole);
             }
         }
-        wamService.commit(builder.build()); // WAWebCommunityGroupJourneyEventImpl: e.commit()
+        wamService.commit(builder.build());
     }
 
     /**
@@ -13820,11 +13528,9 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var category = report.category().orElse(null);
         var clientServerJoinKey = report.clientServerJoinKey().orElse(null);
         var reproducibility = report.reproducibility().orElse(null);
-        // WASmaxOutBugReportingReportBugRequest.makeReportBugRequest: var n = makeReportBugRequest(e)
         var request = new SmaxBugReportingReportBugRequest(from, description, debugInformationJson,
                 deviceLogHandle, mediaUploads, title, category, clientServerJoinKey, reproducibility);
         var requestNode = request.toNode();
-        // WAComms.sendSmaxStanza: var r = yield WAComms.sendSmaxStanza(n, t)
         var response = sendNode(requestNode);
 
         var parsed = SmaxBugReportingReportBugResponse.of(response, requestNode.build()).orElse(null);
@@ -14575,9 +14281,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
             throw new WhatsAppServerRuntimeException("Waiting-room-toggle rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
         }
     }
-    //</editor-fold>
 
-    //<editor-fold desc="Federated identity (Waffle)">
 
     /**
      * Converts a domain-model {@link FederatedRsaEncryption} into the
@@ -14820,9 +14524,7 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         Objects.requireNonNull(prop, "prop cannot be null");
         return abPropsService.getDouble(prop);
     }
-    // </editor-fold>
 
-    //<editor-fold desc="App-state sync (additional exposures)">
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebExternalBetaOptInAction", exports = "setOptInBetaAction",
@@ -14981,5 +14683,4 @@ final class DefaultWhatsAppClient implements WhatsAppClient {
         var mutation = paymentTosMutationFactory.getPaymentTosSetMutation(action);
         webAppStateService.pushPatches(PaymentTosAction.COLLECTION_NAME, List.of(mutation));
     }
-    // </editor-fold>
 }

@@ -15,67 +15,30 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the observable invariants of
- * {@link WebAppStateBackoffScheduler} against WhatsApp Web's
- * {@code WAWebSyncd} retry loop.
- *
- * @apiNote Cobalt-internal exercise of the public scheduler API:
- * finite-failure expiry, per-collection cancellation, attempt-counter
- * reset, sticky server-backoff floor, and idempotent
- * {@link WebAppStateBackoffScheduler#close()}. WA Web's equivalent
- * timer state ({@code W}, {@code q}, {@code O}) is module-level
- * inside {@code WAWebSyncd} and has no externally observable hook;
- * Cobalt exposes the same state here purely so tests and the
- * integration cycle can drive it directly.
- *
- * @implNote This implementation deliberately does not exercise the
- * exact backoff curve at high attempt numbers: the
- * {@code BASE_DELAY * MULTIPLIER^attempt} formula caps at one hour,
- * making per-attempt timing assertions infeasible without
- * instrumentation. The Phase 9 integration cycle covers the
- * curve end-to-end against a recorded server retry stream.
+ * Covers the observable invariants of the {@link WebAppStateBackoffScheduler} public API:
+ * finite-failure expiry, per-collection cancellation, attempt-counter reset, the sticky
+ * server-backoff floor, that scheduled actions fire (and cancellation suppresses them), and
+ * idempotent {@link WebAppStateBackoffScheduler#close()}. The exact backoff curve at high attempt
+ * numbers is not asserted: the {@code BASE_DELAY * MULTIPLIER^attempt} formula caps at one hour, so
+ * per-attempt timing assertions are infeasible without instrumentation.
  */
 @DisplayName("WebAppStateBackoffScheduler")
 class WebAppStateBackoffSchedulerTest {
-    /**
-     * The scheduler under test, freshly created per test.
-     */
     private WebAppStateBackoffScheduler scheduler;
 
-    /**
-     * Builds a fresh scheduler before every test so the shared global
-     * counter does not leak across cases.
-     *
-     * @apiNote JUnit-managed setup; not invoked manually from the
-     * tests.
-     */
     @BeforeEach
     void setUp() {
         scheduler = new WebAppStateBackoffScheduler();
     }
 
-    /**
-     * Closes the scheduler after every test so the underlying virtual
-     * threads are released even when an assertion fails mid-test.
-     *
-     * @apiNote JUnit-managed teardown; not invoked manually from the
-     * tests.
-     */
     @AfterEach
     void tearDown() {
         scheduler.close();
     }
 
-    /**
-     * Pins the 48 hour cumulative-failure window enforced by
-     * {@link WebAppStateBackoffScheduler#scheduleRetry(SyncPatchType, long, Runnable)}.
-     */
     @Nested
     @DisplayName("scheduleRetry -- finite-failure expiry gate")
     class FinitelyFailing {
-        /**
-         * A retry inside the 48 hour window is accepted.
-         */
         @Test
         @DisplayName("retry within the 48h window is scheduled")
         void freshFailureScheduled() {
@@ -84,9 +47,6 @@ class WebAppStateBackoffSchedulerTest {
                     "fresh failure should be retried");
         }
 
-        /**
-         * A retry past the 48 hour window is rejected.
-         */
         @Test
         @DisplayName("retry past the 48h finite-failure expiry is rejected")
         void pastWindowRejected() {
@@ -95,10 +55,6 @@ class WebAppStateBackoffSchedulerTest {
                     "WAWebSyncdCollectionsStateMachine.getExpiredCollections rejects > 2 day window");
         }
 
-        /**
-         * The expiry check is strictly greater-than: 47 hours stays
-         * inside the window.
-         */
         @Test
         @DisplayName("retry exactly at the boundary is treated as expired (strictly greater fails)")
         void atBoundaryIsRetried() {
@@ -107,32 +63,19 @@ class WebAppStateBackoffSchedulerTest {
         }
     }
 
-    /**
-     * Pins the per-collection cancellation contract of
-     * {@link WebAppStateBackoffScheduler#cancelRetry(SyncPatchType)}.
-     */
     @Nested
     @DisplayName("cancelRetry")
     class CancelRetry {
-        /**
-         * Cancelling without a pending retry returns {@code false}.
-         */
         @Test
         @DisplayName("cancelling without pending retry returns false")
         void cancelWithoutPending() {
             assertFalse(scheduler.cancelRetry(SyncPatchType.REGULAR));
         }
 
-        /**
-         * Cancelling after scheduling returns {@code true} once and
-         * {@code false} on subsequent calls.
-         *
-         * @implNote The 60 second sticky server backoff keeps the
-         * timer from firing before the cancel is observed.
-         */
         @Test
         @DisplayName("cancelling after scheduling returns true and clears the future")
         void cancelAfterSchedule() {
+            // 60s sticky server backoff keeps the timer from firing before the cancel is observed
             scheduler.updateServerBackoff(60_000);
             scheduler.scheduleRetry(SyncPatchType.REGULAR, System.currentTimeMillis(), () -> {});
             assertTrue(scheduler.cancelRetry(SyncPatchType.REGULAR));
@@ -140,10 +83,6 @@ class WebAppStateBackoffSchedulerTest {
                     "second cancel finds no pending future");
         }
 
-        /**
-         * Cancellation is per-collection: cancelling one does not
-         * touch the other.
-         */
         @Test
         @DisplayName("cancelling one collection leaves another untouched")
         void independentCollections() {
@@ -156,21 +95,9 @@ class WebAppStateBackoffSchedulerTest {
         }
     }
 
-    /**
-     * Pins that scheduled actions actually fire when the backoff
-     * resolves and that cancellation prevents the action.
-     */
     @Nested
     @DisplayName("retry action fires at the scheduled delay")
     class FiresAction {
-        /**
-         * The first attempt fires within a 5 second wall-clock
-         * window because the base delay is one second.
-         *
-         * @throws InterruptedException if the test thread is
-         *                              interrupted waiting on the
-         *                              latch
-         */
         @Test
         @DisplayName("scheduled action runs (with a 1s base delay)")
         void firstAttemptFires() throws InterruptedException {
@@ -180,21 +107,11 @@ class WebAppStateBackoffSchedulerTest {
                     "first retry should fire within 5 seconds (base delay = 1s * 2^0)");
         }
 
-        /**
-         * Cancelling before the timer fires prevents the action from
-         * running.
-         *
-         * @implNote The 30 second sticky server backoff guarantees
-         * the cancel wins the race.
-         *
-         * @throws InterruptedException if the test thread is
-         *                              interrupted waiting on the
-         *                              latch
-         */
         @Test
         @DisplayName("cancel before fire prevents the action")
         void cancelPreventsFire() throws InterruptedException {
             var latch = new CountDownLatch(1);
+            // 30s sticky server backoff guarantees the cancel wins the race against the timer
             scheduler.scheduleRetry(SyncPatchType.REGULAR, System.currentTimeMillis(),
                     30_000L, latch::countDown);
             scheduler.cancelRetry(SyncPatchType.REGULAR);
@@ -203,20 +120,9 @@ class WebAppStateBackoffSchedulerTest {
         }
     }
 
-    /**
-     * Pins the interaction between
-     * {@link WebAppStateBackoffScheduler#updateServerBackoff(long)},
-     * {@link WebAppStateBackoffScheduler#resetAttemptCounter()}, and
-     * the per-call sticky-floor overload of
-     * {@link WebAppStateBackoffScheduler#scheduleRetry(SyncPatchType, long, Long, Runnable)}.
-     */
     @Nested
     @DisplayName("server backoff and attempt counter interaction")
     class ServerBackoffAndCounter {
-        /**
-         * Calling {@code updateServerBackoff} resets the global
-         * attempt counter.
-         */
         @Test
         @DisplayName("updateServerBackoff resets the attempt counter to 0")
         void updateServerBackoffResetsCounter() {
@@ -230,26 +136,16 @@ class WebAppStateBackoffSchedulerTest {
             assertDoesNotThrow(() -> scheduler.cancelRetry(SyncPatchType.REGULAR));
         }
 
-        /**
-         * {@code resetAttemptCounter} leaves the sticky floor alone.
-         *
-         * @implNote The sticky floor cannot be observed directly
-         * without instrumentation; the test only asserts the call
-         * does not throw.
-         */
         @Test
         @DisplayName("resetAttemptCounter without server backoff change leaves the sticky floor")
         void resetAttemptCounterPreservesSticky() {
+            // the sticky floor is not directly observable; assert only that the call does not throw
             scheduler.updateServerBackoff(5_000);
             scheduler.resetAttemptCounter();
             assertDoesNotThrow(() ->
                     scheduler.scheduleRetry(SyncPatchType.REGULAR, System.currentTimeMillis(), () -> {}));
         }
 
-        /**
-         * The four-arg overload of {@code scheduleRetry} writes the
-         * sticky floor before scheduling.
-         */
         @Test
         @DisplayName("scheduleRetry with explicit serverBackoffMs updates the sticky floor")
         void explicitServerBackoffUpdates() {
@@ -258,17 +154,9 @@ class WebAppStateBackoffSchedulerTest {
         }
     }
 
-    /**
-     * Pins the cleanup contract of
-     * {@link WebAppStateBackoffScheduler#close()}.
-     */
     @Nested
     @DisplayName("close -- cancels pending and is idempotent")
     class Close {
-        /**
-         * {@code close} cancels every pending retry across every
-         * collection.
-         */
         @Test
         @DisplayName("close cancels pending retries")
         void closeCancelsPending() {
@@ -280,9 +168,6 @@ class WebAppStateBackoffSchedulerTest {
             assertFalse(scheduler.cancelRetry(SyncPatchType.CRITICAL_BLOCK));
         }
 
-        /**
-         * {@code close} is safe to call repeatedly.
-         */
         @Test
         @DisplayName("close is idempotent")
         void closeIdempotent() {

@@ -4,42 +4,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Typed customer-care or grievance-officer contact triple carried inside
- * an {@link IqSetMerchantComplianceRequest}.
+ * Carries a customer-care or grievance-officer contact triple inside an
+ * {@link IqSetMerchantComplianceRequest}.
  *
- * @apiNote
- * Use this triple to set or update the contact email, landline and
- * mobile of the merchant's customer-care surface (regulatory-compliance
- * disclosure required in India and other markets); every field is
- * independently optional and an absent field is dropped from the wire
- * stanza rather than zeroed out.
+ * <p>The triple sets or updates the contact email, landline and mobile of the merchant's
+ * customer-care surface, part of the regulatory-compliance disclosure required in India and other
+ * markets. Every field is independently optional and an absent field is dropped from the wire stanza
+ * rather than zeroed out.
  */
 public final class IqSetMerchantComplianceContactDetails {
     /**
-     * The optional contact email stamped into the {@code <email/>}
-     * grandchild.
+     * Holds the optional contact email stamped into the {@code <email/>} grandchild.
      */
     private final String email;
 
     /**
-     * The optional landline phone number stamped into the
-     * {@code <landline_number/>} grandchild.
+     * Holds the optional landline phone number stamped into the {@code <landline_number/>}
+     * grandchild.
      */
     private final String landlineNumber;
 
     /**
-     * The optional mobile phone number stamped into the
-     * {@code <mobile_number/>} grandchild.
+     * Holds the optional mobile phone number stamped into the {@code <mobile_number/>} grandchild.
      */
     private final String mobileNumber;
 
     /**
-     * Constructs a triple.
+     * Constructs a triple from the optional email, landline and mobile.
      *
-     * @apiNote
-     * Pass each field that should appear in the mutation; pass
-     * {@code null} for any field that should remain unchanged on the
-     * merchant's compliance bundle.
+     * <p>Pass {@code null} for any field that should remain unchanged on the merchant's compliance
+     * bundle; that field is dropped from the wire stanza rather than zeroed out.
      *
      * @param email          the email; may be {@code null}
      * @param landlineNumber the landline; may be {@code null}
@@ -52,12 +46,9 @@ public final class IqSetMerchantComplianceContactDetails {
     }
 
     /**
-     * Returns the contact email.
+     * Returns the contact email the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the email the mutation will stamp;
-     * an empty optional means the field is dropped from the wire
-     * stanza.
+     * <p>An empty optional means the field is dropped from the wire stanza.
      *
      * @return an {@link Optional} carrying the email
      */
@@ -66,12 +57,9 @@ public final class IqSetMerchantComplianceContactDetails {
     }
 
     /**
-     * Returns the landline phone number.
+     * Returns the landline phone number the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the landline the mutation will
-     * stamp; an empty optional means the field is dropped from the
-     * wire stanza.
+     * <p>An empty optional means the field is dropped from the wire stanza.
      *
      * @return an {@link Optional} carrying the landline
      */
@@ -80,12 +68,9 @@ public final class IqSetMerchantComplianceContactDetails {
     }
 
     /**
-     * Returns the mobile phone number.
+     * Returns the mobile phone number the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the mobile the mutation will
-     * stamp; an empty optional means the field is dropped from the
-     * wire stanza.
+     * <p>An empty optional means the field is dropped from the wire stanza.
      *
      * @return an {@link Optional} carrying the mobile
      */
@@ -94,7 +79,10 @@ public final class IqSetMerchantComplianceContactDetails {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this triple with another for value equality across all three contact fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal triple
      */
     @Override
     public boolean equals(Object obj) {
@@ -111,7 +99,9 @@ public final class IqSetMerchantComplianceContactDetails {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -119,7 +109,9 @@ public final class IqSetMerchantComplianceContactDetails {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string naming the email, landline and mobile.
+     *
+     * @return the string form
      */
     @Override
     public String toString() {

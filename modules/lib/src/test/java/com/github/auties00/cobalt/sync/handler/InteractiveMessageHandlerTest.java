@@ -31,26 +31,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link InteractiveMessageHandler} adapter for
- * {@code WAWebInteractiveMessageSync}.
- *
- * @apiNote
- * Verifies parity with WA Web for the
- * {@code interactive_message_action} app-state sync action across
- * metadata, the SET happy path that records the per-AGM and
- * per-message state, the orphan branches when chat or message are
- * missing, the malformed-value and malformed-index branches, the
- * REMOVE rejection, the inherited timestamp-based conflict
- * resolution and the
+ * Covers the {@link InteractiveMessageHandler} for the
+ * {@code interactive_message_action} app-state sync action: metadata, the SET
+ * happy path that records the per-AGM and per-message state, the orphan branches
+ * when chat or message are missing, the malformed-value and malformed-index
+ * branches, the REMOVE rejection, timestamp-based conflict resolution and the
  * {@link InteractiveMessageHandler#buildDisableCTAAction} helper.
  *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the per-AGM and composite-index state recorded by the handler
- * can be read back through
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#interactiveMessageStates()}
- * directly.
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the per-AGM and composite-index state
+ * recorded by the handler can be read back through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#interactiveMessageStates()}.
  */
 @DisplayName("InteractiveMessageHandler")
 class InteractiveMessageHandlerTest {

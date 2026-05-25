@@ -12,23 +12,20 @@ import java.util.Optional;
 /**
  * One user entry inside a {@link UsyncQuery}.
  *
- * @apiNote
- * Build one entry per peer the relay should report on, then chain
- * {@code with*} setters to attach the optional hints the per-protocol
- * builders consume (device hash, LID, persona id, username PIN,
- * trusted-contact token). The relay accepts four ways to address a peer
- * (canonical {@link Jid}, phone number, username, phone-JID hint); to make
- * the "at least one addressing identifier" invariant impossible to violate
- * at compile time, instances are created through one of the four {@code by*}
- * static factories instead of a public no-arg constructor.
+ * <p>One entry is built per peer the relay should report on, then {@code with*}
+ * setters are chained to attach the optional hints the per-protocol builders
+ * consume (device hash, LID, persona id, username PIN, trusted-contact token).
+ * The relay accepts four ways to address a peer (canonical {@link Jid}, phone
+ * number, username, phone-JID hint); to make the "at least one addressing
+ * identifier" invariant impossible to violate at compile time, instances are
+ * created through one of the four {@code by*} static factories instead of a
+ * public no-arg constructor.
  *
  * @implNote
- * This implementation is the Cobalt counterpart of {@code USyncUser} in
- * {@code WAWebUsyncUser}. The JS class uses a no-arg constructor plus a
- * runtime {@code validate()} call inside {@code USyncQuery.toNode()} that
- * throws when none of the slots are populated; Cobalt narrows the entry
- * point to four typed factories so the invariant is enforced at compile time
- * instead.
+ * WA Web uses a no-arg constructor plus a runtime validation call inside the
+ * query serialiser that throws when none of the slots are populated; this
+ * implementation narrows the entry point to four typed factories so the
+ * invariant is enforced at compile time instead.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncUser")
 public final class UsyncUser {
@@ -97,10 +94,8 @@ public final class UsyncUser {
     /**
      * Hidden constructor invoked through the {@code by*} factories.
      *
-     * @apiNote
-     * Kept package-private to force creation through a factory that
-     * populates at least one addressing slot, matching the contract enforced
-     * at runtime in JS by {@code USyncUser.validate()}.
+     * <p>Kept private to force creation through a factory that populates at
+     * least one addressing slot.
      */
     private UsyncUser() {
     }
@@ -108,8 +103,7 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by canonical JID.
      *
-     * @apiNote
-     * Used by callers that already hold a resolved
+     * <p>Used by callers that already hold a resolved
      * {@link com.github.auties00.cobalt.model.jid.JidServer#user()} or
      * {@link com.github.auties00.cobalt.model.jid.JidServer#lid()} JID; the
      * relay resolves the rest from the device list.
@@ -130,10 +124,8 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by phone number.
      *
-     * @apiNote
-     * Used by contact-import flows ({@code WAWebContactSyncUtils.constructUsyncDeltaQuery})
-     * that ship phone numbers from the local address book and ask the relay
-     * to resolve them to canonical JIDs.
+     * <p>Used by contact-import flows that ship phone numbers from the local
+     * address book and ask the relay to resolve them to canonical JIDs.
      *
      * @param phoneNumber the phone number, in E.164 form without the leading
      *                    {@code +}
@@ -152,9 +144,8 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by username.
      *
-     * @apiNote
-     * Used by username-lookup flows ({@code WAWebQueryExistsJob.queryUsernameExists})
-     * that resolve a claimed username to its canonical JID.
+     * <p>Used by username-lookup flows that resolve a claimed username to its
+     * canonical JID.
      *
      * @param username the username, without the leading {@code @}
      * @return a fresh entry
@@ -172,10 +163,9 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by phone-JID hint.
      *
-     * @apiNote
-     * Used when the local store has a phone-JID hint but no canonical JID
-     * yet; the relay resolves the hint to a canonical JID before processing
-     * the per-protocol elements.
+     * <p>Used when the local store has a phone-JID hint but no canonical JID
+     * yet; the relay resolves the hint to a canonical JID before processing the
+     * per-protocol elements.
      *
      * @param phoneJid the phone-number JID
      * @return a fresh entry
@@ -193,8 +183,7 @@ public final class UsyncUser {
     /**
      * Attaches a canonical JID alongside the primary addressing slot.
      *
-     * @apiNote
-     * Useful when the canonical JID is learned after the entry was created
+     * <p>Useful when the canonical JID is learned after the entry was created
      * via one of the non-JID factories.
      *
      * @param id the canonical JID
@@ -210,10 +199,9 @@ public final class UsyncUser {
     /**
      * Attaches a LID identifier for this user.
      *
-     * @apiNote
-     * Consumed by {@link com.github.auties00.cobalt.node.usync.protocol.UsyncLidProtocol}
-     * as a hint the relay should confirm, and by the contact protocol when
-     * the request uses username addressing.
+     * <p>Consumed by {@link com.github.auties00.cobalt.node.usync.protocol.UsyncLidProtocol}
+     * as a hint the relay should confirm, and by the contact protocol when the
+     * request uses username addressing.
      *
      * @param lid the LID JID
      * @return this builder
@@ -228,8 +216,7 @@ public final class UsyncUser {
     /**
      * Attaches a phone-JID hint.
      *
-     * @apiNote
-     * Emitted onto the {@code pn_jid} attribute of the {@code <user>} entry;
+     * <p>Emitted onto the {@code pn_jid} attribute of the {@code <user>} entry;
      * the relay uses it to disambiguate when the canonical JID is also a LID.
      *
      * @param phoneJid the phone-number JID
@@ -245,14 +232,12 @@ public final class UsyncUser {
     /**
      * Sets the cached device-list hash for the device protocol.
      *
-     * @apiNote
-     * When the hash matches the relay's current device-list hash the
+     * <p>When the hash matches the relay's current device-list hash the
      * response carries {@code <devices type="omitted">} instead of the full
      * list, so device sync can skip a re-fetch.
      *
      * @implNote
-     * This implementation mirrors the JS {@code asMaybeNonEmptyString} guard
-     * by treating {@code null} and blank strings as "no hash".
+     * This implementation treats {@code null} and blank strings as "no hash".
      *
      * @param deviceHash the hash, base64-encoded
      * @return this builder
@@ -267,8 +252,7 @@ public final class UsyncUser {
     /**
      * Sets the timestamp the local cache last refreshed at.
      *
-     * @apiNote
-     * Emitted on the {@code ts} attribute of the per-user {@code <devices>}
+     * <p>Emitted on the {@code ts} attribute of the per-user {@code <devices>}
      * element; combined with {@link #withDeviceHash(String)} to drive the
      * relay's omit-vs-resend decision.
      *
@@ -285,10 +269,8 @@ public final class UsyncUser {
     /**
      * Sets the expected timestamp the relay should compare against.
      *
-     * @apiNote
-     * Emitted on the {@code expected_ts} attribute of the per-user
-     * {@code <devices>} element; consumed by the relay's stale-cache
-     * detection.
+     * <p>Emitted on the {@code expected_ts} attribute of the per-user
+     * {@code <devices>} element; consumed by the relay's stale-cache detection.
      *
      * @param expectedTimestamp the expected timestamp
      * @return this builder
@@ -303,8 +285,7 @@ public final class UsyncUser {
     /**
      * Sets the persona id for the bot-profile protocol.
      *
-     * @apiNote
-     * Consumed by {@link com.github.auties00.cobalt.node.usync.protocol.UsyncBotProfileProtocol#buildUserElement(UsyncUser)}
+     * <p>Consumed by {@link com.github.auties00.cobalt.node.usync.protocol.UsyncBotProfileProtocol#buildUserElement(UsyncUser)}
      * to attach a {@code persona_id} attribute on the inner {@code <profile/>}
      * child of the {@code <bot>} element; identifies which persona of a
      * multi-persona bot the request targets.
@@ -322,8 +303,7 @@ public final class UsyncUser {
     /**
      * Sets the username PIN that accompanies a username addressing.
      *
-     * @apiNote
-     * Emitted on the {@code pin} attribute of the per-user {@code <contact>}
+     * <p>Emitted on the {@code pin} attribute of the per-user {@code <contact>}
      * element when the user is addressed by {@link #byUsername(String) username};
      * the relay uses the PIN to verify the caller's right to resolve the
      * username.
@@ -341,8 +321,7 @@ public final class UsyncUser {
     /**
      * Sets the contact-protocol type discriminator.
      *
-     * @apiNote
-     * Emitted on the {@code type} attribute of the per-user {@code <contact>}
+     * <p>Emitted on the {@code type} attribute of the per-user {@code <contact>}
      * element when the entry carries neither a phone number nor a username;
      * used by contact-direction queries (e.g. {@code "in"}, {@code "out"}).
      *
@@ -359,12 +338,13 @@ public final class UsyncUser {
     /**
      * Sets the trusted-contact token for the status protocol.
      *
-     * @apiNote
-     * Wrapped into a per-user {@code <tctoken>} child of the {@code <status>}
-     * element when {@code WAWebPrivacyGatingUtils.isProfileScrappingProtectionInUsyncEnabled()}
-     * is on. WA Web's status protocol skips the {@code <tctoken>} entirely
-     * when the gating utility returns false; Cobalt always attaches it when
-     * present and lets the relay enforce the gate.
+     * <p>Wrapped into a per-user {@code <tctoken>} child of the {@code <status>}
+     * element.
+     *
+     * @implNote
+     * WA Web skips the {@code <tctoken>} entirely when its profile-scraping
+     * gating utility returns false; this implementation always attaches the
+     * token when present and lets the relay enforce the gate.
      *
      * @param trustedContactToken the raw token bytes
      * @return this builder

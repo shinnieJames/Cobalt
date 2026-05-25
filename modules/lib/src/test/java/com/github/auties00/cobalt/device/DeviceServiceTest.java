@@ -31,24 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke tests for {@link DeviceService}.
+ * Smoke tests for {@link DeviceService} exercising the read-from-cache paths that do not require a
+ * real USync round-trip: peer fanout for a cached peer, ICDC computation, self-fanout (which must
+ * strip the sender's own device), the group-fanout phash byte-equality KAT against the captured WA
+ * Web oracle, and the alt-device merging mode of {@link DeviceService#getDeviceLists}.
  *
- * @apiNote
- * Builds the full collaborator graph ({@link WamService},
- * {@link SnapshotRecoveryService}, {@link WebAppStateService},
- * {@link DeviceService}) on top of a {@link TestWhatsAppClient} and exercises
- * the read-from-cache paths that do not require a real USync round-trip:
- * peer fanout for a cached peer, ICDC computation for the same peer,
- * self-fanout (which must strip the sender's own device), the group-fanout
- * phash byte-equality KAT against the captured WA Web oracle, and the
- * alt-device merging mode of {@link DeviceService#getDeviceLists}.
- *
- * @implNote
- * This implementation deliberately skips the USync-round-trip cases (the
- * {@code sendNode} path); those are covered by
- * {@link com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParserTest}
- * against captured fixtures. Duplicating them here would require canned IQ
- * responses tied to the test infrastructure for no extra signal.
+ * <p>Each test builds the full collaborator graph ({@link WamService}, {@link SnapshotRecoveryService},
+ * {@link WebAppStateService}, {@link DeviceService}) on top of a {@link TestWhatsAppClient}. The
+ * USync-round-trip cases (the {@code sendNode} path) are deliberately left to
+ * {@link com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParserTest}, which covers them
+ * against captured fixtures.
  */
 @DisplayName("DeviceService")
 class DeviceServiceTest {
@@ -58,17 +50,6 @@ class DeviceServiceTest {
     private static final Jid SELF_LID_DEVICE_1 = Jid.of("83116928594056:1@lid");
     private static final Jid PEER = Jid.of("393495089819@s.whatsapp.net");
 
-    /**
-     * Bundles the constructed client, props, and device service so each test
-     * can share the same wiring.
-     *
-     * @apiNote
-     * Local record; never exposed outside this class.
-     *
-     * @param client        the test client
-     * @param props         the test AB props service
-     * @param deviceService the constructed device service
-     */
     private record Harness(
             TestWhatsAppClient client,
             TestABPropsService props,
@@ -76,11 +57,8 @@ class DeviceServiceTest {
     }
 
     /**
-     * Builds a fresh harness with all collaborators wired against a temporary
-     * store, with the local own JID set to {@code <pn>:1}.
-     *
-     * @apiNote
-     * Called by every test for isolation; never reused across tests.
+     * Builds a fresh harness with all collaborators wired against a temporary store, with the local
+     * own JID set to {@code <pn>:1}.
      *
      * @return the constructed harness
      */
@@ -102,10 +80,6 @@ class DeviceServiceTest {
         return new Harness(client, props, deviceService);
     }
 
-    /**
-     * Verifies {@link DeviceService#getUserFanout} for a cached peer returns
-     * the peer's devices and excludes the local sender's own device.
-     */
     @Test
     @DisplayName("getUserFanout returns the cached companions for a known peer")
     void cachedPeerFanout() {
@@ -140,14 +114,7 @@ class DeviceServiceTest {
                 "fanout must never include the sender's own device");
     }
 
-    /**
-     * Verifies a self-send fanout includes the other own device and excludes
-     * the sending device.
-     *
-     * @apiNote
-     * Regression guard: this test pins the contract that the sender's own
-     * device never appears in its own fanout, even when the chat is with self.
-     */
+    // Regression guard: the sender's own device must never appear in its own fanout, even when the chat is with self
     @Test
     @DisplayName("getUserFanout for self-send strips the sender's own device")
     void selfFanoutStripsSender() {
@@ -170,11 +137,6 @@ class DeviceServiceTest {
                 "self-send fanout must not include the sending device itself");
     }
 
-    /**
-     * Verifies {@link DeviceService#computeIcdc} reaches the
-     * {@link com.github.auties00.cobalt.device.icdc.IcdcComputer} collaborator
-     * and propagates the cached device list's timestamp.
-     */
     @Test
     @DisplayName("computeIcdc delegates to IcdcComputer and returns an Optional")
     void computeIcdcWires() {
@@ -194,15 +156,7 @@ class DeviceServiceTest {
                 "timestamp should propagate from the cached device list");
     }
 
-    /**
-     * Verifies Cobalt's group-fanout phashV2 matches WA Web's oracle
-     * byte-for-byte across three group sizes.
-     *
-     * @apiNote
-     * Parity KAT against the captured {@code group-phashes} oracle. If WA Web
-     * changes its phashV2 algorithm this test will fail and signal that
-     * Cobalt needs the new derivation.
-     */
+    // Parity KAT against the captured group-phashes oracle; fails if WA Web changes its phashV2 derivation
     @Test
     @DisplayName("getGroupFanout phash matches WA Web's phashV2 oracle (byte-equality, three group sizes)")
     void groupFanoutPhashMatchesLiveOracle() throws Exception {
@@ -240,10 +194,6 @@ class DeviceServiceTest {
         }
     }
 
-    /**
-     * Verifies {@code shouldMergeAltDevices=true} preserves each entry while
-     * augmenting its device-id set with its alternate-addressing twin's.
-     */
     @Test
     @DisplayName("getDeviceLists with shouldMergeAltDevices=true augments device ids without collapsing entries")
     void shouldMergeAltDevicesAugmentsDeviceIds() {

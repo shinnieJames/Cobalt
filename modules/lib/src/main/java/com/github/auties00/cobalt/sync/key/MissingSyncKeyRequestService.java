@@ -30,27 +30,20 @@ import java.util.*;
  * Asks companion devices for app state sync keys whose key id was referenced by a snapshot or
  * patch but is absent from the local sync key store.
  *
- * <p>The service is the entry-point invoked by the syncd collection handler when patch
- * decryption fails with a {@code SyncdMissingKeyError}: it filters away ids that are already
- * tracked, broadcasts an {@code AppStateSyncKeyRequest} {@code ProtocolMessage} to every
- * companion device, persists per-device delivery outcomes through
- * {@link MissingSyncKeyTimeoutScheduler}, and emits the bootstrap-progress
- * {@code MdBootstrapAppStateCriticalDataProcessingEvent} that drives the critical-data
- * spinner on the WhatsApp Web first-load screen.
+ * <p>The syncd decrypt path invokes this service when patch or snapshot decryption fails
+ * against a key id that is not in the local store. It filters away ids that are already
+ * tracked, broadcasts an {@code AppStateSyncKeyRequest} {@link ProtocolMessage} to every
+ * companion device, records per-device delivery outcomes against the missing-key tracker, and
+ * emits the bootstrap-progress event that drives the critical-data spinner on the first-load
+ * screen. The decrypt-time entry point {@link #requestMissingKeys(Collection)} is
+ * fire-and-forget; the periodic entry point {@link #reRequestMissingKeys(Collection)} is
+ * driven by {@link MissingSyncKeyTimeoutScheduler#startPeriodicReRequestJob()}.
  *
- * @apiNote
- * Cobalt embedders do not call this directly. The web app-state pipeline calls
- * {@link #requestMissingKeys(Collection)} from inside the syncd snapshot/patch decrypt
- * path; the periodic {@link #reRequestMissingKeys(Collection)} entry point is driven by
- * {@link MissingSyncKeyTimeoutScheduler#startPeriodicReRequestJob()}.
- *
- * @implNote
- * This implementation collapses WA Web's {@code handleMissingKeysInSnapshot} and
- * {@code handleMissingKeysInPatches} (which separately scan snapshot records and patch
- * mutations on the WA Web side) into the inline collection that the Cobalt syncd decrypt
- * path already performs; the result is passed directly to {@link #requestMissingKeys}.
- * Per-device dispatch is sequential rather than {@code Promise.allSettled}-batched so a
- * single misbehaving companion does not stall the whole broadcast under a virtual thread.
+ * @implNote This implementation collapses WA Web's separate snapshot-record and patch-mutation
+ * missing-key scans into the inline id collection that the Cobalt syncd decrypt path already
+ * performs, and passes the result directly to {@link #requestMissingKeys(Collection)}.
+ * Per-device dispatch is sequential rather than batched so a single misbehaving companion does
+ * not stall the whole broadcast under a virtual thread.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdHandleMissingKeys")
 @WhatsAppWebModule(moduleName = "WAWebSyncdRequestAllSyncdMissingKeysJob")
@@ -58,63 +51,53 @@ import java.util.*;
 @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
 public final class MissingSyncKeyRequestService {
     /**
-     * Diagnostic logger for the syncd missing-key request flow.
+     * Holds the diagnostic logger for the syncd missing-key request flow.
      *
-     * @implNote
-     * This implementation uses {@link System.Logger} so the bridged JUL handler installed by
-     * the Cobalt {@code modules/lib} bootstrap surfaces the {@code [syncd] ...} lines under
-     * the same handler chain as the rest of the syncd subsystem.
+     * @implNote This implementation uses {@link System.Logger} so the bridged handler installed
+     * by the {@code modules/lib} bootstrap surfaces the {@code [syncd] ...} lines under the
+     * same handler chain as the rest of the syncd subsystem.
      */
     private static final System.Logger LOGGER = System.getLogger(MissingSyncKeyRequestService.class.getName());
 
     /**
-     * The injected {@link WhatsAppClient} used to dispatch peer messages and resolve the
-     * shared {@link WhatsAppStore}.
-     *
-     * @apiNote
-     * Held by reference rather than fetched lazily so {@link #sendKeyRequestToAllDevices} can
-     * call {@link WhatsAppClient#sendPeerMessage} without a per-call store lookup.
+     * Holds the injected client used to dispatch peer messages and to resolve the shared store.
      */
     private final WhatsAppClient client;
 
     /**
-     * The shared {@link WhatsAppStore} consulted for the current device list, the offline
-     * resume state, the missing-key tracker, and the {@link SyncPatchType#CRITICAL_BLOCK}
-     * bootstrap flag.
+     * Holds the shared store consulted for the current device list, the offline resume state,
+     * the missing-key tracker, and the {@link SyncPatchType#CRITICAL_BLOCK} bootstrap flag.
      */
     private final WhatsAppStore store;
 
     /**
-     * The companion {@link MissingSyncKeyTimeoutScheduler} reference wired in after
-     * construction via {@link #setTimeoutScheduler(MissingSyncKeyTimeoutScheduler)}.
-     *
-     * @implNote
-     * This implementation uses post-construction wiring because the scheduler also depends on
-     * this service for its periodic re-request job, producing a circular construction
-     * dependency that the owning {@link com.github.auties00.cobalt.sync.WebAppStateService}
-     * resolves by constructing both then calling
+     * Holds the companion timeout scheduler wired in after construction via
      * {@link #setTimeoutScheduler(MissingSyncKeyTimeoutScheduler)}.
+     *
+     * @implNote This implementation uses post-construction wiring because the scheduler also
+     * depends on this service for its periodic re-request job, producing a circular
+     * construction dependency that the owning
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService} resolves by constructing both
+     * and then calling {@link #setTimeoutScheduler(MissingSyncKeyTimeoutScheduler)}.
      */
     private MissingSyncKeyTimeoutScheduler timeoutScheduler;
 
     /**
-     * The {@link WamService} used to commit the
-     * {@code MdBootstrapAppStateCriticalDataProcessingEvent} progress beacons fired during
-     * the critical data sync.
+     * Holds the WAM service used to commit the bootstrap progress beacons fired during the
+     * critical-data sync.
      */
     private final WamService wamService;
 
     /**
-     * Constructs a new {@code MissingSyncKeyRequestService}.
+     * Constructs a new request service bound to the supplied client and WAM service.
      *
-     * @apiNote
-     * Invoked once per {@link com.github.auties00.cobalt.sync.WebAppStateService} instance.
-     * The owning service is responsible for completing the wiring with
-     * {@link #setTimeoutScheduler(MissingSyncKeyTimeoutScheduler)}; without that call the
-     * tracker fan-out at the end of {@link #trackMissingKeys(Collection, Set)} is a no-op.
+     * <p>The owning {@link com.github.auties00.cobalt.sync.WebAppStateService} must complete
+     * the wiring with {@link #setTimeoutScheduler(MissingSyncKeyTimeoutScheduler)}; without
+     * that call the tracker reschedule at the end of {@link #trackMissingKeys(Collection, Set)}
+     * is silently skipped.
      *
-     * @param client     the {@link WhatsAppClient} used to dispatch peer messages
-     * @param wamService the {@link WamService} used to commit critical-bootstrap progress events
+     * @param client the client used to dispatch peer messages
+     * @param wamService the WAM service used to commit critical-bootstrap progress events
      */
     public MissingSyncKeyRequestService(WhatsAppClient client, WamService wamService) {
         this.client = client;
@@ -123,15 +106,15 @@ public final class MissingSyncKeyRequestService {
     }
 
     /**
-     * Wires the {@link MissingSyncKeyTimeoutScheduler} dependency after construction.
+     * Wires the timeout scheduler dependency after construction.
      *
-     * @apiNote
-     * Must be invoked exactly once by {@link com.github.auties00.cobalt.sync.WebAppStateService}
-     * before {@link #requestMissingKeys(Collection)} is invoked; otherwise the inline
-     * timeout reschedule at the end of {@link #trackMissingKeys(Collection, Set)} is silently
-     * skipped and any later {@code _setMissingKeyTimeout} guarantee is lost.
+     * <p>Must be invoked exactly once by
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService} before
+     * {@link #requestMissingKeys(Collection)} runs; otherwise the inline timeout reschedule at
+     * the end of {@link #trackMissingKeys(Collection, Set)} is silently skipped and the
+     * wait-for-key guarantee is lost.
      *
-     * @param timeoutScheduler the {@link MissingSyncKeyTimeoutScheduler} to wire in
+     * @param timeoutScheduler the timeout scheduler to wire in
      */
     public void setTimeoutScheduler(MissingSyncKeyTimeoutScheduler timeoutScheduler) {
         this.timeoutScheduler = timeoutScheduler;
@@ -140,19 +123,15 @@ public final class MissingSyncKeyRequestService {
     /**
      * Requests the supplied missing app state sync key ids from companion devices.
      *
-     * @apiNote
-     * Called by {@link com.github.auties00.cobalt.sync.WebAppStateService} from inside the
-     * syncd snapshot and patch decrypt paths whenever an {@code indexKey} or
-     * {@code valueEncryptionKey} resolves to a key id that is not in the local sync key
-     * store (the {@code SyncdMissingKeyError} branch on WA Web's
-     * {@code WAWebSyncdCollectionHandler}). The method is fire-and-forget; the caller does
-     * not await any companion response.
+     * <p>Invoked from inside the syncd snapshot and patch decrypt paths whenever a key id fails
+     * to resolve against the local sync key store. The call is fire-and-forget; the caller does
+     * not await any companion response. {@code null} entries are dropped, and delegation to
+     * {@link #handleMissingKeys(Collection)} applies the resume guard and the
+     * already-tracked deduplication filter.
      *
-     * @implNote
-     * This implementation merges WA Web's {@code handleMissingKeysInSnapshot} and
-     * {@code handleMissingKeysInPatches} entry points into a single id-collection that
-     * Cobalt assembles inline during decryption; both entry points delegate to the same
-     * {@code handleMissingKeys} body that is invoked here.
+     * @implNote This implementation merges WA Web's separate snapshot and patch missing-key
+     * entry points into a single id collection assembled inline during decryption; both WA Web
+     * entry points delegate to the same body invoked here.
      *
      * @param keyIds the missing key ids; {@code null} entries are dropped
      */
@@ -166,10 +145,8 @@ public final class MissingSyncKeyRequestService {
     /**
      * Requests a single missing app state sync key id from companion devices.
      *
-     * @apiNote
-     * Convenience overload used when a single decrypt failure surfaces only one id; the body
-     * just wraps the id in a singleton list and delegates to
-     * {@link #requestMissingKeys(Collection)}.
+     * <p>Convenience overload for the case where a single decrypt failure surfaces only one id;
+     * wraps the id in a singleton list and delegates to {@link #requestMissingKeys(Collection)}.
      *
      * @param keyId the missing key id
      */
@@ -181,22 +158,19 @@ public final class MissingSyncKeyRequestService {
     }
 
     /**
-     * Re-broadcasts an {@code AppStateSyncKeyRequest} for a previously-tracked set of
-     * missing key ids without re-running the resume guard or duplicating tracker entries.
+     * Re-broadcasts an {@code AppStateSyncKeyRequest} for a previously tracked set of missing
+     * key ids without re-running the resume guard or duplicating tracker entries.
      *
-     * @apiNote
-     * Driven exclusively by {@link MissingSyncKeyTimeoutScheduler#startPeriodicReRequestJob()}
-     * to mirror WA Web's six-hour {@code requestAllSyncdMissingKeysJob}, which exists to
-     * recover keys when the original peer broadcast was dropped or a new companion has come
-     * online since the original ask.
+     * <p>Driven exclusively by {@link MissingSyncKeyTimeoutScheduler#startPeriodicReRequestJob()}
+     * to recover keys when the original peer broadcast was dropped or a new companion has come
+     * online since the original ask. An empty input is a no-op; {@code null} entries are
+     * dropped.
      *
-     * @implNote
-     * This implementation, like WA Web, intentionally bypasses
-     * {@link #handleMissingKeys(Collection)}: the resume gate
-     * ({@link WhatsAppStore#isResumeFromRestartComplete()}) and the deduplication filter
-     * against {@link WhatsAppStore#findMissingSyncKey(byte[])} are skipped because the keys
-     * are by construction already in the missing-key store, and the periodic job runs only
-     * after resume has long completed.
+     * @implNote This implementation intentionally bypasses {@link #handleMissingKeys(Collection)}:
+     * the resume gate ({@link WhatsAppStore#isResumeFromRestartComplete()}) and the
+     * deduplication filter against {@link WhatsAppStore#findMissingSyncKey(byte[])} are skipped
+     * because the keys are by construction already tracked and the periodic job runs only after
+     * resume has long completed.
      *
      * @param keyIds the missing key ids to re-broadcast; {@code null} entries are dropped
      */
@@ -227,16 +201,14 @@ public final class MissingSyncKeyRequestService {
     /**
      * Returns every companion {@link Jid} this client may legitimately ask for sync keys.
      *
-     * @apiNote
-     * The list is the registered own-device list with the current device filtered out, so
-     * the broadcast in {@link #sendKeyRequestToAllDevices(AppStateSyncKeyRequest)} reaches
-     * every linked phone or other web session that could plausibly hold the key.
+     * <p>The result is the registered own-device list with the current device filtered out, so
+     * a broadcast reaches every linked phone or other web session that could plausibly hold the
+     * key. When the own JID is unavailable an empty list is returned. When the device list is
+     * missing or fails to load the result falls back to the primary device (device id
+     * {@code 0}).
      *
-     * @implNote
-     * This implementation falls back to the primary device (device id {@code 0}) when the
-     * own-device list is missing or fails to load, matching WA Web's catch branch which
-     * logs the same {@code Key reqs->primary only} warning before returning a singleton
-     * primary-only list.
+     * @implNote This implementation logs a {@code Key reqs->primary only} warning before
+     * returning the singleton primary-only fallback list, matching WA Web's catch branch.
      *
      * @return the companion device {@link Jid}s, or a singleton primary device on lookup failure
      */
@@ -275,16 +247,15 @@ public final class MissingSyncKeyRequestService {
      * Filters out already-tracked key ids, broadcasts the request, then records the new
      * trackers via {@link #trackMissingKeys(Collection, Set)}.
      *
-     * @apiNote
-     * The shared body invoked by both {@link #requestMissingKeys(Collection)} and the
-     * single-id overload. Returns early when the syncd offline-resume sequence has not yet
-     * completed (matching WA Web's {@code if (t !== "idle") return} guard) and when the
-     * supplied ids are all already tracked.
+     * <p>The shared body invoked by both {@link #requestMissingKeys(Collection)} and the
+     * single-id overload. Returns early when the offline-resume sequence has not yet completed
+     * ({@link WhatsAppStore#isResumeFromRestartComplete()} is {@code false}), when the input is
+     * empty, and when every supplied id is already tracked. Surviving ids are wrapped into an
+     * {@code AppStateSyncKeyRequest} and broadcast; the accepting device ids are then recorded
+     * against the tracker.
      *
-     * @implNote
-     * This implementation defensively copies each incoming {@code byte[]} before storing it
-     * because Cobalt's protobuf model exposes mutable byte arrays through its getters; WA
-     * Web stores immutable {@code ArrayBuffer} views and does not need the copy.
+     * @implNote This implementation defensively copies each incoming {@code byte[]} before
+     * storing it because the protobuf model exposes mutable byte arrays through its getters.
      *
      * @param keyIds the missing key ids
      */
@@ -325,23 +296,19 @@ public final class MissingSyncKeyRequestService {
     }
 
     /**
-     * Builds and dispatches the {@code AppStateSyncKeyRequest} peer message to every
-     * companion device, returning the device ids that accepted the send.
+     * Builds and dispatches the {@code AppStateSyncKeyRequest} peer message to every companion
+     * device, returning the device ids that accepted the send.
      *
-     * @apiNote
-     * Throws when the device list resolves to an empty companion set (no peer can answer the
-     * request) and when every per-device send fails (matching WA Web's
-     * {@code throw err(...)} branch on a fully-failed {@code Promise.allSettled}). Partial
-     * failure logs a warning and returns the surviving device ids.
+     * <p>Throws when the device list resolves to an empty companion set, since no peer can then
+     * answer the request, and when every per-device send fails. A partial failure logs a
+     * warning and returns the surviving device ids. After the fan-out, the
+     * {@link BootstrapAppStateDataStageCode#MISSING_KEYS_REQUESTED} bootstrap beacon is emitted.
      *
-     * @implNote
-     * This implementation runs the per-device sends sequentially rather than via
-     * {@code Promise.allSettled}: under Cobalt's virtual-thread model the savings of parallel
-     * fan-out do not justify the bookkeeping overhead, and the sequential loop preserves the
-     * peer-message store ordering already established by
-     * {@link WhatsAppStore#addPeerMessage(String, ChatMessageInfo)}. The
-     * {@link BootstrapAppStateDataStageCode#MISSING_KEYS_REQUESTED} beacon fires after the
-     * fan-out so the WAM event reflects the delivery outcome rather than just the intent.
+     * @implNote This implementation runs the per-device sends sequentially rather than in
+     * parallel: under the virtual-thread model the parallel fan-out savings do not justify the
+     * bookkeeping, and the sequential loop preserves the peer-message store ordering established
+     * by {@link WhatsAppStore#addPeerMessage(String, ChatMessageInfo)}. The beacon fires after
+     * the fan-out so it reflects the delivery outcome rather than the intent.
      *
      * @param keyRequest the {@code AppStateSyncKeyRequest} payload
      * @return the device ids that successfully accepted the peer message
@@ -410,21 +377,18 @@ public final class MissingSyncKeyRequestService {
     }
 
     /**
-     * Emits a {@code MdBootstrapAppStateCriticalDataProcessingEvent} for the supplied
-     * bootstrap stage when the critical data sync is still in progress.
+     * Emits a critical-data processing event for the supplied bootstrap stage when the critical
+     * data sync is still in progress.
      *
-     * @apiNote
-     * Drives the WAM-side critical-data progress beacon that surfaces the
-     * "preparing your data" sub-states on the WA Web first-load screen. A no-op once the
+     * <p>Drives the WAM-side critical-data progress beacon that surfaces the preparing-your-data
+     * sub-states on the first-load screen. The method is a no-op once the
      * {@link SyncPatchType#CRITICAL_BLOCK} collection has been bootstrapped.
      *
-     * @implNote
-     * This implementation approximates WA Web's
-     * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess} state machine by reading
-     * the {@code bootstrapped} flag on the local
+     * @implNote This implementation approximates WA Web's critical-data sync state machine by
+     * reading the {@code bootstrapped} flag on the local
      * {@link com.github.auties00.cobalt.sync.WebAppStateService} state for
-     * {@link SyncPatchType#CRITICAL_BLOCK}; Cobalt does not expose a separate global
-     * critical-data sync flag.
+     * {@link SyncPatchType#CRITICAL_BLOCK}; Cobalt exposes no separate global critical-data sync
+     * flag.
      *
      * @param stage the bootstrap stage reached
      */
@@ -441,23 +405,22 @@ public final class MissingSyncKeyRequestService {
 
     /**
      * Builds one {@code AppStateSyncKeyRequest} {@link ChatMessageInfo} per target device,
-     * returning a map preserving the iteration order of the input device list.
+     * preserving the iteration order of the input device list.
      *
-     * @apiNote
-     * All messages share the same {@code ProtocolMessage} payload but each carries a
-     * freshly-generated {@code MessageKey} id so the relay treats them as independent peer
-     * messages rather than a duplicate broadcast.
+     * <p>All messages share the same {@link ProtocolMessage} payload but each carries a freshly
+     * generated {@link com.github.auties00.cobalt.model.message.MessageKey} id so the relay
+     * treats them as independent peer messages rather than a duplicate broadcast. Every message
+     * is parented to the user-level JID without a device suffix. The own JID must be available;
+     * its absence throws.
      *
-     * @implNote
-     * This implementation routes every {@link MessageKeyBuilder#parentJid(Jid)} to the
-     * user-level JID (no device suffix) per WA Web's
-     * {@code remote: getMePnUserOrThrow_DO_NOT_USE()}. Cobalt's message infrastructure
-     * additionally requires {@code senderJid} and {@code timestamp} to be populated; WA Web
-     * derives both from {@code WebSendChatTransactionalUtils} downstream.
+     * @implNote This implementation populates both {@code senderJid} and {@code timestamp} on
+     * each message because Cobalt's message infrastructure requires them, whereas WA Web derives
+     * both downstream.
      *
      * @param companionDevices the target device {@link Jid}s; iteration order is preserved
      * @param keyRequest the {@code AppStateSyncKeyRequest} payload
      * @return a {@link LinkedHashMap} from device {@link Jid} to the built {@link ChatMessageInfo}
+     * @throws IllegalStateException when no own JID is available
      */
     @WhatsAppWebExport(moduleName = "WAWebKeyManagementSendKeyRequestApi",
             exports = "sendAppStateSyncKeyRequest",
@@ -495,22 +458,19 @@ public final class MissingSyncKeyRequestService {
     }
 
     /**
-     * Records each newly-asked key in the missing-key store with its asked-device set, then
-     * triggers an inline reschedule of the wait-for-key timeout via
-     * {@link MissingSyncKeyTimeoutScheduler#scheduleTimeoutCheck()}.
+     * Records each newly asked key in the missing-key store with its asked-device set, then
+     * triggers an inline reschedule of the wait-for-key timeout.
      *
-     * @apiNote
-     * Each entry is created with the current timestamp; existing entries for the same key
-     * id are overwritten through the upsert semantics of
-     * {@link WhatsAppStore#addMissingSyncKey} so the asked-device set always reflects the
-     * latest broadcast.
+     * <p>Each entry is created with the current timestamp; an existing entry for the same key id
+     * is overwritten so the asked-device set always reflects the latest broadcast. After the
+     * upserts, the wait-for-key timeout is rescheduled through
+     * {@link MissingSyncKeyTimeoutScheduler#scheduleTimeoutCheck()} when the scheduler has been
+     * wired in.
      *
-     * @implNote
-     * This implementation upserts per-entry rather than calling WA Web's
-     * {@code bulkUpdateMissingKeysInTransaction} (Cobalt's store does not expose a
-     * single-transaction bulk-update primitive). The terminal scheduler call is gated on
-     * {@link #timeoutScheduler} being non-null so test harnesses that exercise the request
-     * path without the scheduler can do so without an NPE.
+     * @implNote This implementation upserts per entry rather than in a single transaction
+     * because Cobalt's store exposes no bulk-update primitive. The terminal scheduler call is
+     * gated on {@link #timeoutScheduler} being non-null so test harnesses can exercise the
+     * request path without the scheduler.
      *
      * @param keyIds the key ids to track
      * @param successfulDeviceIds the device ids that accepted the broadcast

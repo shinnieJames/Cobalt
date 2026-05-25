@@ -20,24 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Parity tests for {@link ChatMessageReceiver} against WhatsApp Web's
- * {@code WAWebHandleMsg.default} and {@code WAWebMsgProcessingDecryptApi.decryptE2EPayload}.
- *
- * @apiNote
- * Drives a full encrypt-then-receive cycle: a sender-side
- * {@link MessageEncryption} produces a PKMSG ciphertext, wraps it in a synthetic
- * inbound {@code <message>} node, and hands it to the recipient's
- * {@link ChatMessageReceiver}; the receiver must decrypt, decode the protobuf, and
- * return a populated
- * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} carrying the
- * sender's original {@link MessageContainer}.
- *
- * @implNote
- * Both sides share libsignal session state installed by
- * {@link TestSignalSession#establishSession} before the first encrypt; the second
- * test exercises the WA Web behaviour that a sender's PKMSG remains sticky until
- * the recipient's first ack lands, so the recipient must be able to decrypt two
- * consecutive PKMSGs into the established session.
+ * Covers {@link ChatMessageReceiver} by driving a full encrypt-then-receive cycle: a sender-side
+ * {@link MessageEncryption} produces a PKMSG ciphertext, it is wrapped in a synthetic inbound
+ * {@code <message>} node, and handed to the recipient's {@link ChatMessageReceiver}, which must
+ * decrypt, decode the protobuf, and return a populated
+ * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} carrying the sender's original
+ * {@link MessageContainer}. Both sides share libsignal session state installed by
+ * {@link TestSignalSession#establishSession} before the first encrypt.
  */
 @DisplayName("ChatMessageReceiver")
 class ChatMessageReceiverTest {
@@ -47,10 +36,6 @@ class ChatMessageReceiverTest {
     private static final Jid RECIPIENT_BARE = Jid.of("19254863482@s.whatsapp.net");
     private static final Jid SENDER_BARE = Jid.of("12025550100@s.whatsapp.net");
 
-    /**
-     * Verifies that a PKMSG round-trip recovers the sender's plaintext on the
-     * recipient side.
-     */
     @Test
     @DisplayName("PKMSG receive: decrypts to the sender's MessageContainer and returns a populated ChatMessageInfo")
     void receivePkmsgRoundTrip() {
@@ -98,16 +83,8 @@ class ChatMessageReceiverTest {
                 "decrypted payload bytes equal the sender's plaintext");
     }
 
-    /**
-     * Verifies that the sender's sticky-PKMSG behaviour does not break the second
-     * decrypt: a second PKMSG from the same sender must still resolve into the
-     * installed session.
-     *
-     * @apiNote
-     * Pins the WhatsApp Web behaviour that the sender keeps emitting PKMSG until
-     * the recipient's first ack lands; the matching expectation is verified by
-     * {@code MessageEncryptionTest.typeSwitchesAfterFirstAck} on the send side.
-     */
+    // Pins the WA Web behaviour that the sender keeps emitting PKMSG until the recipient's first
+    // ack lands; the send-side mirror is MessageEncryptionTest.typeSwitchesAfterFirstAck.
     @Test
     @DisplayName("PKMSG receive: subsequent decrypts switch to MSG and recover correctly")
     void msgEnvelopeAfterPrekeyConsumed() {
@@ -137,27 +114,12 @@ class ChatMessageReceiverTest {
                 "second decrypt must recover the new plaintext");
     }
 
-    /**
-     * Builds a synthetic inbound {@code <message>} node carrying a single
-     * {@code <enc>} child of the supplied type and ciphertext.
-     *
-     * @apiNote
-     * Used by the second test to keep both PKMSG sends parameterised by id alone.
-     *
-     * @implNote
-     * The hardcoded timestamp pins a deterministic stanza age so the
-     * expired-status branch never fires during the round-trip.
-     *
-     * @param id         the wire message id
-     * @param encType    the enc type ({@code "pkmsg"} or {@code "msg"})
-     * @param ciphertext the encrypted payload bytes
-     * @return the synthetic inbound node
-     */
     private static Node buildInbound(String id, String encType, byte[] ciphertext) {
         return new NodeBuilder()
                 .description("message")
                 .attribute("id", id)
                 .attribute("from", SENDER_PRIMARY)
+                // pins a deterministic stanza age so the expired-status branch never fires
                 .attribute("t", 1700000000L)
                 .attribute("type", "text")
                 .content(new NodeBuilder()

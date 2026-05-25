@@ -8,36 +8,34 @@ import com.github.auties00.cobalt.node.smax.SmaxOperation;
 import java.util.Objects;
 
 /**
- * The outbound {@code <ib><unified_session id/></ib>} stanza.
+ * Announces this device's WAM user-journey analytics session id to the relay.
  *
- * @apiNote
- * Announces this device's WAM user-journey analytics session id to the
- * relay. WA Web's {@code WAWebUnifiedSession} module derives the id from
- * a rolling 7-day clock ({@code (now + 3d) mod 7d}) and tags WAM events
- * emitted from the Channels surface, the Forward-message flow, the
- * CTWA ad-creation pipeline, and the signup funnel. Cobalt does not run
- * those user-journey loggers itself; the request is exposed through
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#joinUnifiedSession(String)}
- * for embedders that mirror WA Web's telemetry surface.
+ * <p>WhatsApp Web derives the session id from a rolling 7-day clock
+ * ({@code (now + 3d) mod 7d}) and tags WAM events emitted from the Channels
+ * surface, the Forward-message flow, the CTWA ad-creation pipeline, and the
+ * signup funnel with it. Cobalt does not run those user-journey loggers
+ * itself; the request is exposed through
+ * {@link com.github.auties00.cobalt.client.WhatsAppClient#joinUnifiedSession(String)}
+ * for embedders that mirror that telemetry surface. The operation is a
+ * {@code cast}-shape RPC: it is one-way outbound and carries no reply, so it
+ * implements only {@link SmaxOperation.Request}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutUnifiedSessionShareRequest")
 public final class SmaxUnifiedSessionShareRequest implements SmaxOperation.Request {
     /**
-     * The opaque user-journey session id token to announce to the relay.
+     * Holds the opaque user-journey session id token announced to the relay.
      */
     private final String unifiedSessionId;
 
     /**
      * Constructs a request announcing the given session id.
      *
-     * @apiNote
-     * The cast-shape RPC has no reply; the relay accepts any non-null
-     * string verbatim and the caller is responsible for re-issuing the
-     * request when its rolling-clock derivation produces a new id.
+     * <p>The relay accepts any non-{@code null} string verbatim, and the
+     * caller is responsible for re-issuing the request when its rolling-clock
+     * derivation produces a new id.
      *
      * @param unifiedSessionId the session id token; never {@code null}
-     * @throws NullPointerException if {@code unifiedSessionId} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code unifiedSessionId} is {@code null}
      */
     public SmaxUnifiedSessionShareRequest(String unifiedSessionId) {
         this.unifiedSessionId = Objects.requireNonNull(unifiedSessionId, "unifiedSessionId cannot be null");
@@ -55,13 +53,12 @@ public final class SmaxUnifiedSessionShareRequest implements SmaxOperation.Reque
     /**
      * Builds the outbound stanza ready for dispatch.
      *
-     * @apiNote
-     * Produces {@code <ib><unified_session id="..."/></ib>}; the
-     * cast-shape RPC carries no {@code id} attribute on the envelope
-     * because no reply is expected.
+     * <p>Produces {@code <ib><unified_session id="..."/></ib>}. The envelope
+     * carries no {@code id} attribute because, as a {@code cast}-shape RPC, no
+     * reply is expected.
      *
-     * @return a {@link NodeBuilder} carrying the {@code <ib>} envelope
-     *         and the {@code <unified_session/>} payload
+     * @return a {@link NodeBuilder} carrying the {@code <ib>} envelope and the
+     *         {@code <unified_session/>} payload; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutUnifiedSessionShareRequest",
@@ -81,7 +78,7 @@ public final class SmaxUnifiedSessionShareRequest implements SmaxOperation.Reque
      * {@link SmaxUnifiedSessionShareRequest} with an equal session id.
      *
      * @param obj the candidate; may be {@code null}
-     * @return {@code true} when both ids match
+     * @return {@code true} when both ids match, {@code false} otherwise
      */
     @Override
     public boolean equals(Object obj) {

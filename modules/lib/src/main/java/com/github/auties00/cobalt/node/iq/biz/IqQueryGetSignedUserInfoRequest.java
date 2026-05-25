@@ -10,31 +10,23 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="w:biz:catalog" type="get">} stanza that
- * fetches the signed user-info bundle of a single merchant.
+ * Models the outbound {@code <iq xmlns="w:biz:catalog" type="get">} stanza that fetches the signed user-info bundle of a single merchant.
  *
- * @apiNote
- * Use this request to obtain the merchant's signed phone number, TTL
- * timestamp, signature blob and claimed business domain so the
- * buyer-side direct-connection flow can validate that the
- * out-of-band-supplied phone number belongs to the merchant; the cart
- * UI ships this stanza right after the public-key fetch.
+ * <p>The buyer-side direct-connection flow uses the merchant's signed phone number, TTL timestamp,
+ * signature blob and claimed business domain to validate that the out-of-band-supplied phone
+ * number belongs to the merchant; the cart UI ships this stanza right after the public-key fetch.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryGetSignedUserInfoJob")
 public final class IqQueryGetSignedUserInfoRequest implements IqOperation.Request {
     /**
-     * The merchant JID stamped into the {@code biz_jid} attribute of
-     * the {@code <signed_user_info/>} child.
+     * Holds the merchant JID stamped into the {@code biz_jid} attribute of the {@code <signed_user_info/>} child.
      */
     private final Jid businessJid;
 
     /**
-     * Constructs a request.
+     * Constructs a request over the given merchant JID.
      *
-     * @apiNote
-     * Pass the merchant JID whose signed user-info bundle should be
-     * fetched; any other field on the wire is fixed by the relay
-     * schema.
+     * <p>Every other field on the wire is fixed by the relay schema.
      *
      * @param businessJid the merchant JID; never {@code null}
      * @throws NullPointerException if {@code businessJid} is {@code null}
@@ -44,12 +36,10 @@ public final class IqQueryGetSignedUserInfoRequest implements IqOperation.Reques
     }
 
     /**
-     * Returns the merchant JID.
+     * Returns the merchant JID the stanza names.
      *
-     * @apiNote
-     * Use this getter to read back the merchant JID the stanza will
-     * name; the value is routed verbatim into the {@code biz_jid}
-     * attribute of the resulting {@code <signed_user_info/>} child.
+     * <p>The value is routed verbatim into the {@code biz_jid} attribute of the resulting
+     * {@code <signed_user_info/>} child.
      *
      * @return the merchant JID; never {@code null}
      */
@@ -62,9 +52,9 @@ public final class IqQueryGetSignedUserInfoRequest implements IqOperation.Reques
      *
      * @implNote
      * This implementation materialises the WAP envelope produced by the
-     * {@code WAWebQueryGetSignedUserInfoJob} export: a single
-     * {@code <signed_user_info biz_jid/>} child wrapped in the
-     * {@code w:biz:catalog get} IQ frame routed to the WhatsApp service.
+     * {@code WAWebQueryGetSignedUserInfoJob} export: a single {@code <signed_user_info biz_jid/>}
+     * child wrapped in the {@code w:biz:catalog get} IQ frame routed to the WhatsApp service via
+     * {@link JidServer#user()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryGetSignedUserInfoJob",
@@ -82,9 +72,6 @@ public final class IqQueryGetSignedUserInfoRequest implements IqOperation.Reques
                 .content(signedUserInfo);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -97,17 +84,11 @@ public final class IqQueryGetSignedUserInfoRequest implements IqOperation.Reques
         return Objects.equals(this.businessJid, that.businessJid);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int hashCode() {
         return Objects.hash(businessJid);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String toString() {
         return "IqQueryGetSignedUserInfoRequest[businessJid=" + businessJid + ']';

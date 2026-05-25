@@ -22,29 +22,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Integration cycle for the full bootstrap sync after companion link.
- *
- * <p>Per WA Web {@code WAWebSyncdServerSync} the initial bootstrap drives one
- * IQ exchange per {@link SyncPatchType}, downloads the per-collection snapshot
- * via CDN, decrypts each mutation, applies it through the corresponding
+ * Exercises the full bootstrap sync cycle that runs after a companion link: one
+ * IQ exchange per {@link SyncPatchType} pulls a per-collection snapshot, each
+ * mutation is decrypted and applied through its
  * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler}, and
- * persists the resulting collection version + LT-Hash. The cycle finishes when
- * every collection has transitioned to bootstrapped state with a matching MAC.
- *
- * <p>The full cycle requires a captured stanza trace (the
- * {@code integration/full-sync-cycle/} corpus produced by
- * {@code capture-sync-corpus.mjs --phase=9}). The fixture topics carry the
- * outgoing pull IQ, the inbound server response, and the resulting store-state
- * projection used as the oracle. Until those land the test exercises:
- * <ul>
- *   <li>Constructor wiring of the orchestrator graph (no IO).</li>
- *   <li>{@link WebAppStateService#pullPatches} on an empty collection set
- *       short-circuits.</li>
- *   <li>Periodic-sync job start/stop is idempotent.</li>
- * </ul>
- * Oracle parity (post-cycle store state equals the captured WA Web state) is
- * gated on {@link SyncFixtures#isAvailable(String)} so the suite passes before
- * fixtures are captured.
+ * every collection ends bootstrapped with a matching MAC. The pipeline is wired
+ * in-process via {@link TestWhatsAppClient} with no network IO; the synthetic
+ * group asserts orchestrator wiring, an empty {@link WebAppStateService#pullPatches}
+ * short-circuit, and periodic-job idempotence. The captured group is gated on
+ * {@link SyncFixtures#isAvailable(String)} so it skips cleanly until the recorded
+ * bootstrap corpus is committed.
  */
 @DisplayName("FullSyncCycle integration")
 class FullSyncCycleIntegrationTest {
@@ -102,12 +89,9 @@ class FullSyncCycleIntegrationTest {
         @DisplayName("post-cycle store state matches WAWebSyncdServerSync's captured projection")
         void capturedStoreStateMatches() {
             if (!SyncFixtures.isAvailable("integration/full-sync-cycle/all-collections")) return;
-            // Reserved for Phase 10 fixture corpus. The fixture pairs (a) a stanza
-            // trace covering one IQ + response per SyncPatchType and (b) an oracle
-            // document snapshotting the WA Web store post-cycle (chats, contacts,
-            // settings, collection versions, LT hashes). The test drives the same
-            // IQ sequence into Cobalt, captures the post-cycle store state, and
-            // asserts a deep equality against the oracle.
+            // Fixture pairs a stanza trace covering one IQ and response per
+            // SyncPatchType with an oracle snapshot of the post-cycle store (chats,
+            // contacts, settings, collection versions, LT hashes), asserted deeply.
             assertNotNull(SyncFixtures.loadOracle("integration/full-sync-cycle/all-collections"));
         }
 
@@ -115,7 +99,7 @@ class FullSyncCycleIntegrationTest {
         @DisplayName("every SyncPatchType transitions to bootstrapped=true after the cycle")
         void allCollectionsBootstrapped() {
             if (!SyncFixtures.isAvailable("integration/full-sync-cycle/all-collections")) return;
-            // The oracle exposes the bootstrapped flag per collection — every entry
+            // The oracle exposes the bootstrapped flag per collection; every entry
             // must be true after the cycle completes.
             for (var type : SyncPatchType.values()) {
                 assertNotNull(type, "smoke gate; fixture-driven check defers to Phase 10");

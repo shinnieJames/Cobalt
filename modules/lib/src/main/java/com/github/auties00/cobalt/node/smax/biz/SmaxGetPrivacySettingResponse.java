@@ -11,53 +11,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound reply variants produced by the relay
- * in response to a {@link SmaxGetPrivacySettingRequest}.
- *
- * @apiNote
- * Each variant projects a distinct outcome of the SMB
- * data-sharing-with-Meta consent bridge: {@link Success} carries
- * the current consent value, {@link ClientError} carries a
- * documented {@code 4xx} rejection, and {@link ServerError} carries
- * a transient {@code 5xx} relay failure; the WA Web
- * {@code WAWebCommonCTWADataSharing} pipeline writes the parsed
- * consent into {@code CTWADataSharingModel}.
- *
- * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxBizSettingsGetPrivacySettingRPC.sendGetPrivacySettingRPC}
- * by trying each variant in priority order via {@link #of} and
- * returning the first successful parse.
+ * Models the sealed family of inbound reply variants produced by the relay in response to a
+ * {@link SmaxGetPrivacySettingRequest}.
+ * <p>
+ * Each variant projects a distinct outcome of the SMB data-sharing-with-Meta consent bridge:
+ * {@link Success} carries the current consent value, {@link ClientError} carries a documented
+ * {@code 4xx} rejection, and {@link ServerError} carries a transient {@code 5xx} relay failure.
  */
 public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Response
         permits SmaxGetPrivacySettingResponse.Success, SmaxGetPrivacySettingResponse.ClientError, SmaxGetPrivacySettingResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetPrivacySettingResponse} variant in
-     * priority order and returns the first that parses cleanly.
+     * Tries each variant in priority order and returns the first that parses cleanly.
+     * <p>
+     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)},
+     * then {@link ServerError#of(Node, Node)}, so that a malformed success stanza falls through
+     * to an error variant rather than masking an error. An unrecognised stanza shape yields
+     * {@link Optional#empty()}.
      *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxGetPrivacySettingRequest}; the priority order
-     * matches WA Web's {@code parsing} dispatch table so that a
-     * malformed {@code Success} stanza falls through to
-     * {@link ClientError} rather than masking an error.
-     *
-     * @implNote
-     * This implementation invokes {@link Success#of(Node, Node)}
-     * first, then {@link ClientError#of(Node, Node)}, then
-     * {@link ServerError#of(Node, Node)}; an unrecognised stanza
-     * shape returns {@link Optional#empty()}.
-     *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza, used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound stanza, used to validate echoed identifiers; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizSettingsGetPrivacySettingRPC",
             exports = "sendGetPrivacySettingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -78,42 +53,27 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant carrying the current SMB
-     * data-sharing-with-Meta consent value.
-     *
-     * @apiNote
-     * Projected by {@link SmaxGetPrivacySettingResponse#of(Node, Node)}
-     * when the relay returns the documented
-     * {@code <privacy><smb_data_sharing_with_meta_consent>} tree;
-     * the wire value is one of the {@code "true"}/{@code "false"}/
-     * {@code "notset"} dictionary literals enforced by
-     * {@code WASmaxInBizSettingsEnums.ENUM_FALSE_NOTSET_TRUE}.
+     * Carries the current SMB data-sharing-with-Meta consent value.
+     * <p>
+     * Projected when the relay returns the documented
+     * {@code <privacy><smb_data_sharing_with_meta_consent>} tree; the wire value is one of the
+     * {@code "true"}, {@code "false"} or {@code "notset"} dictionary literals.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsGetPrivacySettingResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSmbDataSharingSettingMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSmbDataSharingSettingValueMixin")
     final class Success implements SmaxGetPrivacySettingResponse {
         /**
-         * The {@code value} attribute of the
-         * {@code <smb_data_sharing_with_meta_consent>} child; one
-         * of the {@code "true"}/{@code "false"}/{@code "notset"}
-         * dictionary literals.
+         * The {@code value} attribute of the {@code <smb_data_sharing_with_meta_consent>}
+         * child; one of the {@code "true"}, {@code "false"} or {@code "notset"} literals.
          */
         private final String dataSharingConsent;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply from a consent value already validated against the dictionary.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code value} attribute has been validated against the
-         * {@code ENUM_FALSE_NOTSET_TRUE} dictionary.
-         *
-         * @param dataSharingConsent the consent enum value; never
-         *                           {@code null}
-         * @throws NullPointerException if
-         *                              {@code dataSharingConsent}
-         *                              is {@code null}
+         * @param dataSharingConsent the consent enum value; never {@code null}
+         * @throws NullPointerException if {@code dataSharingConsent} is {@code null}
          */
         public Success(String dataSharingConsent) {
             this.dataSharingConsent = Objects.requireNonNull(dataSharingConsent,
@@ -123,11 +83,6 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Returns the consent enum value.
          *
-         * @apiNote
-         * Use as the input to
-         * {@code CTWADataSharingModel.setValue} when mirroring the
-         * WA Web {@code WAWebCommonCTWADataSharing} cache.
-         *
          * @return the consent value; never {@code null}
          */
         public String dataSharingConsent() {
@@ -135,25 +90,16 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
-         *
-         * @implNote
-         * This implementation enforces the
-         * {@code SmaxIqResultResponseMixin} envelope check, walks
-         * the {@code <privacy><smb_data_sharing_with_meta_consent>}
-         * tree, and validates the {@code value} attribute against
-         * {@link SmaxBizSettingsFalseNotsetTrueFlag#of(String)};
-         * any other value yields {@link Optional#empty()} rather
-         * than an exception, matching the strict dictionary
-         * semantics of
-         * {@code WASmaxInBizSettingsSmbDataSharingSettingValueMixin.parseSmbDataSharingSettingValueMixin}.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
+         * <p>
+         * Enforces the {@link SmaxIqResultResponseMixin#validate(Node, Node)} envelope check,
+         * walks the {@code <privacy><smb_data_sharing_with_meta_consent>} tree, and validates
+         * the {@code value} attribute against {@link SmaxBizSettingsFalseNotsetTrueFlag#of(String)};
+         * any other value yields {@link Optional#empty()} rather than an exception.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizSettingsGetPrivacySettingResponseSuccess",
                 exports = "parseGetPrivacySettingResponseSuccess",
@@ -180,7 +126,10 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality on the consent value.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with an equal consent value
          */
         @Override
         public boolean equals(Object obj) {
@@ -195,7 +144,9 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the consent value.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -203,7 +154,9 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the consent value.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -213,40 +166,29 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant carrying a documented
-     * {@code 4xx} privacy-setting error code.
-     *
-     * @apiNote
-     * Surfaced when the relay rejected the consent fetch via one
-     * of the documented {@code parsePrivacySettingErrors} mixin
-     * arms; the WA Web CTWA settings surface treats the consent
-     * value as indeterminate on this branch.
+     * Carries a documented {@code 4xx} privacy-setting rejection.
+     * <p>
+     * Surfaced when the relay rejected the consent fetch; the CTWA settings surface treats the
+     * consent value as indeterminate on this branch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsGetPrivacySettingResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsPrivacySettingErrors")
     final class ClientError implements SmaxGetPrivacySettingResponse {
         /**
-         * The numeric server-side error code in the {@code 4xx}
-         * range.
+         * The numeric server-side error code in the {@code 4xx} range.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 4xx} envelope has been validated.
+         * Constructs a client-error reply from a validated {@code 4xx} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -265,30 +207,22 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
-         *
-         * @implNote
-         * This implementation routes the {@code <iq>}/{@code <error>}
-         * extraction through
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * and admits the full {@code 4xx} range as a catch-all,
-         * matching WA Web's
-         * {@code parsePrivacySettingErrors} dispatch.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
+         * <p>
+         * Routes the error extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} and admits the full
+         * {@code 4xx} range as a catch-all.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizSettingsGetPrivacySettingResponseError",
                 exports = "parseGetPrivacySettingResponseError",
@@ -302,7 +236,10 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -317,7 +254,9 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -325,7 +264,9 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -335,38 +276,28 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant carrying a transient
-     * {@code 5xx} relay failure.
-     *
-     * @apiNote
-     * Surfaced when the relay returned a transient internal
-     * failure while reading the consent; the caller can re-issue
-     * the request with backoff.
+     * Carries a transient {@code 5xx} relay failure.
+     * <p>
+     * Surfaced when the relay could not read the consent for an internal reason; callers can
+     * re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsGetPrivacySettingResponseError")
     final class ServerError implements SmaxGetPrivacySettingResponse {
         /**
-         * The numeric server-side error code in the {@code 5xx}
-         * range.
+         * The numeric server-side error code in the {@code 5xx} range.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 5xx} envelope has been validated.
+         * Constructs a server-error reply from a validated {@code 5xx} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -385,29 +316,22 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
-         *
-         * @implNote
-         * This implementation delegates the {@code 5xx} range
-         * check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
-         * any stanza outside the {@code 5xx} range yields
-         * {@link Optional#empty()}.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
+         * <p>
+         * Delegates the {@code 5xx} range check to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}; a stanza outside the
+         * {@code 5xx} range yields {@link Optional#empty()}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizSettingsGetPrivacySettingResponseError",
                 exports = "parseGetPrivacySettingResponseError",
@@ -421,7 +345,10 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -436,7 +363,9 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -444,7 +373,9 @@ public sealed interface SmaxGetPrivacySettingResponse extends SmaxOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

@@ -30,26 +30,17 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link LabelAssociationHandler} adapter for
- * {@code WAWebLabelJidSync}.
- *
- * @apiNote
- * Verifies parity with WA Web for the {@code label_jid} app-state
- * sync action across metadata, the SET add/remove paths, the
- * label-stub creation when the referenced label is unknown locally,
- * the malformed-input fallbacks, the inherited timestamp-based
- * conflict resolution and the
+ * Covers the {@link LabelAssociationHandler} for the {@code label_jid} app-state
+ * sync action: metadata, the SET add/remove paths, label-stub creation when the
+ * referenced label is unknown locally, the malformed-input fallbacks,
+ * timestamp-based conflict resolution and the
  * {@link LabelAssociationMutationFactory} builder.
  *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#findLabel(String)}
- * read-back can be asserted directly. Label assignments live inside
- * the {@link com.github.auties00.cobalt.model.preference.Label}
- * model rather than in a side table, matching the production
- * adaptation.
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the {@link WhatsAppStore#findLabel(String)}
+ * read-back can be asserted directly. Label assignments live inside the
+ * {@link com.github.auties00.cobalt.model.preference.Label} model rather than in
+ * a side table.
  */
 @DisplayName("LabelAssociationHandler")
 class LabelAssociationHandlerTest {
@@ -70,22 +61,6 @@ class LabelAssociationHandlerTest {
         factory = new LabelAssociationMutationFactory();
     }
 
-    /**
-     * Builds a {@link SyncdOperation#SET} {@link DecryptedMutation.Trusted}
-     * with the canonical {@code ["label_jid", labelId, chatJid]} index.
-     *
-     * @apiNote
-     * Used by every SET-path test to keep mutation construction
-     * boilerplate out of the test bodies and to reuse the wire-shape
-     * of the {@code label_jid} index across every assertion.
-     *
-     * @param labelId the label identifier
-     * @param chatJid the chat or contact {@link Jid}
-     * @param labeled the labeled flag
-     * @param ts      the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} carrying a
-     *         {@link LabelAssociationAction}
-     */
     private DecryptedMutation.Trusted buildSet(String labelId, Jid chatJid, boolean labeled, Instant ts) {
         var action = new LabelAssociationActionBuilder().labeled(labeled).build();
         var value = new SyncActionValueBuilder().timestamp(ts).labelAssociationAction(action).build();

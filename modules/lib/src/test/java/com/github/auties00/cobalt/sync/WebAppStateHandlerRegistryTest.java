@@ -7,7 +7,6 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler;
@@ -26,52 +25,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the structural contract of
- * {@link WebAppStateHandlerRegistry} against WhatsApp Web's
- * {@code WAWebSyncdGetActionHandler.setActionHandlers}.
- *
- * @apiNote Cobalt-internal exercise of the registry: the
- * incoming-mutation router relies on every default handler being
- * registered, on lookup-by-action-name working in both
- * present-and-missing branches, on every handler declaring a non-null
- * collection and a non-negative version, on
- * {@link WebAppStateHandlerRegistry#maxSupportedVersion()} being a true
- * maximum, and on subsequent
- * {@link WebAppStateHandlerRegistry#registerHandler(WebAppStateActionHandler)}
- * calls overriding earlier ones for the same action name.
- *
- * @implNote This implementation builds a real registry through
- * {@link WebAppStateHandlerRegistry#WebAppStateHandlerRegistry(ABPropsService, LidMigrationService, com.github.auties00.cobalt.wam.WamService)}
- * with the same dependency wiring as
- * {@link WebAppStateService}, so the assertions exercise the
- * production handler set rather than a synthetic one. A trivial
- * {@link RecordingHandler} is used for the override / new-registration
- * cases.
+ * Covers the structural contract of {@link WebAppStateHandlerRegistry}: every default handler being
+ * registered, lookup-by-action-name in both the present and missing branches, every handler
+ * declaring a non-null collection and a non-negative version,
+ * {@link WebAppStateHandlerRegistry#maxSupportedVersion()} being a true maximum, and a later
+ * {@link WebAppStateHandlerRegistry#registerHandler(WebAppStateActionHandler)} call overriding an
+ * earlier one for the same action name. The registry is built with the same dependency wiring as
+ * {@link WebAppStateService} so the assertions exercise the production handler set; the trivial
+ * {@link RecordingHandler} stands in for the override and new-registration cases.
  */
 @DisplayName("WebAppStateHandlerRegistry")
 class WebAppStateHandlerRegistryTest {
-    /**
-     * The local user's PN-form JID baked into the test store.
-     */
     private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
 
-    /**
-     * The local user's LID-form JID baked into the test store.
-     */
     private static final Jid SELF_LID = Jid.of("83116928594000@lid");
 
-    /**
-     * The registry under test, freshly created per test.
-     */
     private WebAppStateHandlerRegistry registry;
 
-    /**
-     * Builds a fresh registry per test with the same dependency
-     * wiring as the production code path.
-     *
-     * @apiNote JUnit-managed setup; not invoked manually from the
-     * tests.
-     */
     @BeforeEach
     void setUp() {
         var props = TestABPropsService.builder().build();
@@ -82,16 +52,9 @@ class WebAppStateHandlerRegistryTest {
         registry = new WebAppStateHandlerRegistry(props, lidMigration, wam);
     }
 
-    /**
-     * Pins the default-handler population done by the constructor.
-     */
     @Nested
     @DisplayName("default registration -- every WAWeb*Sync handler is wired")
     class DefaultRegistration {
-        /**
-         * Looks up one bedrock action to catch a complete-failure
-         * regression early.
-         */
         @Test
         @DisplayName("a known action name resolves to its handler")
         void knownActionResolves() {
@@ -100,10 +63,6 @@ class WebAppStateHandlerRegistryTest {
             assertNotNull(handler);
         }
 
-        /**
-         * Looks up one action name per family to catch missing-family
-         * regressions.
-         */
         @Test
         @DisplayName("a representative selection of action names all resolve")
         void representativeSelectionResolves() {
@@ -124,27 +83,15 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
-    /**
-     * Pins the lookup-miss behaviour of
-     * {@link WebAppStateHandlerRegistry#findHandler(String)}.
-     */
     @Nested
     @DisplayName("lookup -- unknown action")
     class UnknownAction {
-        /**
-         * Unknown action names produce
-         * {@link java.util.Optional#empty()}.
-         */
         @Test
         @DisplayName("findHandler on an unknown name returns Optional.empty()")
         void unknownReturnsEmpty() {
             assertTrue(registry.findHandler("not_a_real_action_name").isEmpty());
         }
 
-        /**
-         * The empty string is treated like any other unknown action
-         * name.
-         */
         @Test
         @DisplayName("findHandler on an empty string returns Optional.empty()")
         void emptyStringReturnsEmpty() {
@@ -152,17 +99,9 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
-    /**
-     * Pins per-handler invariants the rest of the sync pipeline
-     * relies on.
-     */
     @Nested
     @DisplayName("collection consistency -- every handler points at a valid SyncPatchType")
     class CollectionConsistency {
-        /**
-         * Every default handler declares a non-{@code null}
-         * {@link SyncPatchType}.
-         */
         @Test
         @DisplayName("every registered handler resolves to a non-null SyncPatchType")
         void allCollectionsNonNull() {
@@ -173,10 +112,6 @@ class WebAppStateHandlerRegistryTest {
             }
         }
 
-        /**
-         * Every default handler declares a non-negative version
-         * number.
-         */
         @Test
         @DisplayName("every handler's version is non-negative")
         void allVersionsNonNegative() {
@@ -188,17 +123,9 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
-    /**
-     * Pins the maximum-version reduction of
-     * {@link WebAppStateHandlerRegistry#maxSupportedVersion()}.
-     */
     @Nested
     @DisplayName("maxSupportedVersion")
     class MaxSupportedVersion {
-        /**
-         * The reported max is at least the version of every
-         * registered handler in the sample set.
-         */
         @Test
         @DisplayName("maxSupportedVersion equals the maximum of all registered handlers' versions")
         void matchesMaxOverAll() {
@@ -214,17 +141,9 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
-    /**
-     * Pins the override semantics of
-     * {@link WebAppStateHandlerRegistry#registerHandler(WebAppStateActionHandler)}.
-     */
     @Nested
     @DisplayName("registerHandler -- override on duplicate actionName")
     class RegisterHandler {
-        /**
-         * A second {@code registerHandler} call on the same action
-         * name replaces the first.
-         */
         @Test
         @DisplayName("a second handler with the same actionName replaces the first")
         void duplicateNameOverrides() {
@@ -237,10 +156,6 @@ class WebAppStateHandlerRegistryTest {
                     "second register call overrides the first per WAWebSyncdGetActionHandler.setActionHandlers");
         }
 
-        /**
-         * A new handler under a previously unused action name is
-         * lookable.
-         */
         @Test
         @DisplayName("registering a new handler under a new actionName makes it lookable")
         void newRegistrationLookable() {
@@ -254,15 +169,13 @@ class WebAppStateHandlerRegistryTest {
     }
 
     /**
-     * Returns the sample of action names every iteration test walks.
+     * Returns the sample of action names the iteration tests walk.
      *
-     * @apiNote Helper used by the {@code CollectionConsistency} and
-     * {@code MaxSupportedVersion} blocks. Kept in sync by hand with
-     * {@code WebAppStateHandlerRegistry.registerDefaultHandlers}: a
+     * <p>Kept in sync by hand with the registry's default handlers; a
      * missing action here only weakens coverage, not correctness.
      *
-     * @return a set of action names that are guaranteed to be
-     *         registered by the default constructor
+     * @return a set of action names guaranteed to be registered by the
+     *         default constructor
      */
     private static Set<String> sampleRegisteredActionNames() {
         var set = new HashSet<String>();
@@ -284,13 +197,10 @@ class WebAppStateHandlerRegistryTest {
     }
 
     /**
-     * A minimal {@link WebAppStateActionHandler} implementation that
-     * carries explicit identity fields and a no-op
-     * {@code applyMutation}.
-     *
-     * @apiNote Used by the override / new-registration tests to
-     * substitute a known instance under an existing or fresh action
-     * name without touching a real handler implementation.
+     * Minimal {@link WebAppStateActionHandler} carrying explicit identity fields and a no-op
+     * {@code applyMutation}, used by the override and new-registration tests to substitute a known
+     * instance under an existing or fresh action name without touching a real handler. The test
+     * suite only inspects identity, never invokes {@code applyMutation}.
      *
      * @param actionName     the action name returned by
      *                       {@link WebAppStateActionHandler#actionName()}
@@ -304,14 +214,6 @@ class WebAppStateHandlerRegistryTest {
             SyncPatchType collectionName,
             int version
     ) implements WebAppStateActionHandler {
-        /**
-         * {@inheritDoc}
-         *
-         * @implNote This implementation always returns
-         * {@code MutationApplicationResult.success()}; the test
-         * suite only inspects identity, never invokes
-         * {@code applyMutation}.
-         */
         @Override
         public MutationApplicationResult applyMutation(
                 WhatsAppClient client,

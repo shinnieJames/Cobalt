@@ -3,6 +3,10 @@ package com.github.auties00.cobalt;
 import java.security.SecureRandom;
 import java.util.List;
 
+/**
+ * Test-harness generator of random fake data, used to feed plausible inputs to tests that need a
+ * throwaway phone number.
+ */
 public final class Faker {
     // Italian mobile prefixes. The country code is always 39.
     private static final List<String> ITALIAN_MOBILE_PREFIXES = List.of(

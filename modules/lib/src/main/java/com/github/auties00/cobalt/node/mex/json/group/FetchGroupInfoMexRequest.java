@@ -21,87 +21,70 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Outbound MEX query that fetches the full metadata snapshot for a group,
- * community or community subgroup; bot participants are excluded from the
- * participant edge list.
+ * Outbound MEX query that fetches the full metadata snapshot for a group, community or community
+ * subgroup; bot participants are excluded from the participant edge list.
  *
- * @apiNote Issued by WA Web's
- * {@code WAWebGroupQueryGroupJob.queryGroupJob} when opening a chat or
- * refreshing the group-info panel. The response carries the four-way
- * inline-fragment group profile (regular, community, default subgroup,
- * subgroup) including creator identity, subject and description (with
- * author and edit timestamps), participant edges, ephemeral timer,
- * membership-approval state, LID migration state, parent-community link
- * and group-lock status. Cobalt uses {@link FetchGroupInfoIncludBotsMexRequest}
- * when the {@code isOpenGroupBotParticipantAddEnabled} gating flag is on.
+ * <p>The reply carries the four-way group profile (regular group, community, default subgroup,
+ * subgroup) including creator identity, subject and description (with author and edit timestamps),
+ * participant edges, ephemeral timer, membership-approval state, LID migration state,
+ * parent-community link and group-lock status. The bot-inclusive variant is
+ * {@link FetchGroupInfoIncludBotsMexRequest}, used when the open-group bot gating flag is on.
  *
- * @implNote This implementation forwards an optional caller-supplied
- * {@code query_context} variable verbatim; WA Web folds the surface tag
- * through a {@code v(queryContext)} dispatcher that normalises
- * {@code "interactive"}/{@code "enter_group_info"} to {@code "INTERACTIVE"}
- * and {@code "missing_participant_identification"} to its uppercase
- * equivalent. Cobalt leaves the normalisation to the caller.
+ * @implNote This implementation forwards an optional caller-supplied {@code query_context} variable
+ * verbatim; WA Web normalises the surface tag (mapping {@code "interactive"} and
+ * {@code "enter_group_info"} to {@code "INTERACTIVE"}, and the
+ * {@code "missing_participant_identification"} tag to its uppercase equivalent) before sending,
+ * whereas Cobalt leaves the normalisation to the caller.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchGroupInfoJob")
 public final class FetchGroupInfoMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
-     * {@code WAWebMexFetchGroupInfoJobQuery} document.
+     * Compiled GraphQL query identifier for the {@code WAWebMexFetchGroupInfoJobQuery} document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebMexFetchGroupInfoJobQuery.graphql}. The relay maps this
-     * id to its persisted operation; the GraphQL text is never sent on
-     * the wire.
+     * <p>The relay maps this id to its persisted operation; the GraphQL text is never sent on the
+     * wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "26197094166585473";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     * GraphQL operation name reported alongside this query when it is dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * <p>Tags the query in latency and error metrics; kept on the request for embedders mirroring
+     * WhatsApp's telemetry surface.
      */
     public static final String OPERATION_NAME = "mexGetGroupInfo";
 
     /**
-     * The target group identifier bound to the {@code id} GraphQL variable.
+     * Target group identifier bound to the {@code id} GraphQL variable.
      */
     private final String id;
 
     /**
-     * The username-projection toggle bound to the {@code include_username}
-     * GraphQL variable.
+     * Username-projection toggle bound to the {@code include_username} GraphQL variable.
      */
     private final Boolean includeUsername;
 
     /**
-     * The participant-set hash bound to the {@code participants_phash}
-     * GraphQL variable, enabling the relay to skip the edge list when the
-     * local cache matches.
+     * Participant-set hash bound to the {@code participants_phash} GraphQL variable, enabling the
+     * relay to skip the edge list when the local cache matches.
      */
     private final String participantsPhash;
 
     /**
-     * The telemetry context tag bound to the {@code query_context} GraphQL
-     * variable.
+     * Telemetry context tag bound to the {@code query_context} GraphQL variable.
      */
     private final String queryContext;
 
     /**
      * Constructs a new request with the four GraphQL variables.
      *
-     * @apiNote {@code includeUsername} mirrors WA Web's
-     * {@code WAWebUsernameGatingUtils.usernameDisplayedEnabled()} feature
-     * flag and controls whether the relay projects participant usernames.
-     * {@code participantsPhash} is the rolling hash WA Web maintains on
-     * the cached participant set; sending it lets the relay return
-     * {@code participants_phash_match = true} and skip the edge list to
-     * save bandwidth. Any of the four arguments may be {@code null} to
-     * omit the variable from the wire payload.
+     * <p>The {@code includeUsername} flag controls whether the relay projects participant usernames,
+     * mirroring WA Web's username-display gating. The {@code participantsPhash} is the rolling hash
+     * maintained on the cached participant set; sending it lets the relay reply with
+     * {@code participants_phash_match = true} and skip the edge list to save bandwidth. Any of the
+     * four arguments may be {@code null} to omit the variable from the wire payload.
      *
      * @param id                 the target group identifier, may be {@code null} to omit
      * @param includeUsername    whether to project usernames on participant edges, may be {@code null} to omit
@@ -134,12 +117,10 @@ public final class FetchGroupInfoMexRequest implements MexOperation.Request.Json
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation streams the GraphQL variables through
-     * fastjson2's {@link JSONWriter} and only emits each field when its
-     * corresponding constructor argument is non-null, matching the WA Web
-     * pattern that omits undefined GraphQL variables. The wrapped
-     * envelope is built through
-     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
+     * @implNote This implementation streams the GraphQL variables through fastjson2's
+     * {@link JSONWriter} and emits each field only when its corresponding constructor argument is
+     * non-null, matching the WA Web convention of omitting undefined GraphQL variables. The wrapped
+     * envelope is built through {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJob", exports = "mexGetGroupInfo",
             adaptation = WhatsAppAdaptation.ADAPTED)

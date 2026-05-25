@@ -14,11 +14,8 @@ import java.util.Optional;
  * The outbound stanza that records a per-contact biz-feedback
  * preference on the relay.
  *
- * @apiNote
- * Used by the message-feedback surface in
- * {@code WAWebBizUpdatePreferenceJob.updateUserPreferenceFeedback},
- * which writes user reactions to biz-message interactions (block /
- * unblock / report, plus an optional free-form annotation).
+ * <p>Writes user reactions to biz-message interactions (block, unblock or report, plus an optional
+ * free-form annotation).
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizMsgUserFeedbackUpdatePreferenceRequest")
 public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request {
@@ -42,10 +39,8 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     /**
      * Constructs a new request without a free-form annotation.
      *
-     * @apiNote
-     * The default form used when the surface only records a
-     * keyword action (block / unblock / report) without a
-     * user-supplied note.
+     * <p>The default form used when the surface records only a keyword action (block, unblock or
+     * report) without a user-supplied note.
      *
      * @param action the feedback action; never {@code null}
      * @param jid    the target contact JID; never {@code null}
@@ -60,11 +55,8 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
      * Constructs a new request, optionally carrying a free-form
      * feedback annotation.
      *
-     * @apiNote
-     * Called by {@code updateUserPreferenceFeedback}, which forwards
-     * the user's keyword and free-form note verbatim. The
-     * {@code action} value is opaque on the JS side and is treated
-     * as an arbitrary string by the relay.
+     * <p>Forwards the user's keyword and free-form note verbatim. The {@code action} value is
+     * opaque and is treated as an arbitrary string by the relay.
      *
      * @param action   the feedback action; never {@code null}
      * @param jid      the target contact JID; never {@code null}
@@ -82,9 +74,7 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     /**
      * Returns the feedback action keyword.
      *
-     * @apiNote
-     * Surfaces as the {@code action} attribute on the outbound
-     * {@code <user_feedback>} child.
+     * <p>Surfaces as the {@code action} attribute on the outbound {@code <user_feedback>} child.
      *
      * @return the action; never {@code null}
      */
@@ -95,9 +85,7 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     /**
      * Returns the target contact JID.
      *
-     * @apiNote
-     * Surfaces as the {@code jid} attribute on the outbound
-     * {@code <user_feedback>} child.
+     * <p>Surfaces as the {@code jid} attribute on the outbound {@code <user_feedback>} child.
      *
      * @return the JID; never {@code null}
      */
@@ -108,9 +96,8 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     /**
      * Returns the optional free-form feedback annotation.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the request was built
-     * via the two-argument constructor.
+     * <p>Returns {@link Optional#empty()} when the request was built via the two-argument
+     * constructor.
      *
      * @return an {@link Optional} carrying the annotation
      */
@@ -121,13 +108,11 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Stamps {@code xmlns="w:biz:msg_feedback"}, {@code type="set"},
-     * {@code to="s.whatsapp.net"} and emits a single
-     * {@code <user_feedback>} child carrying the
-     * {@code action} / {@code jid} pair plus the optional
-     * {@code feedback} annotation. The IQ {@code id} is assigned by
-     * the dispatcher.
+     * @implNote
+     * This implementation stamps {@code xmlns="w:biz:msg_feedback"}, {@code type="set"},
+     * {@code to="s.whatsapp.net"} and emits a single {@code <user_feedback>} child carrying the
+     * {@code action} and {@code jid} pair plus the optional {@code feedback} annotation. The IQ
+     * {@code id} is assigned by the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizMsgUserFeedbackUpdatePreferenceRequest",
@@ -148,6 +133,9 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
                 .content(feedbackBuilder.build());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -162,11 +150,17 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
                 && Objects.equals(this.feedback, that.feedback);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(action, jid, feedback);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxUpdatePreferenceRequest[action=" + action

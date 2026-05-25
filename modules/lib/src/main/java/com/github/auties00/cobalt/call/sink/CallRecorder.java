@@ -16,132 +16,122 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 /**
- * Mux's a live call's encoded audio + video packets into an MKV
- * file via libavformat — no re-encoding. The recorder takes the
- * Opus and VP8 / H.264 RTP payloads exactly as the call layer
- * produces them and writes them to disk in container-correct
- * order, keeping recording overhead at "byte copy + framing".
+ * Records a live call's encoded audio and video into a Matroska file without re-encoding.
  *
- * <p>Why MKV: it accepts both Opus and VP8 / H.264 natively
- * without timing or muxer-config gymnastics, where MP4 imposes
- * Annex B conversion / SPS-PPS extraction for H.264 and bans VP8
- * entirely.
+ * <p>This recorder muxes the call's already-encoded packets straight into an MKV container through
+ * libavformat, so its per-frame cost is a byte copy plus container framing rather than a codec pass.
+ * An application constructs it with the output path and the codec configuration of the call's
+ * streams, passing {@code null} for either media to omit it for an audio-only or video-only recording,
+ * then calls {@link #writeAudioPacket(byte[], long)} for each encoded audio payload and
+ * {@link #writeVideoPacket(byte[], long, boolean)} for each complete encoded video frame, tagging
+ * keyframes so the container index can seek to them. Callers supply presentation timestamps in
+ * milliseconds and the recorder scales each to its stream's time base. Closing flushes any buffered
+ * packets and writes the container trailer.
  *
- * <p>API shape:
- * <ul>
- *   <li>Construct with the output path + the codec configuration
- *       of the call's streams. Pass {@code null} for either
- *       codec to omit it (audio-only / video-only recordings).</li>
- *   <li>Call {@link #writeAudioPacket} for every encoded audio
- *       payload as it arrives.</li>
- *   <li>Call {@link #writeVideoPacket} for every encoded video
- *       payload (full frame, not RTP fragment), tagging keyframes
- *       so the MKV index can seek to them.</li>
- *   <li>Close to flush + write the trailer.</li>
- * </ul>
+ * <p>Matroska is used because it accepts both Opus audio and VP8 or H.264 video natively, whereas MP4
+ * would require Annex B conversion and parameter-set extraction for H.264 and rejects VP8 outright.
  *
- * <p>Timestamps: callers pass PTS in milliseconds; the recorder
- * scales them to each stream's time base for libavformat.
+ * @apiNote Use this to archive a call to a single file with no transcoding overhead, feeding it the
+ * encoded payloads the call produces. Pass complete video frames, not RTP fragments, and tag
+ * keyframes accurately, otherwise the recording cannot seek. For an uncompressed audio-only capture
+ * with no native dependency, prefer {@link WavFileSink}.
+ * @implNote This implementation requires the FFmpeg native libraries; the constructor calls
+ * {@link FFmpegLoader#ensureLoaded()} before touching any binding.
  */
 public final class CallRecorder implements AutoCloseable {
     /**
-     * Audio codec identifiers the recorder knows how to mux. Opus
-     * is what the call wire uses; we accept it directly. AAC is
-     * here so apps that bridge a call to AAC content can also
-     * record.
+     * Enumerates the audio codecs the recorder can mux.
      */
     public enum AudioCodec {
         /**
-         * Opus — the WhatsApp call wire codec.
+         * Identifies Opus, the WhatsApp call wire audio codec, accepted directly.
          */
         OPUS,
         /**
-         * AAC — included for non-call bridging scenarios.
+         * Identifies AAC, included for bridging non-call audio into a recording.
          */
         AAC
     }
 
     /**
-     * Video codec identifiers the recorder knows how to mux. VP8
-     * is the Cobalt call default; H.264 is the alternative the
-     * call also negotiates.
+     * Enumerates the video codecs the recorder can mux.
      */
     public enum VideoCodec {
         /**
-         * VP8 — the WhatsApp call wire codec.
+         * Identifies VP8, the default WhatsApp call wire video codec.
          */
         VP8,
         /**
-         * H.264 — the alternate WhatsApp call wire codec.
+         * Identifies H.264, the alternate WhatsApp call wire video codec.
          */
         H264
     }
 
     /**
-     * Lifetime arena.
+     * Holds the arena that owns every native allocation for the recording's lifetime.
      */
     private final Arena arena;
 
     /**
-     * libavformat output context.
+     * Holds the libavformat output context ({@code AVFormatContext*}).
      */
     private final MemorySegment formatCtx;
 
     /**
-     * Audio stream pointer ({@code AVStream*}), or {@code null}
-     * when no audio was configured.
+     * Holds the audio stream pointer ({@code AVStream*}), or {@code null} when no audio was
+     * configured.
      */
     private final MemorySegment audioStream;
 
     /**
-     * Video stream pointer ({@code AVStream*}), or {@code null}
-     * when no video was configured.
+     * Holds the video stream pointer ({@code AVStream*}), or {@code null} when no video was
+     * configured.
      */
     private final MemorySegment videoStream;
 
     /**
-     * Audio stream index inside the container; -1 if no audio.
+     * Holds the audio stream's index inside the container, or -1 when no audio was configured.
      */
     private final int audioStreamIndex;
 
     /**
-     * Video stream index inside the container; -1 if no video.
+     * Holds the video stream's index inside the container, or -1 when no video was configured.
      */
     private final int videoStreamIndex;
 
     /**
-     * Reusable AVPacket — refilled per write.
+     * Holds the reusable native packet ({@code AVPacket*}) refilled on each write.
      */
     private final MemorySegment packet;
 
     /**
-     * Whether {@link #close} has been called.
+     * Records whether {@link #close()} has run.
      */
     private boolean closed;
 
     /**
-     * Whether {@code avformat_write_header} ran successfully —
-     * gates whether {@code av_write_trailer} is needed on close.
+     * Records whether the container header was written, which gates whether the trailer must be
+     * written on close.
      */
     private boolean headerWritten;
 
     /**
-     * Opens {@code path} as an MKV output and configures the
-     * audio and video streams. Pass {@code null} for a stream's
-     * codec to omit it.
+     * Opens the given path as a Matroska output and configures the audio and video streams.
      *
-     * @param path            the output file
-     * @param audio           the audio codec, or {@code null}
-     * @param audioSampleRate audio sample rate (e.g. 48000 for
-     *                        Opus on the call wire)
-     * @param audioChannels   audio channel count (1 for the call
-     *                        wire)
-     * @param video           the video codec, or {@code null}
-     * @param videoWidth      video width; ignored when
-     *                        {@code video} is {@code null}
-     * @param videoHeight     video height; ignored when
-     *                        {@code video} is {@code null}
-     * @throws NullPointerException if {@code path} is null
+     * <p>Allocates the output context, configures one stream per non-{@code null} codec, opens the
+     * output file, and writes the container header so the recorder is ready to accept packets. Pass
+     * {@code null} for a stream's codec to omit it; the video dimensions are ignored when no video
+     * codec is given.
+     *
+     * @param path            the output file; never {@code null}
+     * @param audio           the audio codec, or {@code null} to omit audio
+     * @param audioSampleRate the audio sample rate in hertz, for example 48000 for call-wire Opus
+     * @param audioChannels   the audio channel count, 1 for the call wire
+     * @param video           the video codec, or {@code null} to omit video
+     * @param videoWidth      the video width in pixels; ignored when {@code video} is {@code null}
+     * @param videoHeight     the video height in pixels; ignored when {@code video} is {@code null}
+     * @throws NullPointerException     if {@code path} is {@code null}
+     * @throws IllegalArgumentException if both {@code audio} and {@code video} are {@code null}
      */
     public CallRecorder(Path path,
                         AudioCodec audio, int audioSampleRate, int audioChannels,
@@ -199,11 +189,11 @@ public final class CallRecorder implements AutoCloseable {
     /**
      * Appends one encoded audio payload to the recording.
      *
-     * @param payload the encoded payload bytes (e.g. an Opus
-     *                packet)
+     * @param payload the encoded payload bytes, for example one Opus packet; never {@code null}
      * @param ptsMs   the presentation timestamp in milliseconds
-     * @throws IllegalStateException if no audio stream was
-     *                               configured
+     * @throws NullPointerException  if {@code payload} is {@code null}
+     * @throws IllegalStateException if no audio stream was configured, or if the recorder is closed,
+     *                               or if the underlying write fails
      */
     public synchronized void writeAudioPacket(byte[] payload, long ptsMs) {
         Objects.requireNonNull(payload, "payload cannot be null");
@@ -216,12 +206,13 @@ public final class CallRecorder implements AutoCloseable {
     /**
      * Appends one encoded video payload to the recording.
      *
-     * @param payload  the encoded video payload bytes (a complete
-     *                 frame, not an RTP fragment)
+     * @param payload  the encoded video payload bytes, a complete frame rather than an RTP fragment;
+     *                 never {@code null}
      * @param ptsMs    the presentation timestamp in milliseconds
-     * @param keyframe whether this packet starts a keyframe
-     * @throws IllegalStateException if no video stream was
-     *                               configured
+     * @param keyframe whether this packet begins a keyframe
+     * @throws NullPointerException  if {@code payload} is {@code null}
+     * @throws IllegalStateException if no video stream was configured, or if the recorder is closed,
+     *                               or if the underlying write fails
      */
     public synchronized void writeVideoPacket(byte[] payload, long ptsMs, boolean keyframe) {
         Objects.requireNonNull(payload, "payload cannot be null");
@@ -232,15 +223,19 @@ public final class CallRecorder implements AutoCloseable {
     }
 
     /**
-     * Common write path — copies {@code payload} into a fresh
-     * native buffer, fills the AVPacket fields, and forwards to
-     * {@code av_interleaved_write_frame}.
+     * Copies one payload into a native buffer, fills the packet, and writes it to the container.
      *
-     * @param stream      the target {@code AVStream*}
+     * <p>Copies the payload into a freshly allocated native buffer, sets the packet's data, size, and
+     * stream index, scales the millisecond timestamp into the stream's time base for both the
+     * presentation and decode timestamps, marks the keyframe flag, and forwards the packet to
+     * interleaved writing so streams stay in container order.
+     *
+     * @param stream      the target stream pointer ({@code AVStream*})
      * @param streamIndex the stream's container index
      * @param payload     the encoded payload
-     * @param ptsMs       the millisecond pts
-     * @param keyframe    whether this is a keyframe
+     * @param ptsMs       the presentation timestamp in milliseconds
+     * @param keyframe    whether this packet begins a keyframe
+     * @throws IllegalStateException if the recorder is closed or the underlying write fails
      */
     private void writePacket(MemorySegment stream, int streamIndex,
                              byte[] payload, long ptsMs, boolean keyframe) {
@@ -274,8 +269,12 @@ public final class CallRecorder implements AutoCloseable {
     }
 
     /**
-     * Flushes any buffered packets, writes the MKV trailer, and
-     * closes the output file. Idempotent.
+     * Flushes buffered packets, writes the container trailer, and releases native resources.
+     *
+     * <p>Writes the trailer only when the header was written, closes the output file, frees the
+     * format context and the reusable packet, and closes the owning arena. A trailer write that fails
+     * is logged rather than thrown so the remaining resources are still released. Calling this more
+     * than once does nothing after the first time, so it is idempotent.
      */
     @Override
     public synchronized void close() {
@@ -309,15 +308,18 @@ public final class CallRecorder implements AutoCloseable {
     }
 
     /**
-     * Adds an audio {@code AVStream} to {@code formatCtx},
-     * configured for the given codec and rate / channel count.
+     * Adds and configures an audio stream on the output context.
      *
-     * @param formatCtx the output context
+     * <p>Allocates a new stream, sets its codec parameters to the requested codec with the given
+     * sample rate and a default channel layout for the channel count, and sets the stream time base
+     * to milliseconds so callers can pass millisecond timestamps directly.
+     *
+     * @param formatCtx the output context ({@code AVFormatContext*})
      * @param arena     the lifetime arena
-     * @param codec     which audio codec
-     * @param rate      sample rate
-     * @param channels  channel count
-     * @return the stream pointer
+     * @param codec     the audio codec to configure
+     * @param rate      the sample rate in hertz
+     * @param channels  the channel count
+     * @return the configured stream pointer ({@code AVStream*})
      */
     private static MemorySegment configureAudioStream(MemorySegment formatCtx, Arena arena,
                                                       AudioCodec codec, int rate, int channels) {
@@ -340,14 +342,17 @@ public final class CallRecorder implements AutoCloseable {
     }
 
     /**
-     * Adds a video {@code AVStream} to {@code formatCtx},
-     * configured for the given codec and dimensions.
+     * Adds and configures a video stream on the output context.
      *
-     * @param formatCtx the output context
-     * @param codec     which video codec
-     * @param w         width
-     * @param h         height
-     * @return the stream pointer
+     * <p>Allocates a new stream, sets its codec parameters to the requested codec with the given
+     * dimensions and a planar 4:2:0 pixel format, and sets the stream time base to milliseconds so
+     * callers can pass millisecond timestamps directly.
+     *
+     * @param formatCtx the output context ({@code AVFormatContext*})
+     * @param codec     the video codec to configure
+     * @param w         the width in pixels
+     * @param h         the height in pixels
+     * @return the configured stream pointer ({@code AVStream*})
      */
     private static MemorySegment configureVideoStream(MemorySegment formatCtx,
                                                        VideoCodec codec, int w, int h) {

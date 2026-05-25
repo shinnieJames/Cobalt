@@ -14,10 +14,9 @@ import java.util.Optional;
 
 /**
  * The outbound {@code <iq xmlns="w:g2" type="set">} stanza that joins a sub-group inside a community.
- *
- * @apiNote Drives the {@code WAWebGroupJoinSubgroupJob.joinSubgroup} flow used by the community sub-group preview UI;
- * pass the parent community JID as {@link #parentGroupJid()}, the target sub-group JID as
- * {@link #joinLinkedGroupJid()}, and a join-type discriminator: WA Web passes {@code "default_sub_group"} for linked
+ * <p>
+ * {@link #parentGroupJid()} is the parent community JID, {@link #joinLinkedGroupJid()} is the target sub-group JID, and
+ * the optional join-type discriminator distinguishes the sub-group kind: {@code "default_sub_group"} for linked
  * announcement groups and {@code "sub_group"} for ordinary sub-groups.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsJoinLinkedGroupRequest")
@@ -35,16 +34,16 @@ public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Req
     private final Jid joinLinkedGroupJid;
 
     /**
-     * The optional join-type discriminator (typically {@code "sub_group"} or {@code "default_sub_group"}); when
-     * {@code null} the {@code type} attribute is omitted.
+     * The optional join-type discriminator, typically {@code "sub_group"} or {@code "default_sub_group"};
+     * {@code null} omits the {@code type} attribute.
      */
     private final String joinLinkedGroupType;
 
     /**
      * Constructs a request.
-     *
-     * @apiNote WA Web passes {@code "default_sub_group"} for linked announcement groups and {@code "sub_group"}
-     * otherwise; passing {@code null} produces a request without a {@code type} attribute.
+     * <p>
+     * Pass {@code "default_sub_group"} for linked announcement groups and {@code "sub_group"} otherwise; passing
+     * {@code null} produces a request without a {@code type} attribute.
      *
      * @param parentGroupJid       the parent community {@link Jid}; never {@code null}
      * @param joinLinkedGroupJid   the sub-group {@link Jid} to join; never {@code null}
@@ -87,8 +86,8 @@ public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Req
 
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
-     *
-     * @apiNote The resulting envelope is
+     * <p>
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
      *         <join_linked_group jid="<joinLinkedGroupJid>" type="<joinLinkedGroupType>"/>

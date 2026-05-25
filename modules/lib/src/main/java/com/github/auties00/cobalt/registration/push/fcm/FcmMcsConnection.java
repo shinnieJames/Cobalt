@@ -14,57 +14,47 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Owns the long-lived MCS (Mobile Cloud Service) TLS stream the
- * {@link FcmClient} maintains with {@code mtalk.google.com:5228}
- * after registration completes.
+ * Owns the long-lived MCS (Mobile Cloud Service) TLS stream the {@link FcmClient} maintains with
+ * {@code mtalk.google.com:5228} after registration completes.
  *
- * <p>Drives the framed MCS protocol end-to-end: version preamble,
- * login handshake, heartbeat ping/ack exchange, periodic stream-ack
- * iq, and incoming data-message stanzas. Reconnects with a fixed
- * back-off after any transport failure.
+ * <p>Drives the framed MCS protocol end-to-end: version preamble, login handshake, heartbeat ping/ack exchange,
+ * periodic stream-ack iq, and incoming data-message stanzas. Reconnects with a fixed back-off after any transport
+ * failure.
  *
  * <p>Two virtual threads are involved at steady state:
  * <ul>
- *   <li>the <em>reader thread</em>, started by {@link #start()},
- *       owns the socket lifecycle and pumps incoming frames;</li>
- *   <li>the <em>heartbeat thread</em>, spawned per connection by the
- *       reader after login, writes a {@link FcmMcsHeartbeatPing}
- *       every {@link #HEARTBEAT_INTERVAL_SECONDS} seconds.</li>
+ *   <li>the <em>reader thread</em>, started by {@link #start()}, owns the socket lifecycle and pumps incoming
+ *       frames;</li>
+ *   <li>the <em>heartbeat thread</em>, spawned per connection by the reader after login, writes a
+ *       {@link FcmMcsHeartbeatPing} every {@link #HEARTBEAT_INTERVAL_SECONDS} seconds.</li>
  * </ul>
  *
- * <p>Both writers go through {@link #writeLock} so frames can never
- * interleave on the wire. Persistent ids accumulated from incoming
- * data messages are mirrored into {@link FcmSession#persistentIds()}
- * under {@link #sessionLock} so the next login can replay them.
- * Push-code values extracted from incoming {@code app_data} are
- * handed to {@link FcmPushCode#deliver(String)} so callers blocked in
- * {@link FcmClient#getPushCode()} unblock immediately.
+ * <p>Both writers go through {@link #writeLock} so frames can never interleave on the wire. Persistent ids accumulated
+ * from incoming data messages are mirrored into {@link FcmSession#persistentIds()} under {@link #sessionLock} so the
+ * next login can replay them. Push-code values extracted from incoming {@code app_data} are handed to
+ * {@link FcmPushCode#deliver(String)} so callers blocked in {@link FcmClient#getPushCode()} unblock immediately.
  */
 final class FcmMcsConnection {
     /**
      * Logger shared with the rest of the FCM client.
      *
-     * @apiNote
-     * Same logger name {@code cobalt.fcm} as {@link FcmRegistration}
-     * so consumers can configure verbosity for the whole subsystem in
-     * one place.
+     * <p>Uses the same logger name {@code cobalt.fcm} as {@link FcmRegistration} so consumers can configure verbosity
+     * for the whole subsystem in one place.
      */
     private static final Logger LOG = System.getLogger("cobalt.fcm");
 
     /**
-     * MCS gateway hostname; identical for every Android device.
+     * MCS gateway hostname, identical for every Android device.
      */
     private static final String MCS_HOST = "mtalk.google.com";
 
     /**
-     * MCS port; matches the value the native Play Services client
-     * uses.
+     * MCS port; matches the value the native Play Services client uses.
      */
     private static final int MCS_PORT = 5228;
 
     /**
-     * Single-byte version preamble sent before the first framed
-     * packet on every connection.
+     * Single-byte version preamble sent before the first framed packet on every connection.
      */
     private static final byte MCS_VERSION = 41;
 
@@ -96,172 +86,140 @@ final class FcmMcsConnection {
     /**
      * Frame tag for {@link FcmMcsIqStanza}.
      *
-     * @apiNote
-     * Cobalt only emits the periodic stream-ack iq.
+     * <p>Cobalt only emits the periodic stream-ack iq under this tag.
      */
     private static final byte TAG_IQ_STANZA = 7;
 
     /**
-     * Frame tag for incoming {@link FcmMcsDataMessageStanza} (silent
-     * push notifications).
+     * Frame tag for incoming {@link FcmMcsDataMessageStanza}, the silent push notifications.
      */
     private static final byte TAG_DATA_MESSAGE_STANZA = 8;
 
     /**
      * Heartbeat interval in seconds.
      *
-     * @apiNote
-     * Matches the cadence the native client uses to keep middleboxes
-     * from idle-timing out the TCP flow.
+     * @implNote
+     * This implementation uses ten minutes to match the cadence the native client uses to keep middleboxes from
+     * idle-timing out the TCP flow.
      */
     private static final long HEARTBEAT_INTERVAL_SECONDS = 10 * 60L;
 
     /**
-     * Number of frames that must arrive before the client emits a
-     * cumulative stream-ack iq advancing the server's retry cursor.
+     * Number of frames that must arrive before the client emits a cumulative stream-ack iq advancing the server's
+     * retry cursor.
      */
     private static final int STREAM_ACK_EVERY = 10;
 
     /**
-     * Maximum number of persistent ids the client retains for replay
-     * on the next login.
+     * Maximum number of persistent ids the client retains for replay on the next login.
      *
-     * @apiNote
-     * Older ids are discarded so the {@link FcmSession} payload stays
-     * bounded across long-lived sessions.
+     * @implNote
+     * This implementation discards older ids beyond this cap so the {@link FcmSession} payload stays bounded across
+     * long-lived sessions.
      */
     private static final int PERSISTENT_ID_BUFFER = 50;
 
     /**
-     * Back-off in milliseconds between reconnect attempts after a
-     * transport failure.
+     * Back-off in milliseconds between reconnect attempts after a transport failure.
      *
-     * @apiNote
-     * Matches the value the native Play Services client settles on
-     * after the first burst of fast retries.
+     * @implNote
+     * This implementation uses ten seconds to match the value the native Play Services client settles on after the
+     * first burst of fast retries.
      */
     private static final long RECONNECT_BACKOFF_MS = 10_000L;
 
     /**
-     * Key used by WhatsApp's silent verification push to carry the
-     * {@code /v2/code} value inside the FCM data message's
-     * {@code app_data} map.
-     *
-     * @apiNote
-     * Mirrors the {@code data.registration_code} field of the
-     * historical {@code GcmWhatsappResponse} record from the legacy
-     * {@code GcmClient}.
+     * Key under which WhatsApp's silent verification push carries the {@code /v2/code} value inside the FCM data
+     * message's {@code app_data} map.
      */
     private static final String PUSH_CODE_APP_DATA_KEY = "registration_code";
 
     /**
      * Session whose credentials drive the login packet.
      *
-     * @apiNote
-     * The session's {@link FcmSession#persistentIds()} list is mirrored
-     * from inbound stanzas.
+     * <p>The session's {@link FcmSession#persistentIds()} list is mirrored from inbound stanzas.
      */
     private final FcmSession session;
 
     /**
-     * Sink for verification codes extracted from incoming
-     * {@code app_data} entries.
+     * Sink for verification codes extracted from incoming {@code app_data} entries.
      */
     private final FcmPushCode pushCode;
 
     /**
      * Serialises every outbound write on the MCS stream.
      *
-     * @apiNote
-     * Both the reader thread (acks, heartbeat acks) and the heartbeat
-     * virtual thread (10-min ping) need to write framed bytes.
-     * Without this lock two writers could interleave inside one frame
-     * and corrupt the stream.
+     * @implNote
+     * Both the reader thread (acks, heartbeat acks) and the heartbeat virtual thread (ten-minute ping) need to write
+     * framed bytes; without this lock two writers could interleave inside one frame and corrupt the stream.
      */
     private final Object writeLock;
 
     /**
-     * Lock guarding mutations and snapshots of
-     * {@link FcmSession#persistentIds()}.
+     * Lock guarding mutations and snapshots of {@link FcmSession#persistentIds()}.
      *
-     * @apiNote
-     * A dedicated final monitor (rather than
-     * {@code synchronized (session)}) keeps lock identity stable
-     * across the connection's lifetime even if {@link #session} were
-     * ever replaced.
+     * @implNote
+     * This implementation uses a dedicated final monitor rather than {@code synchronized (session)} so lock identity
+     * stays stable across the connection's lifetime even if {@link #session} were ever replaced.
      */
     private final Object sessionLock;
 
     /**
-     * Currently-attached TLS socket, or {@code null} between
-     * connection attempts.
+     * Currently-attached TLS socket, or {@code null} between connection attempts.
      *
-     * @apiNote
-     * Held {@code volatile} so {@link #close()} can read a fresh
-     * value from any thread.
+     * @implNote
+     * This implementation holds the reference {@code volatile} so {@link #close()} can read a fresh value from any
+     * thread.
      */
     private volatile SSLSocket socket;
 
     /**
      * Reader virtual thread, started by {@link #start()}.
      *
-     * @apiNote
-     * Held {@code volatile} so {@link #close()} can interrupt it from
-     * any thread.
+     * @implNote
+     * This implementation holds the reference {@code volatile} so {@link #close()} can interrupt it from any thread.
      */
     private volatile Thread listenerThread;
 
     /**
      * Heartbeat virtual thread for the current connection.
      *
-     * @apiNote
-     * Replaced each time {@link #connectAndListen()} reconnects.
+     * <p>Replaced each time {@link #connectAndListen()} reconnects.
      */
     private volatile Thread heartbeatThread;
 
     /**
      * Stop flag flipped by {@link #close()}.
      *
-     * @apiNote
-     * Read by both the listener loop and the heartbeat loop on every
-     * iteration so they exit promptly without waiting for the next
-     * blocking I/O call to time out.
+     * <p>Read by both the listener loop and the heartbeat loop on every iteration so they exit promptly without
+     * waiting for the next blocking I/O call to time out.
      */
     private volatile boolean stopped;
 
     /**
      * Last received stream id.
      *
-     * @apiNote
-     * Written by the reader thread and read by both the reader (for
-     * iq acks) and the heartbeat thread (for the ping cursor); marked
-     * {@code volatile} so the heartbeat thread sees fresh values
-     * without a happens-before edge per ping.
+     * @implNote
+     * Written by the reader thread and read by both the reader (for iq acks) and the heartbeat thread (for the ping
+     * cursor); this implementation marks it {@code volatile} so the heartbeat thread sees fresh values without a
+     * happens-before edge per ping.
      */
     private volatile long streamId;
 
     /**
-     * Highest stream id already advertised to the server via a
-     * stream-ack iq.
+     * Highest stream id already advertised to the server via a stream-ack iq.
      *
-     * @apiNote
-     * Lives only on the reader thread, so no synchronisation is
-     * required.
+     * <p>Lives only on the reader thread, so no synchronisation is required.
      */
     private long lastStreamIdReported;
 
     /**
-     * Constructs a new connection bound to the given session and
-     * push-code sink.
+     * Constructs a new connection bound to the given session and push-code sink.
      *
-     * @apiNote
-     * Does not open a socket; the caller must invoke {@link #start()}
-     * after construction.
+     * <p>Does not open a socket; the caller must invoke {@link #start()} after construction.
      *
-     * @param session  the session that supplies login credentials and
-     *                 receives persistent-id updates
-     * @param pushCode the holder where verification codes are
-     *                 delivered
+     * @param session  the session that supplies login credentials and receives persistent-id updates
+     * @param pushCode the holder where verification codes are delivered
      */
     FcmMcsConnection(FcmSession session, FcmPushCode pushCode) {
         this.session = session;
@@ -274,20 +232,17 @@ final class FcmMcsConnection {
     /**
      * Spawns the reader virtual thread that owns the MCS connection.
      *
-     * @apiNote
-     * Returns immediately; subsequent transport failures are swallowed
-     * and retried until {@link #close()} flips the stop flag.
+     * <p>Returns immediately; subsequent transport failures are swallowed and retried until {@link #close()} flips the
+     * stop flag.
      */
     void start() {
         this.listenerThread = Thread.startVirtualThread(this::listenLoop);
     }
 
     /**
-     * Stops the reader and heartbeat threads, tears down the TLS
-     * socket, and lets {@link #listenLoop()} return.
+     * Stops the reader and heartbeat threads, tears down the TLS socket, and lets {@link #listenLoop()} return.
      *
-     * @apiNote
-     * Idempotent; called by {@link FcmClient#close()}.
+     * <p>Idempotent; called by {@link FcmClient#close()}.
      */
     void close() {
         stopped = true;
@@ -309,12 +264,10 @@ final class FcmMcsConnection {
     }
 
     /**
-     * Reader virtual-thread loop.
+     * Runs the reader virtual-thread loop.
      *
-     * @apiNote
-     * Reconnects with a fixed back-off on every transport failure;
-     * exits cleanly when {@link #stopped} flips to {@code true} or
-     * when the thread is interrupted by {@link #close()}.
+     * <p>Reconnects with a fixed back-off on every transport failure; exits cleanly when {@link #stopped} flips to
+     * {@code true} or when the thread is interrupted by {@link #close()}.
      */
     private void listenLoop() {
         while (!stopped) {
@@ -342,11 +295,9 @@ final class FcmMcsConnection {
     /**
      * Performs one MCS connection cycle.
      *
-     * @apiNote
-     * TLS handshake, version preamble plus {@link FcmMcsLoginRequest},
-     * {@link FcmMcsLoginResponse} check, heartbeat thread spin-up,
-     * then frame loop until {@link #stopped} flips or the stream
-     * errors out (caught by the outer {@link #listenLoop()}).
+     * <p>Opens the TLS socket, writes the version preamble plus the {@link FcmMcsLoginRequest}, checks the
+     * {@link FcmMcsLoginResponse}, spins up the heartbeat thread, then loops reading frames until {@link #stopped}
+     * flips or the stream errors out (the failure is caught by the outer {@link #listenLoop()}).
      *
      * @throws Exception on any transport failure or login refusal
      */
@@ -397,15 +348,12 @@ final class FcmMcsConnection {
     /**
      * Routes one decoded frame to the matching protocol handler.
      *
-     * @apiNote
-     * Unknown tags are logged and ignored. A {@link #TAG_CLOSE} from
-     * the server is converted to an {@link IOException} so the outer
-     * {@link #listenLoop()} reconnects.
+     * <p>Unknown tags are logged and ignored. A {@link #TAG_CLOSE} from the server is converted to an
+     * {@link IOException} so the outer {@link #listenLoop()} reconnects.
      *
      * @param frame the just-read frame
      * @param out   the connection's output stream, for writing acks
-     * @throws IOException if the server requested close or a write
-     *                     fails
+     * @throws IOException if the server requested close or a write fails
      */
     private void handleFrame(Frame frame, OutputStream out) throws IOException {
         switch (frame.tag) {
@@ -432,15 +380,11 @@ final class FcmMcsConnection {
     }
 
     /**
-     * Decodes an incoming data-message stanza, mirrors its
-     * {@code persistent_id} into {@link FcmSession#persistentIds()},
-     * and surfaces any {@code registration_code} entry to
-     * {@link #pushCode}.
+     * Decodes an incoming data-message stanza, mirrors its {@code persistent_id} into
+     * {@link FcmSession#persistentIds()}, and surfaces any {@code registration_code} entry to {@link #pushCode}.
      *
-     * @apiNote
-     * The persistent-id list is trimmed to the most-recent
-     * {@link #PERSISTENT_ID_BUFFER} entries so a long-lived session
-     * never accumulates an unbounded payload.
+     * <p>The persistent-id list is trimmed to the most-recent {@link #PERSISTENT_ID_BUFFER} entries so a long-lived
+     * session never accumulates an unbounded payload.
      *
      * @param payload the encoded stanza bytes
      */
@@ -468,17 +412,14 @@ final class FcmMcsConnection {
     }
 
     /**
-     * Writes a stream-ack iq when either {@code force} is set or
-     * {@link #STREAM_ACK_EVERY} new frames have arrived since the
-     * previous ack.
+     * Writes a stream-ack iq when either {@code force} is set or {@link #STREAM_ACK_EVERY} new frames have arrived
+     * since the previous ack.
      *
-     * @apiNote
-     * Updates {@link #lastStreamIdReported} on success so the next
-     * call uses the freshly advertised cursor as its baseline.
+     * <p>Updates {@link #lastStreamIdReported} on success so the next call uses the freshly advertised cursor as its
+     * baseline.
      *
      * @param out   the connection's output stream
-     * @param force if {@code true}, sends an iq even when fewer than
-     *              {@link #STREAM_ACK_EVERY} frames have accumulated
+     * @param force if {@code true}, sends an iq even when fewer than {@link #STREAM_ACK_EVERY} frames have accumulated
      * @throws IOException if the write fails
      */
     private void ackIfNeeded(OutputStream out, boolean force) throws IOException {
@@ -507,10 +448,8 @@ final class FcmMcsConnection {
     /**
      * Builds the login request packet for the current connection.
      *
-     * @apiNote
-     * Snapshots the persistent-id list under {@link #sessionLock} so
-     * it cannot mutate mid-encode while the reader thread receives a
-     * new push.
+     * <p>Snapshots the persistent-id list under {@link #sessionLock} so it cannot mutate mid-encode while the reader
+     * thread receives a new push.
      *
      * @return the populated login request
      */
@@ -543,10 +482,8 @@ final class FcmMcsConnection {
     /**
      * Spawns the heartbeat virtual thread for the current connection.
      *
-     * @apiNote
-     * Quietly returns when the socket dies; the outer reader loop
-     * notices the failure and reconnects, which spawns a fresh
-     * heartbeat thread.
+     * <p>Quietly returns when the socket dies; the outer reader loop notices the failure and reconnects, which spawns
+     * a fresh heartbeat thread.
      *
      * @param out the connection's output stream
      */
@@ -573,12 +510,9 @@ final class FcmMcsConnection {
     }
 
     /**
-     * One MCS frame: a one-byte tag, a varint length prefix, and a
-     * payload.
+     * One MCS frame: a one-byte tag, a varint length prefix, and a payload.
      *
-     * @apiNote
-     * Used as the unit of transfer between
-     * {@link #readFrame(InputStream)} and
+     * <p>Used as the unit of transfer between {@link #readFrame(InputStream)} and
      * {@link #handleFrame(Frame, OutputStream)}.
      *
      * @param tag     the frame tag identifying the protocol message
@@ -590,10 +524,8 @@ final class FcmMcsConnection {
     /**
      * Writes one MCS frame to {@code out}.
      *
-     * @apiNote
-     * Writes the tag byte, the varint-encoded payload length, then
-     * the payload itself in a single buffered write to keep the wire
-     * frame contiguous.
+     * <p>Writes the tag byte, the varint-encoded payload length, then the payload itself in a single buffered write to
+     * keep the wire frame contiguous.
      *
      * @param out     the destination stream
      * @param tag     the frame tag byte
@@ -613,16 +545,12 @@ final class FcmMcsConnection {
     /**
      * Reads exactly one MCS frame from {@code in}.
      *
-     * @apiNote
-     * Loops on {@link InputStream#read(byte[], int, int)} until the
-     * full payload has been read; a zero-byte read past EOF surfaces
-     * as an {@link IOException} rather than returning a truncated
-     * payload.
+     * <p>Loops on {@link InputStream#read(byte[], int, int)} until the full payload has been read; a stream close
+     * mid-payload surfaces as an {@link IOException} rather than returning a truncated payload.
      *
      * @param in the source stream
      * @return the decoded frame
-     * @throws IOException if the stream closes mid-frame or the
-     *                     payload is truncated
+     * @throws IOException if the stream closes mid-frame or the payload is truncated
      */
     private static Frame readFrame(InputStream in) throws IOException {
         var tag = in.read();
@@ -645,12 +573,11 @@ final class FcmMcsConnection {
     /**
      * Encodes a non-negative {@code long} as protobuf varint bytes.
      *
-     * @apiNote
-     * Allocates a 10-byte scratch buffer (the maximum varint width
-     * for a 64-bit value), then trims to the actual encoded length
-     * before returning.
+     * @implNote
+     * This implementation allocates a 10-byte scratch buffer (the maximum varint width for a 64-bit value), then trims
+     * to the actual encoded length before returning.
      *
-     * @param value the value to encode (treated as unsigned)
+     * @param value the value to encode, treated as unsigned
      * @return the varint bytes
      */
     private static byte[] encodeVarint(long value) {
@@ -669,16 +596,12 @@ final class FcmMcsConnection {
     /**
      * Reads a varint-encoded payload length from {@code in}.
      *
-     * @apiNote
-     * Rejects values that overflow {@link Integer#MAX_VALUE} or
-     * exceed the 64-bit varint width so a malicious peer cannot
-     * trigger an unbounded allocation through the
-     * {@link #readFrame(InputStream)} payload buffer.
+     * <p>Rejects values that overflow {@link Integer#MAX_VALUE} or exceed the 64-bit varint width so a malicious peer
+     * cannot trigger an unbounded allocation through the {@link #readFrame(InputStream)} payload buffer.
      *
      * @param in the source stream
      * @return the decoded length, in {@code [0, Integer.MAX_VALUE]}
-     * @throws IOException if the stream closes mid-varint or the
-     *                     decoded length is out of range
+     * @throws IOException if the stream closes mid-varint or the decoded length is out of range
      */
     private static int readVarintInt(InputStream in) throws IOException {
         var result = 0L;

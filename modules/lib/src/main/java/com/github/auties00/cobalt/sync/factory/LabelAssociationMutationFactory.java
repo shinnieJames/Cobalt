@@ -17,32 +17,23 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that associate (or disassociate) a Business label with a chat or contact.
  *
- * @apiNote
- * Drives the Business label-management surfaces:
- * {@code WAWebBizLabelEditingAction} flushes per-target add/remove
- * operations, {@code WAWebChatDeleteBridge} purges associations on chat
- * deletion, and {@code WAWebEditLabelAssociationBridge} flushes editor
- * commits, all going through this factory before
- * {@code WAWebSyncdCoreApi.lockForSync}. The factory is the
+ * Drives the Business label-management surfaces: per-target add and remove operations, association
+ * purges on chat deletion, and editor commits all flow through this factory. This factory is the
  * outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.LabelAssociationHandler}.
  *
  * @implNote
- * This implementation emits one mutation per
- * {@code (labelId, targetJid)} pair. WA Web's
- * {@code WAWebLabelJidSync.createLabelAssociationMutations} loops over a
- * {@code labels[]} x {@code targets[]} cartesian product and additionally
- * emits {@code WAWebWamLabelSyncTrackingReporter} telemetry; Cobalt does
- * not run WAM label tracking, so the call site loops at its own level and
- * the telemetry hook is omitted.
+ * This implementation emits one mutation per {@code (labelId, targetJid)} pair. WA Web's
+ * {@code createLabelAssociationMutations} loops over a {@code labels[]} x {@code targets[]} cartesian
+ * product and additionally emits {@code WAWebWamLabelSyncTrackingReporter} telemetry; Cobalt does not
+ * run WAM label tracking, so the call site loops at its own level and the telemetry hook is omitted.
  */
 public final class LabelAssociationMutationFactory {
     /**
      * Creates an instance with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public LabelAssociationMutationFactory() {
 
@@ -51,24 +42,20 @@ public final class LabelAssociationMutationFactory {
     /**
      * Returns a SET mutation that adds or removes a label-to-target association.
      *
-     * @apiNote
      * The mutation index follows
      * {@snippet :
      *     ["label_jid", labelId, targetJid.toString()]
      * }
-     * and the {@link LabelAssociationAction} sub-message carries the
-     * {@code labeled} flag (a "remove" association still emits a SET, with
-     * {@code labeled == false}). Callers must pre-resolve LID 1x1 migration
-     * on {@code targetJid} when applicable; WA Web does that resolution
-     * inline by calling {@code WAWebSyncdGetChat.getWidMutationIndexForWid}
-     * on each target.
+     * and the {@link LabelAssociationAction} sub-message carries the {@code labeled} flag (a "remove"
+     * association still emits a SET, with {@code labeled == false}). Callers must pre-resolve LID 1x1
+     * migration on {@code targetJid} when applicable; WA Web does that resolution inline by calling
+     * {@code WAWebSyncdGetChat.getWidMutationIndexForWid} on each target.
      *
      * @implNote
-     * This implementation pins the action version through
-     * {@link LabelAssociationAction#ACTION_VERSION}, which matches WA Web's
-     * {@code WASyncdConst.LABEL_ASSOCIATION_SYNC_VERSION}. The
-     * {@code modelMetaData} field is left empty to match WA Web's call
-     * site, which also sets it to an empty array.
+     * This implementation pins the action version through {@link LabelAssociationAction#ACTION_VERSION},
+     * which matches WA Web's {@code WASyncdConst.LABEL_ASSOCIATION_SYNC_VERSION}. The
+     * {@code modelMetaData} field is left empty to match WA Web's call site, which also sets it to an
+     * empty array.
      *
      * @param labelId   the label identifier (caller stringifies)
      * @param targetJid the chat or contact {@link Jid} being labelled

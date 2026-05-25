@@ -8,24 +8,23 @@ import java.util.Optional;
 
 /**
  * The payment metadata extracted from the {@code <pay>} and
- * {@code <transaction>} children of an incoming {@code <message>} stanza by
- * {@link MessageReceiveStanzaParser}.
+ * {@code <transaction>} children of an incoming {@code <message>} stanza.
  *
- * @apiNote
- * The two children sit as direct siblings of the {@code <message>} node, not
- * nested; this record flattens both into one shape so the UI does not need
- * to know which node carried which attribute. When both are present the
- * {@code <transaction>} fields win, because {@code <transaction>} is the
- * newer Novi/WhatsApp Pay envelope. The {@link #futureproofed()} flag is
- * set when the {@code <pay>} or {@code <transaction>} node is a Novi-style
- * envelope that this client does not yet understand; downstream code skips
- * rendering payment details in that case.
+ * <p>The two children sit as direct siblings of the {@code <message>} node, not
+ * nested; this record flattens both into one shape so the UI does not need to
+ * know which node carried which attribute. When both are present the
+ * {@code <transaction>} fields win, because {@code <transaction>} is the newer
+ * Novi/WhatsApp Pay envelope. The {@link #futureproofed()} flag is set when the
+ * {@code <pay>} or {@code <transaction>} node is a Novi-style envelope that this
+ * client does not yet understand; downstream code skips rendering payment
+ * details in that case. Instances are produced by
+ * {@link MessageReceiveStanzaParser} and consumed via
+ * {@link MessageReceiveStanza#paymentInfo()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceivePaymentInfo {
     /**
-     * {@code true} when WA Web's {@code isNoviTransaction} check marks the
-     * payment node as a future Novi envelope.
+     * {@code true} when the payment node is tagged as a future Novi envelope.
      */
     private final boolean futureproofed;
 
@@ -46,9 +45,9 @@ public final class MessageReceivePaymentInfo {
      * (millicents for USD-style currencies).
      *
      * @implNote
-     * This implementation keeps WA Web's wire-level scaling factor of 1000
-     * instead of converting to a decimal type so the value round-trips
-     * losslessly through any downstream WhatsApp Pay surfaces.
+     * This implementation keeps the wire-level scaling factor of 1000 instead
+     * of converting to a decimal type so the value round-trips losslessly
+     * through any downstream WhatsApp Pay surfaces.
      */
     private final Long amount1000;
 
@@ -59,18 +58,14 @@ public final class MessageReceivePaymentInfo {
 
     /**
      * The WhatsApp Pay transaction status (for example {@code INIT},
-     * {@code PENDING}, {@code COMPLETED}), set only when the local user is
-     * a party to the transaction.
+     * {@code PENDING}, {@code COMPLETED}), set only when the local user is a
+     * party to the transaction.
      */
     private final String txnStatus;
 
     /**
      * Constructs a populated record from the values extracted by
      * {@link MessageReceiveStanzaParser}.
-     *
-     * @apiNote
-     * Not intended for direct use outside the parser; callers consume
-     * existing instances via {@link MessageReceiveStanza#paymentInfo()}.
      *
      * @param futureproofed        whether this is a Novi-style futureproofed envelope
      * @param receiverJid          the receiver JID string, or {@code null}
@@ -101,8 +96,7 @@ public final class MessageReceivePaymentInfo {
      * Returns whether this payment node was tagged as a Novi-style
      * futureproofed envelope.
      *
-     * @apiNote
-     * When {@code true} every other field on this record is empty; the
+     * <p>When {@code true} every other field on this record is empty; the
      * receiver should fall back to a generic "unsupported payment" placeholder
      * rather than attempting to render the transaction.
      *
@@ -115,9 +109,8 @@ public final class MessageReceivePaymentInfo {
     /**
      * Returns the string form of the receiver's JID, when present.
      *
-     * @apiNote
-     * Identifies which side of the transaction is the payee; compared against
-     * the local user JID to decide whether to display a status badge.
+     * <p>Identifies which side of the transaction is the payee; compared
+     * against the local user JID to decide whether to display a status badge.
      *
      * @return an {@link Optional} wrapping the receiver JID string
      */
@@ -128,8 +121,7 @@ public final class MessageReceivePaymentInfo {
     /**
      * Returns the ISO currency code, when present.
      *
-     * @apiNote
-     * Combined with {@link #amount1000()} to format the displayed monetary
+     * <p>Combined with {@link #amount1000()} to format the displayed monetary
      * value.
      *
      * @return an {@link Optional} wrapping the currency code
@@ -139,12 +131,12 @@ public final class MessageReceivePaymentInfo {
     }
 
     /**
-     * Returns the payment amount in 1/1000 units of the smallest currency
-     * unit, when present.
+     * Returns the payment amount in 1/1000 units of the smallest currency unit,
+     * when present.
      *
-     * @apiNote
-     * Divide by 1000 to obtain the value in the smallest currency unit and by
-     * 100000 to obtain the value in the major unit (for USD style currencies).
+     * <p>Divide by 1000 to obtain the value in the smallest currency unit and
+     * by 100000 to obtain the value in the major unit (for USD-style
+     * currencies).
      *
      * @return an {@link Optional} wrapping the amount
      */
@@ -155,10 +147,9 @@ public final class MessageReceivePaymentInfo {
     /**
      * Returns the WhatsApp Pay transaction status, when present.
      *
-     * @apiNote
-     * Populated by WA Web's {@code getPaymentTxnWebStatus} only when the
-     * receiver is a party to the transaction; absence here typically means
-     * the message is a third-party transaction visible inside a group chat.
+     * <p>Populated only when the receiver is a party to the transaction;
+     * absence here typically means the message is a third-party transaction
+     * visible inside a group chat.
      *
      * @return an {@link Optional} wrapping the status
      */
@@ -169,8 +160,7 @@ public final class MessageReceivePaymentInfo {
     /**
      * Returns the Unix-second transaction timestamp, when present.
      *
-     * @apiNote
-     * Defaults to the message's own {@code t} attribute for legacy
+     * <p>Defaults to the message's own {@code t} attribute for legacy
      * {@code <pay type="send">} stanzas that have no transaction-level
      * timestamp.
      *

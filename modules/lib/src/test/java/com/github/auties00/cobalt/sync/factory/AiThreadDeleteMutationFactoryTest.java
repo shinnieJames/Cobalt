@@ -7,25 +7,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link AiThreadDeleteMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing AI-thread-delete mutation. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.AiThreadDeleteHandler}
- * whose inbound-side coverage lives in
- * {@code AiThreadDeleteHandlerTest}.
- *
- * @implNote
- * This implementation gates the encode test on
- * {@link SyncFixtures#isOracleAvailable(String)}; when no encode fixture
- * has been captured the test no-ops cleanly, matching the rule in
- * memory feedback_no_synthetic_fixtures.
+ * Covers {@link AiThreadDeleteMutationFactory} against captured WhatsApp Web
+ * encode payloads. The encode check is gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so it no-ops cleanly until a
+ * real captured fixture for {@code handler/ai-thread-delete/encode} exists.
  */
 @DisplayName("AiThreadDeleteMutationFactory")
 class AiThreadDeleteMutationFactoryTest {
-    /**
-     * Asserts that the captured encode oracle is loadable when present.
-     */
     @Test
     @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
     void oracle() {

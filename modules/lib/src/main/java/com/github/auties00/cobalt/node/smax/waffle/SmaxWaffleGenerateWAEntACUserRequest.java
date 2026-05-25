@@ -13,79 +13,61 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="waffle" smax_id="37" type="get"/>}
- * Waffle generate-WAEntAC-user request.
- *
- * @apiNote
- * Powers {@code WAWebAccountLinkingAPI.generateWAEntACUser}, which
- * bootstraps a fresh Waffle ("WAEnt-AC") user record on the Facebook
- * side at the moment the local user agrees to a Facebook-linking
- * disclosure flow. The body carries the encrypted-payload mixin
- * (typically an encrypted password / link request blob) plus the
- * accepted-disclosure metadata; the reply is parsed by
- * {@link SmaxWaffleGenerateWAEntACUserResponse} and returns fresh
- * encryption metadata that the embedder decrypts to recover the linked
- * {@code fbid}.
+ * Models the outbound Waffle generate-WAEntAC-user request.
+ * <p>
+ * This request bootstraps a fresh Waffle ("WAEnt-AC") user record on the Facebook side when the local user
+ * agrees to a Facebook-linking disclosure flow. The body carries the encrypted payload inside
+ * {@link SmaxWaffleRsaEncryptionMetadata} plus the four accepted-disclosure fields (the disclosure record's
+ * numeric id and version, and the user's language-group and locale codes). The reply is parsed by
+ * {@link SmaxWaffleGenerateWAEntACUserResponse} and returns fresh encryption metadata that decrypts to the
+ * linked {@code fbid}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleGenerateWAEntACUserRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
 public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation.Request {
     /**
-     * The RSA encryption metadata subtree.
+     * Holds the RSA encryption metadata subtree.
      */
     private final SmaxWaffleRsaEncryptionMetadata encryptionMetadata;
 
     /**
-     * The client wall-clock at request time.
+     * Holds the client wall-clock value stamped at request time.
      */
     private final long timestamp;
 
     /**
-     * The numeric id of the legal-disclosure record the user accepted
-     * at link time.
+     * Holds the numeric id of the legal-disclosure record the user accepted at link time.
      */
     private final int disclosureId;
 
     /**
-     * The version string of the legal-disclosure record.
+     * Holds the version string of the accepted legal-disclosure record.
      */
     private final String disclosureVersion;
 
     /**
-     * The user's language-group code (for example {@code "en"}).
+     * Holds the user's language-group code (for example {@code "en"}).
      */
     private final String disclosureLg;
 
     /**
-     * The user's locale code (for example {@code "US"}).
+     * Holds the user's locale code (for example {@code "US"}).
      */
     private final String disclosureLc;
 
     /**
-     * Constructs a generate-WAEntAC-user request.
+     * Constructs a generate-WAEntAC-user request from the metadata, timestamp, and four disclosure fields.
+     * <p>
+     * The four disclosure fields encode the legal acceptance the user supplied in the linking flow.
      *
-     * @apiNote
-     * The four disclosure fields encode the legal acceptance the user
-     * supplied in the linking UI: the disclosure record's numeric id,
-     * its version string, and the user's language-group / locale
-     * codes. WA Web stamps the request with {@code Date.now()}
-     * (milliseconds since the Unix epoch) and pulls the disclosure
-     * fields from the linking flow's UI state.
-     *
-     * @param encryptionMetadata the RSA encryption metadata; never
-     *                           {@code null}
+     * @param encryptionMetadata the RSA encryption metadata; never {@code null}
      * @param timestamp          the request timestamp
      * @param disclosureId       the accepted disclosure record id
-     * @param disclosureVersion  the accepted disclosure version; never
-     *                           {@code null}
-     * @param disclosureLg       the language-group code; never
-     *                           {@code null}
+     * @param disclosureVersion  the accepted disclosure version; never {@code null}
+     * @param disclosureLg       the language-group code; never {@code null}
      * @param disclosureLc       the locale code; never {@code null}
-     * @throws NullPointerException if {@code encryptionMetadata},
-     *                              {@code disclosureVersion},
-     *                              {@code disclosureLg}, or
-     *                              {@code disclosureLc} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code encryptionMetadata}, {@code disclosureVersion},
+     *                              {@code disclosureLg}, or {@code disclosureLc} is {@code null}
      */
     public SmaxWaffleGenerateWAEntACUserRequest(SmaxWaffleRsaEncryptionMetadata encryptionMetadata, long timestamp,
                    int disclosureId, String disclosureVersion,
@@ -101,8 +83,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
     /**
      * Returns the RSA encryption metadata.
      *
-     * @return the metadata as supplied at construction time; never
-     *         {@code null}
+     * @return the metadata as supplied at construction time; never {@code null}
      */
     public SmaxWaffleRsaEncryptionMetadata encryptionMetadata() {
         return encryptionMetadata;
@@ -129,8 +110,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
     /**
      * Returns the accepted disclosure version.
      *
-     * @return the version as supplied at construction time; never
-     *         {@code null}
+     * @return the version as supplied at construction time; never {@code null}
      */
     public String disclosureVersion() {
         return disclosureVersion;
@@ -139,8 +119,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
     /**
      * Returns the language-group code.
      *
-     * @return the code as supplied at construction time; never
-     *         {@code null}
+     * @return the code as supplied at construction time; never {@code null}
      */
     public String disclosureLg() {
         return disclosureLg;
@@ -149,8 +128,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
     /**
      * Returns the locale code.
      *
-     * @return the code as supplied at construction time; never
-     *         {@code null}
+     * @return the code as supplied at construction time; never {@code null}
      */
     public String disclosureLc() {
         return disclosureLc;
@@ -158,17 +136,13 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     * <p>
+     * The result is an {@code <iq xmlns="waffle" smax_id="37" type="get" to="s.whatsapp.net">} envelope
+     * carrying the encryption-metadata and timestamp children plus a {@code <disclosure>} child whose
+     * attributes hold the four disclosure fields. The dispatch path stamps a fresh {@code id} attribute on
+     * every outbound stanza so the reply parser can match it back to this request.
      *
-     * @apiNote
-     * Produces
-     * {@code <iq xmlns="waffle" smax_id="37" type="get" to="s.whatsapp.net">
-     * <encryption_metadata.../> <timestamp.../>
-     * <disclosure id version lg lc/></iq>}; the dispatch path stamps a
-     * fresh {@code id} attribute on every outbound stanza so the reply
-     * parser can match it back to this request.
-     *
-     * @return a {@link NodeBuilder} carrying the IQ envelope; never
-     *         {@code null}
+     * @return a {@link NodeBuilder} carrying the IQ envelope; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleGenerateWAEntACUserRequest",
@@ -196,9 +170,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxWaffleGenerateWAEntACUserRequest} with equal payload
-     * fields.
+     * Returns whether the given object is a {@link SmaxWaffleGenerateWAEntACUserRequest} with equal payload fields.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when every payload field matches
@@ -223,8 +195,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxOperation
     /**
      * Returns a hash code derived from the six payload fields.
      *
-     * @return a content-based hash consistent with
-     *         {@link #equals(Object)}
+     * @return a content-based hash consistent with {@link #equals(Object)}
      */
     @Override
     public int hashCode() {

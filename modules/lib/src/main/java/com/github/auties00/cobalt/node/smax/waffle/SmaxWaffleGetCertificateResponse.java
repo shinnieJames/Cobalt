@@ -15,34 +15,25 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
- * {@link SmaxWaffleGetCertificateRequest}.
- *
- * @apiNote
- * Mirrors WA Web's three documented {@code GetCertificate} reply
- * shapes: a {@link Success} carrying the requested PEM subset under a
- * {@code <reply timestamp/>} envelope (consumed by
- * {@code WAWebAccountLinkingAPI.fetchValidCertificate}), a
- * {@link ClientError} for malformed or unauthorised requests, and a
- * {@link ServerError} for transient relay failures.
+ * Models the sealed family of inbound replies to a {@link SmaxWaffleGetCertificateRequest}.
+ * <p>
+ * A reply is exactly one of three shapes: a {@link Success} carrying the requested PEM subset under a reply
+ * envelope, a {@link ClientError} for malformed or unauthorised requests (codes below {@code 500}), or a
+ * {@link ServerError} for transient relay failures (codes at or above {@code 500}).
  */
 public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.Response
         permits SmaxWaffleGetCertificateResponse.Success, SmaxWaffleGetCertificateResponse.ClientError, SmaxWaffleGetCertificateResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxWaffleGetCertificateResponse} variant in
-     * priority order and returns the first that parses cleanly.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code sendGetCertificateRPC} dispatch: the
-     * incoming stanza is offered to the {@link Success} parser first,
-     * then the {@link ClientError} parser, then the
-     * {@link ServerError} parser.
+     * Parses the inbound stanza into the first matching variant.
+     * <p>
+     * The stanza is offered to the {@link Success} parser first, then the {@link ClientError} parser, then
+     * the {@link ServerError} parser; the first that parses cleanly wins. An empty {@link Optional} means
+     * none of the three matched.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when none of the three parsers matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when none of the three parsers matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxWaffleGetCertificateRPC",
@@ -62,48 +53,39 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
     }
 
     /**
-     * One PEM child carried inside the {@link Success} reply.
+     * Models one PEM child carried inside the {@link Success} reply.
+     * <p>
+     * Captures the shape shared by the encryption, signature, and password PEM children: a positive
+     * time-to-live in seconds, an optional key id (present only on the password PEM), and the raw PEM bytes.
      *
-     * @apiNote
-     * Models the shape shared by {@code <encryption_pem/>},
-     * {@code <signature_pem/>}, and {@code <password_pem/>}: a
-     * positive {@code ttl} in seconds, an optional {@code key_id} (set
-     * only on the password PEM), and the raw PEM content as bytes.
-     * The PEM content itself is ASCII text but is modelled as raw
-     * bytes to match WA Web's
-     * {@code WASmaxParseUtils.contentBytesRange} parser.
+     * @implNote The PEM content is ASCII text but is modelled as raw bytes to match how the wire content is
+     * extracted.
      *
-     * @param ttl   the per-PEM time-to-live in seconds; always
-     *              positive
-     * @param keyId the per-PEM key id; non-{@code null} only on the
-     *              password PEM
+     * @param ttl   the per-PEM time-to-live in seconds; always positive
+     * @param keyId the per-PEM key id; non-{@code null} only on the password PEM
      * @param pem   the raw PEM content bytes
      */
     record Pem(int ttl, Integer keyId, byte[] pem) {
 
         /**
          * Returns the optional key id.
+         * <p>
+         * An empty {@link Optional} represents the wire absence rather than a sentinel zero; the encryption
+         * and signature PEMs never carry the attribute, while the password PEM always does.
          *
-         * @apiNote
-         * {@link Optional#empty()} represents the wire absence rather
-         * than a sentinel zero; on the encryption and signature PEMs
-         * the attribute is never present, while on the password PEM it
-         * is mandatory.
-         *
-         * @return an {@link Optional} carrying the key id, or empty
-         *         when absent
+         * @return an {@link Optional} carrying the key id, or empty when absent
          */
         public Optional<Integer> keyIdAsOptional() {
             return Optional.ofNullable(keyId);
         }
 
         /**
-         * Returns whether the given object is a {@link Pem} with
-         * equal payload fields.
+         * Returns whether the given object is a {@link Pem} with equal payload fields.
+         * <p>
+         * The PEM bytes are compared element-wise.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when ttl, key id, and PEM bytes all
-         *         match
+         * @return {@code true} when ttl, key id, and PEM bytes all match
          */
         @Override
         public boolean equals(Object obj) {
@@ -122,8 +104,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns a hash code derived from the three payload fields.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -133,8 +114,9 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns a debug rendering that summarises the PEM bytes as
-         * a length rather than as the raw content.
+         * Returns a debug rendering of this PEM.
+         * <p>
+         * The PEM bytes are summarised as a length rather than as the raw content.
          *
          * @return a human-readable summary; never {@code null}
          */
@@ -147,61 +129,43 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code Success} reply variant: the relay returned the
-     * requested PEM subset under a {@code <reply timestamp/>}
-     * envelope.
-     *
-     * @apiNote
-     * Consumed by {@code WAWebAccountLinkingAPI.fetchValidCertificate}.
-     * Each of the three PEM children is independently optional; the
-     * caller only sees PEMs whose corresponding marker was set on the
-     * request. The {@link #replyTimestamp()} is the server-stamped
-     * issue time used to compute the per-PEM expiry from
-     * {@link Pem#ttl()}.
+     * Models the success reply: the relay returned the requested PEM subset under a reply envelope.
+     * <p>
+     * Each of the three PEM children is independently optional; the caller only sees PEMs whose corresponding
+     * marker was set on the request. The {@link #replyTimestamp()} is the server-stamped issue time used to
+     * compute the per-PEM expiry from {@link Pem#ttl()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleGetCertificateResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleGetCertificateResponseMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleIQResultResponseMixin")
     final class Success implements SmaxWaffleGetCertificateResponse {
         /**
-         * The relay-stamped reply timestamp, in seconds since the Unix
-         * epoch.
+         * Holds the relay-stamped reply timestamp, in seconds since the Unix epoch.
          */
         private final long replyTimestamp;
 
         /**
-         * The encryption PEM, or {@code null} when the relay omitted
-         * it.
+         * Holds the encryption PEM, or {@code null} when the relay omitted it.
          */
         private final Pem encryptionPem;
 
         /**
-         * The signature PEM, or {@code null} when the relay omitted
-         * it.
+         * Holds the signature PEM, or {@code null} when the relay omitted it.
          */
         private final Pem signaturePem;
 
         /**
-         * The password PEM, or {@code null} when the relay omitted
-         * it.
+         * Holds the password PEM, or {@code null} when the relay omitted it.
          */
         private final Pem passwordPem;
 
         /**
-         * Constructs a new success projection.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope and
-         * payload have been validated; embedders typically do not
-         * instantiate this directly.
+         * Constructs a success reply from the reply timestamp and the three optional PEMs.
          *
          * @param replyTimestamp the relay-stamped reply timestamp
-         * @param encryptionPem  the encryption PEM, or {@code null}
-         *                       when absent
-         * @param signaturePem   the signature PEM, or {@code null}
-         *                       when absent
-         * @param passwordPem    the password PEM, or {@code null} when
-         *                       absent
+         * @param encryptionPem  the encryption PEM, or {@code null} when absent
+         * @param signaturePem   the signature PEM, or {@code null} when absent
+         * @param passwordPem    the password PEM, or {@code null} when absent
          */
         public Success(long replyTimestamp, Pem encryptionPem, Pem signaturePem, Pem passwordPem) {
             this.replyTimestamp = replyTimestamp;
@@ -222,8 +186,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns the encryption PEM when the relay supplied one.
          *
-         * @return an {@link Optional} carrying the PEM, or empty when
-         *         absent
+         * @return an {@link Optional} carrying the PEM, or empty when absent
          */
         public Optional<Pem> encryptionPem() {
             return Optional.ofNullable(encryptionPem);
@@ -232,8 +195,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns the signature PEM when the relay supplied one.
          *
-         * @return an {@link Optional} carrying the PEM, or empty when
-         *         absent
+         * @return an {@link Optional} carrying the PEM, or empty when absent
          */
         public Optional<Pem> signaturePem() {
             return Optional.ofNullable(signaturePem);
@@ -242,36 +204,26 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns the password PEM when the relay supplied one.
          *
-         * @return an {@link Optional} carrying the PEM, or empty when
-         *         absent
+         * @return an {@link Optional} carrying the PEM, or empty when absent
          */
         public Optional<Pem> passwordPem() {
             return Optional.ofNullable(passwordPem);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the inbound
-         * stanza.
+         * Parses a success variant from the inbound stanza.
+         * <p>
+         * Returns an empty {@link Optional} when the envelope check fails, when the reply child is missing,
+         * or when the inner {@code timestamp} attribute is absent or non-positive. Each of the three PEM
+         * children is parsed through {@link #parsePem(Node)} and is dropped when absent or malformed.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope check
-         * fails, when the {@code <reply/>} child is missing, or when
-         * the inner {@code timestamp} attribute is absent or
-         * non-positive.
-         *
-         * @implNote
-         * This implementation parses each of the three PEM children
-         * through {@link #parsePem(Node)}, which gates on the
-         * {@code ttl} attribute being at least {@code 1} and silently
-         * drops the PEM otherwise (matching WA Web's
-         * {@code attrIntRange(name, 1, undefined)}). The four
-         * per-blob byte-range checks WA Web applies (each PEM 1-4092
-         * bytes) are not re-applied here.
+         * @implNote This implementation gates each PEM on a {@code ttl} attribute of at least {@code 1} and
+         * silently drops the PEM otherwise; the per-blob byte-range checks WhatsApp Web applies (each PEM
+         * 1-4092 bytes) are not re-applied here.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleGetCertificateResponseSuccess",
                 exports = "parseGetCertificateResponseSuccess",
@@ -296,22 +248,16 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
 
         /**
          * Parses a single PEM child node into a {@link Pem} record.
+         * <p>
+         * Returns {@code null} (rather than an empty {@link Optional}) when the node is missing or malformed,
+         * so the three PEM slots on {@link Success} can be assigned directly.
          *
-         * @apiNote
-         * Internal helper for {@link #of(Node, Node)}; returns
-         * {@code null} (rather than an empty {@link Optional}) so the
-         * three PEM slots on {@link Success} can be assigned directly.
-         *
-         * @implNote
-         * This implementation accepts both the
-         * {@code (ttl, key_id, content)} shape of the password PEM and
-         * the {@code (ttl, content)} shape of the encryption and
-         * signature PEMs by treating {@code key_id} as optional; WA Web
-         * uses three distinct parser functions, one per child.
+         * @implNote This implementation accepts both the {@code (ttl, key_id, content)} shape of the password
+         * PEM and the {@code (ttl, content)} shape of the encryption and signature PEMs by treating the key
+         * id as optional, collapsing WhatsApp Web's three distinct per-child parsers into one.
          *
          * @param pemNode the PEM child node, or {@code null}
-         * @return the parsed {@link Pem}, or {@code null} when the
-         *         node is missing or malformed
+         * @return the parsed {@link Pem}, or {@code null} when the node is missing or malformed
          */
         private static Pem parsePem(Node pemNode) {
             if (pemNode == null) {
@@ -332,12 +278,10 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns whether the given object is a {@link Success} with
-         * equal payload fields.
+         * Returns whether the given object is a {@link Success} with equal payload fields.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when timestamp and the three PEMs all
-         *         match
+         * @return {@code true} when timestamp and the three PEMs all match
          */
         @Override
         public boolean equals(Object obj) {
@@ -357,8 +301,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns a hash code derived from the four payload fields.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -380,39 +323,28 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code ClientError} reply variant: the relay rejected the
-     * request with a code below {@code 500}.
-     *
-     * @apiNote
-     * Surfaces malformed-request and unauthorised rejections from the
-     * Waffle backend; {@code WAWebAccountLinkingAPI.fetchValidCertificate}
-     * logs {@code [WAFFLE] GetCertificate RPC failed} and returns
-     * {@code null} so the caller treats the certificate cache as
-     * stale.
+     * Models the client-error reply: the relay rejected the request with a code below {@code 500}.
+     * <p>
+     * Surfaces malformed-request and unauthorised rejections from the Waffle backend. The carried
+     * {@link #errorCode()} and {@link #errorText()} are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleGetCertificateResponseError")
     final class ClientError implements SmaxWaffleGetCertificateResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * Constructs a client-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -431,26 +363,21 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * which only matches codes below {@code 500}.
+         * Parses a client-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which only matches codes below {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleGetCertificateResponseError",
                 exports = "parseGetCertificateResponseError",
@@ -464,8 +391,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns whether the given object is a {@link ClientError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ClientError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -485,8 +411,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -506,35 +431,28 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code ServerError} reply variant: the relay rejected the
-     * request with a code of {@code 500} or above.
-     *
-     * @apiNote
-     * Indicates a transient relay-side failure.
+     * Models the server-error reply: the relay rejected the request with a code of {@code 500} or above.
+     * <p>
+     * Indicates a transient relay-side failure. The carried {@link #errorCode()} and {@link #errorText()}
+     * are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleGetCertificateResponseError")
     final class ServerError implements SmaxWaffleGetCertificateResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * Constructs a server-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -553,26 +471,21 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which only matches codes at or above {@code 500}.
+         * Parses a server-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which only matches codes at or above {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleGetCertificateResponseError",
                 exports = "parseGetCertificateResponseError",
@@ -586,8 +499,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns whether the given object is a {@link ServerError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ServerError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -607,8 +519,7 @@ public sealed interface SmaxWaffleGetCertificateResponse extends SmaxOperation.R
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {

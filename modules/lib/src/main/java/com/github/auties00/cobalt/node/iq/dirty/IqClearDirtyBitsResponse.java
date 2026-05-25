@@ -11,15 +11,21 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Roots the sealed family of inbound reply variants the relay produces in response to an
  * {@link IqClearDirtyBitsRequest}.
  *
- * @apiNote
- * WA Web's {@code cleanDirtyReplyParser} only asserts {@code type="result"} and logs
- * failures to the warn channel without surfacing them; Cobalt instead splits the reply into
- * {@link Success}, {@link ClientError}, and {@link ServerError} variants so the dirty-bit
- * driver can decide whether the resource should be marked as not-yet-cleared (transient
- * failure) or whether the entire dirty-bit pass should be aborted (permanent failure).
+ * <p>The hierarchy permits exactly {@link Success}, {@link ClientError}, and
+ * {@link ServerError}, splitting an accepted clear from a permanent rejection
+ * ({@link ClientError}) and from a transient relay failure ({@link ServerError}). This split
+ * lets the dirty-bit driver decide whether the resource should be marked as not-yet-cleared
+ * (transient failure) or whether the entire dirty-bit pass should be aborted (permanent
+ * failure).
+ *
+ * @implNote
+ * This implementation diverges from WA Web's {@code cleanDirtyReplyParser}, which only asserts
+ * {@code type="result"} and logs failures to the warn channel without surfacing them; the
+ * three-variant split is a Cobalt redesign that exposes the failure mode to the dirty-bit
+ * driver instead.
  */
 @WhatsAppWebModule(moduleName = "WAWebClearDirtyBitsJob")
 public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
@@ -29,11 +35,10 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
      * Tries each {@link IqClearDirtyBitsResponse} variant in priority order and returns the
      * first that parses cleanly.
      *
-     * @apiNote
-     * The priority order ({@link Success}, {@link ClientError}, {@link ServerError}) mirrors
-     * the order WA Web's {@code WADeprecatedWapParser} tries; only one variant ever
-     * populates because {@link SmaxIqResultResponseMixin} and
-     * {@link SmaxBaseServerErrorMixin} match disjoint stanza shapes.
+     * <p>Variants are attempted in the order {@link Success}, {@link ClientError},
+     * {@link ServerError}. At most one variant ever populates because
+     * {@link SmaxIqResultResponseMixin} and {@link SmaxBaseServerErrorMixin} match disjoint
+     * stanza shapes.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza, used to validate echoed identifiers
@@ -58,20 +63,17 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
     }
 
     /**
-     * Reply variant signalling that the relay accepted the dirty-bit clear.
+     * Represents the reply variant signalling that the relay accepted the dirty-bit clear.
      *
-     * @apiNote
-     * Carries no payload; WA Web's {@code cleanDirtyReplyParser} reduces this to
-     * {@code {}}.
+     * <p>Carries no payload beyond the echoed request id.
      */
     @WhatsAppWebModule(moduleName = "WAWebClearDirtyBitsJob")
     final class Success implements IqClearDirtyBitsResponse {
         /**
          * Constructs a new successful reply.
          *
-         * @apiNote
-         * The reply variant is empty by construction; the constructor takes no arguments
-         * because the success envelope carries no payload beyond the echoed id.
+         * <p>Takes no arguments because the success envelope carries no payload beyond the
+         * echoed id.
          */
         public Success() {
         }
@@ -79,10 +81,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="result"}
-         * envelope echoing the {@code request} id, mirroring WA Web's
-         * {@code e.assertAttr("type","result")} guard.
+         * <p>Returns a populated {@link Optional} only when the stanza is a
+         * {@code type="result"} envelope echoing the {@code request} id, as validated by
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -99,7 +100,12 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
+         *
+         * <p>All {@link Success} instances are equal because the variant carries no payload.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link Success}, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -110,7 +116,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a constant hash code shared by every {@link Success} instance.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -118,7 +126,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string identifying this empty success reply.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -127,28 +137,28 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
     }
 
     /**
-     * Reply variant signalling that the relay rejected the dirty-bit clear as malformed or
-     * unauthorised.
+     * Represents the reply variant signalling that the relay rejected the dirty-bit clear as
+     * malformed or unauthorised.
      *
-     * @apiNote
-     * Maps to the {@code 4xx} branch of the dirty-bit reply pipeline; the dirty-bit driver
-     * should treat the resource as still dirty (because the relay-side marker was not
-     * cleared) but should not retry the same request because the failure is structural.
+     * <p>Maps to the {@code 4xx} branch of the dirty-bit reply pipeline. The dirty-bit driver
+     * should treat the resource as still dirty, because the relay-side marker was not cleared,
+     * but should not retry the same request because the failure is structural.
      */
     @WhatsAppWebModule(moduleName = "WAWebClearDirtyBitsJob")
     final class ClientError implements IqClearDirtyBitsResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text from the {@code <error text/>}
+         * attribute, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a new client-error reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text, or {@code null} when omitted
@@ -180,10 +190,10 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls in the {@code 4xx} range, per the parsing contract of
+         * <p>Returns a populated {@link Optional} only when the stanza is a
+         * {@code type="error"} envelope echoing the {@code request} id and carrying a
+         * {@code <error/>} child whose {@code code} attribute falls in the {@code 4xx} range,
+         * per the parsing contract of
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
@@ -203,7 +213,14 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
+         *
+         * <p>Two replies are equal when both their {@link #errorCode()} and
+         * {@link #errorText()} are equal.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link ClientError} with equal code and
+         *         text, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -219,7 +236,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the {@link #errorCode()} and {@link #errorText()}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -227,7 +246,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string describing this reply's error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -237,28 +258,28 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
     }
 
     /**
-     * Reply variant signalling that the relay encountered a transient internal failure while
-     * processing the dirty-bit clear.
+     * Represents the reply variant signalling that the relay encountered a transient internal
+     * failure while processing the dirty-bit clear.
      *
-     * @apiNote
-     * Maps to the {@code 5xx} branch of the dirty-bit reply pipeline; the dirty-bit driver
+     * <p>Maps to the {@code 5xx} branch of the dirty-bit reply pipeline. The dirty-bit driver
      * may retry the same request on the next dirty-bit pass since the marker is still set
      * server-side.
      */
     @WhatsAppWebModule(moduleName = "WAWebClearDirtyBitsJob")
     final class ServerError implements IqClearDirtyBitsResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text from the {@code <error text/>}
+         * attribute, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a new server-error reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text, or {@code null} when omitted
@@ -290,11 +311,11 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing
-         * contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Returns a populated {@link Optional} only when the stanza is a
+         * {@code type="error"} envelope echoing the {@code request} id and carrying a
+         * {@code <error/>} child whose {@code code} attribute falls outside the {@code 4xx}
+         * range, per the parsing contract of
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -313,7 +334,14 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
+         *
+         * <p>Two replies are equal when both their {@link #errorCode()} and
+         * {@link #errorText()} are equal.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link ServerError} with equal code and
+         *         text, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -329,7 +357,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the {@link #errorCode()} and {@link #errorText()}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -337,7 +367,9 @@ public sealed interface IqClearDirtyBitsResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string describing this reply's error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

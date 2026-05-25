@@ -3,26 +3,40 @@ package com.github.auties00.cobalt.call.frame.video;
 import java.util.Objects;
 
 /**
- * One frame of raw video in I420 (YUV 4:2:0 planar) layout — Y plane
- * first, then U, then V. The byte size of {@code yuvI420} is always
- * {@code width*height + 2*(width/2)*(height/2)}; both dimensions
- * must be even.
+ * Holds one frame of raw video in I420 (YUV 4:2:0 planar) layout.
  *
- * <p>{@code width} and {@code height} are carried per-frame (not
- * fixed at call-options time) because the decoder may produce
- * different resolutions across a single call as the peer adapts to
- * bandwidth — the SPS in each VP8/H.264 keyframe authoritatively
- * sets the picture size.
+ * <p>The pixel buffer stores the three planes back to back: the full-resolution Y (luma) plane
+ * first, then the half-resolution U (chroma blue) plane, then the half-resolution V (chroma red)
+ * plane. The byte length of {@code yuvI420} is therefore always
+ * {@code width*height + 2*(width/2)*(height/2)}, and both dimensions must be even so the chroma
+ * planes have integral sizes. The compact constructor rejects any buffer whose length does not
+ * match the declared dimensions.
  *
- * @param yuvI420 the I420 planar bytes; never {@code null}
- * @param width   frame width in pixels; even and ≥ 2
- * @param height  frame height in pixels; even and ≥ 2
- * @param ptsMs   the presentation timestamp in milliseconds,
- *                monotonic within a call
+ * <p>{@code width} and {@code height} are carried per frame rather than fixed for the lifetime of a
+ * call: a single call may switch resolution as the decoder follows the peer's bandwidth adaptation,
+ * and the keyframe header of each VP8 or H.264 picture authoritatively sets the picture size. The
+ * presentation timestamp {@code ptsMs} is measured in milliseconds and is monotonically
+ * non-decreasing within one call.
+ *
+ * @param yuvI420 the I420 planar bytes laid out as Y then U then V; never {@code null}, and exactly
+ *                {@code width*height + 2*(width/2)*(height/2)} bytes long
+ * @param width   the frame width in pixels; even and at least {@code 2}
+ * @param height  the frame height in pixels; even and at least {@code 2}
+ * @param ptsMs   the presentation timestamp in milliseconds, monotonically non-decreasing within a
+ *                single call
  */
 public record VideoFrame(byte[] yuvI420, int width, int height, long ptsMs) {
     /**
-     * Compact constructor — null-checks and validates dimensions.
+     * Validates the planar buffer and the frame dimensions.
+     *
+     * <p>Rejects a {@code null} buffer, an odd or sub-{@code 2} {@code width} or {@code height}, and
+     * a buffer whose length does not equal {@code width*height + 2*(width/2)*(height/2)}. The frame
+     * is otherwise stored as supplied; the buffer reference is shared rather than copied.
+     *
+     * @throws NullPointerException     if {@code yuvI420} is {@code null}
+     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or less than
+     *                                  {@code 2}, or if {@code yuvI420} does not have the expected
+     *                                  length for the declared dimensions
      */
     public VideoFrame {
         Objects.requireNonNull(yuvI420, "yuvI420 cannot be null");

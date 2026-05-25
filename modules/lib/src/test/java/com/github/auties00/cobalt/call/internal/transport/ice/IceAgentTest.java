@@ -28,43 +28,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * End-to-end tests for {@link IceAgent} — drives candidate gathering,
- * pair construction, connectivity-check sending, response handling,
- * and pair nomination using a fake outbound sink that captures the
- * STUN packets the agent sends and synthesises responses.
+ * End-to-end tests for {@link IceAgent}, covering candidate gathering, pair construction,
+ * connectivity-check sending, response handling, and pair nomination. The harness drives the agent
+ * through a fake outbound sink that captures the STUN packets it emits and synthesises the
+ * responses to feed back in. The fixture credentials use the same shared password on both sides so
+ * a single MESSAGE-INTEGRITY computation verifies and stamps for either direction.
  */
 public class IceAgentTest {
 
-    /**
-     * Fixture credentials — same key on both sides so the same
-     * MESSAGE-INTEGRITY computation works for both verify and stamp.
-     */
     private static final IceCredentials CREDS = new IceCredentials(
             "ufrag-local",
             "pass-shared".getBytes(),
             "ufrag-remote",
             "pass-shared".getBytes());
 
-    /**
-     * Fixture local candidate.
-     */
     private static IceCandidate localCandidate(int port, String foundation) {
         return IceCandidate.host(IceComponent.RTP,
                 new InetSocketAddress(InetAddress.getLoopbackAddress(), port), foundation);
     }
 
-    /**
-     * Fixture remote candidate.
-     */
     private static IceCandidate remoteCandidate(int port, String foundation) {
         return IceCandidate.host(IceComponent.RTP,
                 new InetSocketAddress(InetAddress.getLoopbackAddress(), port), foundation);
     }
 
-    /**
-     * The agent forms candidate pairs sorted in descending priority
-     * order — and refuses to start with no pairs.
-     */
     @Test
     public void buildsCheckListInDescendingPriorityOrder() {
         var captured = new ArrayList<byte[]>();
@@ -83,9 +70,6 @@ public class IceAgentTest {
         }
     }
 
-    /**
-     * Cannot start without candidates on at least one side.
-     */
     @Test
     public void cannotStartWithoutPairs() {
         var agent = new IceAgent(true, CREDS, (packet, dest) -> {
@@ -93,11 +77,8 @@ public class IceAgentTest {
         assertThrows(IllegalStateException.class, agent::start);
     }
 
-    /**
-     * Adding candidates after start() is rejected — gathering and
-     * checking phases are kept separate (full-candidate-set ICE,
-     * not trickle).
-     */
+    // Full-candidate-set ICE (not trickle): the gathering and checking phases are kept separate,
+    // so adding candidates after start() is rejected.
     @Test
     public void cannotAddCandidatesAfterStart() {
         var agent = new IceAgent(true, CREDS, (packet, dest) -> {
@@ -111,11 +92,6 @@ public class IceAgentTest {
                 () -> agent.addRemoteCandidate(remoteCandidate(60002, "lte:4")));
     }
 
-    /**
-     * After {@link IceAgent#start()} the highest-priority pair has
-     * been transitioned to {@link IceCheckState#IN_PROGRESS} and a
-     * STUN binding request has been emitted to the outbound sink.
-     */
     @Test
     public void startEmitsBindingRequestForTopPair() {
         var captured = new ArrayList<byte[]>();
@@ -131,7 +107,7 @@ public class IceAgentTest {
         assertEquals(1, captured.size(), "exactly one binding request fired");
         var packet = WaRelayPacket.decode(captured.get(0));
         assertEquals(WaRelayMessageType.BINDING_REQUEST.wireValue(), packet.messageType());
-        // The destination is the remote candidate's transport address.
+        // Destination is the remote candidate's transport address.
         assertEquals(60001, captureDest.get().getPort());
 
         var top = agent.checkList().get(0);
@@ -139,12 +115,6 @@ public class IceAgentTest {
         assertNotNull(top.inFlightTxId());
     }
 
-    /**
-     * Inbound binding success response — matched on transaction id —
-     * transitions the in-flight pair to
-     * {@link IceCheckState#SUCCEEDED} and (controlling agent)
-     * nominates it.
-     */
     @Test
     public void successResponseNominatesPair() {
         var captured = new ArrayList<byte[]>();
@@ -160,7 +130,6 @@ public class IceAgentTest {
         });
         agent.start();
 
-        // Synthesise a binding success response for the in-flight tx.
         var pair = agent.checkList().get(0);
         var response = synthesizeBindingSuccess(pair.inFlightTxId());
         agent.handleInboundStun(response);
@@ -171,10 +140,6 @@ public class IceAgentTest {
         assertSame(pair, nominated.get());
     }
 
-    /**
-     * A success response with a tampered MESSAGE-INTEGRITY is
-     * rejected — pair fails.
-     */
     @Test
     public void tamperedMacFailsThePair() {
         var captured = new ArrayList<byte[]>();
@@ -185,7 +150,6 @@ public class IceAgentTest {
 
         var pair = agent.checkList().get(0);
         var response = synthesizeBindingSuccess(pair.inFlightTxId());
-        // Flip a bit in the MESSAGE-INTEGRITY MAC.
         var miOffset = WaRelayMessageIntegrity.locate(response);
         response[miOffset + 4] ^= (byte) 0xFF;
         agent.handleInboundStun(response);
@@ -195,10 +159,6 @@ public class IceAgentTest {
         assertNull(agent.nominatedPair());
     }
 
-    /**
-     * Inbound responses for an unknown transaction id are dropped
-     * silently (don't poison the agent state).
-     */
     @Test
     public void unknownTxIdIsDropped() {
         var captured = new ArrayList<byte[]>();
@@ -214,10 +174,6 @@ public class IceAgentTest {
         assertSame(IceCheckState.IN_PROGRESS, pair.state());
     }
 
-    /**
-     * {@link IceAgent#tick()} fails any pair whose in-flight check
-     * has exceeded the timeout, and triggers the next waiting pair.
-     */
     @Test
     public void tickTimesOutInFlightPairs() {
         var captured = new ArrayList<byte[]>();
@@ -232,20 +188,13 @@ public class IceAgentTest {
         var firstPair = agent.checkList().get(0);
         assertSame(IceCheckState.IN_PROGRESS, firstPair.state());
 
-        // Advance clock past the timeout.
         fakeClock.advance(Duration.ofSeconds(2));
         agent.tick();
 
         assertSame(IceCheckState.FAILED, firstPair.state());
-        // The next-priority pair should have been triggered.
         assertEquals(2, captured.size(), "tick should fire the next waiting pair");
     }
 
-    /**
-     * Inbound binding requests with a valid MESSAGE-INTEGRITY get a
-     * BINDING_SUCCESS response stamped back. Tampered requests are
-     * silently dropped (no response).
-     */
     @Test
     public void inboundBindingRequestEchoesSuccess() {
         var captured = new ArrayList<byte[]>();
@@ -255,8 +204,8 @@ public class IceAgentTest {
         agent.start();
         captured.clear();
 
-        // Build an inbound binding REQUEST stamped with the local
-        // password (peer's "remote" password is our local password).
+        // Inbound binding REQUEST is stamped with the local password: from the peer's perspective
+        // its "remote" password is our local password.
         var txId = new byte[12];
         new SecureRandom().nextBytes(txId);
         var attrs = new ArrayList<WaRelayAttribute>();
@@ -274,14 +223,6 @@ public class IceAgentTest {
         assertEquals(WaRelayMessageType.BINDING_SUCCESS.wireValue(), response.messageType());
     }
 
-    /**
-     * Synthesises a {@link WaRelayMessageType#BINDING_SUCCESS} response
-     * for the given transaction id, stamped with MESSAGE-INTEGRITY
-     * keyed on the shared fixture password.
-     *
-     * @param txId the transaction id of the request being answered
-     * @return the encoded response bytes
-     */
     private static byte[] synthesizeBindingSuccess(byte[] txId) {
         var attrs = List.of(new WaRelayAttribute(
                 WaRelayAttributeType.MESSAGE_INTEGRITY.wireValue(),
@@ -293,8 +234,8 @@ public class IceAgentTest {
     }
 
     /**
-     * A {@link Clock} that's adjustable from the test thread — used
-     * to fast-forward the agent's check timeout.
+     * A {@link Clock} adjustable from the test thread, used to fast-forward the agent's check
+     * timeout.
      */
     private static final class MutableClock extends Clock {
         private Instant now;

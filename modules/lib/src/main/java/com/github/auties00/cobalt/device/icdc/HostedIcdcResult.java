@@ -5,18 +5,17 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
- * Outcome of inspecting an inbound message's ICDC metadata for hosted
- * business-coexistence transitions.
+ * Carries the outcome of inspecting an inbound message's ICDC metadata for
+ * hosted business-coexistence transitions.
  *
- * @apiNote
- * Returned by {@link com.github.auties00.cobalt.device.DeviceService#handleHostedIcdcMetadataInline}
- * as part of the inbound-message processing pipeline. The two booleans drive two
- * distinct downstream effects: {@link #hostedBizEncMismatch()} tells the
- * caller that the cached account type disagrees with the incoming HOSTED type
- * (so the device list must be refreshed via USync), while
- * {@link #senderOrRecipientAccountTypeHosted()} tells the UI that either side
- * of the chat is a hosted business account (so the coexistence system message
- * may need to be inserted).
+ * <p>This record is returned by
+ * {@link com.github.auties00.cobalt.device.DeviceService#handleHostedIcdcMetadataInline}
+ * during inbound-message processing. Its two booleans drive two distinct
+ * downstream effects. {@link #hostedBizEncMismatch()} reports that the cached
+ * account type disagrees with the incoming HOSTED type, which requires the
+ * device list to be refreshed via USync. {@link #senderOrRecipientAccountTypeHosted()}
+ * reports that either side of the chat is a hosted business account, which may
+ * require the coexistence system message to be inserted into the chat.
  *
  * @param hostedBizEncMismatch               {@code true} when the local ADV
  *                                           account type disagrees with the
@@ -32,15 +31,15 @@ public record HostedIcdcResult(
         boolean senderOrRecipientAccountTypeHosted
 ) {
     /**
-     * No-op outcome returned on every code path that short-circuits before any
-     * hosted-coexistence work happens.
+     * Holds the no-op outcome returned on every code path that short-circuits
+     * before any hosted-coexistence work happens.
      *
-     * @apiNote
-     * Returned when the {@code adv_accept_hosted_devices} AB prop is off, when
-     * the chat is with self, when the chat is not a user chat, when the
-     * inbound message carries no {@code deviceListMetadata}, or when the
-     * relevant party's account type is missing or already E2EE. Equivalent to
-     * "nothing to do; do not flag the UI and do not refresh the device list".
+     * <p>This instance carries {@code false} for both fields, meaning "nothing
+     * to do; do not flag the UI and do not refresh the device list". It is
+     * returned when the {@code adv_accept_hosted_devices} AB prop is off, when
+     * the chat is with self, when the chat is not a user chat, when the inbound
+     * message carries no {@code deviceListMetadata}, or when the relevant
+     * party's account type is missing or already E2EE.
      */
     @WhatsAppWebExport(moduleName = "WAWebIcdcHandlerApi",
             exports = "handleHostedIcdcMetadataInline",

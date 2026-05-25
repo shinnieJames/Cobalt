@@ -17,27 +17,22 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that assign a chat to (or unassign it from) a Business agent.
  *
- * @apiNote
- * Drives the WhatsApp Business team-inbox feature: SMB admins assign chats
- * to specific agents through the Web UI, and the resulting mutations are
- * pushed via {@code WAWebBizChatAssignmentAction} so every agent device sees
- * the same assignment state. The factory is the outgoing-mutation
- * counterpart of
+ * <p>SMB admins assign chats to specific agents through the Web UI, and the
+ * resulting mutations are pushed so every agent device sees the same
+ * assignment state. This factory builds the outgoing mutation; the inbound
+ * counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.ChatAssignmentHandler}.
  *
  * @implNote
- * This implementation does not perform the WA Web batch-style fan-out of
- * {@code createChatAssignmentMutations}, which loops over a list of
- * {@code {agentId, chatId}} pairs; Cobalt callers loop at their own level
- * and invoke {@link #createChatAssignmentMutation} once per pair.
+ * This implementation does not perform WA Web's batch-style fan-out over a
+ * list of {@code {agentId, chatId}} pairs; Cobalt callers loop at their own
+ * level and invoke {@link #createChatAssignmentMutation} once per pair.
  */
 public final class ChatAssignmentMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public ChatAssignmentMutationFactory() {
 
@@ -46,11 +41,9 @@ public final class ChatAssignmentMutationFactory {
     /**
      * Returns a SET mutation that assigns the given chat to the given agent.
      *
-     * @apiNote
-     * Pass {@code agentId == ""} to unassign the chat; the receive-side
-     * handler treats an empty {@code deviceAgentID} as a removal and
-     * collects the chat into the bulk-remove path of
-     * {@code WAWebSchemaChatAssignment.bulkRemove}. The mutation index follows
+     * <p>Pass an empty {@code agentId} to unassign the chat; the receive-side
+     * handler treats an empty {@code deviceAgentID} as a removal. The mutation
+     * index follows
      * {@snippet :
      *     ["agentChatAssignment", chatJid.toString()]
      * }
@@ -59,11 +52,7 @@ public final class ChatAssignmentMutationFactory {
      *
      * @implNote
      * This implementation pins the action version through
-     * {@link ChatAssignmentAction#ACTION_VERSION}, which matches the
-     * {@code CHAT_ASSIGNMENT_SYNC_VERSION} constant exposed by
-     * {@code WAWebProtobufSyncAction} and consumed by both
-     * {@code createChatAssignmentMutations} and the receive-side
-     * {@code applyMutations} branch.
+     * {@link ChatAssignmentAction#ACTION_VERSION}.
      *
      * @param chatJid   the chat {@link Jid} being assigned
      * @param agentId   the target agent identifier, or empty string to unassign

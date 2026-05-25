@@ -8,56 +8,42 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Serializable state of an {@link FcmClient}: the immutable
- * {@link FcmConfig} plus every credential and stream cursor accumulated
- * across the registration handshake and the live MCS stream.
+ * Serializable state of an {@link FcmClient}: the immutable {@link FcmConfig} plus every credential and stream cursor
+ * accumulated across the registration handshake and the live MCS stream.
  *
- * @apiNote
- * Round-trip the value returned by {@link FcmClient#getSession()}
- * through {@link FcmClient#loadSession(FcmSession)} to reuse the same
- * FCM registration token across process restarts; the protobuf
- * codec on this class encodes the full session in one blob.
+ * <p>Round-tripping the value returned by {@link FcmClient#getSession()} through
+ * {@link FcmClient#loadSession(FcmSession)} reuses the same FCM registration token across process restarts; the
+ * protobuf codec on this class encodes the full session in one blob.
  *
  * @implNote
- * This implementation is mutated in place by both
- * {@link FcmRegistration} (during the three-step handshake) and
- * {@link FcmMcsConnection} (as persistent ids accumulate); callers
- * that snapshot the session concurrently with an active MCS connection
- * should copy {@link #persistentIds()} first.
+ * This implementation is mutated in place by both {@link FcmRegistration} (during the three-step handshake) and
+ * {@link FcmMcsConnection} (as persistent ids accumulate); callers that snapshot the session concurrently with an
+ * active MCS connection should copy {@link #persistentIds()} first.
  */
 @ProtobufMessage(name = "FcmSession")
 public final class FcmSession {
     /**
      * Configuration the session was created against.
      *
-     * @apiNote
-     * Bundled in the serialized output so a saved session loads back
-     * without the caller having to remember which {@link FcmConfig} it
-     * was originally created against.
+     * <p>Bundled in the serialized output so a saved session loads back without the caller having to remember which
+     * {@link FcmConfig} it was originally created against.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
     FcmConfig config;
 
     /**
-     * Server-assigned 64-bit Android device id from the {@code /checkin}
-     * step.
+     * Server-assigned 64-bit Android device id from the {@code /checkin} step.
      *
-     * @apiNote
-     * Becomes the username on the MCS login. {@code 0} means no
-     * checkin has been performed yet, which is the trigger
-     * {@link FcmRegistration#ensureCredentials(FcmSession)} uses to
-     * decide it must run the checkin step.
+     * <p>Becomes the username on the MCS login. {@code 0} means no checkin has been performed yet, which is the
+     * trigger {@link FcmRegistration#ensureCredentials(FcmSession)} uses to decide it must run the checkin step.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
     long androidId;
 
     /**
-     * Server-assigned 64-bit security token paired with
-     * {@link #androidId}.
+     * Server-assigned 64-bit security token paired with {@link #androidId}.
      *
-     * @apiNote
-     * Becomes the password on the MCS login. {@code 0} means no
-     * checkin has been performed yet.
+     * <p>Becomes the password on the MCS login. {@code 0} means no checkin has been performed yet.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.UINT64)
     long securityToken;
@@ -65,10 +51,8 @@ public final class FcmSession {
     /**
      * Firebase Installation Id returned by the FIS endpoint.
      *
-     * @apiNote
-     * Sent as the {@code X-appid} header on GCM register3. Empty when
-     * the FIS step has not been performed (or when
-     * {@link FcmConfig#useFis()} is {@code false}).
+     * <p>Sent as the {@code X-appid} header on GCM register3. Empty when the FIS step has not been performed, or when
+     * {@link FcmConfig#useFis()} is {@code false}.
      */
     @ProtobufProperty(index = 4, type = ProtobufType.STRING)
     String fid;
@@ -76,11 +60,9 @@ public final class FcmSession {
     /**
      * FIS auth token returned alongside {@link #fid}.
      *
-     * @apiNote
-     * Sent as the {@code X-Goog-Firebase-Installations-Auth} header on
-     * GCM register3; {@link FcmRegistration#ensureCredentials(FcmSession)}
-     * re-runs the FIS step when {@link #fisExpiresAt} is within 60 s
-     * of the wall clock.
+     * <p>Sent as the {@code X-Goog-Firebase-Installations-Auth} header on GCM register3;
+     * {@link FcmRegistration#ensureCredentials(FcmSession)} re-runs the FIS step when {@link #fisExpiresAt} is within
+     * 60 s of the wall clock.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
     String fisAuthToken;
@@ -88,9 +70,7 @@ public final class FcmSession {
     /**
      * FIS refresh token returned alongside {@link #fid}.
      *
-     * @apiNote
-     * Currently stored but not consumed; the client just re-runs the
-     * full FIS install when the auth token expires.
+     * <p>Currently stored but not consumed; the client just re-runs the full FIS install when the auth token expires.
      */
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String fisRefreshToken;
@@ -98,22 +78,17 @@ public final class FcmSession {
     /**
      * Wall-clock second at which {@link #fisAuthToken} expires.
      *
-     * @apiNote
-     * Compared against {@code System.currentTimeMillis() / 1000 + 60}
-     * to decide whether the FIS step needs a refresh on the next
-     * {@link FcmRegistration#ensureCredentials(FcmSession)} call.
+     * <p>Compared against {@code System.currentTimeMillis() / 1000 + 60} to decide whether the FIS step needs a
+     * refresh on the next {@link FcmRegistration#ensureCredentials(FcmSession)} call.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.UINT64)
     long fisExpiresAt;
 
     /**
-     * FCM registration token, the public output of the three-step
-     * handshake.
+     * FCM registration token, the public output of the three-step handshake.
      *
-     * @apiNote
-     * Empty until GCM register3 succeeds; once populated it is the
-     * value the WhatsApp registration server pushes verification
-     * codes to via {@link FcmClient#getPushToken()}.
+     * <p>Empty until GCM register3 succeeds; once populated it is the value the WhatsApp registration server pushes
+     * verification codes to via {@link FcmClient#getPushToken()}.
      */
     @ProtobufProperty(index = 8, type = ProtobufType.STRING)
     String fcmToken;
@@ -121,11 +96,9 @@ public final class FcmSession {
     /**
      * Per-message persistent ids the server has delivered.
      *
-     * @apiNote
-     * Replayed on the next MCS login so the server stops redelivering
-     * messages this client has already acked locally; bounded to the
-     * most-recent 50 entries by {@link FcmMcsConnection} so the
-     * serialized session stays compact.
+     * <p>Replayed on the next MCS login so the server stops redelivering messages this client has already acked
+     * locally; bounded to the most-recent 50 entries by {@link FcmMcsConnection} so the serialized session stays
+     * compact.
      */
     @ProtobufProperty(index = 9, type = ProtobufType.STRING)
     List<String> persistentIds;
@@ -133,11 +106,8 @@ public final class FcmSession {
     /**
      * Constructs a new session with the given values.
      *
-     * @apiNote
-     * Used by the protobuf codec on decode and by
-     * {@link #newSession(FcmConfig)} to produce an empty starting
-     * state; an explicit {@code null} {@code persistentIds} is
-     * normalised to an empty mutable {@link ArrayList}.
+     * <p>Used by the protobuf codec on decode and by {@link #newSession(FcmConfig)} to produce an empty starting
+     * state; an explicit {@code null} {@code persistentIds} is normalised to an empty mutable {@link ArrayList}.
      *
      * @param config          the session configuration
      * @param androidId       the server-assigned Android device id
@@ -166,11 +136,9 @@ public final class FcmSession {
     /**
      * Creates an empty session bound to {@code config}.
      *
-     * @apiNote
-     * Every credential field is zero or empty; used by
-     * {@link FcmClient#authenticate(com.github.auties00.cobalt.client.WhatsAppDevice)}
-     * before {@link FcmRegistration#ensureCredentials(FcmSession)}
-     * runs the three-step handshake.
+     * <p>Every credential field is zero or empty; used by
+     * {@link FcmClient#authenticate(com.github.auties00.cobalt.client.WhatsAppDevice)} before
+     * {@link FcmRegistration#ensureCredentials(FcmSession)} runs the three-step handshake.
      *
      * @param config the configuration to bind
      * @return a fresh empty session
@@ -254,10 +222,8 @@ public final class FcmSession {
     /**
      * Returns the live mutable list of replayable persistent ids.
      *
-     * @apiNote
-     * The list is mutated in place by {@link FcmMcsConnection};
-     * callers that need a stable view should copy it under
-     * external synchronisation.
+     * <p>The list is mutated in place by {@link FcmMcsConnection}; callers that need a stable view should copy it
+     * under external synchronisation.
      *
      * @return the persistent ids
      */
@@ -268,9 +234,7 @@ public final class FcmSession {
     /**
      * Stores the server-assigned {@link #androidId}.
      *
-     * @apiNote
-     * Called by {@link FcmRegistration} after parsing the
-     * {@code /checkin} response.
+     * <p>Called by {@link FcmRegistration} after parsing the {@code /checkin} response.
      *
      * @param androidId the Android device id
      */
@@ -281,9 +245,7 @@ public final class FcmSession {
     /**
      * Stores the server-assigned {@link #securityToken}.
      *
-     * @apiNote
-     * Called by {@link FcmRegistration} after parsing the
-     * {@code /checkin} response.
+     * <p>Called by {@link FcmRegistration} after parsing the {@code /checkin} response.
      *
      * @param securityToken the security token
      */
@@ -294,10 +256,8 @@ public final class FcmSession {
     /**
      * Stores the {@link #fid}.
      *
-     * @apiNote
-     * Called by {@link FcmRegistration} after the FIS install
-     * succeeds; the value either echoes the candidate FID submitted
-     * by the client or replaces it with the server-confirmed one.
+     * <p>Called by {@link FcmRegistration} after the FIS install succeeds; the value either echoes the candidate FID
+     * submitted by the client or replaces it with the server-confirmed one.
      *
      * @param fid the Firebase Installation Id
      */
@@ -335,9 +295,8 @@ public final class FcmSession {
     /**
      * Stores the {@link #fcmToken}.
      *
-     * @apiNote
-     * Called by {@link FcmRegistration} after register3 returns; the
-     * value is the public output of the whole three-step handshake.
+     * <p>Called by {@link FcmRegistration} after register3 returns; the value is the public output of the whole
+     * three-step handshake.
      *
      * @param fcmToken the FCM registration token
      */

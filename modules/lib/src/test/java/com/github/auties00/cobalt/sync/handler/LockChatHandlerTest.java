@@ -31,25 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link LockChatHandler} adapter for
- * {@code WAWebLockChatSync}.
+ * Covers the {@link LockChatHandler} for the {@code lock} app-state sync action:
+ * metadata, the SET happy path that locks (or unlocks) the chat and clears
+ * archive and pin in the locking branch, the orphan branch when the chat is
+ * unknown locally, the malformed-input fallbacks, the REMOVE rejection,
+ * timestamp-based conflict resolution and the {@link LockChatMutationFactory}
+ * builder paired with {@link ArchiveChatMutationFactory} and
+ * {@link PinChatMutationFactory} for the multi-mutation lock payload.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code lock} app-state sync
- * action across metadata, the SET happy path that locks (or
- * unlocks) the chat and clears archive and pin in the locking
- * branch, the orphan branch when the chat is unknown locally, the
- * malformed-input fallbacks, the REMOVE rejection, the inherited
- * timestamp-based conflict resolution and the
- * {@link LockChatMutationFactory} builder paired with
- * {@link ArchiveChatMutationFactory} and
- * {@link PinChatMutationFactory} for the multi-mutation lock
- * payload.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the
  * {@link com.github.auties00.cobalt.model.chat.Chat#locked()},
  * {@link com.github.auties00.cobalt.model.chat.Chat#archived()} and
  * {@link com.github.auties00.cobalt.model.chat.Chat#pinnedTimestamp()}

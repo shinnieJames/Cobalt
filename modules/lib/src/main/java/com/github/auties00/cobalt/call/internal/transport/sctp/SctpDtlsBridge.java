@@ -8,67 +8,65 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Drains inbound DTLS application-data records into a
- * {@link DataChannelTransport}'s
- * {@link DataChannelTransport#feedInboundPacket(byte[])
- * feedInboundPacket} entry point.
+ * Drains inbound DTLS application-data records into a {@link DataChannelTransport}'s
+ * {@link DataChannelTransport#feedInboundPacket(byte[]) feedInboundPacket} entry point.
  *
- * <p>WebRTC layers SCTP on top of DTLS: each SCTP packet becomes one
- * application-data DTLS record. The DTLS handshake that produces the
- * SRTP keying material also produces an application-data transport
- * for these records.
+ * <p>WebRTC layers SCTP on top of DTLS (RFC 8261): each SCTP packet travels as one application-data DTLS record, and the
+ * same DTLS handshake that derives the SRTP keying material also produces the application-data transport these records
+ * ride on. This bridge owns the inbound direction only: it runs a receive pump that blocks in {@link DTLSTransport}'s
+ * receive call until a record arrives, copies the record into a fresh array, and hands it to the SCTP layer. Outbound
+ * packets do not pass through this bridge; they leave the SCTP layer directly through the {@code outboundSink} given to
+ * {@link DataChannelTransport} at construction, which the caller wires to {@link DTLSTransport}'s send call so the two
+ * directions are symmetric.
  *
- * <p>This bridge owns ONLY the inbound direction. Outbound packets
- * leave the SCTP layer directly through the
- * {@code outboundSink} given to {@link DataChannelTransport} at
- * construction — wire that sink to call
- * {@code dtls.send(packet, 0, packet.length)} so the symmetry is
- * complete.
+ * <p>The bridge is {@link AutoCloseable}; closing it shuts the DTLS transport and interrupts the pump.
  *
- * <p>The receive pump runs on a dedicated daemon virtual thread that
- * blocks in {@code dtls.receive(...)} until a record arrives or the
- * bridge is closed.
+ * @implNote This implementation runs the receive pump on a dedicated daemon virtual thread and reads with a short
+ * 200 ms per-call timeout so that {@link #close()} takes effect promptly rather than waiting for the next inbound
+ * record. A {@link RuntimeException} from a single malformed SCTP packet is swallowed so it cannot kill the pump.
  */
 public final class SctpDtlsBridge implements AutoCloseable {
     /**
-     * Maximum DTLS record size. The bridge allocates a buffer of this
-     * size on each receive() — well above the SCTP-over-DTLS path MTU.
+     * Holds the maximum DTLS record size, in bytes, that the receive buffer is sized for.
+     *
+     * @implNote This implementation uses 16 KiB, comfortably above the SCTP-over-DTLS path MTU, so a single
+     * {@link DTLSTransport} receive can never overflow the buffer.
      */
     private static final int MAX_RECORD_BYTES = 16 * 1024;
 
     /**
-     * Receive timeout per call, in milliseconds. Short enough that
-     * {@link #close()} closes promptly without waiting for the next
-     * inbound record.
+     * Holds the per-call receive timeout, in milliseconds.
+     *
+     * @implNote This implementation uses 200 ms, short enough that {@link #close()} returns promptly without waiting on
+     * the next inbound record while still keeping the pump's wakeup rate low.
      */
     private static final int RECEIVE_TIMEOUT_MILLIS = 200;
 
     /**
-     * The DTLS application-data transport.
+     * Holds the DTLS application-data transport this bridge reads inbound records from.
      */
     private final DTLSTransport dtls;
 
     /**
-     * The SCTP transport this bridge feeds.
+     * Holds the SCTP transport this bridge feeds inbound bytes into.
      */
     private final DataChannelTransport sctp;
 
     /**
-     * The inbound receive thread.
+     * Holds the daemon virtual thread that runs the inbound receive pump.
      */
     private final Thread receiver;
 
     /**
-     * Closed flag.
+     * Tracks whether the bridge has been closed, guarding {@link #close()} against running its teardown twice.
      */
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
-     * Wires the bridge and starts the inbound pump.
+     * Wires the bridge and starts the inbound receive pump.
      *
-     * @param dtls the BC DTLS application-data transport
-     * @param sctp the SCTP transport this bridge feeds inbound bytes
-     *             into
+     * @param dtls the DTLS application-data transport to read inbound records from
+     * @param sctp the SCTP transport to feed those records into
      * @throws NullPointerException if either argument is {@code null}
      */
     public SctpDtlsBridge(DTLSTransport dtls, DataChannelTransport sctp) {
@@ -82,7 +80,12 @@ public final class SctpDtlsBridge implements AutoCloseable {
     }
 
     /**
-     * Body of the inbound receive thread.
+     * Runs the inbound receive pump until the bridge is closed or the thread is interrupted.
+     *
+     * <p>Each iteration reads one DTLS record with the {@link #RECEIVE_TIMEOUT_MILLIS} timeout into a reused buffer; a
+     * non-positive read (timeout or empty record) is retried, and any other read is copied into a fresh array and
+     * handed to {@link DataChannelTransport#feedInboundPacket(byte[])}. An {@link IOException} ends the pump, and a
+     * {@link RuntimeException} from a malformed packet is swallowed so the pump survives it.
      */
     private void receiveLoop() {
         var buffer = new byte[MAX_RECORD_BYTES];
@@ -101,18 +104,25 @@ public final class SctpDtlsBridge implements AutoCloseable {
             try {
                 sctp.feedInboundPacket(bytes);
             } catch (RuntimeException _) {
-                // Swallow — one malformed SCTP packet must not kill
-                // the pump.
             }
         }
     }
 
+    /**
+     * Closes the bridge, shutting the DTLS transport and stopping the receive pump.
+     *
+     * <p>The method is idempotent: a second call returns immediately. It closes the {@link DTLSTransport} (any
+     * {@link IOException} is swallowed) and interrupts the receive thread so it observes the closed state and exits.
+     */
     @Override
     public void close() {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
-        try { dtls.close(); } catch (IOException _) { /* swallow */ }
+        try {
+            dtls.close();
+        } catch (IOException _) {
+        }
         receiver.interrupt();
     }
 }

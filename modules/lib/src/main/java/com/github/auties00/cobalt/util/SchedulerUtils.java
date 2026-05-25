@@ -5,14 +5,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Static helper for firing one-shot tasks on a fresh virtual thread
- * after a configurable delay.
+ * Fires one-shot tasks on a fresh virtual thread after a configurable delay.
  *
- * @apiNote
- * Call {@link #scheduleDelayed(Duration, Runnable)} when a Cobalt
- * subsystem needs a deferred callback (retry backoff, debounced
- * flush, lifecycle teardown) without standing up a
- * {@link java.util.concurrent.ScheduledExecutorService}.
+ * <p>A Cobalt subsystem that needs a deferred callback (retry backoff,
+ * debounced flush, lifecycle teardown) without standing up a
+ * {@link java.util.concurrent.ScheduledExecutorService} schedules it through
+ * {@link #scheduleDelayed(Duration, Runnable)}.
  */
 public final class SchedulerUtils {
     /**
@@ -28,25 +26,22 @@ public final class SchedulerUtils {
      * Schedules {@code task} to run on a fresh virtual thread after
      * {@code delay} has elapsed.
      *
-     * @apiNote
-     * Use this for fire-and-forget deferred callbacks where the
-     * caller does not need to share a thread pool. The returned
-     * future completes (or completes exceptionally) when {@code task}
-     * finishes.
+     * <p>The task runs fire-and-forget on its own virtual thread, so the caller
+     * does not share a thread pool. The returned future completes normally when
+     * {@code task} returns and completes exceptionally if {@code task} throws.
      *
      * @implNote
      * This implementation composes
      * {@link CompletableFuture#delayedExecutor(long, TimeUnit, java.util.concurrent.Executor)}
-     * with {@link Thread#startVirtualThread(Runnable)} so each
-     * scheduled task gets its own virtual thread; the delay timer
-     * runs on the common scheduler shared with other
-     * {@code delayedExecutor} callers.
+     * with {@link Thread#startVirtualThread(Runnable)} so each scheduled task
+     * gets its own virtual thread; the delay timer runs on the common scheduler
+     * shared with other {@code delayedExecutor} callers.
      *
-     * @param delay the amount of time to wait before running the
-     *              task; resolved with nanosecond precision
+     * @param delay the amount of time to wait before running the task; resolved
+     *              with nanosecond precision
      * @param task  the task to execute
-     * @return a future that completes when {@code task} finishes, or
-     *         completes exceptionally if {@code task} throws
+     * @return a future that completes when {@code task} finishes, or completes
+     *         exceptionally if {@code task} throws
      */
     public static CompletableFuture<Void> scheduleDelayed(Duration delay, Runnable task) {
         var delayedExecutor = CompletableFuture.delayedExecutor(delay.toNanos(), TimeUnit.NANOSECONDS, Thread::startVirtualThread);

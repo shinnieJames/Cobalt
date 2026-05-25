@@ -8,87 +8,87 @@ import it.auties.protobuf.model.ProtobufType;
 import java.util.List;
 
 /**
- * Wire shape of an incoming FCM data-message stanza (MCS frame tag
- * {@code 8}).
+ * Models an incoming FCM data-message stanza on the MCS stream.
  *
- * @apiNote
- * Decoded by {@link FcmClient}, which scans the {@link #appData()}
- * entries for the WhatsApp verification code and surfaces it via
- * {@link FcmClient#getPushCode()}.
+ * <p>A data-message stanza is the payload-bearing frame the server pushes to
+ * the client; {@link FcmClient} scans the {@link #appData()} entries (and, on
+ * the binary verification flow, {@link #rawData()}) for the WhatsApp
+ * verification code and surfaces it via {@link FcmClient#getPushCode()}. The
+ * {@link #persistentId()} is tracked so the message can be acknowledged on the
+ * next MCS login and the server can stop redelivering it.
+ *
+ * @implNote This implementation carries the MCS frame tag {@code 8}; the tag is
+ * written as the frame's length-prefixed type byte by the connection layer, not
+ * by this message.
  */
 @ProtobufMessage(name = "FcmMcsDataMessageStanza")
 public final class FcmMcsDataMessageStanza {
     /**
-     * Application-level message id.
+     * Holds the application-level message id.
      *
-     * @apiNote
-     * Often the same value the original sender supplied to the FCM
-     * HTTP API; uninterpreted by the client.
+     * <p>This is typically the same value the original sender supplied to the
+     * FCM HTTP API and is otherwise uninterpreted by the client.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
     String id;
 
     /**
-     * Sender id, typically the project's GCM sender number.
+     * Holds the sender id, typically the project's GCM sender number.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
     String from;
 
     /**
-     * Push category.
+     * Holds the push category.
      *
-     * @apiNote
-     * Typically the receiving app package or the topic name on
+     * <p>This is typically the receiving app package name, or the topic name on
      * topic-style pushes.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
     String category;
 
     /**
-     * FCM collapse key.
+     * Holds the FCM collapse key.
      */
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String token;
 
     /**
-     * Application-level key/value payload.
+     * Holds the application-level key/value payload.
      *
-     * @apiNote
-     * The FCM HTTP API's {@code data} JSON object lands here; the
-     * WhatsApp registration server places the verification code under
-     * the {@code "registration_code"} key.
+     * <p>The FCM HTTP API's {@code data} JSON object lands here; the WhatsApp
+     * registration server places the verification code under the
+     * {@code "registration_code"} key.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.MESSAGE)
     List<AppData> appData;
 
     /**
-     * Per-message persistent id used by the at-least-once delivery
+     * Holds the per-message persistent id used by the at-least-once delivery
      * mechanism.
      *
-     * @apiNote
-     * Tracked by {@link FcmClient} so it can be replayed on the next
-     * MCS login and the server can stop redelivering this message.
+     * <p>{@link FcmClient} retains this id so it can be replayed on the next MCS
+     * login, letting the server drop the message from its retry queue.
      */
     @ProtobufProperty(index = 9, type = ProtobufType.STRING)
     String persistentId;
 
     /**
-     * Time-to-live the sender attached, in seconds.
+     * Holds the time-to-live the sender attached, in seconds.
      */
     @ProtobufProperty(index = 17, type = ProtobufType.INT64)
     long ttl;
 
     /**
-     * Server-side send timestamp, in milliseconds since epoch.
+     * Holds the server-side send timestamp, in milliseconds since the epoch.
      */
     @ProtobufProperty(index = 18, type = ProtobufType.INT64)
     long sent;
 
     /**
-     * Optional binary payload.
+     * Holds the optional binary payload.
      *
-     * @apiNote
-     * Used by FCM-driven SMS/silent verification flows where the
+     * <p>This is used by FCM-driven SMS and silent verification flows, where the
      * verification code is shipped as raw bytes rather than as an
      * {@link AppData} entry.
      */
@@ -98,8 +98,8 @@ public final class FcmMcsDataMessageStanza {
     /**
      * Constructs a new stanza with the given values.
      *
-     * @apiNote
-     * Used by the protobuf decoder; the public consumer of stanzas is
+     * <p>This constructor is invoked by the protobuf decoder when reading a
+     * frame off the MCS stream; the decoded stanza is consumed by
      * {@link FcmClient}.
      *
      * @param id           the application-level message id
@@ -109,7 +109,7 @@ public final class FcmMcsDataMessageStanza {
      * @param appData      the application-level key/value payload
      * @param persistentId the per-message persistent id
      * @param ttl          the time-to-live in seconds
-     * @param sent         the server-side send timestamp in millis
+     * @param sent         the server-side send timestamp in milliseconds
      * @param rawData      the optional binary payload
      */
     FcmMcsDataMessageStanza(String id, String from, String category, String token,
@@ -165,8 +165,8 @@ public final class FcmMcsDataMessageStanza {
     /**
      * Returns the application-level key/value payload.
      *
-     * @return the {@link AppData} entries, possibly {@code null} when
-     *         the stanza carried no payload
+     * @return the {@link AppData} entries, possibly {@code null} when the stanza
+     *         carried no payload
      */
     public List<AppData> appData() {
         return appData;
@@ -184,15 +184,14 @@ public final class FcmMcsDataMessageStanza {
     /**
      * Returns the time-to-live in seconds.
      *
-     * @return the TTL
+     * @return the time-to-live
      */
     public long ttl() {
         return ttl;
     }
 
     /**
-     * Returns the server-side send timestamp in milliseconds since
-     * epoch.
+     * Returns the server-side send timestamp in milliseconds since the epoch.
      *
      * @return the send timestamp
      */
@@ -210,30 +209,28 @@ public final class FcmMcsDataMessageStanza {
     }
 
     /**
-     * One key/value entry in the {@link FcmMcsDataMessageStanza#appData()}
+     * Models one key/value entry in the {@link FcmMcsDataMessageStanza#appData()}
      * list.
      *
-     * @apiNote
-     * The verification code lives in the entry whose {@link #key()}
-     * is {@code "registration_code"}; every other entry is ignored
-     * by Cobalt.
+     * <p>The verification code lives in the entry whose {@link #key()} is
+     * {@code "registration_code"}; every other entry is ignored by Cobalt.
      */
     @ProtobufMessage(name = "FcmMcsDataMessageStanza.AppData")
     public static final class AppData {
         /**
-         * Entry key.
+         * Holds the entry key.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String key;
 
         /**
-         * Entry value.
+         * Holds the entry value.
          */
         @ProtobufProperty(index = 2, type = ProtobufType.STRING)
         String value;
 
         /**
-         * Constructs a new entry.
+         * Constructs a new entry with the given key and value.
          *
          * @param key   the entry key
          * @param value the entry value

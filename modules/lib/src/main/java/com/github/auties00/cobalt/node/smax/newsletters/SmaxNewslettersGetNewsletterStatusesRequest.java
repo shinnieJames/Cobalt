@@ -15,17 +15,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza that fetches a slice of a newsletter's status
- * (view-count and reaction) history.
- *
- * @apiNote
- * Drives the Channels admin status panel surfaced through
- * {@code WAWebNewsletterGetStatusesQuery.queryNewsletterStatuses},
- * which is run with exponential back-off via
- * {@code WAWebNewsletterRpcUtils.runWithBackoff}. The same
- * {@link SmaxNewslettersGetNewsletterMessagesQueryParams} disjunction
- * used for {@link SmaxNewslettersGetNewsletterMessagesRequest} also
- * picks the addressing mode here. The resulting IQ has shape:
+ * Represents the outbound stanza that fetches a slice of a newsletter's
+ * status (view-count and reaction) history.
+ * The same {@link SmaxNewslettersGetNewsletterMessagesQueryParams}
+ * disjunction used for
+ * {@link SmaxNewslettersGetNewsletterMessagesRequest} also picks the
+ * addressing mode here. The resulting IQ has shape:
  * {@snippet :
  *     <iq xmlns="newsletter" type="get" to="s.whatsapp.net">
  *         <statuses count="100" before="200">
@@ -39,36 +34,30 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterStatusRequestPayloadMixin")
 public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOperation.Request {
     /**
-     * The cap on returned {@code <status>} entries per round-trip.
+     * Holds the cap on returned {@code <status>} entries per round-trip.
      */
     private final int count;
 
     /**
-     * The newsletter addressing parameters; either
+     * Holds the newsletter addressing parameters; either
      * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid} or
      * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite}.
      */
     private final SmaxNewslettersGetNewsletterMessagesQueryParams queryParams;
 
     /**
-     * The optional pagination cursor; {@code null} requests the latest
-     * slice.
+     * Holds the optional pagination cursor; {@code null} requests the
+     * latest slice.
      */
     private final SmaxNewslettersGetNewsletterStatusesDirection direction;
 
     /**
      * Constructs a new request.
      *
-     * @apiNote
-     * WA Web hard-codes {@code count} at {@code 100} on the admin
-     * status panel.
-     *
      * @param count       the per-call cap; must be non-negative
      * @param queryParams the addressing parameters; never {@code null}
-     * @param direction   the optional pagination cursor; may be
-     *                    {@code null}
-     * @throws NullPointerException if {@code queryParams} is
-     *                              {@code null}
+     * @param direction   the optional pagination cursor; may be {@code null}
+     * @throws NullPointerException if {@code queryParams} is {@code null}
      */
     public SmaxNewslettersGetNewsletterStatusesRequest(int count,
                    SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
@@ -99,8 +88,7 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
     /**
      * Returns the optional pagination cursor.
      *
-     * @return an {@link Optional} carrying the cursor, or empty when
-     *         requesting the latest slice
+     * @return an {@link Optional} carrying the cursor, or empty when requesting the latest slice
      */
     public Optional<SmaxNewslettersGetNewsletterStatusesDirection> direction() {
         return Optional.ofNullable(direction);
@@ -109,14 +97,11 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
     /**
      * Builds the outbound {@code <iq>} stanza carrying the
      * {@code <statuses>} payload.
+     * The IQ targets {@link Jid#userServer()} rather than the newsletter
+     * JID because the request fetches across the relay's newsletter
+     * index; the {@code <smax$any>} child encodes the addressing variant.
      *
-     * @apiNote
-     * The IQ targets {@code s.whatsapp.net} (not the newsletter JID)
-     * because the request fetches across the relay's newsletter index;
-     * the {@code <smax$any>} child encodes the addressing variant.
-     *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <statuses>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <statuses>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutNewslettersGetNewsletterStatusesRequest",
@@ -158,8 +143,7 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
      * Compares two requests for value equality on every field.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a request with equal
-     *         field values
+     * @return {@code true} when {@code obj} is a request with equal field values
      */
     @Override
     public boolean equals(Object obj) {

@@ -8,37 +8,32 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.iq.IqOperation;
 
 /**
- * The outbound {@code <iq xmlns="fb:thrift_iq" type="set">} stanza that
- * toggles the cart-enabled flag in the current merchant's commerce
- * settings.
+ * Builds the {@code <iq xmlns="fb:thrift_iq" type="set">} stanza that toggles the cart-enabled flag
+ * in the current merchant's commerce settings.
  *
- * @apiNote
- * Use this request from the catalog-management commerce-settings
- * surface; flipping the flag controls whether the merchant's catalog
- * grid shows the "add to cart" affordance, and the relay echoes the
- * post-mutation value back inside the response.
+ * <p>The stanza is sent from the catalog-management commerce-settings surface; flipping the flag
+ * controls whether the merchant's catalog grid shows the "add to cart" affordance, and the relay
+ * echoes the post-mutation value back inside the response.
  *
  * @implNote
- * This implementation models the legacy WAP-IQ path only; WA Web routes
- * the same call through the Relay GraphQL endpoint when the
- * {@code graphQLForCommerceSettingsEnabled} gating flag is on, falling
- * back to the WAP-IQ payload on graphql-error / recovery-required
- * paths, but Cobalt keeps the WAP-IQ payload as the single transport.
+ * This implementation models the legacy WAP-IQ path only; WA Web routes the same call through the
+ * Relay GraphQL endpoint when the {@code graphQLForCommerceSettingsEnabled} gating flag is on,
+ * falling back to the WAP-IQ payload on graphql-error and recovery-required paths, but Cobalt keeps
+ * the WAP-IQ payload as the single transport.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public final class IqUpdateCartEnabledRequest implements IqOperation.Request {
     /**
-     * The desired cart-enabled flag stamped into the {@code enabled}
-     * attribute of the {@code <cart/>} grandchild.
+     * Holds the desired cart-enabled flag stamped into the {@code enabled} attribute of the
+     * {@code <cart/>} grandchild.
      */
     private final boolean cartEnabled;
 
     /**
-     * Constructs a request.
+     * Constructs a request from the desired cart-enabled state.
      *
-     * @apiNote
-     * Pass {@code true} to enable the cart affordance on the catalog
-     * grid; pass {@code false} to disable it.
+     * <p>Pass {@code true} to enable the cart affordance on the catalog grid, {@code false} to
+     * disable it.
      *
      * @param cartEnabled the desired state
      */
@@ -47,12 +42,10 @@ public final class IqUpdateCartEnabledRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the desired cart-enabled flag.
+     * Returns the desired cart-enabled flag the stanza stamps.
      *
-     * @apiNote
-     * Use this getter to read back the desired flag the stanza will
-     * stamp; the relay routes it verbatim into the {@code enabled}
-     * attribute of the resulting {@code <cart/>} grandchild.
+     * <p>The relay routes the value verbatim into the {@code enabled} attribute of the resulting
+     * {@code <cart/>} grandchild.
      *
      * @return the flag
      */
@@ -64,11 +57,9 @@ public final class IqUpdateCartEnabledRequest implements IqOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by
-     * the {@code WAWebBusinessProfileJob.updateCartEnabled} export: a
-     * {@code <cart enabled/>} grandchild wrapped in a
-     * {@code <commerce_settings/>} envelope and an
-     * {@code fb:thrift_iq set} IQ frame routed to the WhatsApp service.
+     * This implementation materialises a {@code <cart enabled/>} grandchild wrapped in a
+     * {@code <commerce_settings/>} envelope and an {@code fb:thrift_iq set} IQ frame routed to the
+     * WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob",
@@ -91,7 +82,10 @@ public final class IqUpdateCartEnabledRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request with another for value equality on the cart-enabled flag.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal request
      */
     @Override
     public boolean equals(Object obj) {
@@ -106,7 +100,9 @@ public final class IqUpdateCartEnabledRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -114,7 +110,9 @@ public final class IqUpdateCartEnabledRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string naming the cart-enabled flag.
+     *
+     * @return the string form
      */
     @Override
     public String toString() {

@@ -14,17 +14,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds the {@code <participants>} stanza node for group SKMSG fanout and
- * its content-binding-only variant.
- *
- * @apiNote
- * Composed by {@link GroupSkmsgFanoutStanza} and {@link ChatFanoutStanza}.
- * Two emission shapes: a sender-key distribution wrapper
- * ({@link #buildSenderKeyDistribution}) carrying one {@code <to><enc>}
- * per new SK recipient, and a content-binding-only wrapper
- * ({@link #buildContentBindingOnly}) carrying RCAT tags for devices that
- * already have the sender key. {@link #requiresIdentityNode} is the
- * pre-key probe used to decide whether the outer stanza must include a
+ * Builds the {@code <participants>} stanza node for group SKMSG fanout and its content-binding-only variant.
+ * <p>
+ * Composed by {@link GroupSkmsgFanoutStanza} and {@link ChatFanoutStanza}. Two emission shapes are produced: a
+ * sender-key distribution wrapper ({@link #buildSenderKeyDistribution(List, Map, String)}) carrying one
+ * {@code <to><enc>} per new SK recipient, and a content-binding-only wrapper
+ * ({@link #buildContentBindingOnly(List, Map)}) carrying RCAT tags for devices that already have the sender key.
+ * {@link #requiresIdentityNode(List)} is the pre-key probe used to decide whether the outer stanza must include a
  * {@code <device-identity>} child.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
@@ -39,29 +35,17 @@ public final class ParticipantsStanza {
 
     /**
      * Builds a {@code <participants>} node for sender-key distribution.
+     * <p>
+     * Each device payload becomes a {@code <to jid="..."><enc decrypt-fail="hide" .../><content_binding .../></to>}
+     * child. Distribution {@code <enc>}s carry {@code decrypt-fail="hide"} unless the caller passes an explicit
+     * override, ensuring SK distribution messages never produce a visible decrypt-fail placeholder. Payloads with a
+     * {@code null} {@link MessageEncryptedPayload#recipientJid()} are skipped (those represent the sender-key cipher).
      *
-     * @apiNote
-     * Each device payload becomes a
-     * {@code <to jid="..."><enc decrypt-fail="hide" .../><content_binding .../></to>}
-     * child. Distribution {@code <enc>}s always carry
-     * {@code decrypt-fail="hide"} unless the caller passes an explicit
-     * override; the default matches WA Web's invariant that SK distribution
-     * messages must never produce a visible decrypt-fail placeholder.
-     * Payloads with a {@code null} {@link MessageEncryptedPayload#recipientJid()}
-     * are skipped (those represent the sender-key cipher in WA Web's
-     * {@code v.map}).
-     *
-     * @param payloads        the per-device encrypted SK distribution
-     *                        payloads
-     * @param contentBindings per-recipient RCAT tags keyed by user
-     *                        {@link Jid}, or {@code null} when RCAT does
-     *                        not apply
-     * @param decryptFail     the explicit {@code decrypt-fail} attribute
-     *                        for the distribution {@code <enc>} nodes, or
-     *                        {@code null} to use the default
-     *                        {@code "hide"}
-     * @return the {@code <participants>} {@link Node}, or {@code null}
-     *         when {@code payloads} is empty
+     * @param payloads        the per-device encrypted SK distribution payloads
+     * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}, or {@code null} when RCAT does not apply
+     * @param decryptFail     the explicit {@code decrypt-fail} attribute for the distribution {@code <enc>} nodes, or
+     *                        {@code null} to use the default {@code "hide"}
+     * @return the {@code <participants>} {@link Node}, or {@code null} when {@code payloads} is empty
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -106,24 +90,17 @@ public final class ParticipantsStanza {
     }
 
     /**
-     * Builds a {@code <participants>} node carrying only content-binding
-     * tags for existing SK recipients.
+     * Builds a {@code <participants>} node carrying only content-binding tags for existing SK recipients.
+     * <p>
+     * Used when no sender-key distribution is needed but RCAT tags must still be delivered to existing SK recipients
+     * (e.g. for an edit on an established group). Returns {@code null} when no binding matches any of the supplied device
+     * JIDs, so the caller can suppress the empty wrapper.
      *
-     * @apiNote
-     * Used when no sender-key distribution is needed but RCAT tags must
-     * still be delivered to existing SK recipients (e.g. for an edit on
-     * an established group). Returns {@code null} when no binding matches
-     * any of the supplied device JIDs, so the caller can suppress the
-     * empty wrapper.
-     *
-     * @implNote
-     * This implementation skips device JIDs whose corresponding user JID
-     * is not present in {@code contentBindings}; only devices with a
-     * matching binding produce a {@code <to>} child.
+     * @implNote This implementation skips device JIDs whose corresponding user JID is not present in
+     * {@code contentBindings}; only devices with a matching binding produce a {@code <to>} child.
      *
      * @param devices         the existing SK device {@link Jid}s
-     * @param contentBindings per-recipient RCAT tags keyed by user
-     *                        {@link Jid}
+     * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}
      * @return the {@code <participants>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
@@ -157,14 +134,11 @@ public final class ParticipantsStanza {
     }
 
     /**
-     * Returns whether any payload is a pre-key message, signalling that
-     * the outer stanza must include a {@code <device-identity>} child.
-     *
-     * @apiNote
-     * Mirrors the {@code shouldHaveIdentity} flag WA Web computes inside
-     * {@code createFanoutMsgStanza}: a PKMSG payload triggers the identity
-     * node because the recipient needs the sender's ADV identity to
-     * decrypt the PreKey envelope.
+     * Returns whether any payload is a pre-key message, signalling that the outer stanza must include a
+     * {@code <device-identity>} child.
+     * <p>
+     * A PKMSG payload triggers the identity node because the recipient needs the sender's ADV identity to decrypt the
+     * PreKey envelope.
      *
      * @param payloads the encrypted payloads, possibly {@code null}
      * @return {@code true} when at least one payload is a PreKey message
@@ -178,22 +152,15 @@ public final class ParticipantsStanza {
     }
 
     /**
-     * Resolves the {@code <content_binding>} child for a device by looking
-     * up the binding keyed on the device's user JID.
+     * Resolves the {@code <content_binding>} child for a device by looking up the binding keyed on the device's user JID.
+     * <p>
+     * Returns {@code null} when the RCAT map is {@code null} or does not contain a binding for the device's user.
      *
-     * @apiNote
-     * Internal helper used by both wrappers. Returns {@code null} when
-     * the RCAT map is {@code null} or does not contain a binding for the
-     * device's user.
-     *
-     * @implNote
-     * This implementation hashes on {@link Jid#toUserJid()} rather than
-     * the device JID so that all of a user's devices share the same RCAT
-     * tag; matches WA Web's {@code widToUserJid} key in the JS source.
+     * @implNote This implementation hashes on {@link Jid#toUserJid()} rather than the device JID so that all of a user's
+     * devices share the same RCAT tag.
      *
      * @param deviceJid       the device {@link Jid}
-     * @param contentBindings per-recipient RCAT tags keyed by user
-     *                        {@link Jid}, or {@code null}
+     * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}, or {@code null}
      * @return the {@code <content_binding>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",

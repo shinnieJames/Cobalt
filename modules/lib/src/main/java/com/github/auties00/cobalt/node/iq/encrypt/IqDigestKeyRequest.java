@@ -12,21 +12,19 @@ import com.github.auties00.cobalt.util.RandomIdUtils;
  * Builds the outbound {@code <iq xmlns="encrypt" type="get"/>} that asks the relay to echo back its
  * recorded Signal key-bundle digest for the local user.
  *
- * @apiNote
- * Used by the digest-key sanity check that fires when the relay sends an
- * {@code <notification type="encrypt"><digest/></notification>} push: the client compares the relay's
- * SHA-1 over {@code identityPubKey || skeyPubKey || skeySignature || preKeyPubKeys} against a local
- * recomputation, and on mismatch falls back to a full
- * {@link IqUploadPreKeysRequest pre-key re-upload}. The request carries no payload other than a
- * bare {@code <digest/>} child.
+ * <p>This request backs the digest-key sanity check that fires when the relay sends an
+ * {@code <notification type="encrypt"><digest/></notification>} push. The client compares the
+ * relay's SHA-1 over {@code identityPubKey || skeyPubKey || skeySignature || preKeyPubKeys} against
+ * a local recomputation, and on mismatch falls back to a full
+ * {@link IqUploadPreKeysRequest pre-key re-upload}. The request carries no payload other than a bare
+ * {@code <digest/>} child.
  */
 @WhatsAppWebModule(moduleName = "WAWebDigestKeyJob")
 public final class IqDigestKeyRequest implements IqOperation.Request {
     /**
      * Constructs an empty digest-key probe.
      *
-     * @apiNote
-     * The request body has no parameters; the only outbound information is the {@code <digest/>}
+     * <p>The request body has no parameters; the only outbound information is the {@code <digest/>}
      * tag and the IQ envelope identifier.
      */
     public IqDigestKeyRequest() {
@@ -35,10 +33,9 @@ public final class IqDigestKeyRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
-     * {@code xmlns="encrypt"} and {@code type="get"}, carrying a single empty {@code <digest/>}
-     * child and a freshly minted {@link RandomIdUtils#newId() request identifier}.
+     * <p>Produces an {@code <iq>} addressed to {@link JidServer#user()} with {@code xmlns="encrypt"}
+     * and {@code type="get"}, carrying a single empty {@code <digest/>} child and a freshly minted
+     * {@link RandomIdUtils#newId() request identifier}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDigestKeyJob",
@@ -59,8 +56,7 @@ public final class IqDigestKeyRequest implements IqOperation.Request {
     /**
      * Compares this request to another instance for equality.
      *
-     * @apiNote
-     * All instances of {@code IqDigestKeyRequest} are interchangeable because the request carries
+     * <p>All instances of {@code IqDigestKeyRequest} are interchangeable because the request carries
      * no per-instance state; equality reduces to a class-identity check.
      *
      * @param obj the candidate instance

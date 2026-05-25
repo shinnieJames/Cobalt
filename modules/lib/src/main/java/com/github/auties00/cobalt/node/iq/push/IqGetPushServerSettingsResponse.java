@@ -11,33 +11,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
- * {@link IqGetPushServerSettingsRequest}.
+ * Models the inbound reply to an {@link IqGetPushServerSettingsRequest}.
  *
- * @apiNote
- * WA Web's {@code getPushServerSettings} parser collapses both the success path and the
- * error path into a single {@code {webserverkey | {errorCode, errorText}}} discriminated
- * record; Cobalt splits the reply into {@link Success}, {@link ClientError}, and
- * {@link ServerError} variants so the browser-push driver can distinguish a missing-entry
- * failure from a transient relay failure.
+ * <p>The reply is one of three variants: {@link Success} carries the relay-issued server push key;
+ * {@link ClientError} signals that the relay rejected the query as malformed or unauthorised; and
+ * {@link ServerError} signals a transient relay failure. Splitting the reply this way lets the
+ * browser-push driver distinguish a hard rejection from a retryable failure.
+ *
+ * @implNote This implementation splits the reply into three variants where WA Web's parser collapses
+ * the success and error paths into a single {@code {webserverkey | {errorCode, errorText}}}
+ * discriminated record.
  */
 public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Response
         permits IqGetPushServerSettingsResponse.Success, IqGetPushServerSettingsResponse.ClientError, IqGetPushServerSettingsResponse.ServerError {
 
     /**
-     * Tries each {@link IqGetPushServerSettingsResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Parses the inbound stanza into the first matching reply variant.
      *
-     * @apiNote
-     * The priority order ({@link Success}, {@link ClientError}, {@link ServerError}) mirrors
-     * the order WA Web's parser tries; only one variant ever populates because
-     * {@link SmaxIqResultResponseMixin} and {@link SmaxBaseServerErrorMixin} match disjoint
-     * stanza shapes.
+     * <p>Each variant is attempted in priority order ({@link Success}, then {@link ClientError},
+     * then {@link ServerError}) and the first that parses cleanly is returned. At most one variant
+     * ever matches: {@link SmaxIqResultResponseMixin#validate(Node, Node)} accepts only a
+     * {@code type="result"} envelope while {@link SmaxBaseServerErrorMixin} accepts only a
+     * {@code type="error"} envelope, so the accepted stanza shapes are disjoint.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza, used to validate echoed identifiers
-     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
-     *         when no documented variant matched the stanza shape
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         documented variant matched the stanza shape
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebGetPushServerSettingsJob",
@@ -57,18 +57,17 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
     }
 
     /**
-     * Reply variant carrying the relay-issued server-side push key.
+     * Carries the relay-issued server-side push key on a successful query.
      *
-     * @apiNote
-     * The {@code webserverkey} is the VAPID-style server public key the browser will use to
-     * validate web-push payload signatures; the browser-push driver hands it to
-     * {@code PushManager.subscribe} verbatim.
+     * <p>The {@code webserverkey} is the VAPID-style server public key the browser uses to validate
+     * web-push payload signatures; the browser-push driver hands it to {@code PushManager.subscribe}
+     * verbatim.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetPushServerSettingsJob")
     final class Success implements IqGetPushServerSettingsResponse {
         /**
-         * Base64-encoded server-side push key returned in the {@code webserverkey} attribute
-         * of the {@code <settings/>} grandchild.
+         * Holds the base64-encoded server-side push key read from the {@code webserverkey}
+         * attribute of the {@code <settings/>} grandchild.
          */
         private final String webServerKey;
 
@@ -92,17 +91,17 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given inbound stanza.
+         * Parses a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope lacks the {@code <settings/>}
-         * grandchild or when the grandchild lacks the {@code webserverkey} attribute; the
-         * caller falls through to the error variants in either case.
+         * <p>Returns {@link Optional#empty()} when the stanza is not a valid result envelope per
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, when the envelope lacks the
+         * {@code <settings/>} grandchild, or when that grandchild lacks the {@code webserverkey}
+         * attribute; the caller falls through to the error variants in any of these cases.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when
+         *         the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebGetPushServerSettingsJob",
                 exports = "getPushServerSettings", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -122,7 +121,13 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
+         *
+         * <p>Two replies are equal when they share the exact runtime class and the same
+         * {@link #webServerKey()}.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is an equal {@link Success}, otherwise {@code false}
          */
         @Override
         public boolean equals(Object obj) {
@@ -137,7 +142,9 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code derived from {@link #webServerKey()}
          */
         @Override
         public int hashCode() {
@@ -145,7 +152,9 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debugging representation of this reply.
+         *
+         * @return a string including the {@link #webServerKey()} value
          */
         @Override
         public String toString() {
@@ -154,22 +163,21 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
     }
 
     /**
-     * Reply variant signalling that the relay rejected the push-server-settings query as
-     * malformed or unauthorised.
+     * Signals that the relay rejected the push-server-settings query as malformed or unauthorised.
      *
-     * @apiNote
-     * Maps to the {@code 4xx} branch of WA Web's reply pipeline; the browser-push driver
-     * treats this as a hard failure and skips the subscription attempt for the session.
+     * <p>This is the client-fault branch of the reply pipeline; the browser-push driver treats it
+     * as a hard failure and skips the subscription attempt for the session.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetPushServerSettingsJob")
     final class ClientError implements IqGetPushServerSettingsResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code read from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the human-readable error text read from the {@code <error text/>} attribute, or
+         * {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -177,7 +185,7 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
          * Constructs a new client-error reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text, or {@code null} when omitted
+         * @param errorText the human-readable text, or {@code null} when omitted
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -194,29 +202,27 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
+         * Parses a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls in the {@code 4xx} range, per the parsing contract of
+         * <p>Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope that echoes the {@code request} id and carries a {@code <error/>} child whose
+         * {@code code} attribute falls in the client-fault range, per the contract of
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when
+         *         the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebGetPushServerSettingsJob",
                 exports = "getPushServerSettings", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -229,7 +235,14 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
+         *
+         * <p>Two replies are equal when they share the exact runtime class, the same
+         * {@link #errorCode()}, and the same {@link #errorText()}.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is an equal {@link ClientError}, otherwise
+         *         {@code false}
          */
         @Override
         public boolean equals(Object obj) {
@@ -245,7 +258,9 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code derived from {@link #errorCode()} and {@link #errorText()}
          */
         @Override
         public int hashCode() {
@@ -253,7 +268,9 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debugging representation of this reply.
+         *
+         * @return a string including the {@link #errorCode()} and {@link #errorText()} values
          */
         @Override
         public String toString() {
@@ -263,22 +280,21 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
     }
 
     /**
-     * Reply variant signalling a transient server-side failure on a push-server-settings
-     * query.
+     * Signals a transient server-side failure on a push-server-settings query.
      *
-     * @apiNote
-     * Maps to the {@code 5xx} branch of WA Web's reply pipeline; the browser-push driver
-     * may retry the same query on the next session attempt once the socket has settled.
+     * <p>This is the server-fault branch of the reply pipeline; the browser-push driver may retry
+     * the same query on the next session attempt once the socket has settled.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetPushServerSettingsJob")
     final class ServerError implements IqGetPushServerSettingsResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code read from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the human-readable error text read from the {@code <error text/>} attribute, or
+         * {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -286,7 +302,7 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
          * Constructs a new server-error reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text, or {@code null} when omitted
+         * @param errorText the human-readable text, or {@code null} when omitted
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -303,29 +319,27 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
+         * Parses a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing
-         * contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope that echoes the {@code request} id and carries a {@code <error/>} child whose
+         * {@code code} attribute falls outside the client-fault range, per the contract of
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when
+         *         the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebGetPushServerSettingsJob",
                 exports = "getPushServerSettings", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -338,7 +352,14 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
+         *
+         * <p>Two replies are equal when they share the exact runtime class, the same
+         * {@link #errorCode()}, and the same {@link #errorText()}.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is an equal {@link ServerError}, otherwise
+         *         {@code false}
          */
         @Override
         public boolean equals(Object obj) {
@@ -354,7 +375,9 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code derived from {@link #errorCode()} and {@link #errorText()}
          */
         @Override
         public int hashCode() {
@@ -362,7 +385,9 @@ public sealed interface IqGetPushServerSettingsResponse extends IqOperation.Resp
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debugging representation of this reply.
+         *
+         * @return a string including the {@link #errorCode()} and {@link #errorText()} values
          */
         @Override
         public String toString() {

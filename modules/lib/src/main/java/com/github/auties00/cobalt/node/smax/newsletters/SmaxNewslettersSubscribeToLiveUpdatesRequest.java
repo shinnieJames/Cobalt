@@ -13,17 +13,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza that opts the connected client into live
- * updates for a newsletter.
- *
- * @apiNote
- * Drives WA Web's
- * {@code WAWebNewsletterSubscribeToLiveUpdatesQuery.subscribeToLiveUpdatesQuery},
- * which is run with exponential back-off via
- * {@code WAWebNewsletterRpcUtils.runWithBackoff}. Once the relay
- * accepts the subscription it will push
- * {@link SmaxNewslettersLiveUpdatesNotificationResponse} stanzas for
- * the requested newsletter until the TTL surfaced by
+ * Represents the outbound stanza that opts the connected client into
+ * live updates for a newsletter.
+ * Once the relay accepts the subscription it pushes
+ * {@link SmaxNewslettersLiveUpdatesNotificationResponse} stanzas for the
+ * requested newsletter until the TTL surfaced by
  * {@link SmaxNewslettersSubscribeToLiveUpdatesResponse.Success#duration()}
  * elapses. The resulting IQ has shape:
  * {@snippet :
@@ -37,18 +31,16 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersBaseIQSetRequestMixin")
 public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxOperation.Request {
     /**
-     * The newsletter {@link Jid} to subscribe to; routed verbatim into
-     * the IQ's {@code to} attribute.
+     * Holds the newsletter {@link Jid} to subscribe to; routed verbatim
+     * into the IQ's {@code to} attribute.
      */
     private final Jid newsletterJid;
 
     /**
      * Constructs a new subscription request.
      *
-     * @param newsletterJid the newsletter to subscribe to; never
-     *                      {@code null}
-     * @throws NullPointerException if {@code newsletterJid} is
-     *                              {@code null}
+     * @param newsletterJid the newsletter to subscribe to; never {@code null}
+     * @throws NullPointerException if {@code newsletterJid} is {@code null}
      */
     public SmaxNewslettersSubscribeToLiveUpdatesRequest(Jid newsletterJid) {
         this.newsletterJid = Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
@@ -67,8 +59,7 @@ public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxO
      * Builds the outbound {@code <iq>} stanza carrying the bare
      * {@code <live_updates/>} payload.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <live_updates/>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <live_updates/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutNewslettersSubscribeToLiveUpdatesRequest",
@@ -86,12 +77,10 @@ public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxO
     }
 
     /**
-     * Compares two requests for value equality on
-     * {@link #newsletterJid()}.
+     * Compares two requests for value equality on {@link #newsletterJid()}.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a request carrying an
-     *         equal {@link #newsletterJid()}
+     * @return {@code true} when {@code obj} is a request carrying an equal {@link #newsletterJid()}
      */
     @Override
     public boolean equals(Object obj) {
@@ -116,8 +105,7 @@ public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxO
     }
 
     /**
-     * Returns a debug representation including the newsletter
-     * {@link Jid}.
+     * Returns a debug representation including the newsletter {@link Jid}.
      *
      * @return a record-like rendering of this request
      */

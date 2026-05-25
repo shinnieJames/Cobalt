@@ -12,7 +12,7 @@ export function registerLiveDebugTools(server: McpServer, context: LiveToolsCont
 
   server.tool(
     "web_live_debug_list_scripts",
-    "Read-only. Lists runtime scripts known to a session's debugger.",
+    "Read-only. Lists runtime scripts known to a session's debugger, including WASM scripts (scriptLanguage 'WebAssembly' with a codeOffset). Use the filter to find a WASM module by URL.",
     {
       sessionId: sessionIdSchema,
       filter: z.string().optional(),
@@ -162,6 +162,76 @@ export function registerLiveDebugTools(server: McpServer, context: LiveToolsCont
   );
 
   server.tool(
+    "web_live_debug_set_wasm_breakpoint",
+    "Sets a breakpoint inside a WASM script at an absolute module byte offset (lineNumber 0, columnNumber = byte offset). Compute byteOffset as codeOffset (from web_live_debug_list_scripts) + the function's bodyOffset (from get_native_module_metadata) + the instruction offset.",
+    {
+      sessionId: sessionIdSchema,
+      scriptId: z.string().describe("The WASM script id (scriptLanguage 'WebAssembly')."),
+      byteOffset: z.number().describe("Absolute byte offset into the WASM module."),
+      condition: z.string().optional(),
+    },
+    async ({
+      sessionId,
+      scriptId,
+      byteOffset,
+      condition,
+    }: {
+      sessionId: string;
+      scriptId: string;
+      byteOffset: number;
+      condition?: string;
+    }) => {
+      requireReady();
+      log.info(`web_live_debug_set_wasm_breakpoint: id=${sessionId} scriptId="${scriptId}" byteOffset=${byteOffset}`);
+      try {
+        const session = requireSession(sessionId);
+        const result = await session.setWasmBreakpoint(scriptId, byteOffset, condition);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "web_live_debug_read_wasm_memory",
+    "Reads a slice of a paused WASM frame's linear memory and returns it as base64. Requires the session to be paused in a WASM frame; pass the callFrameId from web_live_debug_paused_state.",
+    {
+      sessionId: sessionIdSchema,
+      callFrameId: z.string().describe("callFrameId of a paused WASM frame (from web_live_debug_paused_state)."),
+      addr: z.number().describe("Linear-memory start address."),
+      length: z.number().describe("Number of bytes to read."),
+    },
+    async ({
+      sessionId,
+      callFrameId,
+      addr,
+      length,
+    }: {
+      sessionId: string;
+      callFrameId: string;
+      addr: number;
+      length: number;
+    }) => {
+      requireReady();
+      log.info(`web_live_debug_read_wasm_memory: id=${sessionId} addr=${addr} len=${length}`);
+      try {
+        const session = requireSession(sessionId);
+        const result = await session.readWasmMemory(callFrameId, addr, length);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
     "web_live_debug_remove_breakpoint",
     "Removes a breakpoint by id from a session.",
     {
@@ -235,6 +305,46 @@ export function registerLiveDebugTools(server: McpServer, context: LiveToolsCont
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ paused: true, ...(result as object) }, null, 2) }],
         };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "web_live_serve_wasm",
+    "Serves a patched WASM binary (a file produced by patch_native_module) in place of any request whose URL contains 'urlSubstring', via CDP Fetch interception. The replacement applies to subsequent loads of the module; reload the page to pick it up. Set clear=true to remove all replacements and disable interception.",
+    {
+      sessionId: sessionIdSchema,
+      urlSubstring: z.string().describe("Substring of the WASM URL to replace (e.g. the module's hashed filename)."),
+      path: z.string().optional().describe("Path to the patched .wasm file (from patch_native_module). Omit with clear=true."),
+      clear: z.boolean().optional().default(false).describe("Remove all serve replacements and disable interception."),
+    },
+    async ({
+      sessionId,
+      urlSubstring,
+      path,
+      clear,
+    }: {
+      sessionId: string;
+      urlSubstring: string;
+      path?: string;
+      clear: boolean;
+    }) => {
+      requireReady();
+      log.info(`web_live_serve_wasm: id=${sessionId} url~="${urlSubstring}" clear=${clear}`);
+      try {
+        const session = requireSession(sessionId);
+        if (clear) {
+          await session.clearWasmReplacements();
+          return { content: [{ type: "text" as const, text: JSON.stringify({ cleared: true }, null, 2) }] };
+        }
+        if (!path) throw new Error("path is required unless clear=true");
+        await session.serveWasmReplacement(urlSubstring, path);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ serving: path, forUrlSubstring: urlSubstring }, null, 2) }] };
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],

@@ -14,34 +14,27 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 /**
- * A two-pass exact-allocation writer for Apple's XML property-list
- * format.
+ * Serialises a {@link PlistValue} tree into Apple's XML property-list format.
  *
- * @apiNote
- * Consumed indirectly via
- * {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#writeXml(PlistValue)}.
- * Emits the canonical Apple preamble (XML prolog, the
- * {@code PropertyList-1.0.dtd} doctype, and the
- * {@code <plist version="1.0">} root) so {@code albert.apple.com}
- * accepts the bytes verbatim.
+ * <p>The writer emits the canonical Apple preamble (the XML prolog, the {@code PropertyList-1.0.dtd}
+ * doctype, and the {@code <plist version="1.0">} root) followed by the tab-indented value tree and the
+ * closing {@code </plist>} block, producing bytes that Apple's activation endpoint accepts verbatim.
+ * Containers are emitted one entry per line; dictionary keys and string content are XML-escaped; binary
+ * blobs are Base64-encoded; dates and floating-point reals are rendered through their {@link Instant} and
+ * {@link Double} string forms.
  *
- * @implNote
- * This implementation runs pass one to compute the exact UTF-8 byte
- * count via {@link #sizeOf(PlistValue, int)}, then pass two to fill
- * a single {@code byte[]} of that size in place. There is no
- * {@link StringBuilder} growth, no intermediate {@link String}
- * conversion, and no {@link java.nio.charset.CharsetEncoder} pass.
- * All XML element tags and entity replacements are pre-encoded as
- * {@code byte[]} constants.
+ * @implNote This implementation runs two passes to stay allocation-free. The first pass computes the exact
+ * UTF-8 byte count through {@link #sizeOf(PlistValue, int)} and its helpers; the second fills a single
+ * pre-sized {@code byte[]} in place. There is no {@link StringBuilder} growth, no intermediate
+ * {@link String} conversion of the tree, and no {@link java.nio.charset.CharsetEncoder} pass: every element
+ * tag and entity replacement is a pre-encoded {@code byte[]} constant, the UTF-8 encoder is inlined, and
+ * Base64, decimal-integer, and indentation output is written directly into the destination buffer.
  */
 public final class PlistXmlWriter {
     /**
-     * The XML preamble.
-     *
-     * @apiNote
-     * Matches the canonical Apple {@code PropertyList-1.0.dtd}
-     * declaration so Apple's parsers accept the bytes verbatim;
-     * emitted at the head of every {@link #write(PlistValue)} output.
+     * Holds the canonical Apple XML preamble, comprising the XML prolog, the {@code PropertyList-1.0.dtd}
+     * doctype declaration, and the opening {@code <plist version="1.0">} root, emitted at the head of every
+     * {@link #write(PlistValue)} result.
      */
     private static final byte[] PREAMBLE = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -50,129 +43,124 @@ public final class PlistXmlWriter {
             """.getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The closing {@code </plist>} block.
+     * Holds the closing {@code </plist>} block emitted at the tail of every {@link #write(PlistValue)}
+     * result.
      */
     private static final byte[] EPILOGUE = "\n</plist>\n".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The opening {@code <dict>} tag with trailing newline.
+     * Holds the opening {@code <dict>} tag with a trailing newline.
      */
     private static final byte[] DICT_OPEN = {'<', 'd', 'i', 'c', 't', '>', '\n'};
     /**
-     * The closing {@code </dict>} tag.
+     * Holds the closing {@code </dict>} tag.
      */
     private static final byte[] DICT_CLOSE = {'<', '/', 'd', 'i', 'c', 't', '>'};
     /**
-     * The opening {@code <array>} tag with trailing newline.
+     * Holds the opening {@code <array>} tag with a trailing newline.
      */
     private static final byte[] ARRAY_OPEN = {'<', 'a', 'r', 'r', 'a', 'y', '>', '\n'};
     /**
-     * The closing {@code </array>} tag.
+     * Holds the closing {@code </array>} tag.
      */
     private static final byte[] ARRAY_CLOSE = {'<', '/', 'a', 'r', 'r', 'a', 'y', '>'};
     /**
-     * The opening {@code <key>} tag.
+     * Holds the opening {@code <key>} tag.
      */
     private static final byte[] KEY_OPEN = {'<', 'k', 'e', 'y', '>'};
     /**
-     * The closing {@code </key>} tag with trailing newline.
+     * Holds the closing {@code </key>} tag with a trailing newline.
      */
     private static final byte[] KEY_CLOSE = {'<', '/', 'k', 'e', 'y', '>', '\n'};
     /**
-     * The opening {@code <string>} tag.
+     * Holds the opening {@code <string>} tag.
      */
     private static final byte[] STRING_OPEN = {'<', 's', 't', 'r', 'i', 'n', 'g', '>'};
     /**
-     * The closing {@code </string>} tag.
+     * Holds the closing {@code </string>} tag.
      */
     private static final byte[] STRING_CLOSE = {'<', '/', 's', 't', 'r', 'i', 'n', 'g', '>'};
     /**
-     * The opening {@code <data>} tag.
+     * Holds the opening {@code <data>} tag.
      */
     private static final byte[] DATA_OPEN = {'<', 'd', 'a', 't', 'a', '>'};
     /**
-     * The closing {@code </data>} tag.
+     * Holds the closing {@code </data>} tag.
      */
     private static final byte[] DATA_CLOSE = {'<', '/', 'd', 'a', 't', 'a', '>'};
     /**
-     * The opening {@code <integer>} tag.
+     * Holds the opening {@code <integer>} tag.
      */
     private static final byte[] INTEGER_OPEN = {'<', 'i', 'n', 't', 'e', 'g', 'e', 'r', '>'};
     /**
-     * The closing {@code </integer>} tag.
+     * Holds the closing {@code </integer>} tag.
      */
     private static final byte[] INTEGER_CLOSE = {'<', '/', 'i', 'n', 't', 'e', 'g', 'e', 'r', '>'};
     /**
-     * The opening {@code <real>} tag.
+     * Holds the opening {@code <real>} tag.
      */
     private static final byte[] REAL_OPEN = {'<', 'r', 'e', 'a', 'l', '>'};
     /**
-     * The closing {@code </real>} tag.
+     * Holds the closing {@code </real>} tag.
      */
     private static final byte[] REAL_CLOSE = {'<', '/', 'r', 'e', 'a', 'l', '>'};
     /**
-     * The opening {@code <date>} tag.
+     * Holds the opening {@code <date>} tag.
      */
     private static final byte[] DATE_OPEN = {'<', 'd', 'a', 't', 'e', '>'};
     /**
-     * The closing {@code </date>} tag.
+     * Holds the closing {@code </date>} tag.
      */
     private static final byte[] DATE_CLOSE = {'<', '/', 'd', 'a', 't', 'e', '>'};
     /**
-     * The self-closing {@code <true/>} tag.
+     * Holds the self-closing {@code <true/>} tag.
      */
     private static final byte[] TRUE_TAG = {'<', 't', 'r', 'u', 'e', '/', '>'};
     /**
-     * The self-closing {@code <false/>} tag.
+     * Holds the self-closing {@code <false/>} tag.
      */
     private static final byte[] FALSE_TAG = {'<', 'f', 'a', 'l', 's', 'e', '/', '>'};
     /**
-     * The XML entity replacement for {@code &}.
+     * Holds the XML entity replacement for {@code &}.
      */
     private static final byte[] AMP_ENTITY = {'&', 'a', 'm', 'p', ';'};
     /**
-     * The XML entity replacement for {@code <}.
+     * Holds the XML entity replacement for {@code <}.
      */
     private static final byte[] LT_ENTITY = {'&', 'l', 't', ';'};
     /**
-     * The XML entity replacement for {@code >}.
+     * Holds the XML entity replacement for {@code >}.
      */
     private static final byte[] GT_ENTITY = {'&', 'g', 't', ';'};
     /**
-     * The pre-encoded decimal representation of
-     * {@link Long#MIN_VALUE}.
+     * Holds the pre-encoded decimal representation of {@link Long#MIN_VALUE}.
      *
-     * @apiNote
-     * Special-cased because {@code -Long.MIN_VALUE} overflows, so
-     * the generic {@link #writeLong(byte[], int, long)} path cannot
-     * negate the input.
+     * @implNote This implementation special-cases {@link Long#MIN_VALUE} because negating it overflows, so
+     * the generic {@link #writeLong(byte[], int, long)} path cannot derive its magnitude; the constant lets
+     * that path emit the value without computing it.
      */
     private static final byte[] LONG_MIN_VALUE = "-9223372036854775808".getBytes(StandardCharsets.US_ASCII);
     /**
-     * The standard Base64 alphabet, indexed by 6-bit value.
+     * Holds the standard Base64 alphabet, indexed by 6-bit value.
      */
     private static final byte[] BASE64_ALPHABET =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Hidden constructor.
-     *
-     * @apiNote
-     * Prevents instantiation; the class is a stateless namespace.
+     * Prevents instantiation of this stateless namespace class.
      */
     private PlistXmlWriter() {
     }
 
     /**
-     * Serialises a value tree as an XML plist with the canonical
-     * Apple preamble.
+     * Serialises a value tree as an XML plist with the canonical Apple preamble.
      *
-     * @apiNote
-     * The single public entry point; drives the two-pass pipeline
-     * (size, fill) end to end.
+     * <p>Computes the exact output size, allocates a single buffer of that size, then fills it with the
+     * preamble, the rendered value tree, and the epilogue. The returned array is exactly the length of the
+     * serialised bytes with no slack.
      *
      * @param root the root value
-     * @return the UTF-8 encoded XML bytes
+     * @return the UTF-8 encoded XML plist bytes
      */
     public static byte[] write(PlistValue root) {
         var size = PREAMBLE.length + sizeOf(root, 0) + EPILOGUE.length;
@@ -184,16 +172,15 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Returns the exact UTF-8 byte count required to serialise a
-     * value at a given indent depth.
+     * Returns the exact UTF-8 byte count required to serialise a value at a given indent depth.
      *
-     * @apiNote
-     * Pass-one driver: recurses into containers and excludes the
-     * preamble and epilogue (the caller adds those once).
+     * <p>Pass-one driver. Dispatches on the sealed {@link PlistValue} hierarchy, recursing into containers,
+     * and excludes the preamble and epilogue, which {@link #write(PlistValue)} adds once. The {@code indent}
+     * tab count is included in the returned width.
      *
      * @param value  the value to size
      * @param indent the indentation depth in tabs
-     * @return the byte count
+     * @return the byte count for {@code value} including its leading indentation
      */
     private static int sizeOf(PlistValue value, int indent) {
         return switch (value) {
@@ -209,16 +196,14 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Returns the byte count required to serialise a dictionary
-     * node.
+     * Returns the byte count required to serialise a dictionary node.
      *
-     * @apiNote
-     * Sized as the open tag, the indented {@code <key>} / value
-     * pairs separated by newlines, and the close tag.
+     * <p>Sums the open tag, each indented {@code <key>} / value pair plus its trailing newline, and the
+     * close tag, recursing into {@link #sizeOf(PlistValue, int)} for each value.
      *
      * @param dict   the dictionary
-     * @param indent the indentation depth
-     * @return the byte count
+     * @param indent the indentation depth in tabs
+     * @return the byte count for the dictionary including its leading indentation
      */
     private static int sizeOfDict(PlistDictionaryValue dict, int indent) {
         var total = indent + DICT_OPEN.length;
@@ -234,13 +219,12 @@ public final class PlistXmlWriter {
     /**
      * Returns the byte count required to serialise an array node.
      *
-     * @apiNote
-     * Sized as the open tag, the indented items separated by
-     * newlines, and the close tag.
+     * <p>Sums the open tag, each indented item plus its trailing newline, and the close tag, recursing into
+     * {@link #sizeOf(PlistValue, int)} for each item.
      *
      * @param array  the array
-     * @param indent the indentation depth
-     * @return the byte count
+     * @param indent the indentation depth in tabs
+     * @return the byte count for the array including its leading indentation
      */
     private static int sizeOfArray(PlistArrayValue array, int indent) {
         var total = indent + ARRAY_OPEN.length;
@@ -253,18 +237,18 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Emits a value into the destination buffer.
+     * Emits a value into the destination buffer at the given write position.
      *
-     * @apiNote
-     * Pass-two driver: dispatches on the sealed {@link PlistValue}
-     * hierarchy and writes directly into {@code out} starting at
-     * {@code pos}.
+     * <p>Pass-two driver. Dispatches on the sealed {@link PlistValue} hierarchy and writes the indented,
+     * tag-wrapped rendering directly into {@code out}. Each branch writes the leading indentation, the
+     * opening tag, the encoded body, and the closing tag, except the boolean branch, which emits a single
+     * self-closing tag.
      *
      * @param out    the destination buffer
      * @param pos    the current write position
      * @param value  the value to emit
      * @param indent the current indentation depth in tabs
-     * @return the position after the value
+     * @return the write position after the value
      */
     private static int writeValue(byte[] out, int pos, PlistValue value, int indent) {
         return switch (value) {
@@ -308,19 +292,18 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Emits a dictionary with one {@code <key>} / value pair per
-     * line.
+     * Emits a dictionary with one {@code <key>} / value pair per line.
      *
-     * @apiNote
-     * Routes through {@link #writeXmlEscaped(byte[], int, String)}
-     * for the key text so dict keys containing XML metacharacters
-     * survive the round-trip.
+     * <p>Writes the open tag, then for each entry the indented {@code <key>} element followed by its value
+     * on its own line, and finally the indented close tag. Key text is routed through
+     * {@link #writeXmlEscaped(byte[], int, String)} so keys containing XML metacharacters survive the
+     * round-trip.
      *
      * @param out    the destination buffer
      * @param pos    the current write position
      * @param dict   the dictionary
-     * @param indent the current indentation depth
-     * @return the position after the dictionary
+     * @param indent the current indentation depth in tabs
+     * @return the write position after the dictionary
      */
     private static int writeDict(byte[] out, int pos, PlistDictionaryValue dict, int indent) {
         pos = writeIndent(out, pos, indent);
@@ -341,11 +324,14 @@ public final class PlistXmlWriter {
     /**
      * Emits an array with one entry per line.
      *
+     * <p>Writes the open tag, then each item on its own line at the child indent depth, and finally the
+     * indented close tag.
+     *
      * @param out    the destination buffer
      * @param pos    the current write position
      * @param array  the array
-     * @param indent the current indentation depth
-     * @return the position after the array
+     * @param indent the current indentation depth in tabs
+     * @return the write position after the array
      */
     private static int writeArray(byte[] out, int pos, PlistArrayValue array, int indent) {
         pos = writeIndent(out, pos, indent);
@@ -362,13 +348,12 @@ public final class PlistXmlWriter {
     /**
      * Copies a byte array into the destination buffer.
      *
-     * @apiNote
-     * Used for every pre-encoded tag and entity constant.
+     * <p>Used to emit every pre-encoded tag and entity constant.
      *
      * @param out the destination buffer
      * @param pos the current write position
      * @param src the bytes to copy
-     * @return the position after the copy
+     * @return the write position after the copy
      */
     private static int writeBytes(byte[] out, int pos, byte[] src) {
         System.arraycopy(src, 0, out, pos, src.length);
@@ -376,13 +361,12 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Writes the requested number of tab characters at the current
-     * position.
+     * Writes the requested number of tab characters at the current position.
      *
      * @param out   the destination buffer
      * @param pos   the current write position
-     * @param count the indentation depth
-     * @return the position after the tabs
+     * @param count the indentation depth in tabs
+     * @return the write position after the tabs
      */
     private static int writeIndent(byte[] out, int pos, int count) {
         for (var i = 0; i < count; i++) {
@@ -394,21 +378,17 @@ public final class PlistXmlWriter {
     /**
      * Writes a string as UTF-8 with XML entity escaping.
      *
-     * @apiNote
-     * Used for string element content and dict key text; escapes
-     * {@code &}, {@code <}, and {@code >}.
+     * <p>Used for string element content and dictionary key text. The characters {@code &}, {@code <}, and
+     * {@code >} are replaced with their entity forms; all other characters are UTF-8 encoded.
      *
-     * @implNote
-     * This implementation inlines the UTF-8 encoder so the writer
-     * stays allocation-free: ASCII characters emit one byte,
-     * two-byte BMP characters emit two, surrogate pairs decode to
-     * a single 4-byte sequence, and lone high-plane characters emit
-     * three bytes.
+     * @implNote This implementation inlines the UTF-8 encoder so the writer stays allocation-free: ASCII
+     * characters emit one byte, two-byte BMP characters emit two, a valid high/low surrogate pair decodes to
+     * a single 4-byte sequence, and any other character (including a lone surrogate) emits three bytes.
      *
      * @param out   the destination buffer
      * @param pos   the current write position
      * @param value the source string
-     * @return the position after the encoded text
+     * @return the write position after the encoded text
      */
     private static int writeXmlEscaped(byte[] out, int pos, String value) {
         for (var i = 0; i < value.length(); i++) {
@@ -442,18 +422,15 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Writes an already-ASCII string verbatim.
+     * Writes an already-ASCII string verbatim, one byte per character.
      *
-     * @apiNote
-     * Used for the small outputs of
-     * {@link Double#toString(double)} and
-     * {@link Instant#toString()}, neither of which can produce
-     * non-ASCII characters.
+     * <p>Used for the outputs of {@link Double#toString(double)} and {@link Instant#toString()}, neither of
+     * which can produce non-ASCII characters, so no encoding is needed.
      *
      * @param out the destination buffer
      * @param pos the current write position
      * @param s   the ASCII source string
-     * @return the position after the bytes
+     * @return the write position after the bytes
      */
     private static int writeAsciiString(byte[] out, int pos, String s) {
         for (var i = 0; i < s.length(); i++) {
@@ -465,21 +442,18 @@ public final class PlistXmlWriter {
     /**
      * Writes the decimal representation of an integer.
      *
-     * @apiNote
-     * Used for the body of every {@code <integer>} element; includes
-     * a leading minus sign when {@code value} is negative.
+     * <p>Used for the body of every {@code <integer>} element. A leading minus sign is emitted when
+     * {@code value} is negative.
      *
-     * @implNote
-     * This implementation avoids {@link Long#toString(long)} so no
-     * intermediate {@link String} is allocated; the
-     * {@link Long#MIN_VALUE} edge case routes through the
-     * pre-encoded {@link #LONG_MIN_VALUE} constant because
-     * {@code -Long.MIN_VALUE} overflows.
+     * @implNote This implementation avoids {@link Long#toString(long)} so no intermediate {@link String} is
+     * allocated; it counts the digits, then fills them from least to most significant into the destination.
+     * The {@link Long#MIN_VALUE} edge case routes through the pre-encoded {@link #LONG_MIN_VALUE} constant
+     * because negating that value overflows.
      *
      * @param out   the destination buffer
      * @param pos   the current write position
      * @param value the integer value
-     * @return the position after the digits
+     * @return the write position after the digits
      */
     private static int writeLong(byte[] out, int pos, long value) {
         if (value == Long.MIN_VALUE) {
@@ -510,24 +484,20 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Writes the Base64 encoding of a source slice directly into
-     * the destination buffer.
+     * Writes the Base64 encoding of a source slice directly into the destination buffer.
      *
-     * @apiNote
-     * Used for the body of every {@code <data>} element.
+     * <p>Used for the body of every {@code <data>} element. The slice {@code [srcOffset, srcOffset +
+     * srcLength)} is encoded; a partial final group is padded with {@code '='} per the Base64 standard.
      *
-     * @implNote
-     * This implementation streams from {@code src} into {@code out}
-     * without an intermediate slice or {@link Base64.Encoder} call;
-     * the partial final group is padded with {@code '='} as
-     * Base64-standard.
+     * @implNote This implementation streams from {@code src} into {@code out} without an intermediate slice
+     * or {@link java.util.Base64.Encoder} call, using the pre-encoded {@link #BASE64_ALPHABET} lookup table.
      *
      * @param out       the destination buffer
      * @param pos       the current write position
      * @param src       the source buffer
      * @param srcOffset the start offset within {@code src}
      * @param srcLength the number of source bytes to encode
-     * @return the position after the encoded bytes
+     * @return the write position after the encoded bytes
      */
     private static int writeBase64(byte[] out, int pos, byte[] src, int srcOffset, int srcLength) {
         var srcEnd = srcOffset + srcLength;
@@ -558,16 +528,14 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Returns the UTF-8 byte count required to serialise a string
-     * with XML entity escaping applied.
+     * Returns the UTF-8 byte count required to serialise a string with XML entity escaping applied.
      *
-     * @apiNote
-     * Pass-one helper; counts {@code &}, {@code <}, and {@code >}
-     * as their entity replacement widths and the remaining
-     * characters as their UTF-8 byte width.
+     * <p>Pass-one helper paired with {@link #writeXmlEscaped(byte[], int, String)}. Counts {@code &},
+     * {@code <}, and {@code >} as their entity replacement widths and every other character as its UTF-8
+     * byte width, advancing past the low surrogate of a valid pair so it is counted once.
      *
      * @param s the source string
-     * @return the byte count
+     * @return the escaped UTF-8 byte count
      */
     private static int escapedXmlByteLength(String s) {
         var len = 0;
@@ -596,31 +564,31 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Returns the length of the Base64 encoding (with padding) of a
-     * source slice.
+     * Returns the length of the Base64 encoding, with padding, of a source slice.
      *
-     * @apiNote
-     * Pass-one helper; the canonical formula
-     * {@code ((n + 2) / 3) * 4} accounts for both the 4-character
-     * groups and the trailing {@code '='} padding.
+     * <p>Pass-one helper paired with {@link #writeBase64(byte[], int, byte[], int, int)}.
+     *
+     * @implNote This implementation uses the canonical formula {@code ((n + 2) / 3) * 4}, which rounds the
+     * input length up to a whole number of 3-byte groups and accounts for the trailing {@code '='} padding.
      *
      * @param srcLength the source length
-     * @return the encoded length
+     * @return the encoded length in bytes
      */
     private static int base64Length(int srcLength) {
         return ((srcLength + 2) / 3) * 4;
     }
 
     /**
-     * Returns the number of characters
-     * {@code Long.toString(value)} would produce.
+     * Returns the number of characters {@link Long#toString(long)} would produce for a value.
      *
-     * @apiNote
-     * Pass-one helper; counts digits plus an optional leading
-     * minus sign without allocating a {@link String}.
+     * <p>Pass-one helper paired with {@link #writeLong(byte[], int, long)}; counts the digits plus an
+     * optional leading minus sign without allocating a {@link String}.
+     *
+     * @implNote This implementation routes {@link Long#MIN_VALUE} through the {@link #LONG_MIN_VALUE}
+     * constant's length because negating that value to take its magnitude overflows.
      *
      * @param value the integer value
-     * @return the character count
+     * @return the character count of the decimal representation
      */
     private static int decimalDigitCount(long value) {
         if (value == Long.MIN_VALUE) {

@@ -17,22 +17,17 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that record whether a bot welcome message has been requested for a chat.
  *
- * @apiNote
- * Drives the per-bot-chat {@code hasRequestedWelcomeMsg} flag used by
- * WhatsApp Web's bot-welcome flow ({@code WAWebSendBotRequestWelcomeAction}
- * sets it to {@code true} when the user opens a bot chat for the first
- * time; {@code WAWebHandleBizBotWelcomeMsgProtocolModeAction} clears it back
- * to {@code false} after the bot replies). The factory is the
- * outgoing-mutation counterpart of
+ * <p>The flag is set to {@code true} when the user opens a bot chat for the
+ * first time and cleared back to {@code false} after the bot replies, keeping
+ * the per-bot-chat welcome affordance consistent across linked devices. This
+ * factory builds the outgoing mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.BotWelcomeRequestHandler}.
  */
 public final class BotWelcomeRequestMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public BotWelcomeRequestMutationFactory() {
 
@@ -41,12 +36,10 @@ public final class BotWelcomeRequestMutationFactory {
     /**
      * Returns a {@link SyncPendingMutation} that sets the welcome-requested flag for the given bot chat.
      *
-     * @apiNote
-     * Emit this mutation right after sending the bot a welcome request (with
-     * {@code isSent = true}) so other linked devices stop showing the welcome
-     * affordance, and again after the bot replies (with
-     * {@code isSent = false}) so the affordance can be reused later. The
-     * mutation index follows
+     * <p>Emit this mutation right after sending the bot a welcome request (with
+     * {@code isSent == true}) so other linked devices stop showing the welcome
+     * affordance, and again after the bot replies (with {@code isSent == false})
+     * so the affordance can be reused later. The mutation index follows
      * {@snippet :
      *     ["botWelcomeRequest", chatJid.toString()]
      * }
@@ -54,10 +47,8 @@ public final class BotWelcomeRequestMutationFactory {
      * {@code isSent} flag.
      *
      * @implNote
-     * This implementation captures the timestamp via {@link Instant#now()};
-     * WA Web's {@code WAWebBotWelcomeRequestSync.getBotWelcomeRequestSetMutation}
-     * uses {@code WATimeUtils.unixTime()} for the same purpose. The pinned
-     * version is {@link BotWelcomeRequestAction#ACTION_VERSION}.
+     * This implementation captures the timestamp via {@link Instant#now()} and
+     * pins the version to {@link BotWelcomeRequestAction#ACTION_VERSION}.
      *
      * @param chatJid the bot chat {@link Jid}
      * @param isSent  {@code true} once the welcome has been requested, {@code false} after the bot replies

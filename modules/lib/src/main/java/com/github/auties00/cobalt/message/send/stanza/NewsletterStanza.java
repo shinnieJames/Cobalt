@@ -7,19 +7,12 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
 /**
- * Builds the SMAX-flavoured child nodes shared across newsletter publish
- * variants.
- *
- * @apiNote
- * Newsletter sends use a distinct wire format from E2E-encrypted chat or
- * group sends: the payload travels in clear inside a {@code <plaintext>}
- * child under {@code <message to="...@newsletter">}, with no Signal
- * envelope and no {@code <participants>} list. This class currently
- * exposes only the {@code <plaintext>} wrapper; the {@code media_id}
- * attribute for media newsletters is set directly on the outer
- * {@code <message>} per
- * {@code WASmaxOutMessagePublishNewsletterMediaMixin.mergeNewsletterMediaMixin},
- * not as a child.
+ * Builds the SMAX-flavoured child nodes shared across newsletter publish variants.
+ * <p>
+ * Newsletter sends use a distinct wire format from E2E-encrypted chat or group sends: the payload travels in clear
+ * inside a {@code <plaintext>} child under {@code <message to="...@newsletter">}, with no Signal envelope and no
+ * {@code <participants>} list. This class exposes only the {@code <plaintext>} wrapper; the {@code media_id} attribute
+ * for media newsletters is set directly on the outer {@code <message>}, not as a child.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishPayloadMixin")
 public final class NewsletterStanza {
@@ -32,10 +25,8 @@ public final class NewsletterStanza {
 
     /**
      * Builds a {@code <plaintext>} node wrapping a serialised payload.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code mergePayloadMixin} which produces
-     * {@code <plaintext>{@code payload}</plaintext>} with no attributes.
+     * <p>
+     * The resulting node carries the payload as its byte content with no attributes.
      *
      * @param payload the serialised protobuf bytes
      * @return the {@code <plaintext>} {@link Node}
@@ -50,19 +41,13 @@ public final class NewsletterStanza {
     }
 
     /**
-     * Builds a {@code <plaintext>} node carrying a {@code mediatype}
-     * attribute alongside the serialised payload.
-     *
-     * @apiNote
-     * Used by newsletter media sends; the SMAX media subtype string is
-     * one of {@code "image"}, {@code "video"}, {@code "url"},
-     * {@code "audio"}, {@code "document"}, {@code "sticker"}, etc.
-     * Mirrors WA Web's {@code mergeNewsletterMediaMixin} which sets
-     * {@code <plaintext mediatype="...">{@code payload}</plaintext>}.
+     * Builds a {@code <plaintext>} node carrying a {@code mediatype} attribute alongside the serialised payload.
+     * <p>
+     * Used by newsletter media sends; the SMAX media subtype string is one of {@code "image"}, {@code "video"},
+     * {@code "url"}, {@code "audio"}, {@code "document"}, {@code "sticker"}, and similar values.
      *
      * @param payload   the serialised protobuf bytes
-     * @param mediaType the SMAX media subtype string; must not be
-     *                  {@code null}
+     * @param mediaType the SMAX media subtype string; must not be {@code null}
      * @return the {@code <plaintext>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterMediaMixin", exports = "applyMixin",

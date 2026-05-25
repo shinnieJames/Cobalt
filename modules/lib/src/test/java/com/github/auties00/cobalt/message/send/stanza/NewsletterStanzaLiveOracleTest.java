@@ -9,30 +9,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Wire-shape oracle for newsletter plaintext (SMAX) sends, anchored to
- * {@code fixtures/message/send/newsletter-text.jsonl}.
- *
- * @apiNote
- * Pins the distinct wire form newsletter messages take when emitted by
- * WA Web's SMAX publish pipeline: a single {@code <plaintext>} payload
- * child under {@code <message to="...@newsletter">} with no Signal
- * envelope and no {@code <participants>} list. Cross-references
- * {@link NewsletterStanza}.
- *
- * @implNote
- * This implementation skips the assertion block when the fixture topic
- * is not available locally; the capture script under
- * {@code src/test/resources/fixtures/message/} regenerates the file
- * against a live WA Web session when needed.
+ * Wire-shape oracle for newsletter plaintext (SMAX) sends, comparing Cobalt
+ * output against the WA Web stanza captured in
+ * {@code fixtures/message/send/newsletter-text.jsonl}. The captured shape is
+ * the distinct form newsletter messages take from WA Web's SMAX publish
+ * pipeline: a single {@code <plaintext>} payload child under
+ * {@code <message to="...@newsletter">} with no Signal envelope and no
+ * {@code <participants>} list. Cross-references {@link NewsletterStanza}.
+ * The assertion block is skipped when the fixture is not available locally;
+ * the capture script under {@code src/test/resources/fixtures/message/}
+ * regenerates the file against a live WA Web session when needed.
  */
 @DisplayName("Newsletter stanza live wire oracle")
 class NewsletterStanzaLiveOracleTest {
 
-    /**
-     * A newsletter text send is wire-typed {@code "text"}, targets a
-     * {@code @newsletter} JID, and carries its payload inside a single
-     * {@code <plaintext>} child with no encrypted siblings.
-     */
     @Test
     @DisplayName("newsletter text send: <message to=\"...@newsletter\" type=\"text\"> with <plaintext> body")
     void newsletterTextPlaintext() {

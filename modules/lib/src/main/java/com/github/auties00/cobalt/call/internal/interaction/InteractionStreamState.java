@@ -8,78 +8,76 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Per-call RTP-stream bookkeeping for the in-call DataChannel
- * interaction pipeline.
+ * Holds the per-call RTP-stream bookkeeping for the in-call DataChannel interaction pipeline.
  *
- * @apiNote WhatsApp Web's wasm multiplexes the five interaction types
- * across three logical RTP streams (each with its own SSRC, sequence
- * counter, and rolling timestamp): a "reaction" stream, a "hand and
- * peer-control" stream (raise/lower hand, peer mute, key-frame
- * request), and a "video upgrade" stream. SSRCs are randomized per
- * call. This class owns the three counter triples and hands them to
- * {@link CallInteractionEncoder} as each packet is built.
- * @implNote This implementation seeds SSRCs from
- * {@link ThreadLocalRandom} at construction; the sequence number is
- * 16-bit and wraps modulo {@code 65536}; the timestamp is 32-bit and
- * increments by {@link #TIMESTAMP_STEP} per packet to mimic the
- * 50-tick cadence observed in live captures (see
- * {@code reference_wa_voip_interaction_wire_format} memory).
+ * <p>The five interaction kinds are multiplexed across three logical RTP streams, each carrying its own SSRC, sequence
+ * counter, and rolling timestamp: a reaction stream, a control stream for raise-hand and lower-hand gestures, peer-mute
+ * requests, and key-frame requests, and a video-upgrade stream. Each kind maps to exactly one {@link Stream}. The SSRCs
+ * are randomized per call, and the counters are owned here and consumed by {@link CallInteractionEncoder} as each packet
+ * is built. The accessors are thread-safe: sequence and timestamp advance atomically.
+ *
+ * @implNote This implementation seeds each stream's SSRC and starting timestamp from {@link ThreadLocalRandom} at
+ * construction. The sequence number is 16-bit and wraps modulo 65536; the timestamp is 32-bit and advances by
+ * {@link #TIMESTAMP_STEP} per packet to mimic the cadence observed in live captures.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipStackInterfaceWeb")
 public final class InteractionStreamState {
     /**
-     * Per-packet timestamp increment matching the live-capture
-     * observation (each retransmit bumps the 32-bit timestamp by
-     * {@code 50}).
+     * Holds the per-packet timestamp increment applied to each stream's 32-bit timestamp.
+     *
+     * @implNote This implementation uses 50, the per-retransmit timestamp bump observed in live captures.
      */
     public static final int TIMESTAMP_STEP = 50;
 
     /**
-     * Logical RTP-stream identifiers. Each interaction kind maps to
-     * exactly one stream.
+     * Enumerates the logical RTP streams onto which interactions are multiplexed.
+     *
+     * <p>Each interaction kind maps to exactly one stream, and each stream owns an independent SSRC, sequence counter,
+     * and timestamp.
      */
     public enum Stream {
         /**
-         * Carries reactions (byte0=0x80, byte1=0x77, RTP PT=119).
+         * Carries reactions, framed with byte 0 {@code 0x80} and byte 1 {@code 0x77}, RTP payload type 119.
          */
         REACTION,
+
         /**
-         * Carries raise/lower hand, peer-mute requests, and
-         * key-frame requests. byte0 varies (0x81 RTCP for hand,
-         * 0x90 RTP for requests); byte1 is 0xc8 or 0x78
-         * respectively.
+         * Carries raise-hand and lower-hand gestures, peer-mute requests, and key-frame requests.
+         *
+         * <p>Byte 0 varies by interaction: {@code 0x81} for the RTCP-shaped hand toggle and {@code 0x90} for the
+         * RTP-shaped requests; byte 1 is correspondingly {@code 0xc8} or {@code 0x78}.
          */
         CONTROL,
+
         /**
-         * Carries video-upgrade requests (byte0=0x91, byte1=0xc8,
-         * RTCP with extension).
+         * Carries video-upgrade requests, framed with byte 0 {@code 0x91} and byte 1 {@code 0xc8}, RTCP with extension.
          */
         VIDEO_UPGRADE
     }
 
     /**
-     * Per-stream mutable counter triple.
+     * Holds the mutable SSRC, sequence, and timestamp triple for one {@link Stream}.
      */
     private static final class Counters {
         /**
-         * The SSRC, randomized once at construction.
+         * Holds the SSRC, randomized once at construction and constant for the life of the call.
          */
         final int ssrc;
+
         /**
-         * The next sequence number, incrementing modulo 2^16.
+         * Holds the next sequence number, advanced modulo 65536 by each take.
          */
         final AtomicInteger sequence = new AtomicInteger(0);
+
         /**
-         * The next timestamp, incrementing by {@link #TIMESTAMP_STEP}
-         * per packet.
+         * Holds the next timestamp, advanced by {@link #TIMESTAMP_STEP} on each take.
          */
         final AtomicInteger timestamp;
 
         /**
-         * Constructs counters with a random SSRC and starting
-         * timestamp.
+         * Constructs a counter triple with a randomized SSRC and starting timestamp.
          *
-         * @param rng the RNG to seed from
+         * @param rng the random source from which the SSRC and starting timestamp are drawn
          */
         Counters(ThreadLocalRandom rng) {
             this.ssrc = rng.nextInt();
@@ -88,12 +86,12 @@ public final class InteractionStreamState {
     }
 
     /**
-     * The per-stream counter triples, keyed by {@link Stream}.
+     * Maps each {@link Stream} to its counter triple.
      */
     private final Map<Stream, Counters> streams;
 
     /**
-     * Constructs a fresh per-call state with randomized SSRCs.
+     * Constructs a fresh per-call state with an independently randomized counter triple for every {@link Stream}.
      */
     public InteractionStreamState() {
         var rng = ThreadLocalRandom.current();
@@ -106,30 +104,31 @@ public final class InteractionStreamState {
     /**
      * Returns the SSRC of the given stream.
      *
-     * @param stream the stream
-     * @return the SSRC (signed 32-bit treated as unsigned on the wire)
+     * <p>The SSRC is fixed for the life of the call and is written, unchanged, into the header of every packet on the
+     * stream.
+     *
+     * @param stream the stream whose SSRC is returned
+     * @return the SSRC, a signed 32-bit value treated as unsigned on the wire
      */
     public int ssrc(Stream stream) {
         return streams.get(stream).ssrc;
     }
 
     /**
-     * Atomically takes the next sequence number for the stream,
-     * wrapping at {@code 0x10000}.
+     * Atomically takes and returns the next sequence number for the stream, advancing the counter modulo 65536.
      *
-     * @param stream the stream
-     * @return the sequence number to write into the next packet
+     * @param stream the stream whose sequence counter is advanced
+     * @return the 16-bit sequence number to write into the next packet
      */
     public int nextSequence(Stream stream) {
         return streams.get(stream).sequence.getAndUpdate(s -> (s + 1) & 0xffff);
     }
 
     /**
-     * Atomically takes the next timestamp for the stream, advancing
-     * by {@link #TIMESTAMP_STEP}.
+     * Atomically takes and returns the next timestamp for the stream, advancing the counter by {@link #TIMESTAMP_STEP}.
      *
-     * @param stream the stream
-     * @return the timestamp to write into the next packet
+     * @param stream the stream whose timestamp counter is advanced
+     * @return the 32-bit timestamp to write into the next packet
      */
     public int nextTimestamp(Stream stream) {
         return streams.get(stream).timestamp.getAndAdd(TIMESTAMP_STEP);

@@ -6,78 +6,73 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.libsignal.protocol.SignalCiphertextMessage;
 
 /**
- * Wire-level Signal envelope variant tagged on the {@code type} attribute of an
- * {@code <enc>} stanza child.
+ * Identifies the wire-level Signal envelope variant carried in the {@code type}
+ * attribute of an {@code <enc>} stanza child.
  *
- * @apiNote Mirrors the {@code CiphertextType} enum exported from
- * {@code WAWebBackendJobs.flow}. Callers rarely build these manually; the
+ * <p>The four constants correspond one-to-one to the four wire strings
+ * {@code "pkmsg"}, {@code "msg"}, {@code "skmsg"}, and {@code "msmsg"}. The
  * outbound send pipeline derives the variant from a freshly produced Signal
  * ciphertext through {@link #fromSignalCiphertext(SignalCiphertextMessage)},
  * and the inbound receive pipeline parses the incoming attribute through
- * {@link #fromProtocolValue(String)}. The wire strings are the four entries
- * {@code "pkmsg"}, {@code "msg"}, {@code "skmsg"}, and {@code "msmsg"}.
+ * {@link #fromProtocolValue(String)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebBackendJobs.flow")
 public enum MessageEncryptionType {
     /**
-     * PreKey Signal Message variant tagged on the very first encrypted payload
-     * sent to a device when no Signal session exists yet.
+     * Tags the very first encrypted payload sent to a device when no Signal
+     * session exists yet.
      *
-     * @apiNote The first {@code <enc type="pkmsg">} that reaches a device
-     * carries the ephemeral keys needed to establish the Signal session;
-     * subsequent payloads to the same device switch to {@link #MSG}. WA Web
-     * also requires that {@code pkmsg}-bearing fanouts ship the linked
-     * device's {@code <device-identity>} node for ADV signature validation,
-     * which is why {@link SignalCiphertextMessage#PRE_KEY_TYPE}
-     * round-trips to this constant.
+     * <p>The first {@code <enc type="pkmsg">} that reaches a device carries the
+     * ephemeral keys needed to establish the Signal session; subsequent
+     * payloads to the same device switch to {@link #MSG}. PreKey-bearing
+     * fanouts must also ship the linked device's {@code <device-identity>} node
+     * for ADV signature validation. Round-trips from
+     * {@link SignalCiphertextMessage#PRE_KEY_TYPE}.
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobs.flow", exports = "CiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
     PKMSG("pkmsg"),
 
     /**
-     * Regular Signal Message variant tagged on every encrypted payload to a
-     * device once the Signal session has been established.
+     * Tags every encrypted payload to a device once the Signal session has been
+     * established.
      *
-     * @apiNote Default variant for one-to-one and broadcast device fanouts
-     * after the first {@link #PKMSG} has bootstrapped the session. Maps to
-     * {@link SignalCiphertextMessage#WHISPER_TYPE}.
+     * <p>This is the default variant for one-to-one and broadcast device
+     * fanouts after the first {@link #PKMSG} has bootstrapped the session.
+     * Round-trips from {@link SignalCiphertextMessage#WHISPER_TYPE}.
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobs.flow", exports = "CiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
     MSG("msg"),
 
     /**
-     * Sender Key Message variant tagged on group payloads encrypted once by
-     * the sender with a group sender key.
+     * Tags group payloads encrypted once by the sender with a group sender key.
      *
-     * @apiNote Each group member decrypts the same ciphertext using the
-     * previously distributed sender-key record, avoiding per-member
-     * re-encryption. Maps to
-     * {@link SignalCiphertextMessage#SENDER_KEY_TYPE}.
+     * <p>Each group member decrypts the same ciphertext using the previously
+     * distributed sender-key record, avoiding per-member re-encryption.
+     * Round-trips from {@link SignalCiphertextMessage#SENDER_KEY_TYPE}.
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobs.flow", exports = "CiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
     SKMSG("skmsg"),
 
     /**
-     * Message Secret Message variant tagged on bot-targeted payloads where the
-     * Signal envelope wraps an additional inner AES-GCM ciphertext.
+     * Tags bot-targeted payloads where the Signal envelope wraps an additional
+     * inner AES-GCM ciphertext.
      *
-     * @apiNote Used by bot endpoints. The outer Signal envelope wraps a
-     * {@code MessageSecretMessage} protobuf whose {@code encPayload} is
-     * AES-GCM-encrypted under a key derived from the parent message's
-     * {@code messageSecret} via HKDF-SHA256. Has no matching Signal type byte;
-     * the caller overrides the variant to this constant after the Signal layer
-     * has been encoded.
+     * <p>The outer Signal envelope wraps a {@code MessageSecretMessage}
+     * protobuf whose {@code encPayload} is AES-GCM-encrypted under a key derived
+     * from the parent message's {@code messageSecret} via HKDF-SHA256. This
+     * variant has no matching Signal type byte; the caller overrides the variant
+     * to this constant after the Signal layer has been encoded.
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobs.flow", exports = "CiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
     MSMSG("msmsg");
 
     /**
-     * Wire string identifying this variant in the {@code type} attribute of an
-     * {@code <enc>} stanza.
+     * Holds the wire string identifying this variant in the {@code type}
+     * attribute of an {@code <enc>} stanza.
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobs.flow", exports = "CiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -97,9 +92,9 @@ public enum MessageEncryptionType {
      * Returns the wire string emitted as the {@code type} attribute of an
      * {@code <enc>} stanza for this variant.
      *
-     * @apiNote The four possible return values are {@code "pkmsg"},
-     * {@code "msg"}, {@code "skmsg"}, and {@code "msmsg"}; they round-trip
-     * through {@link #fromProtocolValue(String)}.
+     * <p>The four possible return values are {@code "pkmsg"}, {@code "msg"},
+     * {@code "skmsg"}, and {@code "msmsg"}; they round-trip through
+     * {@link #fromProtocolValue(String)}.
      *
      * @return the wire string for this variant
      */
@@ -114,11 +109,11 @@ public enum MessageEncryptionType {
      * wire variant so the outbound encryption pipeline can stamp the correct
      * {@code type} on the {@code <enc>} node.
      *
-     * @apiNote Bot payloads never reach this method. Their Signal type byte
-     * still indicates {@link SignalCiphertextMessage#WHISPER_TYPE} or
+     * <p>Bot payloads never reach this method. Their Signal type byte still
+     * indicates {@link SignalCiphertextMessage#WHISPER_TYPE} or
      * {@link SignalCiphertextMessage#PRE_KEY_TYPE}; the bot-message wrapping
-     * step in the send pipeline overrides the result to {@link #MSMSG} after
-     * the fact.
+     * step in the send pipeline overrides the result to {@link #MSMSG} after the
+     * fact.
      *
      * @param ciphertext the Signal ciphertext whose type byte is read
      * @return the matching wire variant, one of {@link #PKMSG}, {@link #MSG},
@@ -141,10 +136,9 @@ public enum MessageEncryptionType {
      * Parses the {@code type} attribute of an incoming {@code <enc>} node into
      * the matching variant.
      *
-     * @apiNote Inputs other than the four canonical wire strings are rejected
-     * rather than silently mapped to a fallback variant; the inbound receive
-     * pipeline relies on the strict mapping to decide which decryption path to
-     * take.
+     * <p>Inputs other than the four canonical wire strings are rejected rather
+     * than silently mapped to a fallback variant; the inbound receive pipeline
+     * relies on the strict mapping to decide which decryption path to take.
      *
      * @param value the wire string read off the stanza attribute
      * @return the matching variant
@@ -167,10 +161,9 @@ public enum MessageEncryptionType {
      * Returns whether this variant is the PreKey envelope that establishes a
      * fresh Signal session.
      *
-     * @apiNote Cobalt callers use this to decide whether the outbound fanout
-     * must include the linked device's {@code <device-identity>} child node
-     * for ADV signature validation, mirroring the {@code Pkmsg} branch in
-     * {@code WAWebAdvSignatureApi.validateADVwithEncs}.
+     * <p>Callers use this to decide whether the outbound fanout must include the
+     * linked device's {@code <device-identity>} child node for ADV signature
+     * validation.
      *
      * @return {@code true} when this is {@link #PKMSG}
      */
@@ -182,8 +175,8 @@ public enum MessageEncryptionType {
      * Returns whether this variant is the SenderKey envelope used for group
      * fanout.
      *
-     * @apiNote Used by the group receive path to dispatch the payload through
-     * the {@code SignalGroupCipher} rather than the per-device session cipher.
+     * <p>The group receive path uses this to dispatch the payload through the
+     * group sender-key cipher rather than the per-device session cipher.
      *
      * @return {@code true} when this is {@link #SKMSG}
      */

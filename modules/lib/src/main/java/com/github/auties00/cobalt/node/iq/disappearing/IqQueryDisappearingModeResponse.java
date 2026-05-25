@@ -12,42 +12,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Roots the sealed family of inbound reply variants produced by the relay in response to an
  * {@link IqQueryDisappearingModeRequest}.
  *
- * @apiNote
- * Switch on the returned variant to discriminate the relay outcome: a {@link Success}
- * carries the current default duration and the wall-clock at which it was last
- * applied, a {@link ClientError} surfaces a relay rejection, and a {@link ServerError}
- * surfaces a transient relay failure (WA Web wraps the latter in a
- * {@code ServerStatusCodeError} that the account-sync warmup propagates).
- *
- * @implNote
- * This implementation mirrors WA Web's {@code dmParser} which projects the
- * {@code <disappearing_mode duration t/>} payload into a {@code (duration, t)} tuple,
- * plus the standard SMAX server-error envelope.
+ * <p>The hierarchy permits exactly three variants. {@link Success} carries the current default
+ * duration and the wall-clock at which it was last applied; {@link ClientError} surfaces a relay
+ * rejection in the sub-{@code 500} code range; {@link ServerError} surfaces a transient relay
+ * failure in the {@code 500}-and-above range. Callers switch on the parsed variant to discriminate
+ * the relay outcome.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryDisappearingModeJob")
 public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Response
         permits IqQueryDisappearingModeResponse.Success, IqQueryDisappearingModeResponse.ClientError, IqQueryDisappearingModeResponse.ServerError {
 
     /**
-     * Parses the inbound stanza into the first matching
-     * {@link IqQueryDisappearingModeResponse} variant.
+     * Parses the inbound stanza into the first matching {@link IqQueryDisappearingModeResponse}
+     * variant.
      *
-     * @apiNote
-     * Try this once per inbound reply; the priority ordering (success, then
-     * client-error, then server-error) matches the wire shape and never returns
-     * ambiguous matches.
-     *
-     * @implNote
-     * This implementation calls each variant's {@code of(node, request)} in turn
-     * and returns the first present result.
+     * <p>Each variant's {@code of(node, request)} factory is tried in priority order, success then
+     * client-error then server-error, and the first present result is returned. The ordering
+     * matches the wire shape so the variants never overlap; an empty result means no documented
+     * variant matched.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty when no
-     *         documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant
+     *         matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryDisappearingModeJob",
@@ -68,34 +58,33 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
     }
 
     /**
-     * Success variant. The relay returned the current default disappearing-mode
-     * duration and the wall-clock at which it was last applied.
+     * Carries the success outcome: the current default disappearing-mode duration and the
+     * wall-clock at which it was last applied.
      *
-     * @apiNote
-     * Inspect {@link #duration()} for the per-chat default duration ({@link Duration#ZERO}
-     * means the feature is off) and {@link #appliedAtSeconds()} for the relay's
-     * wall-clock anchor.
+     * <p>{@link #duration()} is the default applied to newly-created chats, with
+     * {@link Duration#ZERO} encoding the off state, and {@link #appliedAtSeconds()} is the relay's
+     * wall-clock anchor in seconds since epoch.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryDisappearingModeJob")
     final class Success implements IqQueryDisappearingModeResponse {
         /**
-         * Holds the default disappearing-mode duration applied to newly-created
-         * chats; {@link Duration#ZERO} encodes the off state.
+         * Holds the default disappearing-mode duration applied to newly-created chats.
+         *
+         * <p>{@link Duration#ZERO} encodes the off state.
          */
         private final Duration duration;
 
         /**
-         * Holds the wall-clock at which the duration was last applied, in
-         * seconds since epoch.
+         * Holds the wall-clock at which the duration was last applied, in seconds since epoch.
          */
         private final long appliedAtSeconds;
 
         /**
-         * Constructs a successful reply bound to the given duration and
-         * apply-timestamp.
+         * Constructs a successful reply bound to the given duration and apply-timestamp.
          *
          * @param duration         the default duration; never {@code null}
-         * @param appliedAtSeconds the wall-clock the duration was last applied
+         * @param appliedAtSeconds the wall-clock the duration was last applied, in seconds since
+         *                         epoch
          * @throws NullPointerException if {@code duration} is {@code null}
          */
         public Success(Duration duration, long appliedAtSeconds) {
@@ -122,23 +111,21 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
         }
 
         /**
-         * Parses the inbound stanza into a {@link Success} variant when it
-         * matches the success schema.
+         * Parses the inbound stanza into a {@link Success} variant when it matches the success
+         * schema.
          *
-         * @apiNote
-         * Returns empty when the SMAX result-envelope check fails, when the
-         * {@code <disappearing_mode>} child is absent, or when either the
-         * {@code duration} or {@code t} attribute is missing.
+         * <p>Returns empty when the {@link SmaxIqResultResponseMixin#validate(Node, Node)}
+         * result-envelope check fails, when the {@code <disappearing_mode>} child is absent, or
+         * when either the {@code duration} or {@code t} attribute is missing.
          *
-         * @implNote
-         * This implementation reads both attributes as {@code long}; WA Web's
-         * {@code dmParser} reads {@code duration} and {@code t} as {@code int}
-         * but the underlying wire range is identical.
+         * @implNote This implementation reads both {@code duration} and {@code t} as {@code long}
+         * via {@link Node#getAttributeAsLong(String)} where WA Web reads them as {@code int}; the
+         * underlying wire range is identical.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryDisappearingModeJob",
                 exports = "dmParser",
@@ -163,6 +150,15 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
                     tAttr.getAsLong()));
         }
 
+        /**
+         * Compares this variant to another object for equality.
+         *
+         * <p>Two success variants are equal when they share the same runtime class, the same
+         * {@link #duration()}, and the same {@link #appliedAtSeconds()}.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an equal success variant
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -176,11 +172,21 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
                     && Objects.equals(this.duration, that.duration);
         }
 
+        /**
+         * Returns a hash code derived from {@link #duration()} and {@link #appliedAtSeconds()}.
+         *
+         * @return the field-derived hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(duration, appliedAtSeconds);
         }
 
+        /**
+         * Returns a debug string carrying the duration and apply-timestamp.
+         *
+         * @return a string representation
+         */
         @Override
         public String toString() {
             return "IqQueryDisappearingModeResponse.Success[duration=" + duration
@@ -189,11 +195,10 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
     }
 
     /**
-     * Client-error variant. The relay rejected the query with a {@code 4xx} code.
+     * Carries a client-error outcome: the relay rejected the query with a sub-{@code 500} code.
      *
-     * @apiNote
-     * A client-error here is uncommon since the request has no payload; treat it as
-     * an authorisation or session-state issue.
+     * <p>A client error is uncommon here because the request has no payload; it typically signals
+     * an authorisation or session-state problem rather than a malformed request.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryDisappearingModeJob")
     final class ClientError implements IqQueryDisappearingModeResponse {
@@ -203,7 +208,7 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -230,24 +235,23 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ClientError} variant when it
-         * matches the standard SMAX client-error envelope.
+         * Parses the inbound stanza into a {@link ClientError} variant when it matches the standard
+         * SMAX client-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails; the parse is delegated entirely to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryDisappearingModeJob",
                 exports = "queryDisappearingMode",
@@ -260,6 +264,15 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to another object for equality.
+         *
+         * <p>Two client-error variants are equal when they share the same runtime class, the same
+         * {@link #errorCode()}, and the same error text.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an equal client-error variant
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -273,11 +286,21 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and error text.
+         *
+         * @return the field-derived hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and error text.
+         *
+         * @return a string representation
+         */
         @Override
         public String toString() {
             return "IqQueryDisappearingModeResponse.ClientError[errorCode=" + errorCode
@@ -286,13 +309,12 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
     }
 
     /**
-     * Server-error variant. The relay encountered a transient {@code 5xx} failure
+     * Carries a server-error outcome: the relay hit a transient {@code 500}-and-above failure
      * processing the query.
      *
-     * @apiNote
-     * WA Web wraps this in {@code WAWebBackendErrors.ServerStatusCodeError}; the
-     * account-sync warmup catches it and skips the disappearing-mode propagation
-     * for the current cycle.
+     * <p>The failure is transient; a subsequent attempt may succeed. WA Web wraps the same outcome
+     * in a server-status-code error that its account-sync warmup catches to skip the
+     * disappearing-mode propagation for the current cycle.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryDisappearingModeJob")
     final class ServerError implements IqQueryDisappearingModeResponse {
@@ -302,7 +324,7 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -329,24 +351,23 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ServerError} variant when it
-         * matches the standard SMAX server-error envelope.
+         * Parses the inbound stanza into a {@link ServerError} variant when it matches the standard
+         * SMAX server-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails; the parse is delegated entirely to
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryDisappearingModeJob",
                 exports = "queryDisappearingMode",
@@ -359,6 +380,15 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to another object for equality.
+         *
+         * <p>Two server-error variants are equal when they share the same runtime class, the same
+         * {@link #errorCode()}, and the same error text.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an equal server-error variant
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -372,11 +402,21 @@ public sealed interface IqQueryDisappearingModeResponse extends IqOperation.Resp
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and error text.
+         *
+         * @return the field-derived hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and error text.
+         *
+         * @return a string representation
+         */
         @Override
         public String toString() {
             return "IqQueryDisappearingModeResponse.ServerError[errorCode=" + errorCode

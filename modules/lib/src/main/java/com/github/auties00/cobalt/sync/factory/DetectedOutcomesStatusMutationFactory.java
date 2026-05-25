@@ -14,55 +14,42 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing app-state mutations that toggle whether automated
- * message and contact detections (spam, flagged-account warnings) are
- * mirrored across linked devices.
+ * Builds outgoing app-state mutations that toggle whether automated message and contact detections
+ * (spam, flagged-account warnings) are mirrored across linked devices.
  *
- * @apiNote
- * Drives the Click-To-WhatsApp detected-outcomes onboarding switch
- * exposed on the Web settings surface; consumed on receiving devices
- * by the detected-outcomes sync handler which forwards the boolean to
- * {@code WAWebUserPrefsDetectedOutcomes} so subsequent classifications
- * surface (or stop surfacing) on every companion.
+ * Drives the Click-To-WhatsApp detected-outcomes onboarding switch on the settings surface; the
+ * receive side forwards the boolean to {@code WAWebUserPrefsDetectedOutcomes} so subsequent
+ * classifications surface (or stop surfacing) on every companion. This factory is the
+ * outgoing-mutation counterpart of
+ * {@link com.github.auties00.cobalt.sync.handler.DetectedOutcomesStatusHandler}.
  *
  * @implNote
- * This implementation mirrors
- * {@code WAWebCTWADetectedOutcomeOnboardingStatusUpdateAction}, the
- * dispatcher WA Web invokes from
- * {@code WAWebCTWABridgeApi.ctwaDetectedOutcomeOnboardingStatusUpdate}.
+ * This implementation mirrors {@code WAWebCTWADetectedOutcomeOnboardingStatusUpdateAction}, the
+ * dispatcher WA Web invokes from {@code WAWebCTWABridgeApi.ctwaDetectedOutcomeOnboardingStatusUpdate}.
  */
 public final class DetectedOutcomesStatusMutationFactory {
     /**
      * Constructs a detected-outcomes-status mutation factory.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across
-     * the lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public DetectedOutcomesStatusMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation that toggles the detected-outcomes
-     * status flag.
+     * Builds a pending SET mutation that toggles the detected-outcomes status flag.
      *
-     * @apiNote
-     * Invoked from the public automated-detections setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient}; the
-     * index carries only the action name because the preference is a
-     * singleton per account.
+     * The index carries only the action name because the preference is a singleton per account.
      *
      * @implNote
-     * This implementation captures the timestamp via
-     * {@link Instant#now()}; WA Web's
-     * {@code WAWebCTWADetectedOutcomeOnboardingStatusUpdateAction}
-     * uses {@code WATimeUtils.unixTimeMs()} for the same purpose.
+     * This implementation captures the timestamp via {@link Instant#now()}; WA Web's
+     * {@code ctwaDetectedOutcomeOnboardingStatusUpdateAction} uses {@code WATimeUtils.unixTimeMs()}
+     * for the same purpose.
      *
-     * @param enabled {@code true} to enable cross-device sync of
-     *                automated detections, {@code false} to disable it
-     * @return the pending mutation ready to be queued for outbound
-     *         app-state sync
+     * @param enabled {@code true} to enable cross-device sync of automated detections, {@code false} to disable it
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebCTWADetectedOutcomeOnboardingStatusUpdateAction", exports = "ctwaDetectedOutcomeOnboardingStatusUpdateAction", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getDetectedOutcomesStatusMutation(boolean enabled) {

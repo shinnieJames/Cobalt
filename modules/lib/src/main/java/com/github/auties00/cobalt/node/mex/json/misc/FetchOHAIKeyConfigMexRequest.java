@@ -12,54 +12,42 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Outbound MEX query that fetches the current OHAI (Oblivious HTTP
- * Application Initialisation) key configuration list issued by the
- * WhatsApp relay.
+ * Fetches the current OHAI (Oblivious HTTP Application Initialisation) key configuration list
+ * issued by the WhatsApp relay.
  *
- * @apiNote Issued by WA Web's
- * {@code WAWebOHAIKeyConfigProvider.provideOHAIKeyConfig} when the OHAI
- * key cache stored under {@code WAWebOHAIUserPrefs.getOHAIKeyConfig} is
- * empty or its {@code expirationDate} is within an hour of the wall
- * clock. The result feeds {@code WAWebDebugACS} and ACS-credential
- * redemption helpers, which use the bundle to wrap Account Centre
- * Service (ACS) requests inside an HPKE-encrypted Oblivious HTTP envelope.
+ * <p>This query is issued when the OHAI key cache is empty or near expiry. The result feeds the
+ * Account Centre Service (ACS) credential pipeline, which uses the configuration bundle to wrap ACS
+ * requests inside an HPKE-encrypted Oblivious HTTP envelope. The query takes no GraphQL variables.
  *
- * @implNote This implementation emits an empty {@code variables} object
- * because the compiled GraphQL artifact declares
- * {@code argumentDefinitions: []}; the {@code WAWebOHAIKeyConfigProvider}
- * call-site likewise passes the empty object literal.
+ * @implNote This implementation emits an empty {@code variables} object because the compiled
+ * GraphQL artifact declares no argument definitions.
  */
 @WhatsAppWebModule(moduleName = "WAWebFetchOHAIKeyConfigJob")
 public final class FetchOHAIKeyConfigMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
-     * {@code WAWebFetchOHAIKeyConfigJobQuery} document.
+     * Holds the compiled GraphQL query identifier for the OHAI key-config query document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebFetchOHAIKeyConfigJobQuery.graphql}. The relay maps the
-     * id to a server-side persisted operation and never sees the GraphQL
-     * text on the wire.
+     * <p>The relay maps this identifier to a server-side persisted operation and never sees the
+     * GraphQL text on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchOHAIKeyConfigJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "29366514836329275";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is
+     * Holds the GraphQL operation name reported to the MEX perf tracker when this query is
      * dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * <p>The name tags the query in latency and error metrics; it is kept on the request so
+     * embedders mirroring that telemetry surface can emit the same tag.
      */
     public static final String OPERATION_NAME = "WAWebFetchOHAIKeyConfigJobQuery";
 
     /**
      * Constructs a new request carrying no GraphQL variables.
      *
-     * @apiNote The compiled GraphQL artifact takes no inputs so a single
-     * instance is sufficient for every dispatch.
+     * <p>The compiled GraphQL artifact takes no inputs so a single instance is sufficient for every
+     * dispatch.
      */
     public FetchOHAIKeyConfigMexRequest() {
     }
@@ -83,8 +71,8 @@ public final class FetchOHAIKeyConfigMexRequest implements MexOperation.Request.
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation writes an empty {@code variables}
-     * object using fastjson2's {@link JSONWriter} and wraps it via
+     * @implNote This implementation writes an empty {@code variables} object using fastjson2's
+     * {@link JSONWriter} and wraps it via
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchOHAIKeyConfigJob", exports = "mexFetchOHAIKeyConfig",

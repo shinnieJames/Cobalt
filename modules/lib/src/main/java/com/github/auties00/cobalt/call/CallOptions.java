@@ -1,29 +1,32 @@
 package com.github.auties00.cobalt.call;
 
 /**
- * Configuration for a placed or accepted call. Audio is always on
- * (16 kHz mono — fixed by WhatsApp's wire profile, see
- * {@link com.github.auties00.cobalt.call.frame.audio.AudioFrame}); video is
- * optional and, when on, carries the negotiated picture size.
+ * Configures a placed or accepted call.
  *
- * <p>Use the static factories rather than the canonical constructor:
+ * <p>Audio is always present at 16 kHz mono, fixed by WhatsApp's wire
+ * profile (see
+ * {@link com.github.auties00.cobalt.call.frame.audio.AudioFrame}). Video
+ * is optional; when enabled it carries the negotiated picture size,
+ * frame rate, and encoder bitrate, and the video fields are validated
+ * only in that case. Instances are created through the static factories
+ * rather than the canonical constructor.
  *
- * <pre>{@code
- *   CallOptions.audioOnly()            // voice call
- *   CallOptions.audioVideo()           // 640×480 @ 30 fps default
- *   CallOptions.audioVideo(1280, 720)  // HD
- * }</pre>
+ * {@snippet :
+ *   CallOptions.audio();              // voice call
+ *   CallOptions.video();              // 640x480 at 30 fps default
+ *   CallOptions.video(1280, 720);     // HD
+ * }
  *
- * @param videoEnabled    {@code true} for an audio + video call,
+ * @param videoEnabled    {@code true} for an audio-and-video call,
  *                        {@code false} for audio-only
- * @param videoWidth      frame width in pixels; even and ≥ 2 if
+ * @param videoWidth      frame width in pixels; even and at least 2 when
  *                        {@code videoEnabled}, ignored otherwise
- * @param videoHeight     frame height in pixels; even and ≥ 2 if
+ * @param videoHeight     frame height in pixels; even and at least 2 when
  *                        {@code videoEnabled}, ignored otherwise
- * @param videoFps        target frame rate; ≥ 1 if
+ * @param videoFps        target frame rate; at least 1 when
  *                        {@code videoEnabled}
- * @param videoBitrateBps target encoder bitrate in bits per second;
- *                        ≥ 1 if {@code videoEnabled}
+ * @param videoBitrateBps target encoder bitrate in bits per second; at
+ *                        least 1 when {@code videoEnabled}
  */
 public record CallOptions(
         boolean videoEnabled,
@@ -33,22 +36,28 @@ public record CallOptions(
         int videoBitrateBps
 ) {
     /**
-     * Compact constructor — validates dimensions only when video is
-     * enabled.
+     * Constructs call options, validating the video dimensions only when
+     * video is enabled.
+     *
+     * @throws IllegalArgumentException if {@code videoEnabled} and any of
+     *                                  {@code videoWidth} or
+     *                                  {@code videoHeight} is odd or below
+     *                                  2, or {@code videoFps} or
+     *                                  {@code videoBitrateBps} is below 1
      */
     public CallOptions {
         if (videoEnabled) {
             if (videoWidth < 2 || videoWidth % 2 != 0) {
-                throw new IllegalArgumentException("videoWidth must be even and ≥ 2, got " + videoWidth);
+                throw new IllegalArgumentException("videoWidth must be even and >= 2, got " + videoWidth);
             }
             if (videoHeight < 2 || videoHeight % 2 != 0) {
-                throw new IllegalArgumentException("videoHeight must be even and ≥ 2, got " + videoHeight);
+                throw new IllegalArgumentException("videoHeight must be even and >= 2, got " + videoHeight);
             }
             if (videoFps < 1) {
-                throw new IllegalArgumentException("videoFps must be ≥ 1, got " + videoFps);
+                throw new IllegalArgumentException("videoFps must be >= 1, got " + videoFps);
             }
             if (videoBitrateBps < 1) {
-                throw new IllegalArgumentException("videoBitrateBps must be ≥ 1, got " + videoBitrateBps);
+                throw new IllegalArgumentException("videoBitrateBps must be >= 1, got " + videoBitrateBps);
             }
         }
     }
@@ -63,51 +72,54 @@ public record CallOptions(
     }
 
     /**
-     * Returns options for an audio + video call at 640×480, 30 fps,
-     * 800 kbps — Cobalt's default WebRTC SD profile.
+     * Returns options for an audio-and-video call at the default SD
+     * profile: 640x480 at 30 fps and 800 kbps.
      *
-     * @return an SD audio + video configuration
+     * @return an SD audio-and-video configuration
      */
     public static CallOptions video() {
         return video(640, 480, 30, 800_000);
     }
 
     /**
-     * Returns options for an audio + video call at the given
-     * dimensions, 30 fps, with bitrate auto-derived from the pixel
+     * Returns options for an audio-and-video call at the given
+     * dimensions, 30 fps, with the bitrate auto-derived from the pixel
      * count.
      *
      * @param width  frame width in pixels
      * @param height frame height in pixels
-     * @return an audio + video configuration
+     * @return an audio-and-video configuration
      */
     public static CallOptions video(int width, int height) {
         return video(width, height, 30, defaultBitrate(width, height, 30));
     }
 
     /**
-     * Returns options for an audio + video call at the given
+     * Returns options for an audio-and-video call at the given
      * dimensions, frame rate, and bitrate.
      *
      * @param width      frame width in pixels
      * @param height     frame height in pixels
      * @param fps        target frame rate
      * @param bitrateBps target encoder bitrate in bits per second
-     * @return an audio + video configuration
+     * @return an audio-and-video configuration
      */
     public static CallOptions video(int width, int height, int fps, int bitrateBps) {
         return new CallOptions(true, width, height, fps, bitrateBps);
     }
 
     /**
-     * Heuristic bitrate target for a given resolution + frame rate,
-     * matching WebRTC's typical SD/HD operating points: roughly
-     * {@code 0.1 bits-per-pixel-per-frame}.
+     * Computes a heuristic bitrate target for a resolution and frame
+     * rate.
+     *
+     * <p>The estimate follows WebRTC's typical SD and HD operating
+     * points at roughly 0.1 bits per pixel per frame, clamped to a
+     * 64 kbps floor.
      *
      * @param width  frame width in pixels
      * @param height frame height in pixels
      * @param fps    target frame rate
-     * @return a reasonable starting bitrate in bits per second
+     * @return a starting bitrate in bits per second
      */
     private static int defaultBitrate(int width, int height, int fps) {
         return Math.max(64_000, width * height * fps / 10);

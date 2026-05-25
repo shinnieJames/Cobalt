@@ -24,23 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration cycle for the local-pending + remote-arriving conflict path.
- *
- * <p>Per WA Web {@code WAWebSyncActionStore.doConflictResolution}, when a remote
- * mutation arrives carrying the same index as a local pending mutation, the
- * owning handler's {@code resolveConflicts} decides which mutation wins.
- * Outcomes:
- * <ul>
- *   <li>{@code APPLY_REMOTE_DROP_LOCAL} — apply remote, drop local from pending.</li>
- *   <li>{@code SKIP_REMOTE} — keep local, discard remote.</li>
- *   <li>{@code SKIP_REMOTE_DROP_LOCAL} — handler emits a merged mutation that
- *       supersedes both (the message-range merge path).</li>
- * </ul>
- *
- * <p>The synthetic part exercises the four enclosure outcomes for the canonical
- * range-merging handler ({@code ArchiveChatHandler}). The captured cycle replays
- * a real concurrent-archive trace from the {@code integration/conflict-resolution-cycle/}
- * corpus and asserts the post-resolution store state matches the WA Web oracle.
+ * Exercises the conflict-resolution cycle that runs when a remote mutation
+ * arrives carrying the same index as a local pending mutation: the owning
+ * {@link ArchiveChatHandler#resolveConflicts} decides which mutation wins and
+ * yields a {@link ConflictResolutionState}. The synthetic group drives the
+ * timestamp-tiebreaker outcomes directly; the captured group is gated on
+ * {@link SyncFixtures#isAvailable(String)} so it skips cleanly until the recorded
+ * concurrent-mutation corpus is committed.
  */
 @DisplayName("ConflictResolutionCycle integration")
 class ConflictResolutionCycleIntegrationTest {
@@ -74,12 +64,8 @@ class ConflictResolutionCycleIntegrationTest {
         void remoteNewerWins() {
             var local = archive(true, Instant.ofEpochSecond(1_000));
             var remote = archive(false, Instant.ofEpochSecond(2_000));
-            // ArchiveChatHandler.resolveConflicts uses message-range comparison; for
-            // empty ranges (the default in this synthetic example) the message-range
-            // path produces RANGES_ARE_EQUAL and routes to timestamp tiebreaker.
-            // Either APPLY_REMOTE_DROP_LOCAL (newer remote) or SKIP_REMOTE
-            // (older remote) is acceptable here — we assert the call doesn't throw
-            // and produces a non-null state.
+            // Empty message ranges compare equal, so resolution falls through to the
+            // timestamp tiebreaker; the synthetic case only asserts a non-null state.
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
             assertNotNull(resolution);
             assertNotNull(resolution.state());
@@ -104,11 +90,9 @@ class ConflictResolutionCycleIntegrationTest {
         void concurrentArchive() {
             if (!SyncFixtures.isAvailable(
                     "integration/conflict-resolution-cycle/concurrent-archive")) return;
-            // Reserved for the Phase 10 corpus. The fixture captures (a) the
-            // local pending mutation, (b) the remote mutation arriving via a
-            // server-sync notification, (c) the resolution outcome WA Web
-            // recorded. Cobalt's resolveConflicts must produce the same state +
-            // merged mutation (when applicable).
+            // Fixture pairs the local pending mutation, the remote mutation, and
+            // the recorded resolution outcome; resolveConflicts must reproduce the
+            // same state and merged mutation.
             assertNotNull(SyncFixtures.loadOracle(
                     "integration/conflict-resolution-cycle/concurrent-archive"));
         }
@@ -116,18 +100,13 @@ class ConflictResolutionCycleIntegrationTest {
         @Test
         @DisplayName("every ConflictResolutionState variant has at least one captured fixture")
         void allStatesRepresented() {
-            // Each state appears in its own fixture sub-topic:
-            //   apply-remote-drop-local, skip-remote, skip-remote-drop-local,
-            //   apply-remote-keep-local
-            // Until the corpus lands this is a smoke gate.
+            // Each state maps to its own fixture sub-topic (apply-remote-drop-local,
+            // skip-remote, skip-remote-drop-local, apply-remote-keep-local); this is
+            // a smoke gate until that corpus is committed.
             for (var state : ConflictResolutionState.values()) {
                 assertNotNull(state);
             }
             assertTrue(ConflictResolutionState.values().length > 0);
-            // Once the corpus is captured the assertion becomes:
-            //   for each state s, assertTrue(SyncFixtures.isAvailable(
-            //     "integration/conflict-resolution-cycle/" + topicFor(s)));
-            // We don't enforce that yet because the corpus is not committed.
         }
     }
 }

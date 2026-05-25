@@ -10,47 +10,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Structural tests for {@link GroupSkmsgFanoutStanza}, mirroring
- * {@code WAWebSendGroupSkmsgJob.encryptAndSendSenderKeyMsg}.
- *
- * @apiNote
- * Pins the steady-state SKMSG shape (bare {@code <enc type="skmsg">}
- * sibling, no {@code <participants>}), the bot-feedback variant (null
- * ciphertext suppresses the {@code <enc>} entirely), and the verbatim
- * attribute propagation for {@code phash}, {@code decrypt-fail}, and
- * {@code edit}. The first-send distribution shape (per-device PKMSG
- * under {@code <participants>}) is covered indirectly by the CAG live
- * oracle.
- *
- * @implNote
- * This implementation feeds the 16-arg builder directly; the null-children
- * tail is left {@code null} because the per-child composition is
- * exercised by the dedicated tests on {@link BizStanza},
- * {@link BotStanza}, {@link MetaStanza}, etc.
+ * Structural tests for {@link GroupSkmsgFanoutStanza}, pinning the
+ * steady-state SKMSG shape (bare {@code <enc type="skmsg">} sibling, no
+ * {@code <participants>}), the bot-feedback variant (null ciphertext
+ * suppresses the {@code <enc>} entirely), and the verbatim attribute
+ * propagation for {@code phash}, {@code decrypt-fail}, and {@code edit}.
+ * The tests feed the 16-arg builder directly with a null-children tail,
+ * since per-child composition is exercised by the dedicated tests on
+ * {@link BizStanza}, {@link BotStanza}, and {@link MetaStanza}; the
+ * first-send distribution shape (per-device PKMSG under
+ * {@code <participants>}) is covered indirectly by the CAG live oracle.
  */
 @DisplayName("GroupSkmsgFanoutStanza")
 class GroupSkmsgFanoutStanzaTest {
 
-    /**
-     * A representative group JID used as the recipient.
-     */
     private static final Jid GROUP = Jid.of("120363023250764418@g.us");
 
-    /**
-     * The fixture stanza id.
-     */
     private static final String ID = "3EB0CAFEBABE";
 
-    /**
-     * Fixture ciphertext used wherever the actual bytes do not matter.
-     */
     private static final byte[] CIPHERTEXT = new byte[]{1, 2, 3, 4};
 
-    /**
-     * Steady-state SKMSG emits a bare {@code <enc type="skmsg">} sibling
-     * with the {@code phash}, {@code addressing_mode}, and ciphertext
-     * version attributes on the outer {@code <message>}.
-     */
     @Test
     @DisplayName("steady-state SKMSG: <message> carries a bare <enc type=\"skmsg\">")
     void steadyStateBareSkmsg() {
@@ -73,10 +52,6 @@ class GroupSkmsgFanoutStanzaTest {
                 "steady-state SKMSG does not emit <participants>");
     }
 
-    /**
-     * A null {@code phash} stays absent from the attribute map rather
-     * than being emitted as an empty string.
-     */
     @Test
     @DisplayName("absent phash: phash attribute is absent on the wire (not empty string)")
     void absentPhashIsAbsent() {
@@ -89,11 +64,6 @@ class GroupSkmsgFanoutStanzaTest {
                 "null phash must be absent - not set to an empty string");
     }
 
-    /**
-     * The bot-feedback path passes {@code null} for the SKMSG ciphertext;
-     * the {@code <enc>} child is then suppressed entirely so delivery
-     * happens only via the {@code <bot>} child.
-     */
     @Test
     @DisplayName("bot-feedback path: null ciphertext suppresses the <enc> child entirely")
     void noCiphertextOmitsEnc() {
@@ -106,10 +76,6 @@ class GroupSkmsgFanoutStanzaTest {
                 "null ciphertext must suppress <enc> (bot-feedback path)");
     }
 
-    /**
-     * The {@code decrypt-fail} attribute propagates verbatim to the
-     * {@code <enc>}; {@code "hide"} is the encrypted-reaction CAG hint.
-     */
     @Test
     @DisplayName("decrypt-fail attribute propagates to <enc> when set")
     void decryptFailAttribute() {
@@ -123,10 +89,6 @@ class GroupSkmsgFanoutStanzaTest {
                 "decrypt-fail=hide must propagate on the <enc> for encrypted-reaction CAG sends");
     }
 
-    /**
-     * The {@code edit} attribute propagates verbatim to the outer
-     * {@code <message>}.
-     */
     @Test
     @DisplayName("edit attribute propagates to <message>")
     void editAttribute() {
@@ -139,10 +101,6 @@ class GroupSkmsgFanoutStanzaTest {
                 "edit=1 marker propagates to outer <message edit=...>");
     }
 
-    /**
-     * The four mandatory arguments must be non-null; passing {@code null}
-     * for any of them throws up front.
-     */
     @Test
     @DisplayName("null messageId / groupJid / type / addressingMode throw NullPointerException")
     void requiredArgsNullThrow() {

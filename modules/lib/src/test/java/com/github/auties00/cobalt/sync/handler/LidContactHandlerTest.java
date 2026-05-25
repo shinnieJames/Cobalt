@@ -31,28 +31,19 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link LidContactHandler} adapter for
- * {@code WAWebLidContactSync}.
- *
- * @apiNote
- * Verifies parity with WA Web for the {@code lid_contact} app-state
- * sync action across metadata, the
- * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} gating, the
- * SET upsert (full name, short name, username), the REMOVE branch
- * that clears address-book fields, the non-LID JID rejection, the
- * malformed-input fallbacks and the inherited timestamp-based
- * conflict resolution. {@link LidContactHandler} exposes no
+ * Covers the {@link LidContactHandler} for the {@code lid_contact} app-state
+ * sync action: metadata, the
+ * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} gating, the SET upsert
+ * (full name, short name, username), the REMOVE branch that clears address-book
+ * fields, the non-LID JID rejection, the malformed-input fallbacks and
+ * timestamp-based conflict resolution. {@link LidContactHandler} exposes no
  * outbound builder, so that dimension is absent here.
  *
- * @implNote
- * This implementation builds the handler with a stubbed
- * {@link TestABPropsService} so the gating prop can be flipped per
- * test, wires a real {@link UserStatusMuteHandler} so the
- * orphan-replay loop can be observed end-to-end, and exercises the
- * handler against an in-memory {@link DeviceFixtures#temporaryStore}
- * via {@link TestWhatsAppClient} so the
- * {@link WhatsAppStore#findContactByJid(Jid)}
- * read-back can be asserted directly.
+ * <p>The handler is built with a stubbed {@link TestABPropsService} so the
+ * gating prop can be flipped per test and a real {@link UserStatusMuteHandler},
+ * and runs against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the
+ * {@link WhatsAppStore#findContactByJid(Jid)} read-back can be asserted directly.
  */
 @DisplayName("LidContactHandler")
 class LidContactHandlerTest {
@@ -77,23 +68,6 @@ class LidContactHandlerTest {
         handler = new LidContactHandler(props, new UserStatusMuteHandler());
     }
 
-    /**
-     * Builds a {@link DecryptedMutation.Trusted} carrying the given LID
-     * contact action under the canonical
-     * {@code ["lid_contact", lidJid]} index.
-     *
-     * @apiNote
-     * Used by every test to centralise mutation construction. The
-     * {@code action} parameter is nullable so the malformed-value
-     * path can be exercised without re-implementing the envelope.
-     *
-     * @param lidJid the LID {@link Jid} that keys the mutation
-     * @param action the action payload, may be {@code null}
-     * @param op     the {@link SyncdOperation} to wrap
-     * @param ts     the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} with the requested
-     *         shape
-     */
     private DecryptedMutation.Trusted build(Jid lidJid, LidContactAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) valueBuilder.lidContactAction(action);

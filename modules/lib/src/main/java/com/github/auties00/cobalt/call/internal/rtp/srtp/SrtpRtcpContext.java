@@ -9,99 +9,99 @@ import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
 
 /**
- * Per-SSRC SRTCP context implementing RFC 3711 §3.4 with the
- * {@code SRTP_AES128_CM_HMAC_SHA1_80} profile: AES-128 in counter
- * mode for confidentiality (with the encryption flag always set),
- * HMAC-SHA1 truncated to 80 bits for authentication, and a 31-bit
- * monotonic SRTCP index carried in the trailing index field.
+ * Protects and unprotects SRTCP packets for one SSRC in one direction under the
+ * {@code SRTP_AES128_CM_HMAC_SHA1_80} profile (RFC 3711 section 3.4).
  *
- * <p>One context handles a single direction (sender or receiver) for
- * one SSRC. Sender contexts increment the index per packet; receiver
- * contexts replay-check via {@link SrtpReplayWindow}.
+ * <p>The context uses AES-128 in counter mode for confidentiality (with the encryption flag always
+ * set), HMAC-SHA1 truncated to 80 bits for authentication, and a 31-bit monotonic SRTCP index
+ * carried in the trailing index field. A single context serves either the sender or the receiver
+ * side: a sender increments the index for every packet, while a receiver rejects replays via a
+ * {@link SrtpReplayWindow}.
  *
- * <p>Methods are {@code synchronized} since the underlying JCA
- * {@link Cipher} and {@link Mac} are stateful.
+ * <p>The protect and unprotect methods are {@code synchronized} because the underlying JCA
+ * {@link Cipher} and {@link Mac} carry per-operation state that must not interleave.
  */
 final class SrtpRtcpContext {
     /**
-     * Length, in bytes, of the truncated HMAC-SHA1-80 auth tag.
+     * Holds the length, in bytes, of the truncated HMAC-SHA1-80 authentication tag.
      */
     private static final int AUTH_TAG_LEN = 10;
 
     /**
-     * Length, in bytes, of the trailing E-flag + SRTCP index field.
+     * Holds the length, in bytes, of the trailing field that carries the E flag and the SRTCP
+     * index.
      */
     private static final int INDEX_FIELD_LEN = 4;
 
     /**
-     * Length, in bytes, of the RTCP common header through the SSRC
-     * of the sender — the boundary at which SRTCP encryption begins.
+     * Holds the length, in bytes, of the RTCP common header through the sender SSRC, which is the
+     * boundary at which SRTCP encryption begins.
      */
     private static final int RTCP_HEADER_LEN = 8;
 
     /**
-     * Bit set in the high byte of the index field to indicate that
-     * the SRTCP payload is encrypted (as it always is in our
-     * profile).
+     * Holds the bit set in the high byte of the index field to mark the SRTCP payload as
+     * encrypted, which it always is in this profile.
      */
     private static final int E_FLAG_MASK = 0x80000000;
 
     /**
-     * 31-bit mask isolating the SRTCP index from the E flag.
+     * Holds the 31-bit mask that isolates the SRTCP index from the E flag.
      */
     private static final long INDEX_MASK = 0x7FFFFFFFL;
 
     /**
-     * Owning direction holding the derived session keys and salt.
+     * Holds the owning direction, which carries the derived session keys and salt.
      */
     private final SrtpDirection direction;
 
     /**
-     * Synchronization-source identifier this context is keyed on.
+     * Holds the synchronization-source identifier this context is keyed on.
      */
     private final int ssrc;
 
     /**
-     * {@code true} if this context is a sender; {@code false} if it
-     * is a receiver.
+     * Indicates whether this context is a sender ({@code true}) or a receiver ({@code false}).
      */
     private final boolean sender;
 
     /**
-     * AES cipher in CTR mode, re-IV'd per packet.
+     * Holds the AES cipher in counter mode, re-initialized with a fresh initial counter for every
+     * packet.
      */
     private final Cipher aes;
 
     /**
-     * HMAC-SHA1 instance, pre-keyed with
-     * {@link SrtpDirection#srtcpAuthKey}.
+     * Holds the HMAC-SHA1 instance, pre-keyed with {@link SrtpDirection#srtcpAuthKey}.
      */
     private final Mac hmac;
 
     /**
-     * AES key spec for the SRTCP session encryption key.
+     * Holds the AES key spec for the SRTCP session encryption key.
      */
     private final SecretKeySpec encKeySpec;
 
     /**
-     * Sender state: monotonically incrementing 31-bit SRTCP index.
-     * Starts at zero; incremented to one before the first packet is
-     * sent.
+     * Holds the sender-side monotonically incrementing 31-bit SRTCP index.
+     *
+     * <p>It starts at zero and is incremented to one before the first packet is sent, so the first
+     * outbound packet carries index one.
      */
     private long senderIndex;
 
     /**
-     * Receiver state: replay-detection window keyed on the 31-bit
-     * SRTCP index.
+     * Holds the receiver-side replay-detection window keyed on the 31-bit SRTCP index.
      */
     private final SrtpReplayWindow replay = new SrtpReplayWindow();
 
     /**
-     * Constructs a new context.
+     * Constructs a context for one SSRC and direction, initializing the AES cipher and the
+     * pre-keyed HMAC instance.
      *
      * @param direction the direction holding the derived session keys
-     * @param ssrc      the SSRC the context is keyed on
-     * @param sender    {@code true} for the sender side
+     * @param ssrc      the SSRC this context is keyed on
+     * @param sender    {@code true} for the sender side, {@code false} for the receiver side
+     * @throws WhatsAppCallException.Srtp if the JCA cipher or MAC cannot be initialized
      */
     SrtpRtcpContext(SrtpDirection direction, int ssrc, boolean sender) {
         this.direction = direction;
@@ -118,18 +118,19 @@ final class SrtpRtcpContext {
     }
 
     /**
-     * Encrypts and authenticates an outbound RTCP packet. The 8-byte
-     * RTCP common header (V/P/RC/PT/length + sender SSRC) is left in
-     * cleartext; everything after it is encrypted with AES-128-CTR;
-     * the 4-byte (E=1 || index) field is appended; and a 10-byte
-     * HMAC-SHA1 tag covering the encrypted packet plus the index
-     * field is appended after that.
+     * Encrypts and authenticates an outbound RTCP packet.
+     *
+     * <p>The 8-byte RTCP common header (version, padding, reception count, packet type, length, and
+     * sender SSRC) is copied in cleartext; everything after it is encrypted with AES-128-CTR keyed
+     * on the per-packet initial counter. The sender index is incremented and appended as the
+     * 4-byte {@code (E=1 || index)} field, and a 10-byte HMAC-SHA1 tag covering the encrypted
+     * packet plus that index field is appended last.
      *
      * @param rtcp the plaintext RTCP packet
-     * @return the SRTCP packet, length
-     *         {@code rtcp.length + 4 + 10}
-     * @throws WhatsAppCallException.Srtp if the packet is malformed or encryption
-     *                       fails
+     * @return the SRTCP packet, of length {@code rtcp.length + 4 + 10}
+     * @throws WhatsAppCallException.Srtp if called on a receiver context, if the packet is shorter
+     *                                    than the 8-byte header, if the 31-bit index space is
+     *                                    exhausted, or if encryption fails
      */
     synchronized byte[] protect(byte[] rtcp) {
         if (!sender) {
@@ -168,16 +169,19 @@ final class SrtpRtcpContext {
     }
 
     /**
-     * Authenticates and decrypts an inbound SRTCP packet. The trailing
-     * 10-byte HMAC tag is validated first; the E-flag and index are
-     * then extracted from the field preceding the tag, and the
-     * encrypted portion is decrypted into the returned plaintext
-     * RTCP packet.
+     * Authenticates and decrypts an inbound SRTCP packet.
+     *
+     * <p>The trailing 10-byte HMAC tag is validated first in constant time. The E flag and index
+     * are then extracted from the 4-byte field preceding the tag, the index is replay-checked, and,
+     * when the E flag is set, the encrypted portion after the 8-byte header is decrypted into the
+     * returned plaintext RTCP packet; an unencrypted payload is copied verbatim. The replay window
+     * is updated only after successful authentication.
      *
      * @param srtcp the SRTCP packet
      * @return the plaintext RTCP packet
-     * @throws WhatsAppCallException.Srtp if the packet is malformed, replays an
-     *                       earlier index, or fails authentication
+     * @throws WhatsAppCallException.Srtp if called on a sender context, if the packet is too short,
+     *                                    if it replays an earlier index, if authentication fails, or
+     *                                    if decryption fails
      */
     synchronized byte[] unprotect(byte[] srtcp) {
         if (sender) {
@@ -226,12 +230,14 @@ final class SrtpRtcpContext {
     }
 
     /**
-     * Computes the 10-byte HMAC-SHA1 auth tag covering the first
-     * {@code authedLen} bytes of {@code packet}, truncated to
-     * {@link #AUTH_TAG_LEN}.
+     * Computes the truncated HMAC-SHA1 authentication tag over the first {@code authedLen} bytes of
+     * the packet.
+     *
+     * <p>The full 20-byte HMAC-SHA1 output is computed and the leading {@link #AUTH_TAG_LEN} bytes
+     * are returned as the tag.
      *
      * @param packet    the packet bytes
-     * @param authedLen the count of authenticated bytes
+     * @param authedLen the count of authenticated leading bytes
      * @return the 10-byte truncated tag
      */
     private byte[] computeAuthTag(byte[] packet, int authedLen) {
@@ -243,12 +249,10 @@ final class SrtpRtcpContext {
     }
 
     /**
-     * Computes and writes the auth tag for the outbound packet
-     * currently in {@code packet[0..authedLen)} into
-     * {@code packet[authedLen..authedLen+AUTH_TAG_LEN)}.
+     * Computes and writes the authentication tag for the outbound packet held in
+     * {@code packet[0..authedLen)} into {@code packet[authedLen..authedLen + AUTH_TAG_LEN)}.
      *
-     * @param packet    the in-progress SRTCP packet (room for the tag
-     *                  must already exist)
+     * @param packet    the in-progress SRTCP packet, which must already have room for the tag
      * @param authedLen the length of the authenticated portion
      */
     private void appendAuthTag(byte[] packet, int authedLen) {

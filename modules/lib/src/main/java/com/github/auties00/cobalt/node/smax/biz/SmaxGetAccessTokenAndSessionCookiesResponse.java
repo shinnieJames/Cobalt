@@ -12,48 +12,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed inbound reply hierarchy for the
- * {@code WASmaxBizCtwaAdAccountGetAccessTokenAndSessionCookiesRPC}
- * SMAX send RPC, enumerating every documented reply variant the relay can
- * return for a {@link SmaxGetAccessTokenAndSessionCookiesRequest}.
- *
- * @apiNote
- * The hierarchy mirrors the WA Web pipeline in which
- * {@code WAWebBizAdCreationVerifyEmailCode.verifyEmailCodeAndPersistToken}
- * (and the parallel {@code WAWebFetchAdAccountToken} flow) switches on the
- * SMAX response name to drive the click-to-WhatsApp ad-creation
- * verify-email-code modal: {@link Success} persists the strong access
- * token and dismisses the modal, {@link IncorrectNonce} shows the
- * "invalid code" inline error, {@link TooManyAttempts} shows the generic
- * "something went wrong" copy, and the {@link ClientError} /
- * {@link ServerError} fallbacks both surface the same generic copy.
+ * Models the inbound replies to the CTWA ad-account access-token-and-session-cookies request.
+ * <p>
+ * Enumerates every documented reply variant the relay can return for a
+ * {@link SmaxGetAccessTokenAndSessionCookiesRequest}. The variants drive the click-to-WhatsApp
+ * ad-creation verify-email-code modal: {@link Success} persists the strong access token and
+ * dismisses the modal, {@link IncorrectNonce} shows the invalid-code inline error,
+ * {@link TooManyAttempts} shows the generic something-went-wrong copy, and the {@link ClientError}
+ * and {@link ServerError} fallbacks both surface the same generic copy.
  */
 public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends SmaxOperation.Response
         permits SmaxGetAccessTokenAndSessionCookiesResponse.Success, SmaxGetAccessTokenAndSessionCookiesResponse.TooManyAttempts,
         SmaxGetAccessTokenAndSessionCookiesResponse.IncorrectNonce, SmaxGetAccessTokenAndSessionCookiesResponse.ClientError, SmaxGetAccessTokenAndSessionCookiesResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetAccessTokenAndSessionCookiesResponse}
-     * variant in priority order and returns the first that parses cleanly.
+     * Tries each {@link SmaxGetAccessTokenAndSessionCookiesResponse} variant in priority order and
+     * returns the first that parses cleanly.
+     * <p>
+     * {@link Success} is tried first, then the two dedicated literal errors ({@link TooManyAttempts}
+     * and {@link IncorrectNonce}), then the generic {@link ClientError} and {@link ServerError}
+     * buckets. Returns empty only when none of the documented shapes match.
      *
-     * @apiNote
-     * The dispatch order matches WA Web's
-     * {@code sendGetAccessTokenAndSessionCookiesRPC} sequence exactly:
-     * {@link Success} is tried first, then the two dedicated literal
-     * errors ({@link TooManyAttempts} and {@link IncorrectNonce}), then
-     * the generic {@link ClientError} / {@link ServerError} buckets.
-     * Returns empty only when none of the documented shapes match.
-     *
-     * @implNote
-     * This implementation short-circuits as soon as any variant matches;
-     * for a literal {@code 431} / {@code "TOO_MANY_ATTEMPTS"} error the
-     * generic {@link ClientError} fallback is therefore not reached even
-     * though both shapes would otherwise overlap on the same IQ envelope.
+     * @implNote This implementation short-circuits as soon as any variant matches; for a literal
+     * {@code 431} / {@code "TOO_MANY_ATTEMPTS"} error the generic {@link ClientError} fallback is
+     * therefore not reached even though both shapes would otherwise overlap on the same IQ envelope.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
-     * @param request the original outbound stanza, used to validate echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant matched
+     * @param request the original outbound stanza, used to validate echoed identifiers; never
+     *                {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizCtwaAdAccountGetAccessTokenAndSessionCookiesRPC",
@@ -82,64 +70,52 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     }
 
     /**
-     * The {@code Success} reply variant carrying the access token, session
-     * cookies, business-person identity, and the optional token-strength
-     * marker.
-     *
-     * @apiNote
-     * Drives the happy-path branch of the verify-email-code modal: WA Web
-     * stores {@link #accessToken()} (as a {@code WAA}-type Graph API
-     * bearer token), {@link #sessionCookies()} (consumed by the
-     * Facebook Ads Manager web UI), and {@link #businessPersonId()} (the
-     * Facebook business-person identifier the token is scoped to)
-     * through {@code WAWebFetchAdAccountToken.setToken}. When
-     * {@link #tokenType()} is present and not
-     * {@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} the
-     * WA Web caller logs a fixable error and treats the response as a
-     * failure even though it parsed cleanly.
+     * The success variant carrying the access token, session cookies, business-person identity, and
+     * the optional token-strength marker.
+     * <p>
+     * Drives the happy-path branch of the verify-email-code modal: {@link #accessToken()} is a
+     * {@code WAA}-type Graph API bearer token, {@link #sessionCookies()} is consumed by the Facebook
+     * Ads Manager web UI, and {@link #businessPersonId()} is the Facebook business-person identifier
+     * the token is scoped to. When {@link #tokenType()} is present and not
+     * {@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} the reply is treated as a failure
+     * even though it parsed cleanly.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseSuccess")
     final class Success implements SmaxGetAccessTokenAndSessionCookiesResponse {
         /**
-         * The text content of the mandatory {@code <access_token>} child
-         * (Graph API bearer token).
+         * The text content of the mandatory {@code <access_token>} child (Graph API bearer token).
          */
         private final String accessToken;
 
         /**
-         * The text content of the mandatory {@code <session_cookies>}
-         * child (JSON-encoded blob of cookies for the Facebook Ads
-         * Manager web UI).
+         * The text content of the mandatory {@code <session_cookies>} child (JSON-encoded blob of
+         * cookies for the Facebook Ads Manager web UI).
          */
         private final String sessionCookies;
 
         /**
-         * The {@code id} attribute of the mandatory {@code <business_person>}
-         * child (Facebook business-person identifier the token is scoped to).
+         * The {@code id} attribute of the mandatory {@code <business_person>} child (Facebook
+         * business-person identifier the token is scoped to).
          */
         private final String businessPersonId;
 
         /**
-         * The optional {@code <token_type>} content carrying the
-         * {@code "Strong"} / {@code "Weak"} marker from
-         * {@code WASmaxInBizCtwaAdAccountEnums.ENUM_STRONG_WEAK}.
+         * The optional {@code <token_type>} content carrying the {@code "Strong"} / {@code "Weak"}
+         * marker.
          */
         private final SmaxGetAccessTokenAndSessionCookiesTokenType tokenType;
 
         /**
          * Constructs a successful reply from already-validated wire values.
-         *
-         * @apiNote
-         * Cobalt callers normally obtain a reply by parsing a stanza via
-         * {@link #of(Node, Node)}; this constructor is exposed for tests
-         * and for hand-built fixtures.
+         * <p>
+         * Callers normally obtain a reply by parsing a stanza via {@link #of(Node, Node)}; this
+         * constructor is exposed for tests and for hand-built fixtures.
          *
          * @param accessToken      the Graph API bearer token; never {@code null}
          * @param sessionCookies   the JSON-encoded session-cookies blob; never {@code null}
          * @param businessPersonId the Facebook business-person identifier; never {@code null}
          * @param tokenType        the optional token-strength marker; may be {@code null}
-         * @throws NullPointerException if any of {@code accessToken},
-         *                              {@code sessionCookies}, or
+         * @throws NullPointerException if any of {@code accessToken}, {@code sessionCookies}, or
          *                              {@code businessPersonId} is {@code null}
          */
         public Success(String accessToken, String sessionCookies,
@@ -152,11 +128,9 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the access token.
-         *
-         * @apiNote
-         * Used as a {@code WAA}-type Graph API bearer token; stored via
-         * {@code WAWebFetchAdAccountToken.setToken} alongside the
-         * matching {@link #businessPersonId()}.
+         * <p>
+         * Used as a {@code WAA}-type Graph API bearer token, stored alongside the matching
+         * {@link #businessPersonId()}.
          *
          * @return the access token; never {@code null}
          */
@@ -166,10 +140,9 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the session-cookies blob.
-         *
-         * @apiNote
-         * JSON-encoded cookies consumed by the Facebook Ads Manager web
-         * UI when WA Web opens it in an embedded surface.
+         * <p>
+         * JSON-encoded cookies consumed by the Facebook Ads Manager web UI when it is opened in an
+         * embedded surface.
          *
          * @return the session cookies; never {@code null}
          */
@@ -178,12 +151,10 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Returns the Facebook business-person identifier the token is
-         * scoped to.
-         *
-         * @apiNote
-         * Carried alongside the access token through the token-store as
-         * the {@code bp_id} field of the persisted entry.
+         * Returns the Facebook business-person identifier the token is scoped to.
+         * <p>
+         * Carried alongside the access token through the token-store as the {@code bp_id} field of
+         * the persisted entry.
          *
          * @return the business-person ID; never {@code null}
          */
@@ -193,21 +164,14 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the optional token-strength marker.
-         *
-         * @apiNote
-         * When present and not
-         * {@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG},
-         * WA Web's
-         * {@code WAWebBizAdCreationVerifyEmailCode.verifyEmailCodeAndPersistToken}
-         * logs a fixable error and treats the reply as a failure even
-         * though it parsed cleanly; absent on legacy relays.
+         * <p>
+         * When present and not {@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} the reply
+         * is treated as a failure even though it parsed cleanly; absent on legacy relays.
          *
          * @return an {@link Optional} carrying the marker
-         *         ({@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG}
-         *         or
-         *         {@link SmaxGetAccessTokenAndSessionCookiesTokenType#WEAK}),
-         *         or empty when the relay omitted the {@code <token_type>}
-         *         child
+         *         ({@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} or
+         *         {@link SmaxGetAccessTokenAndSessionCookiesTokenType#WEAK}), or empty when the
+         *         relay omitted the {@code <token_type>} child
          */
         public Optional<SmaxGetAccessTokenAndSessionCookiesTokenType> tokenType() {
             return Optional.ofNullable(tokenType);
@@ -215,30 +179,22 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Parses a {@link Success} variant from the inbound stanza.
+         * <p>
+         * Returns empty when the {@code <iq type="result">} envelope shape does not match the
+         * original request id, when any of the mandatory text-content children
+         * ({@code <access_token>}, {@code <session_cookies>}) is missing or empty, when the
+         * {@code <business_person id="...">} grandchild or its {@code id} attribute is absent, or
+         * when the optional {@code <token_type>} child is present but its text content fails
+         * {@link SmaxGetAccessTokenAndSessionCookiesTokenType} validation.
          *
-         * @apiNote
-         * Returns empty when the {@code <iq type="result">} envelope
-         * shape does not match the original request id, when any of the
-         * mandatory text-content children ({@code <access_token>},
-         * {@code <session_cookies>}) is missing or empty, when the
-         * {@code <business_person id="...">} grandchild or its
-         * {@code id} attribute is absent, or when the optional
-         * {@code <token_type>} child is present but its text content
-         * fails {@link SmaxGetAccessTokenAndSessionCookiesTokenType}
-         * validation.
-         *
-         * @implNote
-         * This implementation delegates envelope validation
-         * ({@code type="result"} plus echoed id) to
-         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} so a
-         * mis-matched id short-circuits before any payload field is
-         * sampled, matching WA Web's
-         * {@code mergeBaseIQResultResponseMixin} composition.
+         * @implNote This implementation delegates envelope validation ({@code type="result"} plus
+         * echoed id) to {@link SmaxIqResultResponseMixin#validate(Node, Node)} so a mis-matched id
+         * short-circuits before any payload field is sampled.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the success schema
          * @throws NullPointerException if either argument is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseSuccess",
@@ -290,13 +246,12 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Compares this reply to {@code obj} for structural equality on
-         * all four slots.
+         * Compares this reply to {@code obj} for structural equality on all four slots.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when {@code obj} is a {@link Success} with
-         *         matching {@link #accessToken()}, {@link #sessionCookies()},
-         *         {@link #businessPersonId()}, and {@link #tokenType()}
+         * @return {@code true} when {@code obj} is a {@link Success} with matching
+         *         {@link #accessToken()}, {@link #sessionCookies()}, {@link #businessPersonId()},
+         *         and {@link #tokenType()}
          */
         @Override
         public boolean equals(Object obj) {
@@ -338,50 +293,41 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     }
 
     /**
-     * The {@code TooManyAttempts} reply variant signalling that the user
-     * has exhausted the rate limit for this nonce.
-     *
-     * @apiNote
-     * Identified by the literal {@code <error code="431" text="TOO_MANY_ATTEMPTS"/>}
-     * pair on the {@code <error/>} child of an {@code <iq type="error">}
-     * envelope. WA Web surfaces this as the generic "something went wrong"
-     * inline error because the verify-email-code modal does not
-     * differentiate per-error copy.
+     * The too-many-attempts variant signalling that the user has exhausted the rate limit for this
+     * nonce.
+     * <p>
+     * Identified by the literal {@code <error code="431" text="TOO_MANY_ATTEMPTS"/>} pair on the
+     * {@code <error/>} child of an {@code <iq type="error">} envelope. Surfaced as the generic
+     * something-went-wrong inline error because the verify-email-code modal does not differentiate
+     * per-error copy.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseTooManyAttempts")
     final class TooManyAttempts implements SmaxGetAccessTokenAndSessionCookiesResponse {
         /**
          * Constructs a marker reply.
-         *
-         * @apiNote
-         * The variant carries no payload; the constructor exists only
-         * so {@link #of(Node, Node)} and tests can instantiate it.
+         * <p>
+         * The variant carries no payload; the constructor exists only so {@link #of(Node, Node)} and
+         * tests can instantiate it.
          */
         public TooManyAttempts() {
         }
 
         /**
          * Parses a {@link TooManyAttempts} variant from the inbound stanza.
+         * <p>
+         * Returns empty when the {@code <iq type="error">} envelope shape does not match the
+         * original request id, when the {@code <error/>} child is missing, or when the {@code code}
+         * and {@code text} attributes are not exactly the literal {@code "431"} /
+         * {@code "TOO_MANY_ATTEMPTS"} pair.
          *
-         * @apiNote
-         * Returns empty when the {@code <iq type="error">} envelope
-         * shape does not match the original request id, when the
-         * {@code <error/>} child is missing, or when the {@code code} /
-         * {@code text} attributes are not exactly the literal
-         * {@code "431"} / {@code "TOO_MANY_ATTEMPTS"} pair.
-         *
-         * @implNote
-         * This implementation delegates envelope validation
-         * ({@code type="error"} plus echoed id) to
-         * {@link SmaxIqErrorResponseMixin#validate(Node, Node)} so a
-         * mis-matched id short-circuits before the error literals are
-         * sampled.
+         * @implNote This implementation delegates envelope validation ({@code type="error"} plus
+         * echoed id) to {@link SmaxIqErrorResponseMixin#validate(Node, Node)} so a mis-matched id
+         * short-circuits before the error literals are sampled.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the literal
-         *         {@code 431} / {@code TOO_MANY_ATTEMPTS} schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the literal {@code 431} / {@code TOO_MANY_ATTEMPTS} schema
          * @throws NullPointerException if either argument is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseTooManyAttempts",
@@ -421,8 +367,7 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Returns a constant hash matching the class identity used by
-         * {@link #equals(Object)}.
+         * Returns a constant hash matching the class identity used by {@link #equals(Object)}.
          *
          * @return the class hash
          */
@@ -443,50 +388,41 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     }
 
     /**
-     * The {@code IncorrectNonce} reply variant signalling that the user
-     * typed a verification code that did not match the relay-side nonce.
-     *
-     * @apiNote
-     * Identified by the literal {@code <error code="432" text="INCORRECT_NONCE"/>}
-     * pair on the {@code <error/>} child of an {@code <iq type="error">}
-     * envelope. This is the only error variant that WA Web surfaces with
-     * differentiated copy (the inline "invalid code" message); every
-     * other failure falls back to the generic "something went wrong"
-     * string.
+     * The incorrect-nonce variant signalling that the user typed a verification code that did not
+     * match the relay-side nonce.
+     * <p>
+     * Identified by the literal {@code <error code="432" text="INCORRECT_NONCE"/>} pair on the
+     * {@code <error/>} child of an {@code <iq type="error">} envelope. This is the only error
+     * variant surfaced with differentiated copy (the inline invalid-code message); every other
+     * failure falls back to the generic something-went-wrong string.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseIncorrectNonce")
     final class IncorrectNonce implements SmaxGetAccessTokenAndSessionCookiesResponse {
         /**
          * Constructs a marker reply.
-         *
-         * @apiNote
-         * The variant carries no payload; the constructor exists only so
-         * {@link #of(Node, Node)} and tests can instantiate it.
+         * <p>
+         * The variant carries no payload; the constructor exists only so {@link #of(Node, Node)} and
+         * tests can instantiate it.
          */
         public IncorrectNonce() {
         }
 
         /**
          * Parses an {@link IncorrectNonce} variant from the inbound stanza.
+         * <p>
+         * Returns empty when the {@code <iq type="error">} envelope shape does not match the
+         * original request id, when the {@code <error/>} child is missing, or when the {@code code}
+         * and {@code text} attributes are not exactly the literal {@code "432"} /
+         * {@code "INCORRECT_NONCE"} pair.
          *
-         * @apiNote
-         * Returns empty when the {@code <iq type="error">} envelope
-         * shape does not match the original request id, when the
-         * {@code <error/>} child is missing, or when the {@code code} /
-         * {@code text} attributes are not exactly the literal
-         * {@code "432"} / {@code "INCORRECT_NONCE"} pair.
-         *
-         * @implNote
-         * This implementation delegates envelope validation to
-         * {@link SmaxIqErrorResponseMixin#validate(Node, Node)} so a
-         * mis-matched id short-circuits before the error literals are
-         * sampled.
+         * @implNote This implementation delegates envelope validation to
+         * {@link SmaxIqErrorResponseMixin#validate(Node, Node)} so a mis-matched id short-circuits
+         * before the error literals are sampled.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the literal
-         *         {@code 432} / {@code INCORRECT_NONCE} schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the literal {@code 432} / {@code INCORRECT_NONCE} schema
          * @throws NullPointerException if either argument is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseIncorrectNonce",
@@ -526,8 +462,7 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Returns a constant hash matching the class identity used by
-         * {@link #equals(Object)}.
+         * Returns a constant hash matching the class identity used by {@link #equals(Object)}.
          *
          * @return the class hash
          */
@@ -548,15 +483,12 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     }
 
     /**
-     * The generic {@code ClientError} reply variant covering documented
-     * common-ad-account 4xx errors that do not match the dedicated
-     * {@link TooManyAttempts} / {@link IncorrectNonce} literals.
-     *
-     * @apiNote
-     * Surfaces the WA Web "something went wrong" inline message; consumers
-     * can read {@link #errorCode()} and {@link #errorText()} for
-     * diagnostics but the verify-email-code modal does not differentiate
-     * per-code copy.
+     * The generic client-error variant covering documented common-ad-account 4xx errors that do not
+     * match the dedicated {@link TooManyAttempts} / {@link IncorrectNonce} literals.
+     * <p>
+     * Surfaces the generic something-went-wrong inline message; consumers can read
+     * {@link #errorCode()} and {@link #errorText()} for diagnostics but the verify-email-code modal
+     * does not differentiate per-code copy.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountCommonAdAccountErrors")
@@ -565,25 +497,21 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountIQErrorForbiddenMixin")
     final class ClientError implements SmaxGetAccessTokenAndSessionCookiesResponse {
         /**
-         * The numeric server-side error code (parsed from
-         * {@code <error code="..."/>}).
+         * The numeric server-side error code (parsed from {@code <error code="..."/>}).
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text (parsed from
-         * {@code <error text="..."/>}), when the relay supplied one.
+         * The human-readable error text (parsed from {@code <error text="..."/>}), when the relay
+         * supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply from already-validated wire
-         * values.
-         *
-         * @apiNote
-         * Cobalt callers normally obtain a reply by parsing a stanza via
-         * {@link #of(Node, Node)}; this constructor is exposed for tests
-         * and for hand-built fixtures.
+         * Constructs a client-error reply from already-validated wire values.
+         * <p>
+         * Callers normally obtain a reply by parsing a stanza via {@link #of(Node, Node)}; this
+         * constructor is exposed for tests and for hand-built fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -595,10 +523,9 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the numeric error code.
-         *
-         * @apiNote
-         * One of the documented 4xx codes (excluding {@code 431} /
-         * {@code 432}, which are routed to the dedicated variants).
+         * <p>
+         * One of the documented 4xx codes, excluding {@code 431} / {@code 432}, which are routed to
+         * the dedicated variants.
          *
          * @return the error code
          */
@@ -608,13 +535,11 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the optional human-readable error text.
+         * <p>
+         * Useful for diagnostics; not surfaced to the user, who sees a single generic copy
+         * regardless.
          *
-         * @apiNote
-         * Useful for diagnostics; not surfaced to the user (WA Web shows
-         * a single generic copy regardless).
-         *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -622,26 +547,21 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Parses a {@link ClientError} variant from the inbound stanza.
+         * <p>
+         * Returns empty when the stanza is not a 4xx error envelope, when the request id does not
+         * match, or when the error happens to match one of the dedicated {@code 431} / {@code 432}
+         * literals (which the orchestrating {@link #of(Node, Node)} will already have routed to
+         * {@link TooManyAttempts} / {@link IncorrectNonce}).
          *
-         * @apiNote
-         * Returns empty when the stanza is not a 4xx error envelope, when
-         * the request id does not match, or when the error happens to
-         * match one of the dedicated {@code 431} / {@code 432} literals
-         * (which the orchestrating {@link #of(Node, Node)} will already
-         * have routed to {@link TooManyAttempts} / {@link IncorrectNonce}).
-         *
-         * @implNote
-         * This implementation delegates the envelope + 4xx-code
-         * extraction to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)};
-         * the helper enforces the {@code type="error"} envelope, validates
-         * the echoed id, and rejects 5xx codes for routing to
-         * {@link ServerError}.
+         * @implNote This implementation delegates the envelope and 4xx-code extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}; the helper enforces the
+         * {@code type="error"} envelope, validates the echoed id, and rejects 5xx codes for routing
+         * to {@link ServerError}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseError",
                 exports = "parseGetAccessTokenAndSessionCookiesResponseError",
@@ -664,12 +584,11 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Compares this reply to {@code obj} for structural equality on
-         * the error code and text.
+         * Compares this reply to {@code obj} for structural equality on the error code and text.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when {@code obj} is a {@link ClientError}
-         *         with matching {@link #errorCode()} and {@link #errorText()}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with matching
+         *         {@link #errorCode()} and {@link #errorText()}
          */
         @Override
         public boolean equals(Object obj) {
@@ -694,8 +613,7 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Returns a debug-friendly rendering naming the error code and
-         * text.
+         * Returns a debug-friendly rendering naming the error code and text.
          *
          * @return a record-style string with the error code and text
          */
@@ -707,16 +625,11 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     }
 
     /**
-     * The generic {@code ServerError} reply variant covering transient
-     * relay-side 5xx failures.
-     *
-     * @apiNote
-     * Carries the same generic surface as {@link ClientError} but
-     * indicates a server-side fault (typically
-     * {@code parseIQErrorInternalServerErrorMixin} or
-     * {@code parseIQErrorServiceUnavailableMixin}); the WA Web caller
-     * shows the same "something went wrong" inline message and may retry
-     * at the application layer.
+     * The generic server-error variant covering transient relay-side 5xx failures.
+     * <p>
+     * Carries the same generic surface as {@link ClientError} but indicates a server-side fault
+     * (typically internal-server-error or service-unavailable); the same something-went-wrong inline
+     * message is shown and the caller may retry at the application layer.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountCommonAdAccountErrors")
@@ -725,25 +638,21 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountIQErrorServiceUnavailableMixin")
     final class ServerError implements SmaxGetAccessTokenAndSessionCookiesResponse {
         /**
-         * The numeric server-side error code (parsed from
-         * {@code <error code="..."/>}).
+         * The numeric server-side error code (parsed from {@code <error code="..."/>}).
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text (parsed from
-         * {@code <error text="..."/>}), when the relay supplied one.
+         * The human-readable error text (parsed from {@code <error text="..."/>}), when the relay
+         * supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply from already-validated wire
-         * values.
-         *
-         * @apiNote
-         * Cobalt callers normally obtain a reply by parsing a stanza via
-         * {@link #of(Node, Node)}; this constructor is exposed for tests
-         * and for hand-built fixtures.
+         * Constructs a server-error reply from already-validated wire values.
+         * <p>
+         * Callers normally obtain a reply by parsing a stanza via {@link #of(Node, Node)}; this
+         * constructor is exposed for tests and for hand-built fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -755,8 +664,7 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the numeric error code.
-         *
-         * @apiNote
+         * <p>
          * One of the documented 5xx codes routed through
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
@@ -768,12 +676,10 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Returns the optional human-readable error text.
-         *
-         * @apiNote
+         * <p>
          * Useful for diagnostics; not surfaced to the user.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -781,22 +687,18 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
 
         /**
          * Parses a {@link ServerError} variant from the inbound stanza.
+         * <p>
+         * Returns empty when the stanza is not a 5xx error envelope or when the request id does not
+         * match.
          *
-         * @apiNote
-         * Returns empty when the stanza is not a 5xx error envelope or
-         * when the request id does not match.
-         *
-         * @implNote
-         * This implementation delegates the envelope + 5xx-code
-         * extraction to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
-         * the helper enforces the {@code type="error"} envelope and
-         * rejects 4xx codes for routing to {@link ClientError}.
+         * @implNote This implementation delegates the envelope and 5xx-code extraction to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}; the helper enforces the
+         * {@code type="error"} envelope and rejects 4xx codes for routing to {@link ClientError}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseError",
                 exports = "parseGetAccessTokenAndSessionCookiesResponseError",
@@ -819,12 +721,11 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Compares this reply to {@code obj} for structural equality on
-         * the error code and text.
+         * Compares this reply to {@code obj} for structural equality on the error code and text.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when {@code obj} is a {@link ServerError}
-         *         with matching {@link #errorCode()} and {@link #errorText()}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with matching
+         *         {@link #errorCode()} and {@link #errorText()}
          */
         @Override
         public boolean equals(Object obj) {
@@ -849,8 +750,7 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         }
 
         /**
-         * Returns a debug-friendly rendering naming the error code and
-         * text.
+         * Returns a debug-friendly rendering naming the error code and text.
          *
          * @return a record-style string with the error code and text
          */

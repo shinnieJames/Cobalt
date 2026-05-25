@@ -13,54 +13,46 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="abt" type="get" to="s.whatsapp.net">}
- * AB-props bundle fetch.
+ * Builds the outbound {@code <iq xmlns="abt" type="get" to="s.whatsapp.net">} stanza that fetches
+ * the AB-props experiment-config bundle.
  *
- * @apiNote
- * Drives WA Web's
- * {@code WASmaxAbPropsGetExperimentConfigRPC.sendGetExperimentConfigRPC},
- * invoked by {@code WAWebAbPropsSyncJob} on session bootstrap and on
- * every server-pushed {@code <notification type="abprops">} bump; the
- * reply populates the local AB-prop store consumed by
- * {@code WAWebABPropsParseConfigValue} and the runtime feature gates.
- * Cobalt embedders dispatch one of these to mirror WA Web's
- * experiment-config sync.
+ * <p>This request fetches the user-scoped experiment configuration bundle that gates WhatsApp's
+ * feature flags. It is dispatched on session bootstrap and again whenever the relay pushes a
+ * {@code <notification type="abprops">} bump, and the matching
+ * {@link SmaxAbPropsGetExperimentConfigResponse} populates the local AB-prop store the runtime
+ * feature gates read from. Either {@code propsHash} or {@code propsRefreshId} may be carried so the
+ * relay can short-circuit the reply to a delta when its current bundle already matches; both are
+ * absent on the first fetch of a session, which forces a full bundle reply.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutAbPropsGetExperimentConfigRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutAbPropsBaseIQGetRequestMixin")
 public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperation.Request {
     /**
-     * The optional content hash echoed back to the relay.
+     * Holds the cached bundle hash echoed back to the relay, or {@code null} when none is known.
      *
-     * @apiNote
-     * Mirrors {@code WAWebABPropsLocalStorage.getHash()} when WA Web
-     * dispatches the request; the relay short-circuits the reply to a
-     * delta when the supplied hash matches its current bundle.
+     * <p>When present, this hash is serialised into the {@code <props hash/>} attribute so the relay
+     * can compare it against its current bundle and reply with a delta instead of the full payload.
      */
     private final String propsHash;
 
     /**
-     * The optional refresh id echoed back to the relay.
+     * Holds the cached refresh id echoed back to the relay, or {@code null} when none is known.
      *
-     * @apiNote
-     * Carried when the {@code 3330} gate is on and the client wants
-     * the relay to correlate this fetch with a prior server-pushed
-     * {@code <notification type="abprops">} bump.
+     * <p>When present, this id is serialised into the {@code <props refresh_id/>} attribute so the
+     * relay can correlate this fetch with a prior server-pushed {@code <notification type="abprops">}
+     * bump.
      */
     private final Integer propsRefreshId;
 
     /**
-     * Constructs a conditional request.
+     * Constructs a conditional request carrying the supplied cached identifiers.
      *
-     * @apiNote
-     * Use this overload when the client already has a cached bundle
-     * and wants the relay to short-circuit on a hash or refresh-id
-     * match.
+     * <p>Both arguments are nullable; supplying either lets the relay short-circuit the reply to a
+     * delta when its current bundle already matches. Supplying neither is equivalent to
+     * {@link #SmaxAbPropsGetExperimentConfigRequest()}.
      *
-     * @param propsHash      the cached props hash; may be
-     *                       {@code null}
-     * @param propsRefreshId the cached refresh id; may be
-     *                       {@code null}
+     * @param propsHash      the cached props hash, or {@code null} when none is known
+     * @param propsRefreshId the cached refresh id, or {@code null} when none is known
      */
     public SmaxAbPropsGetExperimentConfigRequest(String propsHash, Integer propsRefreshId) {
         this.propsHash = propsHash;
@@ -68,52 +60,50 @@ public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperatio
     }
 
     /**
-     * Constructs an unconditional request.
+     * Constructs an unconditional request carrying no cached identifiers.
      *
-     * @apiNote
-     * Use this overload on the first fetch of a session, when no
-     * cached bundle exists and the relay should always return the
-     * full props bundle.
+     * <p>Used on the first fetch of a session, when no cached bundle exists and the relay must
+     * return the full props bundle.
      */
     public SmaxAbPropsGetExperimentConfigRequest() {
         this(null, null);
     }
 
     /**
-     * Returns the cached props hash, when set.
+     * Returns the cached props hash, when one was supplied.
      *
-     * @apiNote
-     * Empty on the first fetch of a session.
+     * <p>Empty on the first fetch of a session.
      *
-     * @return an {@link Optional} carrying the hash
+     * @return an {@link Optional} carrying the hash, or empty when none was supplied
      */
     public Optional<String> propsHash() {
         return Optional.ofNullable(propsHash);
     }
 
     /**
-     * Returns the cached refresh id, when set.
+     * Returns the cached refresh id, when one was supplied.
      *
-     * @apiNote
-     * Empty when the client did not receive a prior refresh-id bump.
+     * <p>Empty when the client never received a prior refresh-id bump.
      *
-     * @return an {@link Optional} carrying the refresh id
+     * @return an {@link Optional} carrying the refresh id, or empty when none was supplied
      */
     public Optional<Integer> propsRefreshId() {
         return Optional.ofNullable(propsRefreshId);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq xmlns="abt" type="get">} stanza wrapping the {@code <props/>}
+     * payload.
      *
-     * @apiNote
-     * Returned unbuilt so the dispatch path can stamp a fresh IQ id
-     * before flushing; mirrors
-     * {@code WASmaxOutAbPropsGetExperimentConfigRequest.makeGetExperimentConfigRequest}
-     * composed with the IQ-get merge mixin.
+     * <p>The {@code <props/>} child always carries {@code protocol="1"} and, when set, the cached
+     * {@code hash} and {@code refresh_id} attributes that let the relay short-circuit to a delta.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <props/>} payload
+     * @implSpec
+     * The builder is returned unbuilt so the dispatch path can stamp a fresh {@code id} attribute
+     * before flushing the stanza.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <props/>} payload; never
+     *         {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutAbPropsGetExperimentConfigRequest",
@@ -137,6 +127,13 @@ public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperatio
                 .content(propsNode);
     }
 
+    /**
+     * Compares this request with another for value equality over its cached identifiers.
+     *
+     * @param obj the object to compare against, may be {@code null}
+     * @return {@code true} when {@code obj} is a {@code SmaxAbPropsGetExperimentConfigRequest} with
+     *         equal {@code propsHash} and {@code propsRefreshId}; {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -150,11 +147,21 @@ public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperatio
                 && Objects.equals(this.propsRefreshId, that.propsRefreshId);
     }
 
+    /**
+     * Returns a hash code derived from the cached identifiers.
+     *
+     * @return the combined hash of {@code propsHash} and {@code propsRefreshId}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(propsHash, propsRefreshId);
     }
 
+    /**
+     * Returns a debug representation listing the cached identifiers.
+     *
+     * @return a string of the form {@code SmaxAbPropsGetExperimentConfigRequest[propsHash=..., propsRefreshId=...]}
+     */
     @Override
     public String toString() {
         return "SmaxAbPropsGetExperimentConfigRequest[propsHash=" + propsHash

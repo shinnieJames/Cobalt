@@ -27,37 +27,23 @@ import com.github.auties00.cobalt.call.session.VideoTrackOptions;
 import com.github.auties00.cobalt.call.internal.video.VideoPipeline;
 
 /**
- * End-to-end M1 1:1 voice-call MVP test — wires two
- * {@link VoiceCallSession}s back-to-back through a loopback
- * {@link DatagramTransport} pair, drives the DTLS handshake to
- * completion, writes mic frames into one side's
- * {@link ActiveCall#localAudioSink}, and observes them arriving at
- * the other side's {@link ActiveCall#remoteAudioSource} after a full
- * Opus encode → RTP → SRTP → loopback → SRTP → RTP → Opus decode
- * round-trip.
+ * Covers end-to-end 1:1 {@link VoiceCallSession} behaviour by wiring two sessions back-to-back
+ * through an in-memory loopback {@link DatagramTransport} pair, driving the DTLS handshake to
+ * completion, and verifying that media written into one side's {@link ActiveCall#localAudioSink}
+ * (and {@link ActiveCall#localVideoSink}) arrives at the other side's
+ * {@link ActiveCall#remoteAudioSource} (and {@link ActiveCall#remoteVideoSource}) after a full
+ * encode, RTP, SRTP, loopback, decode round-trip. Also exercises transport reconnect, video and
+ * screen-share track lifecycle, and DTLS fingerprint-mismatch failure.
  */
 public class VoiceCallSessionTest {
 
-    /**
-     * Peer JID used by every test case.
-     */
     private static final Jid PEER = Jid.of("12345", JidServer.user());
 
-    /**
-     * Local self JID used by every test case.
-     */
     private static final Jid SELF = Jid.of("99999", JidServer.user());
 
-    /**
-     * 16 kHz mono 10 ms — the WhatsApp voice-call profile.
-     */
+    // 160 samples = 16 kHz mono 10 ms, the WhatsApp voice-call profile.
     private static final int FRAME_SIZE = 160;
 
-    /**
-     * Drives a full M1 voice-call round-trip — both sides handshake
-     * successfully, then PCM written into one side's mic sink ends
-     * up on the other side's remote audio source.
-     */
     @Test
     public void voiceCallRoundTripsAudio() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -71,7 +57,6 @@ public class VoiceCallSessionTest {
         var serverCall = new ActiveCall(serverEngine, "id-vc-2",
                 SELF, PEER, PEER, false, CallOptions.audio());
 
-        // Each side picks its own SSRC; the peer accepts the other.
         var clientSsrc = 0xAAAAAAAA;
         var serverSsrc = 0xBBBBBBBB;
         var clientOptions = new VoiceCallOptions(clientSsrc, serverSsrc, 111,
@@ -95,9 +80,6 @@ public class VoiceCallSessionTest {
             assertTrue(clientSession.connected());
             assertTrue(serverSession.connected());
 
-            // Push a sine frame into the client's mic — it should
-            // appear on the server's remote audio source after Opus
-            // round-trip + RTP/SRTP.
             for (var i = 0; i < 5; i++) {
                 clientCall.localAudioSink().write(
                         new AudioFrame(sineFrame(1000), i * 10L));
@@ -110,12 +92,6 @@ public class VoiceCallSessionTest {
         }
     }
 
-    /**
-     * After a successful initial handshake, calling
-     * {@link VoiceCallSession#reconnect(DatagramTransport)} on both
-     * sides with a fresh {@link DatagramTransport} pair re-runs the
-     * DTLS handshake and resumes media without dropping the call.
-     */
     @Test
     public void reconnectReestablishesMedia() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -144,16 +120,12 @@ public class VoiceCallSessionTest {
             serverSession.awaitConnected(15, TimeUnit.SECONDS);
             assertTrue(clientSession.connected());
 
-            // Simulate a network change — both peers swap to a fresh
-            // transport pair and rerun the handshake. (In production
-            // the call layer drives this from the ICE agent's
-            // pair-failure event.)
+            // Simulate a network change: both peers swap to a fresh transport pair and rerun the
+            // handshake. In production the call layer drives this from the ICE agent's pair-failure event.
             var newTransports = LoopbackDatagramPair.pair();
             clientSession.reconnect(newTransports[0]);
             serverSession.reconnect(newTransports[1]);
 
-            // The session may briefly report not-connected during the
-            // gap; await reconvergence.
             var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
             while (!clientSession.connected() && System.nanoTime() < deadline) {
                 Thread.sleep(20);
@@ -164,20 +136,12 @@ public class VoiceCallSessionTest {
             assertTrue(clientSession.connected(), "client must reconverge after reconnect");
             assertTrue(serverSession.connected(), "server must reconverge after reconnect");
 
-            // Drive a fresh frame post-reconnect — verifies the new
-            // SRTP keys + RTP plumbing actually move bytes.
             clientCall.localAudioSink().write(new AudioFrame(sineFrame(800), 0L));
             var received = pollForFrame(serverCall, 5_000);
             assertNotNull(received, "audio must flow again after reconnect");
         }
     }
 
-    /**
-     * After a connected voice call, both sides start a VP8 video
-     * track and a frame written to one side's
-     * {@link ActiveCall#localVideoSink} arrives at the other side's
-     * {@link ActiveCall#remoteVideoSource}.
-     */
     @Test
     public void videoTrackRoundTripsFrames() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -194,7 +158,7 @@ public class VoiceCallSessionTest {
         var serverOpts = new VoiceCallOptions(0xB1, 0xA1, 111,
                 AudioPipelineOptions.defaults().withoutAec().withoutPreprocessor());
 
-        // 64×64 keeps the encoders fast under the test stack.
+        // 64x64 keeps the encoders fast under the test stack.
         var videoPipeline = new VideoPipelineOptions(64, 64, 30, 100_000, true);
         var clientVideo = new VideoTrackOptions(0xC1, 0xD1, 96,
                 VideoTrackOptions.Codec.VP8, videoPipeline,
@@ -231,11 +195,6 @@ public class VoiceCallSessionTest {
         }
     }
 
-    /**
-     * The M7 screen-share track coexists with a camera track —
-     * each kind has its own SSRC, codec, and pipeline; both can be
-     * active simultaneously.
-     */
     @Test
     public void cameraAndScreenShareCoexist() throws Exception {
         var clientCert = DtlsCertificate.generate();
@@ -276,14 +235,12 @@ public class VoiceCallSessionTest {
             assertTrue(clientSession.videoActive(VideoTrackOptions.Kind.SCREEN_SHARE));
             assertTrue(clientSession.videoActive());
 
-            // Starting a second camera track is rejected — already
-            // running.
+            // Starting a second camera track is rejected: one is already running.
             Assertions.assertThrows(
                     IllegalStateException.class,
                     () -> clientSession.startVideoTrack(camera));
 
-            // Starting via startScreenShare with a CAMERA-kind
-            // option is rejected.
+            // startScreenShare rejects a CAMERA-kind option.
             Assertions.assertThrows(
                     IllegalArgumentException.class,
                     () -> clientSession.startScreenShare(camera));
@@ -295,11 +252,6 @@ public class VoiceCallSessionTest {
         }
     }
 
-    /**
-     * A handshake against a peer with a wrong fingerprint fails on
-     * both sides; both sessions surface the failure via
-     * {@link VoiceCallSession#awaitConnected}.
-     */
     @Test
     public void mismatchedFingerprintFails() {
         var clientCert = DtlsCertificate.generate();
@@ -333,16 +285,7 @@ public class VoiceCallSessionTest {
         }
     }
 
-    /**
-     * Builds a {@code w × h} I420 frame whose Y plane is a
-     * horizontal gradient and whose U/V planes are neutral —
-     * voice-test content that's small but compressible enough for
-     * VP8.
-     *
-     * @param w the width
-     * @param h the height
-     * @return the I420 bytes
-     */
+    // w-by-h I420 frame: Y plane is a horizontal gradient, U/V planes neutral; compressible by VP8.
     private static byte[] gradientI420(int w, int h) {
         var ySize = w * h;
         var uvSize = (w / 2) * (h / 2);
@@ -356,15 +299,7 @@ public class VoiceCallSessionTest {
         return frame;
     }
 
-    /**
-     * Polls the call's remote video source with a deadline.
-     *
-     * @param call      the call
-     * @param timeoutMs deadline in ms
-     * @return the next decoded video frame, or {@code null} on
-     *         timeout
-     * @throws InterruptedException if interrupted
-     */
+    // Polls the call's remote video source until timeoutMs, returning null on timeout.
     private static VideoFrame pollForVideoFrame(ActiveCall call, long timeoutMs)
             throws InterruptedException {
         var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
@@ -385,12 +320,7 @@ public class VoiceCallSessionTest {
         return null;
     }
 
-    /**
-     * Generates a 16-kHz mono sine frame at the given frequency.
-     *
-     * @param freqHz the sine frequency
-     * @return a fresh {@code short[FRAME_SIZE]} sine frame
-     */
+    // 16 kHz mono sine frame at the given frequency.
     private static short[] sineFrame(int freqHz) {
         var pcm = new short[FRAME_SIZE];
         for (var i = 0; i < FRAME_SIZE; i++) {
@@ -399,22 +329,13 @@ public class VoiceCallSessionTest {
         return pcm;
     }
 
-    /**
-     * Polls the call's remote audio source for a frame, with a
-     * deadline. Used so the test doesn't hang forever if the
-     * round-trip silently drops a packet.
-     *
-     * @param call      the call
-     * @param timeoutMs maximum wait in ms
-     * @return the next decoded frame, or {@code null} on timeout
-     * @throws InterruptedException if interrupted
-     */
+    // Polls the call's remote audio source until timeoutMs, returning null on timeout so the test
+    // does not hang forever when the round-trip silently drops a packet.
     private static AudioFrame pollForFrame(ActiveCall call, long timeoutMs)
             throws InterruptedException {
         var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
         while (System.nanoTime() < deadline) {
-            // remoteAudioSource.next() blocks; spin a virtual thread
-            // to do it concurrently with the deadline check.
+            // remoteAudioSource.next() blocks; spin a virtual thread to race it against the deadline.
             var holder = new AtomicReference<AudioFrame>();
             var t = Thread.ofVirtual().start(() -> {
                 try {
@@ -431,11 +352,8 @@ public class VoiceCallSessionTest {
         return null;
     }
 
-    /**
-     * In-memory pair of {@link DatagramTransport}s — what one side
-     * sends, the other side's listener receives via a virtual-thread
-     * pump.
-     */
+    // In-memory pair of DatagramTransports; what one side sends, the other's listener receives
+    // via a virtual-thread pump.
     private static final class LoopbackDatagramPair implements DatagramTransport {
         private final LinkedBlockingQueue<byte[]> inbound;
         private final LinkedBlockingQueue<byte[]> peerInbound;
@@ -505,9 +423,7 @@ public class VoiceCallSessionTest {
         }
     }
 
-    /**
-     * Synthetic {@link CallService}-shaped recipient
-     */
+    // Synthetic CallService-shaped stand-in for the call engine.
     private static final class RecordingEngine extends CallService {
         RecordingEngine() {
             super(null, null);

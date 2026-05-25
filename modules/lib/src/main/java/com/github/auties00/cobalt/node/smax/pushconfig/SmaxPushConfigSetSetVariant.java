@@ -15,58 +15,50 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction of payload variants for
- * {@link SmaxPushConfigSetRequest}.
+ * Represents the sealed disjunction of payload variants for a {@link SmaxPushConfigSetRequest}.
  *
- * @apiNote
- * The push-config RPC is a two-shape SET: either a
- * {@link Config} registration (with a nested platform-specific
- * {@link SmaxPushConfigSetConfigVariant}) or a {@link Clear}
- * de-registration (optionally scoped to one platform). Mirrors WA Web's
- * {@code WASmaxOutPushConfigSetSetConfigOrSetClearMixinGroup} branch
- * selector.
+ * <p>The push-config SET stanza carries exactly one of two shapes: a {@link Config} registration
+ * that nests a platform-specific {@link SmaxPushConfigSetConfigVariant}, or a {@link Clear}
+ * de-registration optionally scoped to a single platform. Each variant renders itself into the
+ * {@code <config>} or {@code <clear>} child node that {@link SmaxPushConfigSetRequest#toNode()}
+ * nests under the outbound IQ.
  */
 public sealed interface SmaxPushConfigSetSetVariant
         permits SmaxPushConfigSetSetVariant.Config, SmaxPushConfigSetSetVariant.Clear {
 
     /**
-     * Builds the {@code <config>} or {@code <clear>} child node.
+     * Builds the {@code <config>} or {@code <clear>} child node for this variant.
      *
-     * @apiNote
-     * Invoked by {@link SmaxPushConfigSetRequest#toNode()} to materialise
-     * the variant into the outbound stanza.
+     * <p>{@link SmaxPushConfigSetRequest#toNode()} calls this method to materialise the variant
+     * into the outbound stanza.
      *
-     * @return the {@link Node}
+     * @implSpec Implementations must return a single {@link Node} whose description is either
+     * {@code config} or {@code clear}, with no surrounding envelope.
+     * @return the {@link Node} for this variant
      */
     Node toNode();
 
     /**
-     * The {@code <config>} variant. Registers a push channel for a
-     * specific client family.
+     * Represents the {@code <config>} variant that registers a push channel for a specific client
+     * family.
      *
-     * @apiNote
-     * Carries exactly one of the platform-specific config mixins
-     * exposed through {@link SmaxPushConfigSetConfigVariant} (FB,
-     * Android, Apple, WNS, Enterprise, or Web Push); the caller picks
-     * the one matching the embedder's notification platform.
+     * <p>The instance carries exactly one of the platform-specific config mixins exposed through
+     * {@link SmaxPushConfigSetConfigVariant} (FB, Android, Apple, WNS, Enterprise, or Web Push);
+     * the carried variant determines which platform-specific {@code <config>} shape the relay
+     * receives.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigSetSetConfigMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigConfigMixins")
     final class Config implements SmaxPushConfigSetSetVariant {
         /**
-         * The platform-specific config payload.
+         * Holds the platform-specific config payload that this variant renders.
          */
         private final SmaxPushConfigSetConfigVariant config;
 
         /**
-         * Constructs a {@code <config>} variant.
+         * Constructs a {@code <config>} variant wrapping the given platform-specific config.
          *
-         * @apiNote
-         * The supplied {@link SmaxPushConfigSetConfigVariant}
-         * determines which platform-specific {@code <config>} shape the
-         * relay sees.
-         *
-         * @param config the platform-specific config
+         * @param config the platform-specific {@link SmaxPushConfigSetConfigVariant}
          * @throws NullPointerException if {@code config} is {@code null}
          */
         public Config(SmaxPushConfigSetConfigVariant config) {
@@ -74,10 +66,7 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * Returns the platform-specific config payload.
-         *
-         * @apiNote
-         * Exposed for test and audit code.
+         * Returns the platform-specific config payload carried by this variant.
          *
          * @return the {@link SmaxPushConfigSetConfigVariant}
          */
@@ -86,12 +75,10 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <config>} child node by delegating to the carried platform-specific
+         * variant.
          *
-         * @implNote
-         * This implementation delegates to the carried
-         * {@link SmaxPushConfigSetConfigVariant#toNode()}, mirroring the
-         * WA Web {@code mergeSetSetConfigMixin} forwarder.
+         * @return the {@link Node} produced by {@link SmaxPushConfigSetConfigVariant#toNode()}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigSetSetConfigMixin",
@@ -102,10 +89,10 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant to another object for equality on the carried config.
          *
-         * @implNote
-         * This implementation compares the carried config.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Config} with an equal carried config
          */
         @Override
         public boolean equals(Object obj) {
@@ -120,10 +107,9 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the carried config.
          *
-         * @implNote
-         * This implementation hashes the carried config.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -131,11 +117,9 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this variant.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -144,32 +128,26 @@ public sealed interface SmaxPushConfigSetSetVariant
     }
 
     /**
-     * The {@code <clear>} variant. Drops a push registration.
+     * Represents the {@code <clear>} variant that drops a push registration.
      *
-     * @apiNote
-     * Set {@link #clearPlatform()} to scope the clear to a single
-     * platform (e.g., {@code "web"} to drop only the web subscription
-     * while leaving any mobile registration intact); leave it null to
-     * drop every registration tied to the account.
+     * <p>A non-null platform scope confines the clear to a single platform (for example,
+     * {@code "web"} to drop only the web subscription while leaving any mobile registration
+     * intact); a {@code null} scope drops every registration tied to the account.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigSetClearMixin")
     final class Clear implements SmaxPushConfigSetSetVariant {
         /**
-         * The optional platform scope.
-         *
-         * @apiNote
-         * One of {@code "fb"}, {@code "apple"}, {@code "android"},
-         * {@code "wns"}, {@code "ent"}, {@code "web"}; {@code null}
-         * drops every registration.
+         * Holds the optional platform scope, one of {@code "fb"}, {@code "apple"},
+         * {@code "android"}, {@code "wns"}, {@code "ent"}, or {@code "web"}; {@code null} drops
+         * every registration.
          */
         private final String clearPlatform;
 
         /**
-         * Constructs a {@code <clear>} variant.
+         * Constructs a {@code <clear>} variant with the given optional platform scope.
          *
-         * @apiNote
-         * Pass a non-null {@code clearPlatform} to scope the clear; pass
-         * {@code null} to drop every registration tied to the account.
+         * <p>A non-null {@code clearPlatform} scopes the clear to that platform; {@code null}
+         * drops every registration tied to the account.
          *
          * @param clearPlatform the optional platform scope
          */
@@ -180,10 +158,8 @@ public sealed interface SmaxPushConfigSetSetVariant
         /**
          * Returns the optional platform scope.
          *
-         * @apiNote
-         * When present, the relay clears only the registration matching
-         * that platform name; when absent every registration is
-         * dropped.
+         * <p>When present, the relay clears only the registration matching that platform name;
+         * when absent every registration is dropped.
          *
          * @return an {@link Optional} carrying the scope
          */
@@ -192,14 +168,10 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Builds the {@code <clear>} child node, adding the {@code platform} attribute only when
+         * a scope is present.
          *
-         * @implNote
-         * This implementation emits a single {@code <clear>} element,
-         * adding the {@code platform} attribute only when
-         * {@link #clearPlatform} is non-null per the
-         * {@code WASmaxOutPushConfigSetClearMixin.mergeSetClearMixin}
-         * fixture.
+         * @return the {@link Node}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigSetClearMixin",
@@ -215,10 +187,10 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant to another object for equality on the platform scope.
          *
-         * @implNote
-         * This implementation compares the optional platform scope.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Clear} with an equal platform scope
          */
         @Override
         public boolean equals(Object obj) {
@@ -233,10 +205,9 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the platform scope.
          *
-         * @implNote
-         * This implementation hashes the optional platform scope.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -244,11 +215,9 @@ public sealed interface SmaxPushConfigSetSetVariant
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this variant.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
+         * @return the string form
          */
         @Override
         public String toString() {

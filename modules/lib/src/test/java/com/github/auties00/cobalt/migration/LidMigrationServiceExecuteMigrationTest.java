@@ -21,20 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LidMigrationService#executeMigration()}.
- *
- * @apiNote
- * Pins the migration executor that walks every chat, classifies it,
- * applies the resolution to the store, advances the state to
- * {@link LidMigrationState#COMPLETE}, and finally flushes the primary
- * caches into the bidirectional mapping table.
- *
- * @implNote
- * This implementation drives the service into
- * {@link LidMigrationState#READY} by delivering a protocol message
- * before each call to {@link LidMigrationService#executeMigration()},
- * mirroring WA Web's auto-start path through
- * {@code WAWebOrchestratorNonPersistedJob}.
+ * Covers {@link LidMigrationService#executeMigration()}: the chat sweep that classifies every
+ * chat, applies each resolution to the store, advances to {@link LidMigrationState#COMPLETE}, and
+ * flushes the primary caches into the bidirectional mapping table. Each test drives the service to
+ * {@link LidMigrationState#READY} by delivering a protocol message, since the executor auto-starts
+ * from {@code processProtocolMessage}.
  */
 @DisplayName("LidMigrationService.executeMigration")
 class LidMigrationServiceExecuteMigrationTest {
@@ -47,21 +38,8 @@ class LidMigrationServiceExecuteMigrationTest {
     private static final Jid OTHER_PN = Jid.of("12025550100@s.whatsapp.net");
     private static final Jid OTHER_LID = Jid.of("12025550100123@lid");
 
-    /**
-     * Bundles the test client and the service under test.
-     *
-     * @param client  the test client harness
-     * @param service the service under test
-     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
-    /**
-     * Builds a fresh harness wired with the supplied AB props.
-     *
-     * @param props the AB-props seed to drive
-     *              {@link LidMigrationService#executeMigration()}
-     * @return a fresh {@link Harness}
-     */
     private static Harness build(TestABPropsService props) {
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
         var client = TestWhatsAppClient.create().withStore(store);
@@ -70,13 +48,6 @@ class LidMigrationServiceExecuteMigrationTest {
         return new Harness(client, service);
     }
 
-    /**
-     * Returns the AB-prop seed used by the happy-path executor
-     * tests, with the peer-sync timeout disabled and compatibility
-     * enabled.
-     *
-     * @return the default {@link TestABPropsService}
-     */
     private static TestABPropsService defaultProps() {
         return TestABPropsService.builder()
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_PEER_SYNC_TIMEOUT_IN_SECONDS, 0L)
@@ -84,9 +55,6 @@ class LidMigrationServiceExecuteMigrationTest {
                 .build();
     }
 
-    /**
-     * Verifies that executeMigration in NOT_STARTED -> no-op (state stays put).
-     */
     @Test
     @DisplayName("executeMigration in NOT_STARTED -> no-op (state stays put)")
     void wrongStateNoOp() {
@@ -95,9 +63,6 @@ class LidMigrationServiceExecuteMigrationTest {
         assertEquals(LidMigrationState.NOT_STARTED, h.service.state());
     }
 
-    /**
-     * Verifies that LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false -> FAILED + IncompatibleClient.
-     */
     @Test
     @DisplayName("LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false -> FAILED + IncompatibleClient")
     void incompatibleClientAborts() {
@@ -118,9 +83,6 @@ class LidMigrationServiceExecuteMigrationTest {
                 h.client.failures().getFirst());
     }
 
-    /**
-     * Verifies that empty store + empty mappings -> state advances to COMPLETE with no failures.
-     */
     @Test
     @DisplayName("empty store + empty mappings -> state advances to COMPLETE with no failures")
     void emptyStoreEmptyMappings() {
@@ -135,9 +97,6 @@ class LidMigrationServiceExecuteMigrationTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
-    /**
-     * Verifies that PN chat with primary mapping -> executeMigrate rewrites chat to LID.
-     */
     @Test
     @DisplayName("PN chat with primary mapping -> executeMigrate rewrites chat to LID")
     void executeMigratePnChat() {
@@ -173,9 +132,6 @@ class LidMigrationServiceExecuteMigrationTest {
         assertEquals(PEER_LID, store.findLidByPhone(PEER_PN).orElseThrow());
     }
 
-    /**
-     * Verifies that PN chat with no LID anywhere -> executeDelete removes the chat.
-     */
     @Test
     @DisplayName("PN chat with no LID anywhere -> executeDelete removes the chat")
     void executeDeletePnChatWithoutLid() {
@@ -196,9 +152,6 @@ class LidMigrationServiceExecuteMigrationTest {
                 "chat with no LID and deletability bypass is removed");
     }
 
-    /**
-     * Verifies that Mixed store: LID chat kept, group kept, PN chat migrated, undeletable PN survives via cache fallback.
-     */
     @Test
     @DisplayName("Mixed store: LID chat kept, group kept, PN chat migrated, undeletable PN survives via cache fallback")
     void mixedStoreClassifiesEverything() {
@@ -239,9 +192,6 @@ class LidMigrationServiceExecuteMigrationTest {
         assertFalse(store.findChatByJid(OTHER_PN).isPresent());
     }
 
-    /**
-     * Verifies that learnMappingsInBulk: latest LID differs -> both assigned and latest registered in store.
-     */
     @Test
     @DisplayName("learnMappingsInBulk: latest LID differs -> both assigned and latest registered in store")
     void learnMappingsInBulkLatestDiffers() {
@@ -264,9 +214,6 @@ class LidMigrationServiceExecuteMigrationTest {
                 "with latest differing from assigned, the latest LID is the last registered entry");
     }
 
-    /**
-     * Verifies that waitForOfflineDeliveryEnd gates the executor: still INIT after enabling delivery -> blocks until COMPLETE.
-     */
     @Test
     @DisplayName("waitForOfflineDeliveryEnd gates the executor: still INIT after enabling delivery -> blocks until COMPLETE")
     void waitForOfflineDeliveryEndIsGate() {
@@ -305,9 +252,6 @@ class LidMigrationServiceExecuteMigrationTest {
         assertEquals(LidMigrationState.COMPLETE, h.service.state());
     }
 
-    /**
-     * Verifies that learnMappingsInBulk: assigned LID matches existing store mapping -> entry skipped (no churn).
-     */
     @Test
     @DisplayName("learnMappingsInBulk: assigned LID matches existing store mapping -> entry skipped (no churn)")
     void learnMappingsInBulkAssignedMatchesExisting() {
@@ -331,9 +275,6 @@ class LidMigrationServiceExecuteMigrationTest {
         assertEquals(PEER_LID, store.findLidByPhone(PEER_PN).orElseThrow());
     }
 
-    /**
-     * Verifies that learnMappingsInBulk: latest LID matches existing local mapping -> only assigned LID registered (old bucket).
-     */
     @Test
     @DisplayName("learnMappingsInBulk: latest LID matches existing local mapping -> only assigned LID registered (old bucket)")
     void learnMappingsInBulkLatestMatchesLocalOldBucket() {
@@ -359,9 +300,6 @@ class LidMigrationServiceExecuteMigrationTest {
                 "old-bucket registers only the assigned LID when local matches the latest");
     }
 
-    /**
-     * Verifies that per-resolution error swallowed: missing chat during executeMigrate does not abort the sweep.
-     */
     @Test
     @DisplayName("per-resolution error swallowed: missing chat during executeMigrate does not abort the sweep")
     void perResolutionErrorSwallowed() {

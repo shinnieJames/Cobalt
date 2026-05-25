@@ -9,55 +9,43 @@ import com.github.auties00.cobalt.registration.push.apns.plist.xml.PlistXmlWrite
 import java.io.IOException;
 
 /**
- * The static facade over the format-specific Apple
- * {@code Foundation/PropertyList} parsers and writers used by the
- * APNS code.
+ * Routes property-list parsing and serialisation to the format-specific Apple
+ * {@code Foundation/PropertyList} implementations used by the APNS code.
  *
- * @apiNote
- * Routes parse calls to {@link PlistBinaryParser} or
- * {@link PlistXmlParser} by inspecting the magic bytes of the input,
- * and routes write calls to the matching format-specific writer.
- * Callers should depend on this class rather than on the
- * implementation classes so future format additions (e.g.
- * {@code bplist15} or OpenStep) require only one edit.
- *
- * @implNote
- * This implementation is a non-instantiable namespace; the package
- * exposes only this entry point and the
- * {@link com.github.auties00.cobalt.registration.push.apns.plist.value}
- * type hierarchy.
+ * <p>This class is the single entry point callers depend on: {@link #parse(byte[])}
+ * auto-detects the input format from its magic bytes and dispatches to
+ * {@link PlistBinaryParser} or {@link PlistXmlParser}, while {@link #writeXml(PlistValue)}
+ * and {@link #writeBinary(PlistValue)} emit each concrete format through the matching
+ * writer. Depending on this class rather than on the implementation classes keeps the
+ * format-detection logic in one place, so adding a future format (for example
+ * {@code bplist15} or OpenStep) is a single edit here. The package exposes only this
+ * type and the
+ * {@link com.github.auties00.cobalt.registration.push.apns.plist.value.PlistValue}
+ * value hierarchy.
  */
 public final class Plist {
     /**
-     * Hidden constructor.
-     *
-     * @apiNote
-     * Prevents instantiation; the class is a stateless namespace.
+     * Prevents instantiation of this stateless namespace.
      */
     private Plist() {
     }
 
     /**
-     * Parses a plist by auto-detecting between the binary and XML
-     * formats.
+     * Parses a plist, auto-detecting between the binary and XML formats.
      *
-     * @apiNote
-     * Called by {@code ApnsBag.ofPlist} and
-     * {@code ApnsActivationInfo.ofPlist} on bytes whose format Apple
-     * may flip at any time (the activation response is XML today but
-     * the bag is technically a binary plist on some carriers); the
-     * auto-detection means callers do not need to track which.
+     * <p>The format is inferred from the leading magic bytes of {@code data}: input
+     * beginning with the {@code bplist00} signature is treated as a binary plist and
+     * parsed by {@link PlistBinaryParser#parse(byte[])}, and anything else is treated
+     * as XML and parsed by {@link PlistXmlParser#parse(byte[])}. APNS callers can feed
+     * the activation response or the bag bytes here without tracking which encoding
+     * Apple returned.
      *
-     * @implNote
-     * This implementation delegates the magic-byte check to
-     * {@link PlistBinaryParser#isBinary(byte[])}; anything that does
-     * not start with {@code bplist00} is fed to
-     * {@link PlistXmlParser#parse(byte[])}.
-     *
+     * @implNote This implementation delegates the magic-byte check to
+     *           {@link PlistBinaryParser#isBinary(byte[])}; only input starting with
+     *           {@code bplist00} takes the binary branch.
      * @param data the source bytes
      * @return the root value
-     * @throws IOException if the source is malformed for the
-     *                     detected format
+     * @throws IOException if the source is malformed for the detected format
      */
     public static PlistValue parse(byte[] data) throws IOException {
         if (PlistBinaryParser.isBinary(data)) {
@@ -67,16 +55,10 @@ public final class Plist {
     }
 
     /**
-     * Serialises a value tree as an XML plist with the canonical
-     * Apple preamble.
+     * Serialises a value tree as an XML plist with the canonical Apple preamble.
      *
-     * @apiNote
-     * Used by the activation flow to emit the inner and outer
-     * activation plists; Apple's activation endpoint requires the
-     * XML form.
-     *
-     * @implNote
-     * This implementation delegates to {@link PlistXmlWriter#write}.
+     * <p>This is the form the activation flow emits for the inner and outer activation
+     * plists, which Apple's activation endpoint requires.
      *
      * @param root the root value
      * @return the UTF-8 encoded XML plist bytes
@@ -88,13 +70,9 @@ public final class Plist {
     /**
      * Serialises a value tree as a {@code bplist00} binary plist.
      *
-     * @apiNote
-     * Provided for symmetry with {@link #writeXml(PlistValue)}; not
-     * consumed by the current APNS code path but kept available for
-     * future callers that need to emit binary plists.
-     *
-     * @implNote
-     * This implementation delegates to {@link PlistBinaryWriter#write}.
+     * <p>This counterpart to {@link #writeXml(PlistValue)} is not exercised by the
+     * current APNS code path but remains available for callers that need the binary
+     * encoding.
      *
      * @param root the root value
      * @return the binary plist bytes

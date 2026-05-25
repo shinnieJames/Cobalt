@@ -14,62 +14,45 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Builds the MEX request that uploads a batch of newsletter capability
- * exposure events.
+ * Builds the MEX request that uploads a batch of newsletter capability exposure events.
  *
- * @apiNote
- * Drives the low-priority background job surfaced by
- * {@code WAWebNewsletterLogExposuresJob.logNewsletterExposures}: as the
- * client renders newsletter UI surfaces it queues one
- * {@link NewsletterExposure} per (newsletter Jid, capability) pair that
- * the user was exposed to, then flushes the batch through this mutation
- * so the relay can drive directory ranking and feature-rollout analytics.
- * Build via the constructor with a non-null (possibly empty) batch and
- * submit through the MEX IQ dispatcher; the relay does not return data of
- * interest, so the {@link LogNewsletterExposuresMexResponse} is a marker.
+ * <p>This request backs a low-priority background job: as the client renders newsletter surfaces it
+ * queues one {@link NewsletterExposure} per (newsletter Jid, capability) pair the user was exposed
+ * to, then flushes the batch through this mutation so the relay can drive directory ranking and
+ * feature-rollout analytics. Construct it with a non-null (possibly empty) batch and submit it
+ * through the MEX IQ dispatcher; the relay returns no data of interest, so
+ * {@link LogNewsletterExposuresMexResponse} is a presence marker.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexLogNewsletterExposuresJob")
 public final class LogNewsletterExposuresMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexLogNewsletterExposuresJobMutation.graphql} on the
-     * WhatsApp relay.
+     * Holds the compiled persisted-query identifier of the log-newsletter-exposures mutation.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child;
-     * the WhatsApp relay refuses requests whose persisted-query id is unknown.
+     * <p>Emitted as the {@code query_id} attribute of the outgoing {@code <query>} child; the relay
+     * refuses requests whose persisted-query id is unknown.
      */
     public static final String QUERY_ID = "25260800823586918";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this mutation.
+     * Holds the GraphQL operation name reported for this mutation.
      *
-     * @apiNote
-     * Reported to observability sinks that key telemetry on the operation
-     * name; mirrors the export name exposed by
-     * {@code WAWebMexLogNewsletterExposuresJob}.
+     * <p>Forwarded to observability sinks that key telemetry on the operation name.
      */
     public static final String OPERATION_NAME = "mexLogNewsletterExposures";
 
     /**
-     * The defensive copy of the exposure batch this request will flush.
+     * Holds the defensive copy of the exposure batch this request flushes.
      */
     private final List<NewsletterExposure> exposures;
 
     /**
      * Constructs a request that uploads the given batch of exposures.
      *
-     * @apiNote
-     * Each {@link NewsletterExposure} pairs a newsletter Jid with a
-     * capability identifier (mirroring WA Web's
-     * {@code WAWebNewsletterQueryUtils.getNewsletterCapabilityFromEnum}
-     * output). An empty list is accepted and produces an empty
-     * {@code exposures} array on the wire; a {@code null} list is
-     * rejected so callers cannot silently send malformed batches.
+     * <p>Each {@link NewsletterExposure} pairs a newsletter Jid with a capability identifier. An
+     * empty list is accepted and produces an empty {@code exposures} array on the wire; a
+     * {@code null} list is rejected so callers cannot silently send malformed batches.
      *
-     * @param exposures the batch of exposure entries; never {@code null},
-     *                  may be empty
+     * @param exposures the batch of exposure entries; never {@code null}, may be empty
      * @throws NullPointerException if {@code exposures} is {@code null}
      */
     public LogNewsletterExposuresMexRequest(List<NewsletterExposure> exposures) {
@@ -80,9 +63,7 @@ public final class LogNewsletterExposuresMexRequest implements MexOperation.Requ
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}, the persisted-query identifier of the
-     * mutation.
+     * <p>Returns {@link #QUERY_ID}, the persisted-query identifier of the mutation.
      */
     @Override
     public String id() {
@@ -92,9 +73,7 @@ public final class LogNewsletterExposuresMexRequest implements MexOperation.Requ
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}, the value WA Web's
-     * {@code MexPerfTracker} reports for this mutation.
+     * <p>Returns {@link #OPERATION_NAME}, the operation name reported for this mutation.
      */
     @Override
     public String name() {
@@ -102,27 +81,22 @@ public final class LogNewsletterExposuresMexRequest implements MexOperation.Requ
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder} ready to be
-     * dispatched through the WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder} ready to be dispatched through the
+     * WhatsApp relay.
      *
-     * @apiNote
-     * Produces the
-     * {@code {variables: {input: {exposures: [{newsletter_id, capability}, ...]}}}}
-     * payload consumed by the persisted-query identified by
-     * {@link #QUERY_ID}; the {@code newsletter_id} and {@code capability}
-     * fields are written as JSON {@code null} when the underlying
-     * {@link NewsletterExposure} accessor is empty, matching the
-     * defensive shape WA Web emits.
+     * <p>Produces the
+     * {@code {variables: {input: {exposures: [{newsletter_id, capability}, ...]}}}} payload consumed
+     * by the persisted-query identified by {@link #QUERY_ID}. The {@code newsletter_id} and
+     * {@code capability} fields are written as JSON {@code null} when the underlying
+     * {@link NewsletterExposure#newsletterId()} or {@link NewsletterExposure#capability()} accessor
+     * is empty.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
+     * @implNote This implementation writes the GraphQL variables directly through
      * {@link JSONWriter} and delegates IQ envelope construction to
-     * {@link Json#createMexNode(String, String)}; any {@link IOException}
-     * raised by the in-memory writer is wrapped in an
-     * {@link UncheckedIOException} since neither sink can fail in practice.
+     * {@link Json#createMexNode(String, String)}; any {@link IOException} raised by the in-memory
+     * writer is wrapped in an {@link UncheckedIOException} since neither sink can fail in practice.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLogNewsletterExposuresJob", exports = "mexLogNewsletterExposures",

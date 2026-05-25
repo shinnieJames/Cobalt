@@ -13,28 +13,26 @@ import java.util.logging.Logger;
 /**
  * Per-protocol backoff registry shared across USync queries.
  *
- * @apiNote
- * Embedders that issue USync queries through Cobalt do not interact with this
- * class directly: the client owns a single instance and calls
+ * <p>A single instance is owned by the client and shared by every
+ * {@link UsyncQuery} it dispatches; sharing the registry is what makes the
+ * backoff state persistent across calls. The client calls
  * {@link #waitForBackoff(UsyncQuery)} before each dispatch and
  * {@link #setProtocolBackoffMs(String, long)} when the relay attaches an
- * {@code error_backoff} attribute to a per-protocol error. Tests that want to
- * fast-forward through an active window can use {@link #clear(String)} or
- * {@link #clearAll()}.
+ * {@code error_backoff} attribute to a per-protocol error. {@link #clear(String)}
+ * and {@link #clearAll()} drop active windows, primarily for tests and for
+ * logout/reconnect reset paths.
  *
  * @implNote
- * This implementation is the Cobalt counterpart of the module-level
- * {@code Map} kept inside {@code WAWebUsyncBackoff}: that JS code stores a
- * {@code Promise} per protocol that resolves after a {@code setTimeout},
- * so awaiting the promise inherently sleeps. Cobalt stores the absolute
- * expiry {@link Instant} instead and sleeps on the difference; the public
- * surface preserves the JS export names.
+ * WA Web stores a {@code Promise} per protocol that resolves after a
+ * {@code setTimeout}, so awaiting the promise inherently sleeps. This
+ * implementation stores the absolute expiry {@link Instant} instead and sleeps
+ * on the difference.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncBackoff")
 public final class UsyncBackoff {
     /**
-     * Logger that mirrors the {@code WALogger.LOG} traces emitted around
-     * backoff start/end in the JS module.
+     * Logger that mirrors the backoff start/end traces emitted by the JS
+     * module.
      */
     private static final Logger LOGGER = Logger.getLogger(UsyncBackoff.class.getName());
 
@@ -46,11 +44,6 @@ public final class UsyncBackoff {
 
     /**
      * Creates an empty backoff registry.
-     *
-     * @apiNote
-     * One instance is shared by every {@link UsyncQuery} dispatched through
-     * the same client; sharing the registry is what makes the backoff state
-     * persistent across calls.
      */
     public UsyncBackoff() {
         this.backoffs = new ConcurrentHashMap<>();
@@ -59,12 +52,11 @@ public final class UsyncBackoff {
     /**
      * Records a backoff window for the named protocol.
      *
-     * @apiNote
-     * Driven by {@code WhatsAppClient.executeUsyncQuery} when it observes an
-     * {@code error_backoff} attribute on a per-protocol error in the response.
-     * Subsequent {@link UsyncQuery} dispatches for the same protocol either
-     * block in {@link #waitForBackoff(UsyncQuery)} until the window elapses
-     * or, for {@link UsyncContext#INTERACTIVE} contexts, skip the wait.
+     * <p>Driven by the client when it observes an {@code error_backoff}
+     * attribute on a per-protocol error in the response. Subsequent
+     * {@link UsyncQuery} dispatches for the same protocol either block in
+     * {@link #waitForBackoff(UsyncQuery)} until the window elapses or, for
+     * {@link UsyncContext#INTERACTIVE} contexts, skip the wait.
      *
      * @param protocolName the protocol wire name (e.g. {@code "devices"},
      *                     {@code "contact"})
@@ -82,25 +74,18 @@ public final class UsyncBackoff {
      * Sleeps the current thread until every backoff window relevant to the
      * given query has elapsed.
      *
-     * @apiNote
-     * Invoked by {@code WhatsAppClient.executeUsyncQuery} immediately before
-     * the IQ is sent. Three cases short-circuit the wait, matching the JS
-     * {@code WAWebUsyncBackoff} logic:
-     * <ul>
-     *   <li>{@link UsyncContext#INTERACTIVE} skips the wait entirely because
-     *   the user is waiting on the result;</li>
-     *   <li>{@link UsyncContext#MESSAGE} and {@link UsyncContext#VOIP} exempt
-     *   the {@code devices} protocol because failing here would block message
-     *   encryption;</li>
-     *   <li>protocols whose window has already elapsed are removed from the
-     *   map and skipped.</li>
-     * </ul>
+     * <p>Three cases short-circuit the wait: {@link UsyncContext#INTERACTIVE}
+     * skips the wait entirely because the user is waiting on the result;
+     * {@link UsyncContext#MESSAGE} and {@link UsyncContext#VOIP} exempt the
+     * {@code devices} protocol because failing here would block message
+     * encryption; and protocols whose window has already elapsed are removed
+     * from the map and skipped.
      *
      * @implNote
      * This implementation runs sequentially per protocol because Cobalt
      * dispatches USync on a virtual thread; the JS counterpart fans out via
-     * {@code Promise.all} over per-protocol promises that share the same wall
-     * clock, so the observable total wait is identical.
+     * per-protocol promises that share the same wall clock, so the observable
+     * total wait is identical.
      *
      * @param query the query about to be dispatched
      * @throws InterruptedException if the current thread is interrupted while
@@ -138,11 +123,9 @@ public final class UsyncBackoff {
     /**
      * Drops any active backoff for the named protocol.
      *
-     * @apiNote
-     * Exists for tests and for explicit invalidation paths that need the next
-     * {@link #waitForBackoff(UsyncQuery)} to return immediately for the
-     * named protocol. WA Web has no equivalent surface: the JS map is cleared
-     * implicitly when each timer resolves.
+     * <p>The next {@link #waitForBackoff(UsyncQuery)} returns immediately for
+     * the named protocol. WA Web has no equivalent surface: the JS map is
+     * cleared implicitly when each timer resolves.
      *
      * @param protocolName the protocol wire name
      */
@@ -153,9 +136,7 @@ public final class UsyncBackoff {
     /**
      * Drops every active backoff window.
      *
-     * @apiNote
-     * Called from logout and reconnect reset paths and from tests that want
-     * to start each scenario with an empty registry.
+     * <p>Called from logout and reconnect reset paths.
      */
     public void clearAll() {
         backoffs.clear();

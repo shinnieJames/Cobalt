@@ -21,20 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link DeviceFanoutCalculator} against synthetic device-list fixtures.
+ * Exercises {@link DeviceFanoutCalculator#calculate} and
+ * {@link DeviceFanoutCalculator#filterIdentityChanges} across self-device filtering (PN and LID),
+ * primary-fallback when a user has no device list, hosted-device gating via
+ * {@link ABProp#ADV_ACCEPT_HOSTED_DEVICES}, multi-user merging, hosted-business coexistence, and
+ * bot-JID handling.
  *
- * @apiNote
- * Covers the four behaviour buckets of {@code WAWebDBDeviceListFanout.getFanOutList}:
- * self-device filtering across PN and LID, primary-fallback when a user has no device list,
- * hosted-device gating via {@link ABProp#ADV_ACCEPT_HOSTED_DEVICES}, multi-user merging,
- * hosted-business coexistence, and bot-JID handling. The {@link FilterIdentityChanges} nested
- * class additionally exercises the {@code filterDeviceWithChangedIdentity} resend-time prune.
- *
- * @implNote
- * This implementation builds {@link DeviceList} inputs in-process via {@link DeviceListBuilder}
- * so the filter logic is exercised without going through
- * {@link com.github.auties00.cobalt.device.DeviceService}; the
- * {@link TestABPropsService} controls the AB props the calculator consults.
+ * <p>Inputs are built in-process via {@link DeviceListBuilder} so the filter logic runs without
+ * the production parse path; {@link TestABPropsService} supplies the AB props the calculator
+ * consults.
  */
 @DisplayName("DeviceFanoutCalculator")
 class DeviceFanoutCalculatorTest {
@@ -45,18 +40,7 @@ class DeviceFanoutCalculatorTest {
     private static final Jid PEER_USER = Jid.of("393495089819@s.whatsapp.net");
     private static final Jid PEER_LID_USER = Jid.of("72104938291847@lid");
 
-    /**
-     * Builds a single {@link DeviceList} fixture for one user.
-     *
-     * @apiNote
-     * Mirrors the shape the production {@code DeviceListSyncResultParser} produces; passing no
-     * {@code devices} yields the empty-device-list state that drives the calculator's
-     * primary-fallback branch.
-     *
-     * @param userJid the user JID the list belongs to
-     * @param devices the device infos to populate the list with
-     * @return a freshly-built {@link DeviceList}
-     */
+    // Passing no devices yields the empty-device-list state that drives the primary-fallback branch.
     private static DeviceList list(Jid userJid, DeviceInfo... devices) {
         return new DeviceListBuilder()
                 .userJid(userJid)
@@ -67,32 +51,13 @@ class DeviceFanoutCalculatorTest {
                 .build();
     }
 
-    /**
-     * Packs the given device lists into the mutable set shape expected by
-     * {@link DeviceFanoutCalculator#calculate}.
-     *
-     * @apiNote
-     * Convenience around {@link HashSet#HashSet(java.util.Collection)} so tests can spell out
-     * recipient sets inline.
-     *
-     * @param lists the device lists to bundle
-     * @return a fresh {@link HashSet} carrying the inputs
-     */
     private static Set<DeviceList> deviceLists(DeviceList... lists) {
         return new HashSet<>(List.of(lists));
     }
 
-    /**
-     * Groups the self-device-filtering scenarios; the calculator must drop the sender's own
-     * PN and LID device JIDs from every fanout.
-     */
     @Nested
     @DisplayName("self-device filtering")
     class SelfDeviceFiltering {
-        /**
-         * The sender's own PN device JID stays out of a fanout that includes the sender's own
-         * device list.
-         */
         @Test
         @DisplayName("excludes the sender's own PN device from the fanout")
         void excludesOwnPnDevice() {
@@ -106,10 +71,6 @@ class DeviceFanoutCalculatorTest {
             assertFalse(fanout.contains(SELF_PN_DEVICE_15));
         }
 
-        /**
-         * The sender's own LID device JID stays out of a fanout that includes the sender's own
-         * LID device list.
-         */
         @Test
         @DisplayName("excludes the sender's own LID device from the fanout")
         void excludesOwnLidDevice() {
@@ -123,10 +84,6 @@ class DeviceFanoutCalculatorTest {
             assertFalse(fanout.contains(SELF_LID_DEVICE_15));
         }
 
-        /**
-         * Both sender device JIDs are dropped when the input contains both PN-addressed and
-         * LID-addressed self device lists; other own devices stay in.
-         */
         @Test
         @DisplayName("excludes the sender across PN and LID when both addressing modes are present")
         void excludesAcrossBothAddressingModes() {
@@ -146,16 +103,9 @@ class DeviceFanoutCalculatorTest {
         }
     }
 
-    /**
-     * Groups the scenarios where a user has no device entries and the calculator must fall
-     * back to that user's primary JID.
-     */
     @Nested
     @DisplayName("primary-fallback when device list is empty")
     class PrimaryFallback {
-        /**
-         * A peer with no device entries lands in the fanout as the bare primary user JID.
-         */
         @Test
         @DisplayName("falls back to the primary JID when a user has no device entries")
         void primaryFallback() {
@@ -168,10 +118,6 @@ class DeviceFanoutCalculatorTest {
             assertEquals(Set.of(PEER_USER.toUserJid()), fanout);
         }
 
-        /**
-         * The self PN user never lands in the fanout via the fallback branch, even if its own
-         * device list is empty.
-         */
         @Test
         @DisplayName("does NOT fall back to the self primary when the empty list belongs to the sender (PN)")
         void selfPrimaryNotFallback() {
@@ -184,10 +130,6 @@ class DeviceFanoutCalculatorTest {
             assertFalse(fanout.contains(SELF_PN_USER.toUserJid()));
         }
 
-        /**
-         * The self LID user never lands in the fanout via the fallback branch, even if its own
-         * device list is empty.
-         */
         @Test
         @DisplayName("does NOT fall back to the self primary when the empty list belongs to the sender (LID)")
         void selfLidPrimaryNotFallback() {
@@ -201,16 +143,9 @@ class DeviceFanoutCalculatorTest {
         }
     }
 
-    /**
-     * Groups the hosted-device gating scenarios driven by
-     * {@link ABProp#ADV_ACCEPT_HOSTED_DEVICES}.
-     */
     @Nested
     @DisplayName("hosted-device gating")
     class HostedDeviceGating {
-        /**
-         * Hosted device entries stay out of the fanout when the AB prop is off.
-         */
         @Test
         @DisplayName("excludes hosted devices when ADV_ACCEPT_HOSTED_DEVICES is off")
         void excludesHostedWhenDisabled() {
@@ -227,10 +162,6 @@ class DeviceFanoutCalculatorTest {
             assertFalse(fanout.stream().anyMatch(jid -> jid.toString().contains(":99")));
         }
 
-        /**
-         * Hosted device entries land in the fanout when the AB prop is on and the target chat
-         * JID is user-shaped.
-         */
         @Test
         @DisplayName("includes hosted devices for a user-type chat when the AB prop is enabled")
         void includesHostedForUserChat() {
@@ -246,10 +177,6 @@ class DeviceFanoutCalculatorTest {
             assertTrue(fanout.stream().anyMatch(jid -> jid.toString().contains(":99")));
         }
 
-        /**
-         * Group sends (chat JID {@code null}) never include hosted devices, even when the AB
-         * prop is on.
-         */
         @Test
         @DisplayName("excludes hosted devices when the chat JID is null (group send)")
         void groupSendNeverIncludesHosted() {
@@ -266,15 +193,9 @@ class DeviceFanoutCalculatorTest {
         }
     }
 
-    /**
-     * Groups the multi-user merging scenarios.
-     */
     @Nested
     @DisplayName("multi-user fanout")
     class MultiUserFanout {
-        /**
-         * Device JIDs across distinct users merge into a single fanout set.
-         */
         @Test
         @DisplayName("merges device JIDs across multiple users")
         void mergesAcrossUsers() {
@@ -292,17 +213,9 @@ class DeviceFanoutCalculatorTest {
         }
     }
 
-    /**
-     * Groups the hosted-business coexistence scenarios that hit the hosted-id gating branch
-     * together with the primary-fallback branch.
-     */
     @Nested
     @DisplayName("hosted-business coex fanout")
     class HostedCoexFanout {
-        /**
-         * A Cloud-API business JID with only the primary device fans out to the bare primary
-         * JID via the empty-device-list branch.
-         */
         @Test
         @DisplayName("Cloud-API business (hostStorage=2) with primary-only device list: fanout = primary JID")
         void hostedPrimaryOnlyFanout() {
@@ -318,10 +231,6 @@ class DeviceFanoutCalculatorTest {
                     "hosted business with primary-only list fans out to the bare primary JID");
         }
 
-        /**
-         * The explicit hosted device id (99) is gated by {@link ABProp#ADV_ACCEPT_HOSTED_DEVICES}:
-         * present when the prop is on, dropped when off.
-         */
         @Test
         @DisplayName("explicit hosted-id (99) is gated by ADV_ACCEPT_HOSTED_DEVICES")
         void hostedDeviceIdGatedByProp() {
@@ -345,17 +254,9 @@ class DeviceFanoutCalculatorTest {
         }
     }
 
-    /**
-     * Groups the bot-JID scenarios. Bot-server JIDs pass the user-shaped predicate inside
-     * {@link DeviceFanoutCalculator} and so participate in the primary-fallback branch.
-     */
     @Nested
     @DisplayName("bot JID fanout")
     class BotJidFanout {
-        /**
-         * A bot peer with no companion devices fans out to the bot's bare primary JID via the
-         * empty-device-list branch.
-         */
         @Test
         @DisplayName("fanout for a bot DM with primary-only device list returns the bare bot JID")
         void botPrimaryFanout() {
@@ -370,15 +271,8 @@ class DeviceFanoutCalculatorTest {
                     "bot DM with no companion devices fans out to the bot's primary JID alone");
         }
 
-        /**
-         * The {@code @bot}-server form of a bot JID is recognised as user-shaped and lands in
-         * the fanout.
-         *
-         * @implNote
-         * Pins WA Web's {@code WAWebWid.isUser} {@code "bot"} branch: the predicate inside
-         * {@link DeviceFanoutCalculator}'s primary-fallback path must accept {@code @bot}
-         * servers so {@code WAWebBotUtils.META_BOT_FBID_WID} (FBID @bot) can be fanned out.
-         */
+        // Pins the "bot" branch of WA Web's isUser predicate: the @bot server must be treated as
+        // user-shaped so an FBID @bot can be fanned out through the primary-fallback path.
         @Test
         @DisplayName("fanout for the @bot-server address resolves through the isUserJid predicate")
         void botServerAddressIsUserJid() {
@@ -394,15 +288,9 @@ class DeviceFanoutCalculatorTest {
         }
     }
 
-    /**
-     * Groups the {@link DeviceFanoutCalculator#filterIdentityChanges} scenarios.
-     */
     @Nested
     @DisplayName("filterIdentityChanges")
     class FilterIdentityChanges {
-        /**
-         * An empty rotated-set returns the input unchanged.
-         */
         @Test
         @DisplayName("returns the input unchanged when no identities have rotated")
         void noChanges() {
@@ -412,9 +300,6 @@ class DeviceFanoutCalculatorTest {
             assertEquals(devices, filtered);
         }
 
-        /**
-         * Devices flagged as rotated drop out of the returned set; others stay in.
-         */
         @Test
         @DisplayName("removes devices whose identities have rotated without acknowledgement")
         void removesRotated() {

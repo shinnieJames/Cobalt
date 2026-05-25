@@ -18,10 +18,10 @@ import java.util.Optional;
 /**
  * Parsed response of the {@code queryProductCollections} MEX query.
  *
- * @apiNote Carries the {@code xwa_product_catalog_get_collections.collections}
- * array projected onto Cobalt {@link BusinessCatalog} values, paired with
- * the {@code paging.after} cursor needed to drive subsequent pages.
- * Surfaced from {@link QueryProductCollectionsMexRequest} replies.
+ * <p>Carries the {@code xwa_product_catalog_get_collections.collections} array
+ * projected onto Cobalt {@link BusinessCatalog} values, paired with the
+ * {@code paging.after} cursor needed to drive subsequent pages, decoded from
+ * {@link QueryProductCollectionsMexRequest} replies.
  *
  * @implNote This implementation drops the WA Web {@code status_info},
  * {@code can_appeal}, {@code reject_reason} and {@code commerce_url} fields
@@ -31,18 +31,26 @@ import java.util.Optional;
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryProductCollections")
 public final class QueryProductCollectionsMexResponse implements MexOperation.Response.Json {
+    /**
+     * Holds the business catalogs returned by this page.
+     */
     private final List<BusinessCatalog> collections;
+
+    /**
+     * Holds the {@code paging.after} cursor, or the empty string when the
+     * relay reported no further pages.
+     */
     private final String afterCursor;
 
     /**
      * Constructs a parsed collections response.
      *
-     * @apiNote Package-private; instances are produced by {@link #of(Node)}
-     * after parsing the inbound IQ payload.
+     * <p>Instances are produced by {@link #of(Node)} after parsing the inbound
+     * IQ payload.
      *
      * @param collections the parsed business catalogs
-     * @param afterCursor the {@code paging.after} cursor, or the empty
-     *                    string when the relay reported no further pages
+     * @param afterCursor the {@code paging.after} cursor, or the empty string
+     *                    when the relay reported no further pages
      */
     private QueryProductCollectionsMexResponse(List<BusinessCatalog> collections, String afterCursor) {
         this.collections = collections;
@@ -52,10 +60,9 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Entry point for receivers handling
-     * {@code <iq xmlns="w:mex">} replies tagged with
-     * {@link QueryProductCollectionsMexRequest#QUERY_ID}. Unwraps the
-     * {@code <result>} child, reads its content bytes and decodes the
+     * <p>Entry point for receivers handling {@code <iq xmlns="w:mex">} replies
+     * tagged with {@link QueryProductCollectionsMexRequest#QUERY_ID}; unwraps
+     * the {@code <result>} child, reads its content bytes and decodes the
      * GraphQL JSON envelope.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
@@ -73,8 +80,8 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
     /**
      * Returns the collections carried by this page of the query.
      *
-     * @apiNote Each {@link BusinessCatalog} pairs the collection's id and
-     * name with the products nested inside it, projected through
+     * <p>Each {@link BusinessCatalog} pairs the collection's id and name with
+     * the products nested inside it, projected through
      * {@link CatalogProductParser#parseProducts(JSONArray)}.
      *
      * @return an unmodifiable list of {@link BusinessCatalog} values, never
@@ -85,16 +92,16 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
     }
 
     /**
-     * Returns the {@code paging.after} cursor usable to request the next
-     * page of collections.
+     * Returns the {@code paging.after} cursor usable to request the next page
+     * of collections.
      *
-     * @apiNote Pass the returned value as the {@code afterCursor} argument
-     * of the next {@link QueryProductCollectionsMexRequest}. An empty
-     * {@link Optional} means the relay did not advertise a continuation
-     * cursor; callers should stop pagination.
+     * <p>Pass the returned value as the {@code afterCursor} argument of the
+     * next {@link QueryProductCollectionsMexRequest}. An empty {@link Optional}
+     * means the relay did not advertise a continuation cursor, so callers
+     * should stop pagination.
      *
-     * @return an {@link Optional} carrying the cursor when the relay
-     *         returned a non-empty value, or empty otherwise
+     * @return an {@link Optional} carrying the cursor when the relay returned a
+     *         non-empty value, or empty otherwise
      */
     public Optional<String> afterCursor() {
         return afterCursor == null || afterCursor.isEmpty() ? Optional.empty() : Optional.of(afterCursor);
@@ -103,15 +110,14 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
     /**
      * Parses the raw JSON bytes of the {@code <result>} child.
      *
-     * @apiNote Package-private; only invoked via the {@link #of(Node)} entry
-     * point after unwrapping the IQ stanza.
+     * <p>Invoked only via the {@link #of(Node)} entry point after unwrapping
+     * the IQ stanza.
      *
-     * @implNote This implementation matches WA Web's empty-result fallback:
-     * a reply where {@code xwa_product_catalog_get_collections} is
-     * {@code null} returns an empty collections list with an empty cursor
-     * rather than {@link Optional#empty()}. Only a structurally broken
-     * envelope (missing {@code data} or unparseable JSON) yields
-     * {@link Optional#empty()}.
+     * @implNote This implementation matches WA Web's empty-result fallback: a
+     * reply where {@code xwa_product_catalog_get_collections} is {@code null}
+     * returns an empty collections list with an empty cursor rather than
+     * {@link Optional#empty()}. Only a structurally broken envelope (missing
+     * {@code data} or unparseable JSON) yields {@link Optional#empty()}.
      *
      * @param json the UTF-8 encoded JSON payload
      * @return the parsed response, or empty if the envelope is missing the
@@ -141,13 +147,14 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
      * Parses an array of GraphQL collection objects into a list of
      * {@link BusinessCatalog} values.
      *
-     * @apiNote Invoked once per response to project the
-     * {@code collections} array onto the Cobalt domain model.
+     * <p>Invoked once per response to project the {@code collections} array
+     * onto the Cobalt domain model.
      *
-     * @implNote This implementation wraps the result in
+     * @implNote This implementation skips entries that
+     * {@link #parseCollection(JSONObject)} rejects (currently only {@code null}
+     * entries) and wraps the result in
      * {@link List#copyOf(java.util.Collection)} so callers receive an
-     * unmodifiable list; entries that {@link #parseCollection(JSONObject)}
-     * rejects (currently only {@code null} entries) are skipped.
+     * unmodifiable list.
      *
      * @param array the GraphQL collections array, possibly {@code null}
      * @return the parsed collections, never {@code null}
@@ -166,10 +173,9 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
     }
 
     /**
-     * Parses a single GraphQL collection object into a
-     * {@link BusinessCatalog}.
+     * Parses a single GraphQL collection object into a {@link BusinessCatalog}.
      *
-     * @apiNote Invoked by {@link #parseCollections(JSONArray)} per array
+     * <p>Invoked by {@link #parseCollections(JSONArray)} once per array
      * element.
      *
      * @implNote This implementation defaults missing {@code id} and
@@ -177,8 +183,7 @@ public final class QueryProductCollectionsMexResponse implements MexOperation.Re
      * {@code n || ""} and {@code r || ""} fall-throughs.
      *
      * @param obj the GraphQL collection object, possibly {@code null}
-     * @return the parsed collection, or empty when {@code obj} is
-     *         {@code null}
+     * @return the parsed collection, or empty when {@code obj} is {@code null}
      */
     private static Optional<BusinessCatalog> parseCollection(JSONObject obj) {
         if (obj == null) {

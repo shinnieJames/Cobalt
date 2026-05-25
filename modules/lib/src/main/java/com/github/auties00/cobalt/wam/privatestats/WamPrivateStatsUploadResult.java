@@ -5,18 +5,16 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import java.util.Objects;
 
 /**
- * The categorised outcome of one private-stats buffer upload attempt.
+ * Carries the categorised outcome of one private-stats buffer upload attempt.
  *
- * @apiNote
- * Returned by {@link WamPrivateStatsUploader#upload(byte[])} so the
- * caller can emit a {@code PsBufferUploadWamEvent} mirroring WA Web's
- * {@link WhatsAppWebModule WAWebUploadPrivateStatsBackend} flow.
+ * <p>Returned by {@link WamPrivateStatsUploader#upload(byte[])} so the caller can emit a
+ * {@code PsBufferUploadWamEvent} mirroring the {@code WAWebUploadPrivateStatsBackend} flow. The
+ * {@code httpResponseCode} is the HTTP status returned by the endpoint, or {@code -1} when the request never
+ * reached the server.
  *
  * @param result           the categorised result code; see {@link Type}
- * @param httpResponseCode the HTTP status returned by the endpoint,
- *                         or {@code -1} when the request never
- *                         reached the server (token issuance failure
- *                         or transport exception)
+ * @param httpResponseCode the HTTP status returned by the endpoint, or {@code -1} when the request never reached
+ *                         the server (token issuance failure or transport exception)
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPrivateStatsBackend")
 @WhatsAppWebModule(moduleName = "WAWebWamEnumPsBufferUploadResult")
@@ -31,73 +29,48 @@ public record WamPrivateStatsUploadResult(Type result, int httpResponseCode) {
     }
 
     /**
-     * The categorised upload outcomes.
+     * Enumerates the categorised upload outcomes.
      *
-     * @apiNote
-     * Mirrors the {@code PS_BUFFER_UPLOAD_RESULT} constants of
-     * {@link WhatsAppWebModule WAWebWamEnumPsBufferUploadResult}, which
-     * {@link WhatsAppWebModule WAWebUploadPrivateStatsBackend} reads
-     * when populating {@code PsBufferUploadWamEvent.psBufferUploadResult}.
+     * <p>Mirrors the {@code PS_BUFFER_UPLOAD_RESULT} constants of the {@code WAWebWamEnumPsBufferUploadResult}
+     * module, which {@code WAWebUploadPrivateStatsBackend} reads when populating
+     * {@code PsBufferUploadWamEvent.psBufferUploadResult}.
      */
     public enum Type {
         /**
-         * The server returned HTTP {@code 200}.
-         *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.SUCCESS}.
+         * Indicates the server returned HTTP {@code 200}.
          */
         SUCCESS,
         /**
-         * The server returned a transient server-side error
-         * (HTTP {@code 429} or {@code 500}).
+         * Indicates the server returned a transient server-side error, HTTP {@code 429} or {@code 500}.
          *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.ERROR_SERVER_OTHER};
-         * WA Web treats these as retry-after-backoff outcomes.
+         * <p>WA Web treats these as retry-after-backoff outcomes.
          */
         ERROR_SERVER_OTHER,
         /**
-         * The server returned HTTP {@code 400} indicating the
-         * multipart body could not be parsed.
-         *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.ERROR_PARSING}.
+         * Indicates the server returned HTTP {@code 400} because the multipart body could not be parsed.
          */
         ERROR_PARSING,
         /**
-         * The server returned HTTP {@code 400} indicating the
-         * carried WAM buffer could not be decoded.
+         * Indicates the server returned HTTP {@code 400} because the carried WAM buffer could not be decoded.
          *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.ERROR_DECODING}.
-         * Cobalt does not currently distinguish between
-         * parse-failure and decode-failure 400 responses on the wire;
-         * both map to {@link #ERROR_PARSING} in the default mapping.
+         * <p>Cobalt does not currently distinguish between parse-failure and decode-failure 400 responses on the
+         * wire; both map to {@link #ERROR_PARSING} in the default mapping.
          */
         ERROR_DECODING,
         /**
-         * Token issuance failed before the request was assembled.
+         * Indicates token issuance failed before the request was assembled.
          *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.ERROR_CREDENTIAL};
-         * surfaced by {@link WamPrivateStatsUploader} when its
-         * {@link WamPrivateStatsTokenIssuer} throws.
+         * <p>Surfaced by {@link WamPrivateStatsUploader} when its {@link WamPrivateStatsTokenIssuer} throws.
          */
         ERROR_CREDENTIAL,
         /**
-         * The server returned HTTP {@code 401} indicating the
-         * hard-coded {@code access_token} is no longer accepted.
-         *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.ERROR_ACCESS_TOKEN}.
+         * Indicates the server returned HTTP {@code 401} because the hard-coded {@code access_token} is no
+         * longer accepted.
          */
         ERROR_ACCESS_TOKEN,
         /**
-         * Any other failure: a network error, an unexpected HTTP
-         * status, or a transport-layer exception.
-         *
-         * @apiNote
-         * Mirrors {@code PS_BUFFER_UPLOAD_RESULT.ERROR_OTHER}.
+         * Indicates any other failure: a network error, an unexpected HTTP status, or a transport-layer
+         * exception.
          */
         ERROR_OTHER
     }

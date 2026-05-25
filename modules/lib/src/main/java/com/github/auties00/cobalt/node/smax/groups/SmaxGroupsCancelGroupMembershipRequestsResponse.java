@@ -15,14 +15,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsCancelGroupMembershipRequestsRequest}.
+ * Sealed reply family for a {@link SmaxGroupsCancelGroupMembershipRequestsRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's
- * {@code Success}/{@code ClientError}/{@code ServerError} cases. {@link Success} ships a per-participant outcome
- * list mirroring the WA Web mixin family
- * {@code WASmaxInGroupsMembershipRequestsCancellationParticipantMixins}; callers must walk
- * {@link Success#participants()} and inspect {@link Success.CancelParticipantResult#rejectionReason()} to
- * surface per-row failures.
+ * The three variants partition every reply the relay can return: {@link Success}, {@link ClientError} and
+ * {@link ServerError}. {@link Success} ships a per-participant outcome list; callers must walk
+ * {@link Success#participants()} and inspect {@link Success.CancelParticipantResult#rejectionReason()} to surface
+ * per-row failures.
  */
 public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends SmaxOperation.Response
         permits SmaxGroupsCancelGroupMembershipRequestsResponse.Success, SmaxGroupsCancelGroupMembershipRequestsResponse.ClientError, SmaxGroupsCancelGroupMembershipRequestsResponse.ServerError {
@@ -31,16 +29,15 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
      * Dispatches the inbound IQ across each {@link SmaxGroupsCancelGroupMembershipRequestsResponse} variant in
      * priority order and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in
-     * {@code WASmaxGroupsCancelGroupMembershipRequestsRPC}.
+     * {@link Success} is probed first, then {@link ClientError}, then {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * documented variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the
      * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
-     * @param request the original outbound {@link SmaxGroupsCancelGroupMembershipRequestsRequest} stanza, used
-     *                to validate echoed identifiers
+     * @param request the original outbound {@link SmaxGroupsCancelGroupMembershipRequestsRequest} stanza, used to
+     *                validate echoed identifiers
      * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
@@ -62,31 +59,31 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
     }
 
     /**
-     * The reply variant carrying the per-participant outcome list when the relay processed the cancellation
-     * envelope.
+     * Reply variant carrying the per-participant outcome list when the relay processed the cancellation envelope.
      *
-     * @apiNote The IQ envelope succeeds even when individual rows are rejected with
-     * {@code request_not_found} or {@code not_authorized}; callers must walk {@link #participants()} to detect
-     * partial rejection.
+     * The IQ envelope succeeds even when individual rows are rejected; callers must walk {@link #participants()}
+     * to detect partial rejection.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
     final class Success implements SmaxGroupsCancelGroupMembershipRequestsResponse {
         /**
-         * The optional {@code addressing_mode} attribute echoed on the IQ envelope.
+         * Holds the optional {@code addressing_mode} attribute echoed on the IQ envelope.
          */
         private final String addressingMode;
 
         /**
-         * The per-participant outcome rows.
+         * Holds the per-participant outcome rows.
          */
         private final List<CancelParticipantResult> participants;
 
         /**
          * Constructs a {@link Success}.
          *
+         * The supplied participant list is defensively copied and a {@code null} value is treated as empty.
+         *
          * @param addressingMode the optional addressing-mode echo; may be {@code null}
-         * @param participants   the per-participant outcomes; defensively copied, {@code null} treated as empty
+         * @param participants   the per-participant outcomes; may be {@code null}
          */
         public Success(String addressingMode, List<CancelParticipantResult> participants) {
             this.addressingMode = addressingMode;
@@ -114,8 +111,7 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseCancelGroupMembershipRequestsResponseSuccess}: the IQ
-         * must be a valid {@code type="result"} echo of the request and must carry a
+         * The IQ must be a valid {@code type="result"} echo of the request and must carry a
          * {@code <cancel_membership_requests>} child whose {@code <participant>} grand-children satisfy
          * {@link CancelParticipantResult#of(Node)}.
          *
@@ -187,26 +183,26 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * The per-participant outcome row for a single cancellation target.
+         * Per-participant outcome row for a single cancellation target.
          *
-         * @apiNote The row surfaces the cancelled {@link Jid}, the optional phone-number echo, and an optional
-         * {@link RejectionReason} payload identifying which arm of the WA Web cancellation disjunction the relay
-         * took when the row was refused.
+         * The row surfaces the cancelled {@link Jid}, the optional phone-number echo, and an optional
+         * {@link RejectionReason} payload identifying which arm of the cancellation disjunction the relay took
+         * when the row was refused.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsCancellationParticipantMixins")
         public static final class CancelParticipantResult {
             /**
-             * The participant {@link Jid}.
+             * Holds the participant {@link Jid}.
              */
             private final Jid jid;
 
             /**
-             * The optional {@code phone_number} echo.
+             * Holds the optional {@code phone_number} echo.
              */
             private final String phoneNumber;
 
             /**
-             * The optional rejection-reason payload, populated only when the relay refused the row.
+             * Holds the optional rejection-reason payload, populated only when the relay refused the row.
              */
             private final RejectionReason rejectionReason;
 
@@ -255,9 +251,7 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             /**
              * Tries to parse a {@link CancelParticipantResult} row from a single {@code <participant>} child.
              *
-             * @apiNote Matches the WA Web parser
-             * {@code parseCancelGroupMembershipRequestsResponseSuccessCancelMembershipRequestsParticipant}: the
-             * node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * The node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
              * {@code <request_not_found/>} or {@code <not_authorized/>} child triggering the rejection arm.
              *
              * @param node the {@code <participant>} child
@@ -324,18 +318,17 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             }
 
             /**
-             * The rejection-reason payload for a participant the relay refused to cancel.
+             * Rejection-reason payload for a participant the relay refused to cancel.
              *
-             * @apiNote Identifies which arm of the WA Web disjunction the relay took:
-             * {@link Kind#REQUEST_NOT_FOUND} (the participant has no pending request on this group) or
-             * {@link Kind#NOT_AUTHORIZED} (the caller does not own the targeted request and lacks admin rights
-             * to cancel on behalf of others).
+             * Identifies which arm of the disjunction the relay took: {@link Kind#REQUEST_NOT_FOUND} (the
+             * participant has no pending request on this group) or {@link Kind#NOT_AUTHORIZED} (the caller does
+             * not own the targeted request and lacks admin rights to cancel on behalf of others).
              */
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsParticipantRequestNotFoundMixin")
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsParticipantNotAuthorizedMixin")
             public static final class RejectionReason {
                 /**
-                 * The rejection-arm marker.
+                 * Holds the rejection-arm marker.
                  */
                 private final Kind kind;
 
@@ -361,8 +354,8 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                 /**
                  * Tries to parse a {@link RejectionReason} payload from a {@code <participant>} child.
                  *
-                 * @apiNote The presence of a {@code <request_not_found/>} or {@code <not_authorized/>}
-                 * grand-child discriminates the rejected arms; absence signals the accepted arm.
+                 * The presence of a {@code <request_not_found/>} or {@code <not_authorized/>} grand-child
+                 * discriminates the rejected arms; absence signals the accepted arm.
                  *
                  * @param node the {@code <participant>} child
                  * @return an {@link Optional} carrying the parsed payload, or empty when the row succeeded
@@ -421,21 +414,20 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                 }
 
                 /**
-                 * Discriminator for the WA Web cancellation-rejection arms.
+                 * Discriminator for the cancellation-rejection arms.
                  *
-                 * @apiNote One constant per documented mixin arm; future WA Web additions would require an
-                 * enum extension here plus a new branch in {@link RejectionReason#of(Node)}.
+                 * Each constant maps to one documented rejection arm.
                  */
                 public enum Kind {
                     /**
-                     * The relay could not find a pending membership request matching the supplied participant
-                     * on this group.
+                     * Indicates the relay could not find a pending membership request matching the supplied
+                     * participant on this group.
                      */
                     REQUEST_NOT_FOUND,
 
                     /**
-                     * The caller is not authorised to cancel the targeted request; typically because they
-                     * neither own it nor hold admin rights on the group.
+                     * Indicates the caller is not authorised to cancel the targeted request; typically because
+                     * they neither own it nor hold admin rights on the group.
                      */
                     NOT_AUTHORIZED
                 }
@@ -444,17 +436,17 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed or unauthorised.
+     * Reply variant emitted when the relay rejected the request envelope as malformed or unauthorised.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseClientError")
     final class ClientError implements SmaxGroupsCancelGroupMembershipRequestsResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -490,8 +482,8 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -549,17 +541,17 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseServerError")
     final class ServerError implements SmaxGroupsCancelGroupMembershipRequestsResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -595,8 +587,8 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

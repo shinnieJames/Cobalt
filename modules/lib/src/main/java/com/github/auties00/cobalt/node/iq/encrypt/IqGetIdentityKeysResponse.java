@@ -18,15 +18,15 @@ import java.util.Optional;
  * Closed family of reply variants observable on the bulk identity-key
  * {@link IqGetIdentityKeysRequest} roundtrip.
  *
- * @apiNote
- * {@link Success} carries one {@link Success.IdentityEntry} per requested device JID, interleaving
- * {@link Success.IdentityEntry.Resolved} entries with per-device {@link Success.IdentityEntry.Failure}
- * envelopes when the relay could not resolve a particular device. {@link ClientError} and
- * {@link ServerError} are envelope-level failures that affect the whole batch.
+ * <p>{@link Success} carries one {@link Success.IdentityEntry} per requested device JID,
+ * interleaving {@link Success.IdentityEntry.Resolved} entries with per-device
+ * {@link Success.IdentityEntry.Failure} envelopes when the relay could not resolve a particular
+ * device. {@link ClientError} and {@link ServerError} are envelope-level failures that affect the
+ * whole batch.
  *
  * @implNote
- * WA Web's {@code identityKeysParser} {@code throw}s on the first per-user {@code <error/>} it
- * encounters and discards the whole batch. Cobalt deliberately keeps a per-device
+ * WA Web's {@code identityKeysParser} throws on the first per-user {@code <error/>} it encounters
+ * and discards the whole batch. This implementation instead keeps a per-device
  * {@link Success.IdentityEntry.Failure} record so the caller can still resolve identities for the
  * devices that succeeded and re-query just the failed ones.
  */
@@ -37,9 +37,8 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     /**
      * Parses the inbound stanza into the first matching {@link IqGetIdentityKeysResponse} variant.
      *
-     * @apiNote
-     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
-     * {@link ServerError#of(Node, Node)}.
+     * <p>Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)},
+     * then {@link ServerError#of(Node, Node)}.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza
@@ -66,11 +65,9 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     /**
      * Successful bulk reply carrying one {@link IdentityEntry} per requested device.
      *
-     * @apiNote
-     * Iterate {@link #entries()} and pattern-match each variant: {@link IdentityEntry.Resolved}
-     * exposes the device's identity key for installation into the local
-     * {@code waSignalStore}/{@code SignalProtocolStore}; {@link IdentityEntry.Failure} carries the
-     * per-device error envelope the relay attached.
+     * <p>{@link #entries()} is iterated and each variant pattern-matched: {@link IdentityEntry.Resolved}
+     * exposes the device's identity key for installation into the local Signal store;
+     * {@link IdentityEntry.Failure} carries the per-device error envelope the relay attached.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     final class Success implements IqGetIdentityKeysResponse {
@@ -83,8 +80,7 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Constructs a populated success envelope.
          *
-         * @apiNote
-         * The {@code entries} list is defensively copied; mutating the passed-in list after
+         * <p>The {@code entries} list is defensively copied; mutating the passed-in list after
          * construction does not affect this instance.
          *
          * @param entries the per-device identity entries
@@ -107,10 +103,9 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Parses a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check, when
+         * <p>Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check, when
          * the top-level {@code <list/>} is missing, or when any {@code <user/>} grandchild lacks a
-         * {@code jid} attribute or has malformed {@code <type/>}/{@code <identity/>} content.
+         * {@code jid} attribute or has malformed {@code <type/>} or {@code <identity/>} content.
          *
          * @implNote
          * This implementation walks the {@code <list/>} grandchildren and records per-device
@@ -204,9 +199,8 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
      * Closed per-device entry variant carrying either a successfully fetched identity key or the
      * relay's per-device error envelope.
      *
-     * @apiNote
-     * Pattern-match on {@link Resolved} versus {@link Failure} to dispatch identity-key
-     * installation vs error logging on a per-device basis.
+     * <p>Pattern-matching on {@link Resolved} versus {@link Failure} dispatches identity-key
+     * installation against error logging on a per-device basis.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     sealed interface IdentityEntry permits IdentityEntry.Resolved, IdentityEntry.Failure {
@@ -221,10 +215,8 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Per-device resolved entry; the relay returned the device's long-term identity public key.
          *
-         * @apiNote
-         * The {@link #identityPublicKey()} bytes can be fed through
-         * {@code WAWebCryptoCurve25519.toSignalCurvePubKey} (or its Cobalt equivalent) before being
-         * recorded against the Signal address derived from {@link #deviceJid()}.
+         * <p>The {@link #identityPublicKey()} bytes are recorded against the Signal address derived
+         * from {@link #deviceJid()} after conversion to the Signal Curve25519 public-key form.
          */
         @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
         final class Resolved implements IdentityEntry {
@@ -335,10 +327,10 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
          * Per-device failure entry; the relay returned an {@code <error/>} grandchild instead of a
          * resolved identity key for this device JID.
          *
-         * @apiNote
-         * WA Web's {@code identityKeysParser} would have thrown and abandoned the whole batch;
-         * Cobalt records the failure per-device so the caller can still process the resolved
-         * entries from the same response.
+         * @implNote
+         * WA Web's {@code identityKeysParser} would have thrown and abandoned the whole batch; this
+         * implementation records the failure per-device so the caller can still process the
+         * resolved entries from the same response.
          */
         @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
         final class Failure implements IdentityEntry {
@@ -446,9 +438,8 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     /**
      * Client-error variant; the relay rejected the whole bulk fetch with a {@code 4xx} envelope.
      *
-     * @apiNote
-     * Distinct from {@link Success.IdentityEntry.Failure}, which is a per-device failure inside an
-     * otherwise successful batch.
+     * <p>Distinct from {@link Success.IdentityEntry.Failure}, which is a per-device failure inside
+     * an otherwise successful batch.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     final class ClientError implements IqGetIdentityKeysResponse {
@@ -494,8 +485,7 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Parses a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -556,9 +546,8 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
      * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope
      * while processing the bulk fetch.
      *
-     * @apiNote
-     * Affects the whole batch; the caller typically retries after the surrounding contact-sync or
-     * device-sync flow re-runs.
+     * <p>Affects the whole batch; the caller typically retries after the surrounding contact-sync
+     * or device-sync flow re-runs.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     final class ServerError implements IqGetIdentityKeysResponse {
@@ -604,8 +593,7 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Parses a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

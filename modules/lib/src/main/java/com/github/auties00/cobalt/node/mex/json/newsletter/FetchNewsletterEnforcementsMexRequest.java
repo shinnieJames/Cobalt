@@ -19,53 +19,46 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Builds the MEX request that fetches the moderation enforcement history
- * of a newsletter.
+ * Builds the MEX request that fetches the moderation enforcement history of a newsletter.
  *
- * @apiNote
- * Drives the admin moderation surface that lists profile-picture
- * deletions, account suspensions, violating-message takedowns and
- * geographical suspensions applied to the newsletter, plus their appeal
- * state. The {@code locale} variable selects the language for the
- * human-readable policy text the server attaches to each enforcement.
+ * <p>Backs the admin moderation surface that lists profile-picture deletions, account suspensions,
+ * violating-message takedowns and geographical suspensions applied to the newsletter, plus their
+ * appeal state. The {@code locale} variable selects the language for the human-readable policy text
+ * the server attaches to each enforcement. The matching response is parsed by
+ * {@link FetchNewsletterEnforcementsMexResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterEnforcementsJob")
 public final class FetchNewsletterEnforcementsMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexFetchNewsletterEnforcementsJobQuery.graphql} on the
-     * WhatsApp relay.
+     * Holds the compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterEnforcementsJobQuery.graphql} on the WhatsApp relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Sent as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "25987882310910935";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this query.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterEnforcements";
 
     /**
-     * The locale tag the server uses when localising the policy text
-     * embedded in each enforcement record.
+     * Holds the locale tag the server uses when localising the policy text embedded in each
+     * enforcement record.
      */
     private final String locale;
 
     /**
-     * The newsletter Jid whose enforcement history is being fetched.
+     * Holds the newsletter Jid whose enforcement history is being fetched.
      */
     private final String newsletterId;
 
     /**
-     * Constructs a request for the enforcement history of the given newsletter
-     * under the given locale.
+     * Constructs a request for the enforcement history of the given newsletter under the given
+     * locale.
      *
-     * @apiNote
-     * Both arguments are written as top-level GraphQL variables; pass
-     * {@code null} for either to skip emitting it (the server then applies
-     * its defaults).
+     * <p>Both arguments are written as top-level GraphQL variables; passing {@code null} for either
+     * skips emitting it and the server then applies its defaults.
      *
      * @param locale       the locale tag for localised policy text
      * @param newsletterId the newsletter Jid
@@ -78,8 +71,7 @@ public final class FetchNewsletterEnforcementsMexRequest implements MexOperation
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns the value of {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -89,8 +81,7 @@ public final class FetchNewsletterEnforcementsMexRequest implements MexOperation
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns the value of {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -98,19 +89,16 @@ public final class FetchNewsletterEnforcementsMexRequest implements MexOperation
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the {@code {variables: {locale, newsletter_id}}} payload;
-     * either variable is omitted when its field is {@code null}.
+     * <p>Produces the {@code {variables: {locale, newsletter_id}}} payload; either variable is
+     * omitted when its field is {@code null}.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterEnforcementsJob", exports = "mexFetchNewsletterEnforcements",

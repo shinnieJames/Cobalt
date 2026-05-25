@@ -14,62 +14,51 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Outbound MEX query that reads the invite code currently bound to a group
- * without rotating it.
+ * Outbound MEX query that reads the invite code currently bound to a group without rotating it.
  *
- * @apiNote Surfaced from WA Web's
- * {@code WAWebGroupInviteAction.queryGroupInviteCode} when chat UIs need to
- * display the shareable {@code chat.whatsapp.com/<code>} link, prime the
- * group-info panel, or copy the link to the clipboard. To rotate the code
- * instead of reading it, use {@link CreateInviteCodeMexRequest}.
+ * <p>The reply carries the shareable {@code chat.whatsapp.com/<code>} link's opaque suffix, used to
+ * display the link, prime the group-info panel, or copy the link to the clipboard. Callers that need
+ * to rotate the code instead of reading it use {@link CreateInviteCodeMexRequest}.
  *
- * @implNote This implementation forwards an optional caller-supplied
- * {@code query_context} variable; WA Web pins it to the constant
- * {@code "INVITE_CODE"} at the only call site.
+ * @implNote This implementation forwards an optional caller-supplied {@code query_context} variable;
+ * WA Web pins it to the constant {@code "INVITE_CODE"} at its only call site.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchGroupInviteCodeJob")
 public final class FetchGroupInviteCodeMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
-     * {@code WAWebMexFetchGroupInviteCodeJobQuery} document.
+     * Compiled GraphQL query identifier for the {@code WAWebMexFetchGroupInviteCodeJobQuery}
+     * document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebMexFetchGroupInviteCodeJobQuery.graphql}. The relay maps
-     * this id to its persisted operation; the GraphQL text is never sent on
-     * the wire.
+     * <p>The relay maps this id to its persisted operation; the GraphQL text is never sent on the
+     * wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInviteCodeJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "29247029834912157";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     * GraphQL operation name reported alongside this query when it is dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * <p>Tags the query in latency and error metrics; kept on the request for embedders mirroring
+     * WhatsApp's telemetry surface.
      */
     public static final String OPERATION_NAME = "fetchMexGroupInviteCode";
 
     /**
-     * The target group identifier bound to the {@code id} GraphQL variable.
+     * Target group identifier bound to the {@code id} GraphQL variable.
      */
     private final String id;
 
     /**
-     * The telemetry context tag bound to the {@code query_context} GraphQL
-     * variable.
+     * Telemetry context tag bound to the {@code query_context} GraphQL variable.
      */
     private final String queryContext;
 
     /**
      * Constructs a new request with the two GraphQL variables.
      *
-     * @apiNote {@code queryContext} mirrors the WA Web
-     * {@code "INVITE_CODE"} tag pinned at
-     * {@code WAWebMexFetchGroupInviteCodeJob.fetchMexGroupInviteCode}; pass
-     * {@code null} to omit the optional variable from the wire payload.
+     * <p>The {@code queryContext} mirrors the WA Web {@code "INVITE_CODE"} tag pinned at the call
+     * site; pass {@code null} to omit the optional variable from the wire payload.
      *
      * @param id           the target group identifier
      * @param queryContext the optional telemetry context tag, may be {@code null} to omit
@@ -98,10 +87,9 @@ public final class FetchGroupInviteCodeMexRequest implements MexOperation.Reques
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation streams the GraphQL variables through
-     * fastjson2's {@link JSONWriter} and only emits the {@code id} and
-     * {@code query_context} fields when their corresponding constructor
-     * argument is non-null, matching the WA Web pattern that omits
+     * @implNote This implementation streams the GraphQL variables through fastjson2's
+     * {@link JSONWriter} and emits the {@code id} and {@code query_context} fields only when their
+     * corresponding constructor argument is non-null, matching the WA Web convention of omitting
      * undefined GraphQL variables. The wrapped envelope is built through
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */

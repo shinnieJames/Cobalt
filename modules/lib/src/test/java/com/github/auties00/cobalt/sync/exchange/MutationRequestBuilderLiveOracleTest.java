@@ -22,58 +22,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins {@link MutationRequestBuilder}'s output against captured WA Web outgoing sync IQ
- * stanzas.
+ * Pins {@link MutationRequestBuilder}'s output against outgoing sync IQ stanzas captured
+ * from a live WhatsApp Web session.
  *
- * @apiNote
- * Drives a parameterised matrix over the seven captured {@code (patchType, action)}
- * topics in {@code src/test/resources/fixtures/sync/}. For each topic the test loads the
- * captured outgoing {@code <iq>}, asserts envelope-attribute parity
- * ({@code type}, {@code xmlns}, {@code to}), checks the {@code <collection>} name and the
- * presence of a numeric {@code version}, and decodes the inline {@code <patch>} bytes to
- * verify mutation count, MAC lengths, key-id presence and {@code deviceIndex} field.
- *
- * @implNote
- * This implementation gates every assertion on
- * {@link SyncFixtures#isAvailable(String)} so the suite stays green before the captured
- * fixtures land. Byte-equality on the encrypted patch payload is intentionally not
- * exercised: the patch is encrypted with a fresh random IV per call, so byte-for-byte
- * equality with the captured ciphertext is impossible without IV injection. The
- * lower-level (IV, plaintext, ciphertext) parity is covered by
- * {@code EncryptedMutationTest} instead; this test focuses on the envelope and the
- * surrounding protobuf structure.
+ * <p>The fixtures under {@code src/test/resources/fixtures/sync/exchange/} are JSONL
+ * stanza dumps captured via the {@code web_live_stanza_dump_to_file} MCP tool and
+ * reconstructed into {@link com.github.auties00.cobalt.node.Node} instances by
+ * {@link SyncFixtures}. Every assertion is gated on {@link SyncFixtures#isAvailable(String)}
+ * so the suite stays green before the captured fixtures land. Byte-equality on the
+ * encrypted patch payload is not exercised: the patch is encrypted with a fresh random IV
+ * per call, so byte-for-byte equality with the captured ciphertext is impossible without
+ * IV injection; the lower-level (IV, plaintext, ciphertext) parity lives in
+ * {@code EncryptedMutationTest}, and this suite covers the envelope and the surrounding
+ * protobuf structure.
  */
 @DisplayName("MutationRequestBuilder - live-oracle parity")
 class MutationRequestBuilderLiveOracleTest {
-    /**
-     * The fixed self phone-number JID used by every test in this class.
-     */
     private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
 
-    /**
-     * The fixed self LID JID used by every test in this class.
-     */
     private static final Jid SELF_LID = Jid.of("83116928594000@lid");
 
-    /**
-     * The fixed self device JID used by every test in this class (device 1).
-     */
     private static final Jid SELF_PN_DEVICE_1 = Jid.of("19250000001:1@s.whatsapp.net");
 
-    /**
-     * The {@link TestWhatsAppClient} wired to a fresh per-test store and AB-prop service.
-     */
     private TestWhatsAppClient client;
 
-    /**
-     * The system under test.
-     */
     private MutationRequestBuilder builder;
 
-    /**
-     * Builds a fresh harness per test: temporary store seeded with the device JIDs,
-     * default AB props, builder wired to the synthetic client and WAM service.
-     */
     @BeforeEach
     void setUp() {
         var props = TestABPropsService.builder().build();
@@ -86,17 +60,6 @@ class MutationRequestBuilderLiveOracleTest {
         builder = new MutationRequestBuilder(client, props, wam, TestMediaConnectionService.create());
     }
 
-    /**
-     * Returns the parameterised topic matrix used by every parameterised test in this
-     * class.
-     *
-     * @apiNote
-     * Each tuple pairs a fixture topic relative to {@code fixtures/sync/} with the
-     * {@link SyncPatchType} the captured IQ targets so tests can use the patch type
-     * directly without re-deriving it from the kebab-case directory prefix.
-     *
-     * @return the parameter stream
-     */
     static Stream<Topic> uploadTopics() {
         return Stream.of(
                 new Topic("exchange/regular-low/upload-archive",                SyncPatchType.REGULAR_LOW),
@@ -109,31 +72,12 @@ class MutationRequestBuilderLiveOracleTest {
         );
     }
 
-    /**
-     * Pairs a captured fixture topic with the {@link SyncPatchType} the captured IQ
-     * targets.
-     *
-     * @apiNote
-     * Internal carrier used by {@link #uploadTopics()}.
-     *
-     * @param topic the fixture topic relative to {@code fixtures/sync/}
-     * @param patchType the collection the captured IQ targets
-     */
     record Topic(String topic, SyncPatchType patchType) {
     }
 
-    /**
-     * Tests for the IQ envelope attributes.
-     */
     @Nested
     @DisplayName("envelope parity - type / xmlns / to")
     class EnvelopeParity {
-        /**
-         * Asserts that the captured {@code <iq>} envelope carries
-         * {@code type="set"}, {@code xmlns="w:sync:app:state"}, and a server JID.
-         *
-         * @param topic the captured topic to test
-         */
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.github.auties00.cobalt.sync.exchange.MutationRequestBuilderLiveOracleTest#uploadTopics")
         @DisplayName("captured <iq> envelope attributes match WA Web's outgoing sync IQ shape")
@@ -157,18 +101,9 @@ class MutationRequestBuilderLiveOracleTest {
         }
     }
 
-    /**
-     * Tests for the {@code <collection>} attributes.
-     */
     @Nested
     @DisplayName("collection wire-shape parity")
     class CollectionShape {
-        /**
-         * Asserts that the captured {@code <collection>} name attribute matches
-         * {@code SyncPatchType.toString()}.
-         *
-         * @param topic the captured topic to test
-         */
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.github.auties00.cobalt.sync.exchange.MutationRequestBuilderLiveOracleTest#uploadTopics")
         @DisplayName("captured <collection> name matches the patch-type's lowercase wire token")
@@ -191,12 +126,6 @@ class MutationRequestBuilderLiveOracleTest {
                     "wire collection name must match SyncPatchType.toString()");
         }
 
-        /**
-         * Asserts that the captured {@code <collection>} carries a numeric
-         * {@code version} attribute.
-         *
-         * @param topic the captured topic to test
-         */
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.github.auties00.cobalt.sync.exchange.MutationRequestBuilderLiveOracleTest#uploadTopics")
         @DisplayName("captured <collection> exposes a numeric version attribute")
@@ -218,18 +147,9 @@ class MutationRequestBuilderLiveOracleTest {
         }
     }
 
-    /**
-     * Tests for the inline {@code <patch>} protobuf structure.
-     */
     @Nested
     @DisplayName("patch protobuf structural parity")
     class PatchStructure {
-        /**
-         * Asserts that the decoded {@code <patch>} bytes carry at least one mutation,
-         * 32-byte snapshot/patch MACs and a non-empty key id.
-         *
-         * @param topic the captured topic to test
-         */
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.github.auties00.cobalt.sync.exchange.MutationRequestBuilderLiveOracleTest#uploadTopics")
         @DisplayName("decoded <patch> bytes carry a non-empty mutation list and 32-byte MACs")
@@ -261,11 +181,6 @@ class MutationRequestBuilderLiveOracleTest {
                     assertTrue(id.length > 0, "patch key id must be non-empty"));
         }
 
-        /**
-         * Asserts that the decoded {@code <patch>} carries a {@code deviceIndex} field.
-         *
-         * @param topic the captured topic to test
-         */
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.github.auties00.cobalt.sync.exchange.MutationRequestBuilderLiveOracleTest#uploadTopics")
         @DisplayName("decoded <patch> carries a non-null deviceIndex matching the producing device")
@@ -291,17 +206,9 @@ class MutationRequestBuilderLiveOracleTest {
         }
     }
 
-    /**
-     * Tests for the captured response replay against
-     * {@link MutationResponseParser}.
-     */
     @Nested
     @DisplayName("MutationSyncResponse oracle replay")
     class ResponseReplay {
-        /**
-         * Asserts that a captured success response parses to a successful
-         * {@link MutationSyncResponse}.
-         */
         @Test
         @DisplayName("a captured success response parses to a successful MutationSyncResponse")
         void parsesSuccessResponse() {

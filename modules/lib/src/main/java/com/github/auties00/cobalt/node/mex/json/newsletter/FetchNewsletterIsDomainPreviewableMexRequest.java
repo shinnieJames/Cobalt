@@ -18,48 +18,41 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Builds the MEX request that asks the server whether the given URL domains
- * may render link previews inside newsletter messages.
+ * Builds the MEX request that asks the server whether the given URL domains may render link
+ * previews inside newsletter messages.
  *
- * @apiNote
- * Drives the newsletter composer's link-preview gate; the relay maintains
- * a per-domain allowlist for newsletter previews and this query batches
- * the lookup for every domain the user has typed before the composer
- * decides to fetch and render previews.
+ * <p>Backs the newsletter composer's link-preview gate. The relay maintains a per-domain allowlist
+ * for newsletter previews and this query batches the lookup for every domain the user has typed
+ * before the composer decides to fetch and render previews. The matching response is parsed by
+ * {@link FetchNewsletterIsDomainPreviewableMexResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterIsDomainPreviewableJob")
 public final class FetchNewsletterIsDomainPreviewableMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexFetchNewsletterIsDomainPreviewableJobQuery.graphql} on
-     * the WhatsApp relay.
+     * Holds the compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterIsDomainPreviewableJobQuery.graphql} on the WhatsApp relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Sent as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9849510985088294";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this query.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterIsDomainPreviewable";
 
     /**
-     * The URL domains to validate.
+     * Holds the URL domains to validate.
      */
     private final List<String> urlDomains;
 
     /**
-     * Constructs a request asking whether each of the given URL domains is
-     * previewable.
+     * Constructs a request asking whether each of the given URL domains is previewable.
      *
-     * @apiNote
-     * Each entry is a bare host string (no scheme, no path); the relay
-     * matches against the configured per-domain allowlist exactly.
+     * <p>Each entry is a bare host string with no scheme and no path; the relay matches against the
+     * configured per-domain allowlist exactly.
      *
-     * @param urlDomains the URL domains to validate, may be {@code null} or
-     *                   empty
+     * @param urlDomains the URL domains to validate, may be {@code null} or empty
      */
     public FetchNewsletterIsDomainPreviewableMexRequest(List<String> urlDomains) {
         this.urlDomains = urlDomains;
@@ -68,8 +61,7 @@ public final class FetchNewsletterIsDomainPreviewableMexRequest implements MexOp
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns the value of {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -79,8 +71,7 @@ public final class FetchNewsletterIsDomainPreviewableMexRequest implements MexOp
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns the value of {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -88,20 +79,16 @@ public final class FetchNewsletterIsDomainPreviewableMexRequest implements MexOp
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the {@code {variables: {url_domains: [...]}}} payload; the
-     * {@code url_domains} key is always emitted (the array itself may be
-     * empty).
+     * <p>Produces the {@code {variables: {url_domains: [...]}}} payload; the {@code url_domains} key
+     * is always emitted and the array itself may be empty.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterIsDomainPreviewableJob", exports = "mexFetchNewsletterIsDomainPreviewable",
@@ -131,8 +118,7 @@ public final class FetchNewsletterIsDomainPreviewableMexRequest implements MexOp
     /**
      * Writes a list of strings as a JSON array into the given writer.
      *
-     * @apiNote
-     * Emits an empty array when {@code values} is {@code null}.
+     * <p>Emits an empty array when {@code values} is {@code null}.
      *
      * @param writer the JSON writer to emit into
      * @param values the string values to serialise, may be {@code null}

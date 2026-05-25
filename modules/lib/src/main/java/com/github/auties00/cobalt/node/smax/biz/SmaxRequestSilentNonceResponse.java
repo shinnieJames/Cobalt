@@ -14,24 +14,16 @@ import java.util.Optional;
  * The sealed family of inbound reply variants produced by the relay
  * in response to a {@link SmaxRequestSilentNonceRequest}.
  *
- * @apiNote
- * Surfaced by the CTWA (click-to-WhatsApp) biz-token-nonce flow whose
- * JS caller {@code WAWebCTWABizAccessTokenNonceManager.fetchNonce}
- * polls the relay for a silent nonce before driving the Meta
- * token-exchange surface; the four variants split the wire outcome
- * into {@link Success} (relay supplied a nonce directly without
- * recovery), {@link RecoveryRequired} (relay refused the silent path
- * because the user must first confirm account ownership via a
- * recovery email; carries the email mask the UI must show),
- * {@link ClientError} (relay rejected the request with a {@code 4xx}
- * envelope) and {@link ServerError} (transient {@code 5xx} relay
- * failure).
+ * <p>The click-to-WhatsApp biz-token-nonce flow polls the relay for a silent nonce before driving
+ * the Meta token-exchange surface. The four variants split the wire outcome into {@link Success}
+ * (relay supplied a nonce directly without recovery), {@link RecoveryRequired} (relay refused the
+ * silent path because the user must first confirm account ownership via a recovery email; carries
+ * the email mask the UI must show), {@link ClientError} (relay rejected the request with a
+ * {@code 4xx} envelope) and {@link ServerError} (transient {@code 5xx} relay failure).
  *
  * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxBizAccessTokenRequestSilentNonceRPC.sendRequestSilentNonceRPC}
- * by trying each variant in priority order via {@link #of} and
- * returning the first successful parse.
+ * This implementation tries each variant in priority order via {@link #of(Node, Node)} and returns
+ * the first successful parse.
  */
 public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Response
         permits SmaxRequestSilentNonceResponse.Success, SmaxRequestSilentNonceResponse.RecoveryRequired,
@@ -41,14 +33,10 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
      * Tries each {@link SmaxRequestSilentNonceResponse} variant in
      * priority order and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxRequestSilentNonceRequest}; the priority order
-     * matches WA Web's {@code parsing} dispatch table
-     * ({@code Success}/{@code RecoveryRequired}/{@code Error}) so
-     * that a malformed {@code Success} stanza falls through to
-     * {@link RecoveryRequired} (then to {@link ClientError}) rather
-     * than masking the documented outcome.
+     * <p>Invoked by the smax reply pump after dispatching a {@link SmaxRequestSilentNonceRequest}.
+     * The priority order ensures a malformed {@link Success} stanza falls through to
+     * {@link RecoveryRequired} (then to {@link ClientError}) rather than masking the documented
+     * outcome.
      *
      * @implNote
      * This implementation invokes {@link Success#of(Node, Node)}
@@ -92,14 +80,10 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
      * accepted the silent-nonce request and will push the nonce via
      * a separate notification.
      *
-     * @apiNote
-     * Projected by
-     * {@link SmaxRequestSilentNonceResponse#of(Node, Node)} when the
-     * relay returns the documented {@code <Result status="Success"/>}
-     * tree; WA Web's {@code fetchNonce} treats this branch as a hand
-     * off to the QPL {@code push_nonce_start} marker and waits for
-     * the asynchronous nonce-push notification before resolving the
-     * fetch promise.
+     * <p>Projected by {@link SmaxRequestSilentNonceResponse#of(Node, Node)} when the relay returns
+     * the documented {@code <Result status="Success"/>} tree. The caller treats this branch as a
+     * hand-off and waits for the asynchronous nonce-push notification (see
+     * {@link SmaxNonceNotificationResponse}) before resolving the fetch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenHackBaseIQResultResponseMixin")
@@ -107,11 +91,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
         /**
          * Constructs a new successful reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code <Result status="Success"/>} tree has been validated;
-         * takes no arguments because the wire form carries no
-         * projected payload besides the literal status string.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code <Result status="Success"/>} tree
+         * has been validated; takes no arguments because the wire form carries no projected payload
+         * besides the literal status string.
          */
         public Success() {
         }
@@ -189,17 +171,11 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
      * relay refused the silent nonce path and instead dispatched a
      * recovery email the user must confirm before retrying.
      *
-     * @apiNote
-     * Projected by
-     * {@link SmaxRequestSilentNonceResponse#of(Node, Node)} when the
-     * relay returns the documented
-     * {@code <Result status="RecoveryRequired" email="..."/>} tree;
-     * WA Web's {@code fetchNonce} surfaces the email mask to the UI
-     * (annotating the QPL flow with
-     * {@code fetch_nonce_recovery_needed=true}) so the user can
-     * complete the recovery flow via
-     * {@code requestAdAccountRecoveryCode}; see
-     * {@link SmaxSendAccountRecoveryNonceResponse}.
+     * <p>Projected by {@link SmaxRequestSilentNonceResponse#of(Node, Node)} when the relay returns
+     * the documented {@code <Result status="RecoveryRequired" email="..."/>} tree. The caller
+     * surfaces the email mask to the UI so the user can complete the recovery flow that issues a
+     * {@link SmaxSendAccountRecoveryNonceRequest} (see
+     * {@link SmaxSendAccountRecoveryNonceResponse}).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseRecoveryRequired")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenHackBaseIQResultResponseMixin")
@@ -213,10 +189,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
         /**
          * Constructs a new recovery-required reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code <Result status="RecoveryRequired"/>} envelope and
-         * the {@code email} attribute have been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the
+         * {@code <Result status="RecoveryRequired"/>} envelope and the {@code email} attribute have
+         * been validated.
          *
          * @param email the masked recovery-email address; never
          *              {@code null}
@@ -230,10 +205,7 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
         /**
          * Returns the masked recovery-email address.
          *
-         * @apiNote
-         * Surface this to the UI as the "we sent a code to ..."
-         * disclosure text; WA Web stores it as
-         * {@code resultEmail} on the projected nonce-fetch outcome.
+         * <p>Surface this to the UI as the "we sent a code to ..." disclosure text.
          *
          * @return the email mask; never {@code null}
          */
@@ -322,12 +294,8 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
      * The {@code ClientError} reply variant carrying a documented
      * {@code 4xx} biz-access-token rejection.
      *
-     * @apiNote
-     * Surfaced when the relay rejected the silent-nonce request via
-     * one of the bad-request or forbidden mixin arms; WA Web's
-     * {@code fetchNonce} treats this branch as
-     * {@code {type: "error"}} and ends the QPL flow with code
-     * {@code 3} without retrying.
+     * <p>Surfaced when the relay rejected the silent-nonce request (bad-request or forbidden). The
+     * caller treats this branch as a terminal error and does not retry.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceErrors")
@@ -350,9 +318,7 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
         /**
          * Constructs a new client-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 4xx} envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 4xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may
@@ -457,13 +423,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
      * The {@code ServerError} reply variant carrying a transient
      * {@code 5xx} relay failure.
      *
-     * @apiNote
-     * Surfaced when the relay returned a transient internal failure
-     * while processing the silent-nonce request (internal-server-error
-     * or service-unavailable); WA Web's
-     * {@code WAPromiseRetryLoop}-backed {@code fetchNonce} retries
-     * with exponential backoff up to
-     * {@code adAccountTokenNonceMaxRetries} attempts.
+     * <p>Surfaced when the relay returned a transient internal failure while processing the
+     * silent-nonce request (internal-server-error or service-unavailable); the caller can retry
+     * with exponential backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceErrors")
@@ -487,9 +449,7 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
         /**
          * Constructs a new server-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 5xx} envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 5xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may

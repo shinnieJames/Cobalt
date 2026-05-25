@@ -27,31 +27,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * Handles server-issued cryptographic notifications: {@code encrypt}
- * (pre-key low, digest key, identity change), {@code mediaretry}
- * (re-uploaded CDN URL delivery), {@code server} (log upload and AB
- * prop sync requests), and {@code registration} (device-switch OTP).
+ * Handles server-issued cryptographic notifications dispatched by
+ * {@link NotificationDeviceDispatcher}.
  *
- * @apiNote
- * Dispatched by {@link NotificationDeviceDispatcher}. Most branches
- * trigger a side-effect on the local crypto or AB state and do not
- * require a per-user mutation: pre-key low uploads more pre-keys to
- * the server, identity change wipes the Signal session and fires
- * {@link WhatsAppClientListener#onDeviceIdentityChanged}, media retry
- * decrypts the new direct path and writes it onto the message, server
- * runs the matching maintenance task, and registration delivers the
- * device-switch OTP to listeners.
+ * <p>Covers four notification types: {@code encrypt} (pre-key low, digest key, identity change),
+ * {@code mediaretry} (re-uploaded CDN URL delivery), {@code server} (log upload and AB prop sync
+ * requests), and {@code registration} (device-switch OTP). Most branches trigger a side-effect on
+ * the local crypto or AB state: pre-key low uploads more pre-keys to the server, identity change
+ * wipes the Signal session and fires {@link WhatsAppClientListener#onDeviceIdentityChanged}, media
+ * retry decrypts the new direct path and writes it onto the message, server runs the matching
+ * maintenance task, and registration delivers the device-switch OTP to listeners. Every supported
+ * stanza is acknowledged even when its branch throws; unsupported types return without
+ * side-effects.
  *
- * @implNote
- * This implementation merges six WA Web modules
- * ({@code WAWebHandlePreKeyLow}, {@code WAWebHandleIdentityChange},
- * {@code WAWebHandleMediaRetryNotification},
- * {@code WAWebHandleServerNotification},
- * {@code WAWebHandleDeviceSwitchingNotification},
- * {@code WAWebHandleDigestKey}) under one Cobalt handler because they
- * all share the per-stanza ACK pattern (read {@code type}, branch,
- * ACK in {@code finally}) and so live more comfortably as one class
- * than six near-empty ones.
+ * @implNote This implementation merges six WA Web modules ({@code WAWebHandlePreKeyLow},
+ * {@code WAWebHandleIdentityChange}, {@code WAWebHandleMediaRetryNotification},
+ * {@code WAWebHandleServerNotification}, {@code WAWebHandleDeviceSwitchingNotification},
+ * {@code WAWebHandleDigestKey}) under one Cobalt handler because they all share the per-stanza ACK
+ * pattern (read {@code type}, branch, ACK in {@code finally}) and so live more comfortably as one
+ * class than six near-empty ones.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandlePreKeyLow")
 @WhatsAppWebModule(moduleName = "WAWebHandleIdentityChange")
@@ -61,18 +55,15 @@ import java.util.function.Consumer;
 @WhatsAppWebModule(moduleName = "WAWebHandleDigestKey")
 final class NotificationServerCryptoStreamHandler implements SocketStream.Handler {
     /**
-     * Logger used for warnings and debug messages about server-crypto
-     * notification handling.
+     * Logs warnings and debug messages about server-crypto notification handling.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationServerCryptoStreamHandler.class.getName());
 
     /**
-     * Set of notification {@code type} values routed to this handler.
+     * Holds the notification {@code type} values routed to this handler.
      *
-     * @apiNote
-     * Used by {@link #handle(Node)} as the first-line filter. Any
-     * stanza whose type is outside this set returns without
-     * side-effects.
+     * <p>Consulted by {@link #handle(Node)} as the first-line filter; any stanza whose type is
+     * outside this set returns without side-effects.
      */
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "encrypt",
@@ -82,54 +73,46 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     );
 
     /**
-     * The {@link WhatsAppClient} used for store reads, Signal session
-     * mutations, pre-key uploads, and ack sends.
+     * Provides store reads, Signal session mutations, pre-key uploads, and ack sends.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The {@link ABPropsService} used by the {@code server/abprops}
-     * branch to re-sync AB props from the server.
+     * Re-syncs AB props from the server for the {@code server/abprops} branch.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Deduplication guard that prevents two concurrent pre-key uploads
-     * for the same {@code stanzaId} within one session.
+     * Guards against two concurrent pre-key uploads for the same {@code stanzaId} within one
+     * session.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandlePreKeyLow} top-level {@code s} set which
-     * stores the {@code n} session-id key during the upload and
-     * removes it on completion. Cleared by {@link #reset()} when the
-     * stream reconnects.
+     * <p>The stanza id is added before the upload and removed on completion, so a second pre-key-low
+     * stanza with the same id arriving concurrently exits without re-uploading. Cleared by
+     * {@link #reset()} when the stream reconnects.
      */
     private final Set<String> preKeyUploadGuard;
 
     /**
-     * The {@link WamService} used to commit the {@code WaOldCode}
-     * event after a successful device-switch OTP delivery.
+     * Commits the {@code WaOldCode} event after a successful device-switch OTP delivery.
      */
     private final WamService wamService;
 
     /**
-     * The {@link AckSender} used to ship the post-processing
-     * {@code <ack class="notification">} stanza (special-casing the
-     * {@code encrypt} branch to omit {@code type} and the
-     * {@code mediaretry} branch to include {@code participant}).
+     * Ships the post-processing {@code <ack class="notification">} stanza, special-casing the
+     * {@code encrypt} branch to omit {@code type} and the {@code mediaretry} branch to include
+     * {@code participant}.
      */
     private final AckSender ackSender;
 
     /**
      * Constructs the handler with shared dependencies.
      *
-     * @apiNote
-     * Called once by {@link NotificationDeviceDispatcher}; embedders
-     * do not instantiate this handler directly.
+     * <p>Called once by {@link NotificationDeviceDispatcher}.
      *
      * @param whatsapp       the {@link WhatsAppClient}
      * @param abPropsService the {@link ABPropsService}
      * @param wamService     the {@link WamService}
+     * @param ackSender      the {@link AckSender}
      */
     NotificationServerCryptoStreamHandler(WhatsAppClient whatsapp, ABPropsService abPropsService, WamService wamService, AckSender ackSender) {
         this.whatsapp = whatsapp;
@@ -140,13 +123,12 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Routes the notification to its per-type sub-handler and always
-     * sends the protocol-level ACK.
+     * Routes the notification to its per-type sub-handler and always sends the protocol-level ACK.
      *
-     * @apiNote
-     * Invoked by {@link NotificationDeviceDispatcher}. Stanzas whose
-     * type is outside {@link #SUPPORTED_TYPES} return without
-     * side-effects.
+     * <p>Stanzas whose type is outside {@link #SUPPORTED_TYPES} return without side-effects. For a
+     * supported stanza the matching branch handler runs inside a {@code try} block, any failure is
+     * caught and warning-logged, and the ACK is sent in the {@code finally} block so a valid stanza
+     * is always acknowledged even when its branch throws.
      *
      * @param node the incoming {@code <notification>} stanza
      */
@@ -178,12 +160,9 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Clears the per-session pre-key deduplication guard so a new
-     * session can trigger fresh uploads.
+     * Clears the per-session pre-key deduplication guard so a new session can trigger fresh uploads.
      *
-     * @apiNote
-     * Invoked by {@link NotificationDeviceDispatcher#reset()} on
-     * socket reconnect. Embedders do not call this directly.
+     * <p>Invoked by {@link NotificationDeviceDispatcher#reset()} on socket reconnect.
      */
     @Override
     public void reset() {
@@ -193,21 +172,13 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     /**
      * Routes an {@code encrypt} notification to the per-child branch.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebCommsHandleLoggedInStanza} {@code encrypt} switch:
-     * {@code <count>} routes to
-     * {@code WAWebHandlePreKeyLow}, {@code <digest>} to
-     * {@code WAWebHandleDigestKey}, {@code <identity>} to
-     * {@code WAWebHandleIdentityChange}.
+     * <p>The first child tag selects the branch: {@code <count>} triggers a pre-key-low upload,
+     * {@code <identity>} records an end-to-end identity change, and {@code <digest>} is recognised
+     * but skipped. A stanza with no child, and any other child tag, is debug-logged and ignored.
      *
-     * @implNote
-     * This implementation skips the {@code <digest>} branch with a
-     * debug log; Cobalt has no equivalent of WA Web's
-     * digest-key verification because the
-     * {@code WAWebSignalStoreApi.waSignalStore} double-ratchet state
-     * Cobalt uses already includes the digest in its session-state
-     * envelope.
+     * @implNote This implementation skips the {@code <digest>} branch with a debug log because
+     * Cobalt has no equivalent of WA Web's digest-key verification; the double-ratchet session-state
+     * envelope Cobalt persists already includes the digest.
      *
      * @param node the {@code <notification type="encrypt"/>} stanza
      */
@@ -230,20 +201,14 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Uploads a fresh batch of pre-keys when the server reports the
-     * pre-key reserve is running low.
+     * Uploads a fresh batch of pre-keys when the server reports the pre-key reserve is running low.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandlePreKeyLow.c} which sets
-     * {@code waSignalStore.setServerHasPreKeys(false)}, waits for the
-     * offline-delivery barrier, then calls
-     * {@code WAWebUploadPreKeysJob.uploadPreKeys()}.
+     * <p>Returns early when the stanza has no id or when an upload for the same id is already in
+     * progress; otherwise it uploads the requested number of pre-keys and releases the guard once
+     * the upload completes.
      *
-     * @implNote
-     * This implementation uses the stanza id as the deduplication
-     * key; a second pre-key-low stanza with the same id arriving
-     * concurrently exits without re-uploading.
+     * @implNote This implementation uses the stanza id as the deduplication key; a second
+     * pre-key-low stanza with the same id arriving concurrently exits without re-uploading.
      *
      * @param node      the {@code <notification type="encrypt"/>} stanza
      * @param keysCount the server-reported remaining pre-key count
@@ -262,25 +227,16 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Records an end-to-end identity change for a remote device,
-     * wiping the existing Signal session and forcing a sender-key
-     * rotation.
+     * Records an end-to-end identity change for a remote device, wiping the existing Signal session
+     * and forcing a sender-key rotation.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleIdentityChange.handleE2eIdentityChange} which:
-     * <ul>
-     *   <li>Skips companion-device changes (non-zero device id).</li>
-     *   <li>Skips the local primary device.</li>
-     *   <li>Wipes the Signal session via
-     *       {@code Session.deleteRemoteInfo}.</li>
-     *   <li>Marks the user's broadcast and status sender keys for
-     *       rotation.</li>
-     *   <li>Fires the security-code-changed notification.</li>
-     * </ul>
-     * Cobalt collapses these into store mutations and fires
-     * {@link WhatsAppClientListener#onDeviceIdentityChanged} so the
-     * embedder can drive the equivalent UI.
+     * <p>Companion-device changes (non-zero device id) and the local primary device are skipped.
+     * When a {@code lid} attribute is present it is registered as a LID-PN mapping, and the
+     * {@code display_name} attribute, when non-blank, updates the contact's chosen name. The handler
+     * then marks the identity change, cleans up the Signal session, clears the sender-key
+     * distribution for the participant, marks the user for key rotation, and fires
+     * {@link WhatsAppClientListener#onDeviceIdentityChanged} so the embedder can drive the
+     * equivalent UI.
      *
      * @param node the {@code <notification type="encrypt"/>} stanza with an {@code <identity/>} child
      */
@@ -324,27 +280,21 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Decrypts the re-uploaded direct path delivered inside a
-     * {@code mediaretry} notification and writes it to the original
-     * media message.
+     * Decrypts the re-uploaded direct path delivered inside a {@code mediaretry} notification and
+     * writes it to the original media message.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleMediaRetryNotification.default}: the
-     * notification carries
-     * {@code <encrypt><enc_p>...</enc_p><enc_iv>...</enc_iv></encrypt>}
-     * which is the AES-GCM-encrypted
-     * {@link MediaRetryNotificationSpec} blob keyed off the message's
-     * media key. The decrypted blob's {@code directPath} replaces the
-     * provider's URL so a subsequent download hits the new CDN path.
+     * <p>Returns early when the stanza carries an {@code <error>} child, lacks an {@code <encrypt>}
+     * child, or when no matching media message is found. The {@code <encrypt>} child carries
+     * {@code <enc_p>} (the AES-GCM-encrypted {@link MediaRetryNotificationSpec} blob) and
+     * {@code <enc_iv>} (the IV); both, plus the message's media key, are required. On success the
+     * decoded {@code directPath} clears the provider's URL and replaces its direct path so a
+     * subsequent download hits the new CDN path.
      *
-     * @implNote
-     * This implementation derives the AES key via HKDF-SHA256 with
-     * info string {@code "WhatsApp Media Retry Notification"},
-     * matching the WA crypto contract. The IV is the
-     * {@code enc_iv} payload directly. Failures (missing media key,
-     * decryption error, decode error) are silently swallowed because
-     * the notification cannot be retried by the client.
+     * @implNote This implementation derives the AES key via HKDF-SHA256 with info string
+     * {@code "WhatsApp Media Retry Notification"}, matching the WA crypto contract, uses the
+     * {@code enc_iv} payload as the IV directly, and feeds the message key id as the GCM additional
+     * authenticated data. Failures (missing media key, decryption error, decode error) are silently
+     * swallowed because the notification cannot be retried by the client.
      *
      * @param node the {@code <notification type="mediaretry"/>} stanza
      */
@@ -390,22 +340,15 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Routes a {@code server} notification to the matching maintenance
-     * task based on the first child tag.
+     * Routes a {@code server} notification to the matching maintenance task based on the first child
+     * tag.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleServerNotification.m(type)}:
-     * {@code <log>} triggers
-     * {@code WAWebCrashlog.upload(SERVER_REQUESTED)}; {@code <abprops>}
-     * triggers
-     * {@code WAWebAbPropsSyncJob.syncABPropsTask({shouldSendHash: false})}.
+     * <p>A {@code <log>} child requests a crash-log upload, which Cobalt does not perform; an
+     * {@code <abprops>} child triggers an AB-prop resync via {@link ABPropsService#sync()}. A stanza
+     * with no child, and any other child tag, is debug-logged and ignored.
      *
-     * @implNote
-     * This implementation does not run the crashlog upload because
-     * Cobalt does not maintain a per-device crash log. The
-     * {@code abprops} branch routes through {@link ABPropsService#sync()}
-     * which re-runs the AB-prop fetch.
+     * @implNote This implementation does not run the crashlog upload because Cobalt does not
+     * maintain a per-device crash log.
      *
      * @param node the {@code <notification type="server"/>} stanza
      */
@@ -421,22 +364,17 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Delivers the device-switch OTP code to listeners and commits the
-     * {@code WaOldCode} WAM event.
+     * Delivers the device-switch OTP code to listeners and commits the {@code WaOldCode} WAM event.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleDeviceSwitchingNotification.default} which
-     * fires {@code showDeviceSwitchOtp} to the frontend and commits
-     * the equivalent WAM event. The notification is dropped when the
-     * OTP has already expired (the server tolerates a small clock
-     * skew and clients must re-check).
+     * <p>Returns early when the stanza lacks a {@code <wa_old_registration>} child, and drops the
+     * notification when the code or expiry is missing or the OTP has already expired against the
+     * current epoch second. A numeric code is delivered via
+     * {@link WhatsAppClientListener#onRegistrationCode}; the WAM event is committed afterward with
+     * the local device id.
      *
-     * @implNote
-     * This implementation parses the numeric OTP and ignores
-     * non-numeric values with a debug log. WA Web passes the raw
-     * string through; Cobalt requires a {@code long} for the
-     * {@link WhatsAppClientListener#onRegistrationCode} callback.
+     * @implNote This implementation parses the numeric OTP and debug-logs non-numeric values because
+     * the {@link WhatsAppClientListener#onRegistrationCode} callback requires a {@code long}, whereas
+     * WA Web passes the raw string through.
      *
      * @param node the {@code <notification type="registration"/>} stanza
      */
@@ -475,12 +413,9 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Fans the callback out to every registered listener on its own
-     * virtual thread.
+     * Fans the callback out to every registered listener on its own virtual thread.
      *
-     * @apiNote
-     * Internal helper used by {@link #handleIdentityChange(Node)} and
-     * {@link #handleRegistration(Node)}.
+     * <p>Used by {@link #handleIdentityChange(Node)} and {@link #handleRegistration(Node)}.
      *
      * @param consumer the callback to invoke against each listener
      */
@@ -491,15 +426,11 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Searches chats, status messages, and newsletters for the message
-     * matching the given stanza id.
+     * Searches chats, status messages, and newsletters for the message matching the given stanza id.
      *
-     * @apiNote
-     * Used only by {@link #handleMediaRetry(Node)} to locate the
-     * original media message whose direct path needs replacing. The
-     * three-tier search matches WA Web's
-     * {@code WAWebMsgCollection.get(msgKey)} fallback chain through
-     * the chat, status, and newsletter collections.
+     * <p>Used only by {@link #handleMediaRetry(Node)} to locate the original media message whose
+     * direct path needs replacing. Returns {@code null} for a {@code null} id and when no message
+     * matches in any of the three collections.
      *
      * @param id the stanza identifier
      * @return the matching {@link MessageInfo}, or {@code null} when not found
@@ -532,19 +463,12 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Sends the protocol-level ACK with the type attribute reflected
-     * from the original stanza (except for {@code encrypt} which uses
-     * no type per WA Web).
+     * Sends the protocol-level ACK with the {@code type} attribute reflected from the original
+     * stanza.
      *
-     * @apiNote
-     * Fire-and-forget; mirrors WA Web's per-module ack-builders
-     * which pin the type per handler. The {@code encrypt} type
-     * deliberately omits the {@code type} attribute on the ack to
-     * match
-     * {@code WAWebHandlePreKeyLow}'s {@code wap("ack", {to, id, class})}.
-     * The {@code mediaretry} ACK also reflects the {@code participant}
-     * attribute when present, matching
-     * {@code WAWebHandleMediaRetryNotification}.
+     * <p>The {@code encrypt} type omits the {@code type} attribute on the ack; every other type
+     * reflects it. The {@code mediaretry} ack additionally reflects the {@code participant}
+     * attribute when present.
      *
      * @param node the original {@code <notification>} stanza
      * @param type the notification type from the {@code type} attribute

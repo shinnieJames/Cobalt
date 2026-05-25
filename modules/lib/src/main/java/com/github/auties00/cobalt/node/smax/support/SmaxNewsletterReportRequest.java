@@ -16,19 +16,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code spam} IQ that reports a newsletter and a list of offending messages.
+ * Reports a newsletter and its offending messages as an outbound {@code spam} IQ.
  *
- * @apiNote
- * Drives the "Report newsletter" surface invoked by WA Web's
- * {@code WAWebNewsletterReportUtils.sendNewsletterReport}; pair with
- * {@link SmaxNewsletterReportResponse} to consume the relay's verdict. Each offending message
- * is represented by a {@link SmaxNewsletterReportMessageEntry}.
+ * <p>Every field is required: the newsletter JID, spam-flow, subject and the list of offending
+ * messages, each modelled by a {@link SmaxNewsletterReportMessageEntry}. The relay's verdict is
+ * parsed by {@link SmaxNewsletterReportResponse}.
  *
  * @implNote
- * This implementation flattens the WA Web mixin chain (BaseIQSetRequest, BaseReport,
- * EntitySubject) into a single {@link NodeBuilder} that pins {@code xmlns="spam"},
- * {@code to=JidServer.user()} and {@code type="set"}. Unlike the per-message group / individual
- * variants, all four scalar fields are required and the message list copy is non-{@code null}.
+ * This implementation flattens the WA Web mixin chain into a single {@link NodeBuilder} that pins
+ * {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. Unlike the group and
+ * individual variants, the outer IQ never carries optional children.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamNewsletterReportRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamBaseReportMixin")
@@ -36,46 +33,30 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamEntitySubjectMixin")
 public final class SmaxNewsletterReportRequest implements SmaxOperation.Request {
     /**
-     * The newsletter JID being reported.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list jid="..."/>} via WA Web's {@code JID} marshaller.
+     * Holds the newsletter JID being reported, routed into {@code <spam_list jid="..."/>}.
      */
     private final Jid spamListJid;
 
     /**
-     * The spam-flow identifier surfacing the user-facing report flow.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list spam_flow="..."/>}; carries the WA Web enum that names the
-     * surface from which the report was issued.
+     * Holds the spam-flow identifier routed into {@code <spam_list spam_flow="..."/>}, naming the
+     * user-facing surface that issued the report.
      */
     private final String spamListSpamFlow;
 
     /**
-     * The newsletter subject string echoed by the relay for attribution context.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list subject="..."/>} via WA Web's
-     * {@code WASmaxOutSpamEntitySubjectMixin}.
+     * Holds the newsletter subject string routed into {@code <spam_list subject="..."/>} for
+     * attribution context.
      */
     private final String spamListSubject;
 
     /**
-     * The list of offending {@link SmaxNewsletterReportMessageEntry} entries.
-     *
-     * @apiNote
-     * WA Web caps the count at 65 ({@code REPEATED_CHILD(message, 0, 65)}); appended in
-     * insertion order under {@code <spam_list>}.
+     * Holds the offending {@link SmaxNewsletterReportMessageEntry} entries appended in insertion
+     * order under {@code <spam_list>} (WA Web caps the count at 65).
      */
     private final List<SmaxNewsletterReportMessageEntry> messages;
 
     /**
      * Constructs a newsletter-report request.
-     *
-     * @apiNote
-     * Typically invoked by callers that have collected the form fields and harvested offending
-     * messages from the local cache.
      *
      * @param spamListJid      the newsletter JID; never {@code null}
      * @param spamListSpamFlow the spam-flow string; never {@code null}
@@ -92,10 +73,7 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the newsletter JID.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list jid>} value.
+     * Returns the newsletter JID, the {@code <spam_list jid>} value.
      *
      * @return the JID; never {@code null}
      */
@@ -104,10 +82,7 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the spam-flow identifier.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list spam_flow>} value naming the user-facing surface.
+     * Returns the spam-flow identifier, the {@code <spam_list spam_flow>} value.
      *
      * @return the spam-flow; never {@code null}
      */
@@ -116,10 +91,7 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the newsletter subject.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list subject>} value.
+     * Returns the newsletter subject, the {@code <spam_list subject>} value.
      *
      * @return the subject; never {@code null}
      */
@@ -128,11 +100,7 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the message entries.
-     *
-     * @apiNote
-     * Surfaces the {@link SmaxNewsletterReportMessageEntry} entries that {@link #toNode()}
-     * embeds under {@code <spam_list>}.
+     * Returns the message entries that {@link #toNode()} embeds under {@code <spam_list>}.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -143,14 +111,13 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Emits the outbound newsletter-report IQ ready for
-     * {@link com.github.auties00.cobalt.node.smax} dispatch.
+     * <p>Materialises each message entry into a {@code <message>} child under {@code <spam_list>}
+     * and wraps it in the outer {@code <iq>} envelope.
      *
      * @implNote
-     * This implementation materialises each {@link SmaxNewsletterReportMessageEntry} via
-     * {@link SmaxNewsletterReportMessageEntry#toNode()} and attaches the resulting list as
-     * {@code <spam_list>} content; the outer IQ never carries optional children.
+     * This implementation materialises each entry via
+     * {@link SmaxNewsletterReportMessageEntry#toNode()}; the outer IQ never carries optional
+     * children.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSpamNewsletterReportRequest",
@@ -174,6 +141,12 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
                 .content(spamListBuilder.build());
     }
 
+    /**
+     * Compares this request to another for value equality across all fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxNewsletterReportRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -189,11 +162,21 @@ public final class SmaxNewsletterReportRequest implements SmaxOperation.Request 
                 && Objects.equals(this.messages, that.messages);
     }
 
+    /**
+     * Returns a hash code derived from all fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(spamListJid, spamListSpamFlow, spamListSubject, messages);
     }
 
+    /**
+     * Returns a debug string listing every field.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxNewsletterReportRequest[spamListJid=" + spamListJid

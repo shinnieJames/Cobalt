@@ -15,13 +15,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Tracks per-customer Click-To-WhatsApp Ads data-sharing consent from {@code ctwaPerCustomerDataSharing} sync mutations.
  *
- * @apiNote
- * Drives the SMB CTWA per-customer data-sharing consent surface where
- * a business owner toggles, per business-account LID, whether
- * customer-level CTWA telemetry may be shared with third-party
- * partners. When the toggle changes on another device, the server
- * replays the resulting {@link CtwaPerCustomerDataSharingAction} here.
- * Cobalt embedders read the flag through
+ * <p>This handler drives the SMB CTWA per-customer data-sharing consent
+ * surface where a business owner toggles, per business-account LID, whether
+ * customer-level CTWA telemetry may be shared with third-party partners. When
+ * the toggle changes on another device, the server replays the resulting
+ * {@link CtwaPerCustomerDataSharingAction} here, and the flag becomes readable
+ * through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findCtwaDataSharing(String)}.
  *
  * @implNote
@@ -40,9 +39,8 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
     /**
      * Constructs the singleton CTWA-per-customer-data-sharing handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this once during client
+     * bootstrap.
      */
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public CtwaPerCustomerDataSharingHandler() {
@@ -69,16 +67,12 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * For SET mutations, validates that {@code indexParts[1]}
-     * (the account LID raw string) is present and that the value
-     * carries a {@link CtwaPerCustomerDataSharingAction}, then
-     * upserts a
+     * <p>For SET mutations, validates that {@code indexParts[1]} (the account
+     * LID raw string) is present and that the value carries a
+     * {@link CtwaPerCustomerDataSharingAction}, then upserts a
      * {@link com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreference}
-     * keyed by that LID. For REMOVE mutations, drops the entry by
-     * LID. Returns
-     * {@link MutationApplicationResult#unsupported()} for other
-     * operations.
+     * keyed by that LID. For REMOVE mutations, drops the entry by LID. Returns
+     * {@link MutationApplicationResult#unsupported()} for other operations.
      *
      * @implNote
      * This implementation reads the

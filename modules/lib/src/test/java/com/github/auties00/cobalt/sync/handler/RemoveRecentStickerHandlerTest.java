@@ -28,24 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link RemoveRecentStickerHandler}'s parity with
- * {@code WAWebStickersRemoveRecentSyncAction.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the {@code recent_sticker} primary-feature
- * gate, the non-{@code SET} operation filter, the malformed-index branch,
- * the orphan branch when the local recent-stickers map has no matching
- * entry, the happy path that removes the entry, the skip-removal path
- * when the local timestamp is newer than {@code lastStickerSentTs}, the
- * default timestamp tiebreaker for conflict resolution, and the
- * {@code RemoveRecentStickerMutationFactory} pending-mutation builder
- * shape.
- *
- * @implNote
- * Each test instantiates a fresh {@link TestWhatsAppClient} backed by a
- * temporary {@link WhatsAppStore} seeded with a known LID identity; the
- * {@code recent_sticker} primary feature is opened on a per-test basis
- * so the feature-gate branch can be exercised in isolation.
+ * Covers {@link RemoveRecentStickerHandler}: the wire-constant metadata, the
+ * {@code recent_sticker} primary-feature gate, the non-{@code SET} operation filter, the
+ * malformed-index branch, the orphan branch when the local recent-stickers map has no
+ * matching entry, the happy path that removes the entry, the skip-removal path when the
+ * local timestamp is newer than {@code lastStickerSentTs}, the default timestamp
+ * tiebreaker for conflict resolution, and the {@link RemoveRecentStickerMutationFactory}
+ * pending-mutation builder. The {@code recent_sticker} primary feature is opened on a
+ * per-test basis so the feature gate can be exercised in isolation.
  */
 @DisplayName("RemoveRecentStickerHandler")
 class RemoveRecentStickerHandlerTest {
@@ -57,45 +47,16 @@ class RemoveRecentStickerHandlerTest {
     private WhatsAppStore store;
     private TestWhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} so seeded
-     * recent stickers and primary features do not leak between cases.
-     *
-     * @implNote
-     * The {@code recent_sticker} primary feature is intentionally not
-     * pre-enabled; tests that need to reach the post-feature-gate body
-     * call {@code store.setPrimaryFeatures(...)} themselves so the
-     * gating branch can be exercised in isolation.
-     */
+    // The recent_sticker primary feature is intentionally not pre-enabled; tests that need
+    // the post-gate body call store.setPrimaryFeatures(...) themselves.
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given action and index into a trusted {@code SET}
-     * mutation with a fixed reference timestamp.
-     *
-     * @apiNote
-     * Used as a one-liner so each test can focus on the
-     * happy/malformed/orphan/skip branch it exercises rather than on
-     * mutation assembly.
-     *
-     * @implNote
-     * The fixed reference timestamp ({@code 1_700_000_000L}) is reused
-     * by both the wrapping {@link DecryptedMutation.Trusted} timestamp
-     * and the inner {@code SyncActionValue} timestamp so any
-     * timestamp-dependent branch sees a consistent value.
-     *
-     * @param action the remove-recent-sticker payload
-     * @param index  the JSON-encoded index
-     * @return the trusted mutation
-     */
+    // The fixed reference timestamp is reused by the wrapping mutation and the inner
+    // SyncActionValue so any timestamp-dependent branch sees a consistent value.
     private static DecryptedMutation.Trusted setMutation(RemoveRecentStickerAction action, String index) {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
         var value = new SyncActionValueBuilder()
@@ -106,17 +67,6 @@ class RemoveRecentStickerHandlerTest {
                 RemoveRecentStickerAction.ACTION_VERSION);
     }
 
-    /**
-     * Seeds the recent-stickers map with a sticker keyed under
-     * {@link #STICKER_HASH} and carrying the given timestamp.
-     *
-     * @apiNote
-     * Used by the happy-path and skip-removal tests to control how the
-     * incoming {@code lastStickerSentTs} compares against the local
-     * entry.
-     *
-     * @param epochSecond the local sticker's epoch-second timestamp
-     */
     private void seedRecentSticker(long epochSecond) {
         var sticker = new StickerBuilder().timestamp(epochSecond).build();
         store.addRecentSticker(STICKER_HASH, sticker);

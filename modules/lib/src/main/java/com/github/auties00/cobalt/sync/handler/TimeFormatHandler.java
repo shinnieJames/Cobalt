@@ -13,14 +13,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Mirrors the user's 12/24-hour clock preference across linked devices.
  *
- * @apiNote
- * Cobalt embedders never invoke this handler directly; the sync dispatcher
- * routes incoming {@code time_format} mutations here whenever the user
- * toggles 12/24-hour display on another linked device. The handler writes
- * the boolean preference into
+ * <p>The sync dispatcher routes incoming {@code time_format} mutations here
+ * whenever the user toggles 12/24-hour display on another linked device. The
+ * handler writes the boolean preference into
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)}
- * so any UI built on top of Cobalt can render timestamps using the
- * user-chosen format.
+ * so any UI built on top of Cobalt can render timestamps using the user-chosen
+ * format.
  */
 @WhatsAppWebModule(moduleName = "WAWebTimeFormatSync")
 public final class TimeFormatHandler implements WebAppStateActionHandler {
@@ -28,8 +26,7 @@ public final class TimeFormatHandler implements WebAppStateActionHandler {
     /**
      * Constructs the handler.
      *
-     * @apiNote
-     * The handler is stateless; Cobalt's sync registry holds a single
+     * <p>The handler is stateless; Cobalt's sync registry holds a single
      * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebTimeFormatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -67,20 +64,18 @@ public final class TimeFormatHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>A non-{@link SyncdOperation#SET} operation is reported as
+     * {@link MutationApplicationResult#unsupported()}; a value that does not decode
+     * to a {@link TimeFormatAction} is reported as malformed; otherwise the boolean
+     * is written to
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)}.
+     *
      * @implNote
-     * This implementation mirrors WA Web's per-mutation closure inside
-     * {@code WAWebTimeFormatSync.applyMutations}: non-{@code SET}
-     * operations are unsupported; a missing {@code timeFormatAction} or
-     * {@code isTwentyFourHourFormatEnabled} value is malformed; otherwise
-     * the boolean is written to
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)}
-     * in place of WA Web's
-     * {@code WAWebBackendApi.frontendFireAndForget("setIs24Hour", ...)}
-     * shell hop. The {@code md_syncd_24_hour_time_format_sync_enabled}
-     * AB-prop is never consulted because WA Web itself never reads it;
-     * the prop exists in {@code WAWebABPropsConfigs} but no module uses
-     * it. The trailing {@code WALogger.WARN} unsupported counter is
-     * omitted as telemetry.
+     * This implementation writes directly to the store in place of WA Web's
+     * {@code WAWebBackendApi.frontendFireAndForget("setIs24Hour", ...)} shell hop,
+     * never consults the {@code md_syncd_24_hour_time_format_sync_enabled} AB-prop
+     * because WA Web itself never reads it, and omits the trailing
+     * {@code WALogger.WARN} unsupported counter as telemetry.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebTimeFormatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)

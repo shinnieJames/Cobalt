@@ -14,12 +14,9 @@ import java.util.Optional;
 /**
  * Parsed response of the {@code queryCatalog} MEX query.
  *
- * @apiNote Carries the {@code xwa_product_catalog_get_product_catalog.product_catalog}
+ * <p>Carries the {@code xwa_product_catalog_get_product_catalog.product_catalog}
  * projection paired with the {@code paging.after} cursor needed to drive
- * subsequent pages. Surfaced from {@link QueryCatalogMexRequest} replies; the
- * paired WA Web entry point is {@code WAWebQueryCatalog.default} and the
- * downstream callers are {@code WAWebBizProductCatalogBridge.queryCatalog}
- * and the {@code WAWebBusinessProfileCollection} prefetch path.
+ * subsequent pages, decoded from {@link QueryCatalogMexRequest} replies.
  *
  * @implNote This implementation tolerates a relay reply that omits either
  * {@code xwa_product_catalog_get_product_catalog} or its
@@ -29,14 +26,22 @@ import java.util.Optional;
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalog")
 public final class QueryCatalogMexResponse implements MexOperation.Response.Json {
+    /**
+     * Holds the catalog entries returned by this page.
+     */
     private final List<BusinessCatalogEntry> products;
+
+    /**
+     * Holds the {@code paging.after} cursor, or the empty string when the
+     * relay reported no further pages.
+     */
     private final String afterCursor;
 
     /**
      * Constructs a parsed catalog response.
      *
-     * @apiNote Package-private; instances are produced by the
-     * {@link #of(Node)} factory after parsing the inbound IQ payload.
+     * <p>Instances are produced by the {@link #of(Node)} factory after parsing
+     * the inbound IQ payload.
      *
      * @param products    the catalog entries returned by this page
      * @param afterCursor the {@code paging.after} cursor, or the empty string
@@ -50,10 +55,9 @@ public final class QueryCatalogMexResponse implements MexOperation.Response.Json
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Entry point for receivers handling
-     * {@code <iq xmlns="w:mex">} replies tagged with the
-     * {@link QueryCatalogMexRequest#QUERY_ID} query id. Unwraps the
-     * {@code <result>} child, reads its content bytes and decodes the
+     * <p>Entry point for receivers handling {@code <iq xmlns="w:mex">} replies
+     * tagged with the {@link QueryCatalogMexRequest#QUERY_ID} query id; unwraps
+     * the {@code <result>} child, reads its content bytes and decodes the
      * GraphQL JSON envelope.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
@@ -71,7 +75,7 @@ public final class QueryCatalogMexResponse implements MexOperation.Response.Json
     /**
      * Returns the products carried by this page of the catalog.
      *
-     * @apiNote Each entry is the projection produced by
+     * <p>Each entry is the projection produced by
      * {@link CatalogProductParser#parseProducts(com.alibaba.fastjson2.JSONArray)}.
      *
      * @return an unmodifiable list of {@link BusinessCatalogEntry} values,
@@ -85,10 +89,10 @@ public final class QueryCatalogMexResponse implements MexOperation.Response.Json
      * Returns the {@code paging.after} cursor usable to request the next page
      * of products.
      *
-     * @apiNote Pass the returned value as the {@code afterCursor} argument of
-     * the next {@link QueryCatalogMexRequest}. An empty {@link Optional}
-     * means the relay did not advertise a continuation cursor; callers should
-     * stop pagination.
+     * <p>Pass the returned value as the {@code afterCursor} argument of the
+     * next {@link QueryCatalogMexRequest}. An empty {@link Optional} means the
+     * relay did not advertise a continuation cursor, so callers should stop
+     * pagination.
      *
      * @return an {@link Optional} carrying the cursor when the relay returned
      *         a non-empty value, or empty otherwise
@@ -100,15 +104,15 @@ public final class QueryCatalogMexResponse implements MexOperation.Response.Json
     /**
      * Parses the raw JSON bytes of the {@code <result>} child.
      *
-     * @apiNote Package-private; only invoked via the {@link #of(Node)} entry
-     * point after unwrapping the IQ stanza.
+     * <p>Invoked only via the {@link #of(Node)} entry point after unwrapping
+     * the IQ stanza.
      *
      * @implNote This implementation matches WA Web's empty-result fallback: a
      * reply where {@code xwa_product_catalog_get_product_catalog} or
-     * {@code product_catalog} is {@code null} returns a response with an
-     * empty product list and an empty cursor rather than
-     * {@link Optional#empty()}. Only a structurally broken envelope (missing
-     * {@code data} or unparseable JSON) yields {@link Optional#empty()}.
+     * {@code product_catalog} is {@code null} returns a response with an empty
+     * product list and an empty cursor rather than {@link Optional#empty()}.
+     * Only a structurally broken envelope (missing {@code data} or unparseable
+     * JSON) yields {@link Optional#empty()}.
      *
      * @param json the UTF-8 encoded JSON payload
      * @return the parsed response, or empty if the envelope is missing the

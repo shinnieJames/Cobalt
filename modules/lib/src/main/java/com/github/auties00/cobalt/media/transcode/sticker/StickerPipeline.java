@@ -25,69 +25,61 @@ import java.nio.channels.SeekableByteChannel;
 import java.util.Map;
 
 /**
- * Decodes a source image, normalises it to the WhatsApp sticker shape, and
- * encodes it as an extended WebP.
+ * Decodes a source image, normalises it to the WhatsApp sticker shape, and encodes it as an extended WebP.
  *
- * @apiNote
- * Drives the sticker branch of the upload transcoder. The output is a
- * {@value #STICKER_DIMENSION}-square WebP with transparent padding around
- * the source aspect ratio so the sticker overlay looks the same regardless
- * of the source image proportions. When the caller supplies sticker
- * metadata (publisher, pack id, emojis, accessibility text) the pipeline
- * appends a WhatsApp-format EXIF chunk via {@link WebpMetadataWriter}.
+ * <p>This type drives the sticker branch of the upload transcoder. It decodes the first frame of the source image,
+ * scales it to fit inside a {@value #STICKER_DIMENSION}-pixel square while preserving aspect ratio, pads the remaining
+ * area with transparent black, and encodes the result as a single-frame WebP. When the caller supplies sticker
+ * metadata (publisher, pack id, emojis, accessibility text and the like) the pipeline appends a WhatsApp-format EXIF
+ * chunk via {@link WebpMetadataWriter#write(byte[], Map)}. The transparent padding keeps the rendered sticker the same
+ * size on every receiver regardless of the source aspect ratio. The single instance is owned by the parent
+ * {@link MediaTranscoderService}.
  *
- * @implNote
- * This implementation drives libavfilter with the WA Web sticker filter
- * chain
+ * @implNote This implementation drives libavfilter with the sticker filter chain
  * {@snippet :
  *  scale=512:512:force_original_aspect_ratio=decrease,
  *  pad=512:512:(ow-iw)/2:(oh-ih)/2:0x00000000,
  *  format=rgba
  * }
- * then hands the RGBA frame to FFmpeg's {@code libwebp} encoder at
- * quality {@value #WEBP_QUALITY} with {@code lossless=0}. Encoding stops at
- * a single packet because stickers are static one-frame WebPs. The source
- * is read through {@link AvioReadBuffer} backed by a {@link FileChannel};
- * the encoded output is a single libwebp packet copied straight to a
- * {@link MediaPayload.OfBytes} so no temp file is created.
- *
- * @see WebpMetadataWriter
+ * then hands the RGBA frame to FFmpeg's {@code libwebp} encoder at quality {@value #WEBP_QUALITY} with
+ * {@code lossless=0}. Encoding stops at a single packet because stickers are static one-frame WebPs. The source is
+ * read through {@link AvioReadBuffer} backed by the supplied {@link SeekableByteChannel}; the encoded output is a
+ * single libwebp packet copied straight into a {@link MediaPayload.OfBytes} so no temporary file is created.
  */
 public final class StickerPipeline {
     /**
-     * Side of the output sticker in pixels. Mirrors
-     * {@code WAWebStickerConstants.STICKER_DIMENSION}.
+     * Side length, in pixels, of the square output sticker.
+     *
+     * @implNote This implementation uses 512, matching the fixed sticker canvas WhatsApp renders.
      */
     private static final int STICKER_DIMENSION = 512;
 
     /**
-     * libwebp quality setting in the {@code 0..100} range. Mirrors WA Web's
-     * sticker encoder configuration.
+     * libwebp encoder quality on the {@code 0..100} scale.
+     *
+     * @implNote This implementation uses 90, matching WhatsApp's sticker encoder configuration.
      */
     private static final int WEBP_QUALITY = 90;
 
     /**
-     * Constructs the pipeline; the parent
-     * {@link MediaTranscoderService} owns the single instance.
+     * Constructs an empty pipeline.
+     *
+     * <p>The instance is stateless; the parent {@link MediaTranscoderService} owns the single instance.
      */
     public StickerPipeline() {
     }
 
     /**
-     * Transcodes the source image into the sticker wire format, applies
-     * codec-derived metadata to {@code provider}, and returns the encoded
-     * payload.
+     * Transcodes the source image into the sticker wire format, applies codec-derived metadata to {@code provider},
+     * and returns the encoded payload.
      *
-     * @apiNote
-     * Equivalent to {@link #run(MediaProvider, Path, Map)} with an empty
-     * metadata map.
+     * <p>This overload behaves exactly like {@link #run(MediaProvider, SeekableByteChannel, Map)} invoked with an
+     * empty metadata map, so no EXIF metadata chunk is embedded in the output.
      *
-     * @param provider the upload target; codec-derived fields are applied
-     *                 to this instance
+     * @param provider the upload target; codec-derived fields are applied to this instance
      * @param source   the raw image channel; not closed by this method
      * @return the encoded WebP payload
-     * @throws WhatsAppMediaException.Processing if decoding or encoding
-     *         fails
+     * @throws WhatsAppMediaException.Processing if decoding or encoding fails
      */
     public MediaPayload run(MediaProvider provider, SeekableByteChannel source)
             throws WhatsAppMediaException.Processing {
@@ -95,30 +87,21 @@ public final class StickerPipeline {
     }
 
     /**
-     * Transcodes the source image into the sticker wire format with an
-     * optional WhatsApp metadata chunk, applies codec-derived metadata to
-     * {@code provider}, and returns the encoded payload.
+     * Transcodes the source image into the sticker wire format with an optional WhatsApp metadata chunk, applies
+     * codec-derived metadata to {@code provider}, and returns the encoded payload.
      *
-     * @apiNote
-     * Keys in the {@code metadata} map are the canonical WhatsApp
-     * descriptor names (for example {@code "sticker-pack-id"},
-     * {@code "emojis"}, {@code "accessibility-text"}); see
-     * {@code WAWebStickerMetadataParsing} for the full set. The map is
-     * serialised to JSON and embedded as an EXIF chunk via
-     * {@link WebpMetadataWriter#write(byte[], Map)}. When {@code provider}
-     * is a {@link StickerMessage} the {@code mimetype}, {@code mediaSize},
-     * {@code width}, and {@code height} fields are populated; every other
-     * {@link MediaProvider} variant receives only the common
-     * {@code mediaSize} update.
+     * <p>The keys of {@code metadata} are the canonical WhatsApp descriptor names (for example
+     * {@code "sticker-pack-id"}, {@code "emojis"}, {@code "accessibility-text"}). The map is serialised to JSON and
+     * embedded as an EXIF chunk via {@link WebpMetadataWriter#write(byte[], Map)}; passing an empty map skips the embed
+     * step entirely. When {@code provider} is a {@link StickerMessage} the {@code mimetype}, {@code mediaSize},
+     * {@code width}, and {@code height} fields are populated; every other {@link MediaProvider} variant receives only
+     * the common {@code mediaSize} update.
      *
-     * @param provider the upload target; codec-derived fields are applied
-     *                 to this instance
+     * @param provider the upload target; codec-derived fields are applied to this instance
      * @param source   the raw image channel; not closed by this method
-     * @param metadata sticker descriptor map; pass an empty map to skip
-     *                 the metadata embed
+     * @param metadata sticker descriptor map; pass an empty map to skip the metadata embed
      * @return the encoded WebP payload
-     * @throws WhatsAppMediaException.Processing if decoding, encoding, or
-     *         the metadata embed fails
+     * @throws WhatsAppMediaException.Processing if decoding, encoding, or the metadata embed fails
      */
     public MediaPayload run(MediaProvider provider, SeekableByteChannel source,
                             Map<String, Object> metadata)
@@ -147,17 +130,16 @@ public final class StickerPipeline {
     }
 
     /**
-     * Drives the source frame through the sticker filter chain.
+     * Drives the decoded source frame through the sticker filter chain and returns the scaled, padded RGBA frame.
      *
-     * @apiNote
-     * The chain mirrors WA Web's sticker pipeline: scale-with-aspect-fit
-     * into the 512x512 box, pad the remainder with transparent black so
-     * the sticker overlay is always the same size on every receiver, and
-     * coerce to RGBA so the libwebp encoder picks up the alpha channel.
+     * <p>The chain scales the source with aspect-fit into the {@value #STICKER_DIMENSION}-square box, pads the
+     * remaining area with transparent black so the sticker overlay is always the same size on every receiver, and
+     * coerces the result to RGBA so the libwebp encoder picks up the alpha channel. The returned frame is freshly
+     * allocated and must be released by the caller via {@link #freeFrame(MemorySegment)}.
      *
-     * @param decoded the demuxed source state with the first input frame
-     * @return a freshly-allocated {@link AVFrame} (caller must
-     *         {@code av_frame_free} via {@link #freeFrame(MemorySegment)})
+     * @param decoded the demuxed source state holding the first input frame
+     * @return a freshly-allocated {@link AVFrame} the caller must free
+     * @throws WhatsAppMediaException.Processing if the filter graph fails to produce an output frame
      */
     private static MemorySegment scaleAndPad(DecodedSource decoded) {
         var arena = decoded.arena;
@@ -239,14 +221,11 @@ public final class StickerPipeline {
     }
 
     /**
-     * Encodes the given RGBA frame as a WebP image via FFmpeg's
-     * {@code libwebp} encoder.
+     * Encodes the given RGBA frame as a WebP image via FFmpeg's {@code libwebp} encoder.
      *
-     * @apiNote
-     * libwebp emits a single packet for a static image. The returned bytes
-     * are a complete WebP file (RIFF + WEBP header + VP8L/VP8 chunk),
-     * ready for {@link WebpMetadataWriter} when sticker metadata needs to
-     * be embedded.
+     * <p>libwebp emits a single packet for a static image. The returned bytes are a complete WebP file (RIFF outer
+     * header, {@code WEBP} form type, and the encoded image chunk), ready for {@link WebpMetadataWriter#write(byte[],
+     * Map)} when sticker metadata needs to be embedded.
      *
      * @param frame the RGBA input frame at sticker dimensions
      * @return the encoded WebP bytes
@@ -311,13 +290,17 @@ public final class StickerPipeline {
     }
 
     /**
-     * Opens the source channel through FFmpeg and decodes the first frame.
+     * Opens the source channel through FFmpeg and decodes its first frame.
+     *
+     * <p>The channel is wrapped in an {@link AvioReadBuffer} so libavformat reads through the Java channel rather than
+     * a file path. The method probes the container, selects the first video stream, opens its decoder, and runs the
+     * demux-decode loop until a single frame is produced. On any failure the half-initialised native resources are
+     * released before the exception propagates.
      *
      * @param arena   the shared arena that owns the AVIO bridge
      * @param channel the source channel
-     * @return the decoded source bundle
-     * @throws WhatsAppMediaException.Processing if probing, opening, or
-     *         decoding fails
+     * @return the decoded source bundle holding the first frame and the open native contexts
+     * @throws WhatsAppMediaException.Processing if probing, opening, or decoding fails
      */
     private static DecodedSource decodeFirstFrame(Arena arena, SeekableByteChannel channel)
             throws WhatsAppMediaException.Processing {
@@ -398,11 +381,10 @@ public final class StickerPipeline {
     }
 
     /**
-     * Returns the index of the first video stream in the demuxer, or
-     * {@code -1} if none.
+     * Returns the index of the first video stream in the demuxer, or {@code -1} if none exists.
      *
      * @param formatCtx the open demuxer
-     * @return the stream index or {@code -1}
+     * @return the zero-based index of the first video stream, or {@code -1} when the source has no video stream
      */
     private static int pickVideoStream(MemorySegment formatCtx) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -419,11 +401,11 @@ public final class StickerPipeline {
     }
 
     /**
-     * Returns the i-th stream pointer from the demuxer's stream array.
+     * Returns the stream pointer at the given index from the demuxer's stream array.
      *
      * @param formatCtx the open demuxer
      * @param index     the zero-based stream index
-     * @return the stream pointer reinterpreted as an {@link AVStream}
+     * @return the stream pointer reinterpreted to the {@link AVStream} layout
      */
     private static MemorySegment streamPointer(MemorySegment formatCtx, int index) {
         return AVFormatContext.streams(formatCtx)
@@ -432,19 +414,18 @@ public final class StickerPipeline {
     }
 
     /**
-     * Allocates a fresh {@link AVFrame}.
+     * Allocates a fresh frame via {@code av_frame_alloc}.
      *
-     * @return the allocated frame
+     * @return the allocated {@link AVFrame} pointer
      */
     private static MemorySegment allocFrame() {
         return FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
     }
 
     /**
-     * Frees the given frame via {@code av_frame_free}, tolerating
-     * {@code NULL}.
+     * Frees the given frame via {@code av_frame_free}, tolerating a {@code null} or {@code NULL} argument.
      *
-     * @param frame the frame to free
+     * @param frame the frame to free; ignored when {@code null} or {@link MemorySegment#NULL}
      */
     private static void freeFrame(MemorySegment frame) {
         if (frame == null || frame == MemorySegment.NULL) {
@@ -458,13 +439,16 @@ public final class StickerPipeline {
     }
 
     /**
-     * Releases half-initialised resources on the failure path.
+     * Releases half-initialised native resources on the decode failure path.
      *
-     * @param formatCtx demuxer context or {@code NULL}
-     * @param codecCtx  decoder context or {@code NULL}
-     * @param frame     decoder output frame or {@code NULL}
-     * @param packet    demuxer packet or {@code NULL}
-     * @param bridge    AVIO bridge to close
+     * <p>Each argument may be {@link MemorySegment#NULL} (or {@code null}) when its allocation step had not yet run;
+     * the method skips any such resource and tolerates being called at any point during partial initialisation.
+     *
+     * @param formatCtx the demuxer context, or {@link MemorySegment#NULL}
+     * @param codecCtx  the decoder context, or {@link MemorySegment#NULL}
+     * @param frame     the decoder output frame, or {@link MemorySegment#NULL}
+     * @param packet    the demuxer packet, or {@link MemorySegment#NULL}
+     * @param bridge    the AVIO bridge to close
      */
     private static void freeOnFailure(MemorySegment formatCtx, MemorySegment codecCtx,
                                        MemorySegment frame, MemorySegment packet,
@@ -497,10 +481,9 @@ public final class StickerPipeline {
     /**
      * Holds the per-run FFmpeg state across the decode and filter passes.
      *
-     * @apiNote
-     * Implements {@link AutoCloseable} so the orchestrator can wrap it in a
-     * try-with-resources block and guarantee FFmpeg cleanup runs even when
-     * the filter or encode passes throw.
+     * <p>The bundle owns the open demuxer, decoder, demuxer packet, and the first decoded frame, together with the
+     * shared arena and the AVIO bridge that back them. It implements {@link AutoCloseable} so the pipeline can wrap it
+     * in a try-with-resources block and guarantee the native cleanup runs even when the filter or encode passes throw.
      */
     private static final class DecodedSource implements AutoCloseable {
         /**
@@ -529,12 +512,12 @@ public final class StickerPipeline {
         final MemorySegment packet;
 
         /**
-         * The first decoded frame; reused for the filter pass.
+         * The first decoded frame, reused as the input to the filter pass.
          */
         final MemorySegment frame;
 
         /**
-         * Constructs the decoded source bundle.
+         * Constructs the decoded source bundle from the supplied native state.
          *
          * @param arena     the shared arena
          * @param bridge    the AVIO bridge
@@ -553,6 +536,12 @@ public final class StickerPipeline {
             this.frame = frame;
         }
 
+        /**
+         * Releases the demuxer packet, decoded frame, decoder, and demuxer, then closes the AVIO bridge.
+         *
+         * <p>Each native resource is skipped when it is {@link MemorySegment#NULL}, so the method is safe regardless of
+         * how far initialisation progressed.
+         */
         @Override
         public void close() {
             try (var local = Arena.ofConfined()) {

@@ -7,30 +7,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Exercises the self-send PN/LID round-trip through {@link AbstractWhatsAppStore}.
+ * Covers the self-send PN/LID round-trip through {@link AbstractWhatsAppStore#findLidByPhone(Jid)}
+ * and {@link AbstractWhatsAppStore#findPhoneByLid(Jid)}: a message addressed to the local user's
+ * own phone-number JID must resolve to a LID and that LID must map back to the same PN.
  *
- * @apiNote
- * Pins the store-side half of the self-send routing contract: when the local user sends a
- * message addressed to their own phone-number JID, the store must resolve the corresponding LID
- * and the LID must round-trip back to the same PN. Without this, the server acks the stanza but
- * the primary phone never surfaces the message because the destination chat is keyed under the
- * LID, not the PN.
- *
- * @implNote
- * This test compares against a captured live oracle
- * ({@code fixtures/device/self-chat-routing.expected.json}) produced by exercising WA Web's
- * {@code findOrCreateLatestChat(<own PN>)}, which yields a LID-keyed chat. The round-trip checked
- * here is {@code PN -> findLidByPhone -> LID -> findPhoneByLid -> PN}; the assertion on the
- * reverse direction exists to guarantee {@link AbstractWhatsAppStore#findPhoneByLid(Jid)} carries
- * the self-special-case symmetric to {@link AbstractWhatsAppStore#findLidByPhone(Jid)}, without
- * which the local user's LID would never resolve back to a PN.
+ * <p>The expectations come from a captured live oracle
+ * ({@code fixtures/device/self-chat-routing.expected.json}) recorded from WA Web's
+ * {@code findOrCreateLatestChat(<own PN>)}, which keys the self-chat under a LID.
  */
 class SelfPnLidRoutingTest {
 
-    /**
-     * Round-trips the local user's own PN through the LID lookup back to the same PN and
-     * matches the captured oracle's account LID.
-     */
     @Test
     void selfMappingRoundTripMatchesLiveOracle() {
         var oracle = DeviceFixtures.loadOracle("self-chat-routing");

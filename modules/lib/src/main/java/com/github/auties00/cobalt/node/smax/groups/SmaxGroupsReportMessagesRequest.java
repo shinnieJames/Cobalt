@@ -16,9 +16,9 @@ import java.util.Optional;
  * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that flags a single message in a group for moderator
  * review.
  *
- * @apiNote Drives the "Report message" affordance available to group admins on the message context menu. The
- * relay returns a bare {@link SmaxGroupsReportMessagesResponse.Success} envelope on success; there is no
- * per-report payload because the report is opaque to the client.
+ * <p>Backs the "Report message" affordance available to group admins on the message context menu. The relay
+ * returns a bare {@link SmaxGroupsReportMessagesResponse.Success} envelope on success; there is no per-report
+ * payload because the report is opaque to the client.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsReportMessagesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -48,7 +48,7 @@ public final class SmaxGroupsReportMessagesRequest implements SmaxOperation.Requ
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -68,7 +68,7 @@ public final class SmaxGroupsReportMessagesRequest implements SmaxOperation.Requ
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <reports>

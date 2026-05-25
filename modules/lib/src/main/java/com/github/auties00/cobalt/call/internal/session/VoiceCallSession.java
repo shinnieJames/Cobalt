@@ -24,116 +24,107 @@ import com.github.auties00.cobalt.call.session.VoiceCallOptions;
 import com.github.auties00.cobalt.call.session.VideoTrackOptions;
 
 /**
- * The M1 1:1 voice-call media session — owns and wires the
- * DTLS-SRTP handshake driver, the RTP sender + receiver, and the
- * audio pipeline against an {@link ActiveCall}'s media ports.
+ * Drives the media plane of a one-to-one voice call, owning the DTLS-SRTP handshake driver, the RTP
+ * sender and receiver, and the audio pipeline bound to an {@link ActiveCall}'s media ports.
  *
- * <p>Construction takes the connected {@link DatagramTransport} from
- * the ICE agent (#76) and the {@link DtlsCertificate} pair the call
- * signaling exchanged. {@link #start()} drives the DTLS handshake to
- * completion, derives the SRTP keys, wires the
- * {@link RtpSender}/{@link RtpReceiver} to the resulting
- * {@link SrtpEndpoint
- * SrtpEndpoint}, and starts the audio pipeline so PCM frames written
- * to {@link ActiveCall#localAudioSink} flow through Opus encoding,
- * RTP packetisation, and SRTP protection to the peer — and inbound
- * frames flow back the other way to
- * {@link ActiveCall#remoteAudioSource}.
+ * <p>Construction takes the connected {@link DatagramTransport} produced by the ICE agent and the
+ * {@link DtlsCertificate} the call signaling exchanged. {@link #start()} drives the DTLS handshake to
+ * completion, derives the SRTP keys, wires the {@link RtpSender} and {@link RtpReceiver} to the
+ * resulting {@link SrtpEndpoint}, and starts the audio pipeline so PCM frames written to
+ * {@link ActiveCall#localAudioSink()} flow through Opus encoding, RTP packetisation, and SRTP
+ * protection to the peer, while inbound frames flow the other way to
+ * {@link ActiveCall#remoteAudioSource()}. Video tracks may be added on top through
+ * {@link #startVideoTrack(VideoTrackOptions)}; a camera track and a screen-share track can run at the
+ * same time, each on its own SSRC and payload type but sharing the audio track's SRTP keys.
  *
- * <h2>Lifecycle</h2>
+ * <p>The lifecycle proceeds in order:
  *
  * <ol>
- *   <li>Construct with the active call, the connected transport, our
- *       DTLS role + cert, and the peer's fingerprint from
- *       signaling.</li>
- *   <li>{@link #start()} drives the DTLS handshake on a virtual
- *       thread, then wires the RTP loop and starts the audio
- *       pipeline.</li>
- *   <li>{@link #awaitConnected} blocks until the handshake completes
- *       — the call is now actively exchanging media.</li>
- *   <li>{@link #close()} (or {@link ActiveCall#close()}) tears
- *       everything down in reverse order.</li>
+ *   <li>Construct with the active call, the connected transport, the local DTLS role and
+ *       certificate, and the peer's fingerprint from signaling.</li>
+ *   <li>{@link #start()} drives the DTLS handshake on a virtual thread, then wires the RTP loop and
+ *       starts the audio pipeline.</li>
+ *   <li>{@link #awaitConnected} blocks until the handshake completes and media is flowing.</li>
+ *   <li>{@link #close()}, or {@link ActiveCall#close()}, tears everything down in reverse order.</li>
  * </ol>
  *
- * <h2>What this doesn't do</h2>
- *
- * <p>The session does NOT speak WhatsApp call signaling. It assumes
- * the offer/answer exchange, ICE candidate gathering, and DTLS
- * fingerprint trade have already happened — those flows live in the
- * call signaling layer and feed this session a connected transport
- * plus the peer's fingerprint. Group-call media (M5+) reuses these
- * same primitives but adds an SFU-style multipoint layer on top.
+ * <p>This session does not speak WhatsApp call signaling. It assumes the offer/answer exchange, ICE
+ * candidate gathering, and DTLS fingerprint trade have already happened in the call signaling layer,
+ * which feeds this session a connected transport plus the peer's fingerprint. Group-call media reuses
+ * these same primitives behind {@link GroupCallSession}, which adds an SFU-style multipoint layer on
+ * top.
  */
 public final class VoiceCallSession implements AutoCloseable {
     /**
-     * The active call whose media ports drive the session.
+     * The active call whose media ports drive this session.
      */
     private final ActiveCall call;
 
     /**
-     * Configuration — never mutated after construction.
+     * The per-call configuration supplying the SSRCs, Opus payload type, and audio pipeline options;
+     * never mutated after construction.
      */
     private final VoiceCallOptions options;
 
     /**
-     * The DTLS role we play across this and any future
-     * {@link #reconnect reconnection}.
+     * The DTLS role played across this handshake and any future {@link #reconnect reconnection}.
      */
     private final SrtpRole role;
 
     /**
-     * The local DTLS certificate. Reused across reconnects so the
-     * peer's signaling-advertised fingerprint stays valid.
+     * The local DTLS certificate, reused across reconnects so the peer's signaling-advertised
+     * fingerprint stays valid.
      */
     private final DtlsCertificate localCert;
 
     /**
-     * The peer's expected fingerprint, also stable across reconnects.
+     * The expected peer certificate fingerprint, also stable across reconnects; a defensive copy is
+     * held so the caller's array cannot mutate it.
      */
     private final byte[] expectedPeerFingerprint;
 
     /**
-     * The active DTLS-SRTP handshake driver. Owns the underlying
-     * {@link DatagramTransport}; closing the session closes the
-     * driver, which closes the transport.
+     * The active DTLS-SRTP handshake driver, which owns the underlying {@link DatagramTransport}.
      *
-     * <p>Replaced by {@link #reconnect(DatagramTransport)} when the
-     * call layer detects a network change.
+     * <p>Closing the session closes the driver, which closes the transport. This field is replaced by
+     * {@link #reconnect(DatagramTransport)} when the call layer detects a network change.
      */
     private DtlsSrtpDriver dtls;
 
     /**
-     * Audio pipeline; instantiated post-handshake.
+     * The audio pipeline, instantiated once the handshake completes and preserved across reconnects;
+     * {@code null} until then.
      */
     private AudioPipeline audio;
 
     /**
-     * RTP sender; instantiated post-handshake.
+     * The audio RTP sender, instantiated once the handshake completes and nulled during a reconnect
+     * window; {@code null} until then.
      */
     private RtpSender rtpSender;
 
     /**
-     * RTP receiver; instantiated post-handshake.
+     * The audio RTP receiver, instantiated once the handshake completes and nulled during a reconnect
+     * window; {@code null} until then.
      */
     private RtpReceiver rtpReceiver;
 
     /**
-     * Per-kind video track state. Keyed by
-     * {@link VideoTrackOptions.Kind} so a camera track and a
-     * screen-share track can coexist on the same session
-     * simultaneously, each with its own codec, pipeline, RTP sender
-     * + receiver, and distinct SSRC.
+     * The active video tracks, keyed by {@link VideoTrackOptions.Kind}.
+     *
+     * <p>Keying on the kind lets a camera track and a screen-share track coexist on the same session,
+     * each with its own codec, pipeline, RTP sender and receiver, and distinct SSRC.
      */
     private final ConcurrentHashMap<VideoTrackOptions.Kind, VideoTrack> videoTracks =
             new ConcurrentHashMap<>();
 
     /**
-     * Bundle of state for one active video track — the codec,
-     * pipeline, and RTP plumbing.
+     * Bundles the state of one active video track: its configuration, codec, pipeline, and RTP
+     * plumbing.
      *
      * @param options  the configuration this track was started with
-     * @param codec    the codec adapter (closed by the pipeline)
-     * @param pipeline the video pipeline driving the loop
+     * @param codec    the codec adapter, closed by the pipeline
+     * @param pipeline the video pipeline driving the encode/decode loop
      * @param sender   the RTP sender for outbound frames
      * @param receiver the RTP receiver for inbound frames
      */
@@ -142,42 +133,38 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Monotonic counter used to drive the AudioPipeline's outbound
-     * pts when wrapping {@link OpusPacket} from the encoder. Each
-     * Opus frame is 10 ms in the WhatsApp profile, so we step by 10
-     * per outbound packet.
+     * The monotonic outbound presentation timestamp, in milliseconds, stamped onto each encoded Opus
+     * frame.
+     *
+     * @implNote This implementation steps the counter by one frame duration per outbound packet,
+     * which is 10 ms in the WhatsApp voice profile, so the RTP sender receives a strictly increasing
+     * timestamp without depending on wall-clock timing of the encoder.
      */
     private final AtomicLong outboundPtsMs = new AtomicLong();
 
     /**
-     * Whether {@link #start()} has been called.
+     * Whether {@link #start()} has been called, guarding against a second handshake.
      */
     private volatile boolean started;
 
     /**
-     * Whether {@link #close()} has been called.
+     * Whether {@link #close()} has been called, after which media wiring and track changes are
+     * suppressed.
      */
     private volatile boolean closed;
 
     /**
-     * Constructs a new session.
+     * Constructs a one-to-one voice-call session bound to the given call and transport.
      *
-     * @param call                    the active call
-     * @param transport               the connected datagram transport
-     *                                from the ICE agent
-     * @param role                    {@link SrtpRole#CLIENT} or
-     *                                {@link SrtpRole#SERVER} per the
-     *                                DTLS-SRTP role exchanged via
-     *                                signaling
-     * @param localCert               our local DTLS certificate
-     * @param expectedPeerFingerprint the peer's SHA-256 fingerprint
-     *                                from signaling
+     * @param call                    the active call whose media ports drive the session
+     * @param transport               the connected datagram transport from the ICE agent
+     * @param role                    the DTLS-SRTP role exchanged via signaling, either
+     *                                {@link SrtpRole#CLIENT} or {@link SrtpRole#SERVER}
+     * @param localCert               the local DTLS certificate
+     * @param expectedPeerFingerprint the peer's SHA-256 certificate fingerprint from signaling
      * @param options                 the per-call configuration
-     * @throws NullPointerException     if any argument is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if
-     *                                  {@code expectedPeerFingerprint}
-     *                                  is not exactly 32 bytes
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if {@code expectedPeerFingerprint} is not exactly 32 bytes
      */
     public VoiceCallSession(ActiveCall call, DatagramTransport transport,
                             SrtpRole role, DtlsCertificate localCert,
@@ -201,40 +188,41 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Returns the DTLS-SRTP driver. Exposed so the call layer can
-     * wire its STUN handler back to the ICE agent for keepalives.
+     * Returns the DTLS-SRTP driver, exposed so the call layer can wire its STUN handler back to the
+     * ICE agent for keepalives.
      *
-     * @return the DTLS driver
+     * @return the DTLS-SRTP driver
      */
     public DtlsSrtpDriver dtlsDriver() {
         return dtls;
     }
 
     /**
-     * Returns the audio pipeline, or {@code null} until the DTLS
-     * handshake completes.
+     * Returns the audio pipeline, or {@code null} until the handshake completes.
      *
-     * @return the audio pipeline, or {@code null}
+     * @return the audio pipeline, or {@code null} if the handshake has not completed
      */
     public AudioPipeline audio() {
         return audio;
     }
 
     /**
-     * Returns whether the DTLS handshake has completed and the RTP
-     * plumbing is currently wired (i.e. media is flowing). Returns
-     * {@code false} during a {@link #reconnect} window between the
-     * old session being torn down and the new handshake completing.
+     * Returns whether the handshake has completed and the RTP plumbing is currently wired.
      *
-     * @return {@code true} if connected
+     * <p>This reports {@code false} during a {@link #reconnect} window, between the old session being
+     * torn down and the new handshake completing, because the RTP plumbing is nulled across the swap.
+     *
+     * @return {@code true} if media is flowing
      */
     public boolean connected() {
         return audio != null && rtpSender != null;
     }
 
     /**
-     * Spawns the handshake thread. Idempotent — subsequent calls are
-     * no-ops.
+     * Starts the DTLS handshake and spawns the completer thread that wires the media plane.
+     *
+     * <p>The handshake runs on a virtual thread; this method returns immediately. Calling it more
+     * than once, or after {@link #close()}, is a no-op.
      */
     public synchronized void start() {
         if (started || closed) {
@@ -248,16 +236,20 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Blocks until the DTLS handshake completes and the media
-     * pipeline starts. Throws if the handshake fails or the wait
-     * times out.
+     * Blocks until the handshake completes and the media pipeline starts, or fails.
      *
-     * @param timeout maximum time to wait
-     * @param unit    timeout unit
-     * @throws IOException          if the handshake failed or the
-     *                              wait timed out
-     * @throws InterruptedException if the calling thread is
-     *                              interrupted
+     * <p>This first waits for the DTLS handshake, then polls until the completer thread has
+     * instantiated the audio pipeline. It throws if the session is closed before wiring finishes or
+     * if wiring does not complete within the given budget.
+     *
+     * @param timeout the maximum time to wait
+     * @param unit    the unit of {@code timeout}
+     * @throws IOException          if the handshake failed, the session closed early, or wiring timed
+     *                              out
+     * @throws InterruptedException if the calling thread is interrupted while waiting
+     * @implNote This implementation polls the {@code audio} field every 5 ms after the handshake
+     * completes because the completer thread wires the pipeline asynchronously; the same {@code unit}
+     * budget bounds both the handshake wait and the wiring poll.
      */
     public void awaitConnected(long timeout, TimeUnit unit) throws IOException, InterruptedException {
         dtls.awaitHandshake(timeout, unit);
@@ -274,22 +266,23 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Starts a video track on this call — the call must already be
-     * {@link #connected()}. Constructs a {@link VideoCodec} of the
-     * configured kind, a {@link VideoPipeline} that drives
-     * {@link ActiveCall#localVideoSink} ↔
-     * {@link ActiveCall#remoteVideoSource}, and an RTP sender +
-     * receiver sharing the audio track's SRTP keys but with a
-     * separate SSRC + payload type.
+     * Starts a video track on this call, which must already be {@link #connected()}.
      *
-     * <p>The call layer drives this from
-     * {@link CallService#startCall} when the user requests video at
-     * call setup (#65), or from a video-upgrade signaling exchange
-     * (#66), or from a screen-share request (#69).
+     * <p>This constructs a {@link VideoCodec} of the configured kind, an RTP sender and receiver that
+     * share the audio track's SRTP keys but use a separate SSRC and payload type, and a
+     * {@link VideoPipeline} driving {@link ActiveCall#localVideoSink()} and
+     * {@link ActiveCall#remoteVideoSource()}. The call layer drives this from
+     * {@link CallService#placeCall(com.github.auties00.cobalt.model.jid.Jid, com.github.auties00.cobalt.call.CallOptions)}
+     * when the user requests video at call setup, from a video-upgrade signaling exchange, or from a
+     * screen-share request. If pipeline startup fails, the partially-built pipeline and codec are
+     * closed and the exception propagates.
      *
      * @param trackOptions the video track configuration
-     * @throws IllegalStateException if the session is not connected
-     *                               or already has a video track
+     * @throws NullPointerException  if {@code trackOptions} is {@code null}
+     * @throws IllegalStateException if the session is closed, the handshake has not completed, or a
+     *                               track of the same kind is already running
+     * @implNote This implementation stamps outbound video RTP with a 90 kHz clock, the RTP standard
+     * video timestamp rate.
      */
     public synchronized void startVideoTrack(VideoTrackOptions trackOptions) {
         Objects.requireNonNull(trackOptions, "trackOptions cannot be null");
@@ -334,9 +327,12 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Stops the named video track. Idempotent for the kind.
+     * Stops the video track of the given kind, closing its pipeline.
      *
-     * @param kind which track to stop (camera or screen-share)
+     * <p>This is idempotent for the kind: stopping a kind that is not running is a no-op.
+     *
+     * @param kind the track kind to stop
+     * @throws NullPointerException if {@code kind} is {@code null}
      */
     public synchronized void stopVideoTrack(VideoTrackOptions.Kind kind) {
         Objects.requireNonNull(kind, "kind cannot be null");
@@ -351,10 +347,9 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Returns whether a video track of the given kind is currently
-     * active.
+     * Returns whether a video track of the given kind is currently active.
      *
-     * @param kind the kind to check
+     * @param kind the track kind to check
      * @return {@code true} if a track of that kind is running
      */
     public boolean videoActive(VideoTrackOptions.Kind kind) {
@@ -362,8 +357,7 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Returns whether any video track (camera or screen-share) is
-     * currently active.
+     * Returns whether any video track, camera or screen-share, is currently active.
      *
      * @return {@code true} if at least one video track is running
      */
@@ -372,14 +366,14 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Convenience for the M7 screen-share API — equivalent to
-     * {@link #startVideoTrack(VideoTrackOptions)} with options
-     * configured for {@link VideoTrackOptions.Kind#SCREEN_SHARE}.
+     * Starts a screen-share track, equivalent to {@link #startVideoTrack(VideoTrackOptions)} with
+     * options configured for {@link VideoTrackOptions.Kind#SCREEN_SHARE}.
      *
-     * @param options the screen-share track options; must have
-     *                {@code kind == SCREEN_SHARE}
-     * @throws IllegalArgumentException if {@code options.kind() !=
-     *                                  SCREEN_SHARE}
+     * @param options the screen-share track options, whose kind must be
+     *                {@link VideoTrackOptions.Kind#SCREEN_SHARE}
+     * @throws NullPointerException     if {@code options} is {@code null}
+     * @throws IllegalArgumentException if the options are not configured for
+     *                                  {@link VideoTrackOptions.Kind#SCREEN_SHARE}
      */
     public void startScreenShare(VideoTrackOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
@@ -391,38 +385,32 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Stops the active screen-share track, if any. Equivalent to
-     * {@code stopVideoTrack(SCREEN_SHARE)}.
+     * Stops the active screen-share track, equivalent to
+     * {@link #stopVideoTrack(VideoTrackOptions.Kind)} with
+     * {@link VideoTrackOptions.Kind#SCREEN_SHARE}.
      */
     public void stopScreenShare() {
         stopVideoTrack(VideoTrackOptions.Kind.SCREEN_SHARE);
     }
 
     /**
-     * Re-establishes the DTLS + SRTP layer against a freshly-supplied
-     * {@link DatagramTransport} (typically a new ICE-nominated path
-     * after a Wi-Fi ↔ cellular IP swap or a relay change). The audio
-     * pipeline keeps running across the swap; the encoded outbound
-     * frames produced during the brief gap are dropped (the
-     * {@link #rtpSender} field is nulled while the new handshake
-     * runs), and inbound playback simply skips the missing samples.
+     * Re-establishes the DTLS and SRTP layer against a freshly-supplied {@link DatagramTransport},
+     * typically a new ICE-nominated path after a network change or relay swap.
      *
-     * <p>Idempotent in the sense that calling reconnect on a closed
-     * session is a no-op. Calling reconnect twice in quick succession
-     * cancels the in-flight handshake and starts a new one.
+     * <p>The audio pipeline keeps running across the swap; the encoded outbound frames produced during
+     * the brief gap are dropped because the RTP plumbing is nulled while the new handshake runs, and
+     * inbound playback skips the missing samples. Calling this on a closed session is a no-op; calling
+     * it twice in quick succession cancels the in-flight handshake and starts a new one. The
+     * reconnection reuses the original DTLS role, local certificate, and expected peer fingerprint.
      *
      * @param newTransport the new connected datagram path
-     * @throws NullPointerException if {@code newTransport} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code newTransport} is {@code null}
      */
     public synchronized void reconnect(DatagramTransport newTransport) {
         Objects.requireNonNull(newTransport, "newTransport cannot be null");
         if (closed) {
             return;
         }
-        // Drop the RTP plumbing first so any outbound frame produced
-        // during the swap is dropped instead of trying to use a
-        // half-built endpoint.
         this.rtpSender = null;
         this.rtpReceiver = null;
         try {
@@ -439,9 +427,11 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Tears down the session — stops the audio pipeline, closes the
-     * DTLS driver (which closes the transport), and propagates the
-     * underlying {@link ActiveCall}'s {@code ENDED} state. Idempotent.
+     * Tears down the session, closing every video track, the audio pipeline, and the DTLS driver
+     * (which closes the transport).
+     *
+     * <p>Calling this more than once is a no-op. The underlying {@link ActiveCall}'s ended state
+     * propagates from the call layer that owns the session.
      */
     @Override
     public synchronized void close() {
@@ -470,10 +460,13 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Body of the completer virtual thread — waits for the DTLS
-     * handshake, then wires up the RTP loop and starts the audio
-     * pipeline. If the handshake fails, the session is closed and
-     * the call is hung up.
+     * Runs on the completer thread: waits for the DTLS handshake, then wires the media plane.
+     *
+     * <p>If the SRTP endpoint is already available it is used directly; otherwise this awaits the
+     * handshake and, on failure, fails the session through {@link #handshakeFailed()}.
+     *
+     * @implNote This implementation bounds the handshake wait at 30 seconds, matching the call layer's
+     * setup timeout.
      */
     private void completeAfterHandshake() {
         var srtp = dtls.srtpEndpoint();
@@ -489,11 +482,12 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Wires the RTP loop + audio pipeline once the SRTP keys are
-     * known. On the first handshake this also instantiates and
-     * starts the {@link AudioPipeline}; on a {@link #reconnect}
-     * the pipeline is preserved and only the RTP/SRTP plumbing is
-     * swapped.
+     * Wires the RTP loop and audio pipeline once the SRTP keys are known.
+     *
+     * <p>On the first handshake this also instantiates and starts the {@link AudioPipeline}; on a
+     * {@link #reconnect} the pipeline is preserved and only the RTP and SRTP plumbing is swapped. If
+     * pipeline startup fails on the first handshake, the session is failed through
+     * {@link #handshakeFailed()}.
      *
      * @param srtp the negotiated SRTP endpoint
      */
@@ -523,16 +517,18 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Inbound side: parses the SSRC from the (clear) RTP header at
-     * offset 8, routes the packet to the audio or video receiver,
-     * and drains the resulting jitter buffer.
+     * Demultiplexes one inbound SRTP packet by SSRC and routes it to the audio or matching video
+     * receiver.
      *
-     * <p>The SRTP header is in clear; only the payload + auth tag
-     * are encrypted/MAC'd. So we can read the SSRC without first
-     * decrypting — that lets us pick the right receiver before
-     * paying the AES-CM cost.
+     * <p>Packets shorter than the RTP header are dropped. The audio SSRC is matched first; otherwise
+     * the video tracks are scanned for a matching receive SSRC. The chosen receiver is handed the
+     * packet and its jitter buffer is drained.
      *
      * @param protectedPacket the SRTP-protected bytes
+     * @implNote This implementation reads the SSRC from bytes 8 through 11 of the RTP header, which is
+     * in clear under SRTP since only the payload and auth tag are encrypted; this picks the right
+     * receiver before paying the AES-CM decryption cost. The 12-byte guard is the minimum RTP header
+     * length.
      */
     private void onProtectedSrtp(byte[] protectedPacket) {
         if (protectedPacket.length < 12) {
@@ -558,11 +554,11 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Listener for the RTP receiver — when a payload arrives, wraps
-     * it back into an {@link OpusPacket} and feeds the inbound
-     * pipeline. PLC triggers (missing markers) are surfaced as
-     * empty payloads with the {@code voiceActive=false} flag so the
-     * pipeline's decoder runs concealment.
+     * Wraps one inbound audio payload back into an {@link OpusPacket} and feeds the audio pipeline.
+     *
+     * <p>If the pipeline is not yet wired the emission is dropped. A missing marker is surfaced as an
+     * empty payload with the voice-active flag cleared so the pipeline's decoder runs packet-loss
+     * concealment; the marker bit is propagated only for non-missing packets.
      *
      * @param inbound the receiver's emission
      */
@@ -577,15 +573,17 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Listener for the video RTP receiver — wraps the inbound
-     * payload back into a {@link VideoPacket} and feeds the video
-     * pipeline. Missing markers (PLC triggers) are surfaced via the
-     * pipeline's {@link VideoPipeline#requestKeyframe()} so the peer
-     * gets a fresh IDR rather than try to conceal a lost video
-     * packet (concealing video tends to look worse than waiting one
-     * GOP for a keyframe).
+     * Wraps one inbound video payload back into a {@link VideoPacket} and feeds the matching video
+     * pipeline.
      *
+     * <p>If no track of the given kind is active the emission is dropped. A missing marker requests a
+     * fresh keyframe through {@link VideoPipeline#requestKeyframe()} rather than concealing the loss,
+     * since concealing video tends to look worse than waiting one group of pictures for a keyframe.
+     *
+     * @param opts    the video track options identifying the track
      * @param inbound the receiver's emission
+     * @implNote This implementation derives the presentation timestamp from a 90 kHz clock, the RTP
+     * standard video timestamp rate.
      */
     private void onInboundVideoRtp(VideoTrackOptions opts, RtpReceiver.InboundRtp inbound) {
         var track = videoTracks.get(opts.kind());
@@ -602,11 +600,15 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Listener for the video pipeline's outbound side — packetises
-     * each encoded VP8/H.264 frame into RTP and ships it through the
-     * DTLS driver. Sets the M bit on keyframes per RFC 7741 §4.4.
+     * Packetises one encoded outbound video frame into RTP and ships it through the DTLS driver.
      *
+     * <p>If the sender is not wired the frame is dropped, and any send failure is swallowed so a
+     * transient transport error does not stop the pipeline. The frame's keyframe flag is passed to the
+     * sender so it can set the marker bit on keyframes.
+     *
+     * @param sender the RTP sender for the track
      * @param packet the encoded outbound packet
+     * @implNote This implementation marks keyframes per RFC 7741 section 4.4.
      */
     private void onEncodedVideoOutbound(RtpSender sender, VideoPacket packet) {
         if (sender == null) {
@@ -619,9 +621,12 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Listener for the audio pipeline's outbound side — packetises
-     * each encoded Opus frame into RTP and ships it through the
-     * DTLS driver.
+     * Packetises one encoded outbound Opus frame into RTP and ships it through the DTLS driver.
+     *
+     * <p>If the sender is not wired the frame is dropped, and any send failure is swallowed so a
+     * transient transport error does not stop the pipeline. The outbound timestamp comes from the
+     * monotonic counter stepped by one frame duration per packet rather than from the encoder's
+     * presentation timestamp.
      *
      * @param packet the encoded outbound packet
      */
@@ -638,19 +643,18 @@ public final class VoiceCallSession implements AutoCloseable {
     }
 
     /**
-     * Returns the duration of one encoded outbound frame in
-     * milliseconds — derived from the audio pipeline's frame size
-     * and sample rate.
+     * Returns the duration of one encoded outbound frame in milliseconds, derived from the audio
+     * pipeline's frame size and sample rate.
      *
-     * @return the frame duration in ms
+     * @return the frame duration in milliseconds
      */
     private long packetDurationMs() {
         return 1000L * options.audio().frameSize() / options.audio().sampleRate();
     }
 
     /**
-     * Handles a handshake failure — closes the session and hangs up
-     * the call so the application sees the {@code ENDED} state.
+     * Fails the session after a handshake failure, closing it and hanging up the call so the
+     * application observes the ended state.
      */
     private void handshakeFailed() {
         try {

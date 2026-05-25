@@ -15,42 +15,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants for
- * {@link SmaxPushConfigSetRequest}.
+ * Represents the sealed family of inbound reply variants for a {@link SmaxPushConfigSetRequest}.
  *
- * @apiNote
- * Mirrors WA Web's {@code WASmaxPushConfigSetRPC} dispatch:
- * {@link Success} (relay accepted the change), {@link InternalServerError}
- * (transient 500), and {@link Conflict} (409 when another registration
- * holds the same push channel). WA Web's
- * {@code WAWebSetPushConfigJob.setPushConfig} returns the {@code (code,
- * text)} pair to the caller on both error variants and logs the failure
- * under the {@code push-notification} tag; Cobalt embedders that wire
- * server push to their own application typically follow the same
- * pattern.
+ * <p>A reply resolves to exactly one of three shapes: {@link Success} when the relay accepted the
+ * change, {@link InternalServerError} for a transient {@code 500}, and {@link Conflict} for a
+ * {@code 409} raised when another registration already holds the same push channel. The two error
+ * variants expose their {@code (code, text)} pair so callers can log the failure and decide whether
+ * to retry; recovery is left to the caller rather than performed inline.
  */
 public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         permits SmaxPushConfigSetResponse.Success, SmaxPushConfigSetResponse.InternalServerError, SmaxPushConfigSetResponse.Conflict {
 
     /**
-     * Tries each {@link SmaxPushConfigSetResponse} variant in priority
+     * Lifts an inbound IQ stanza into the sealed disjunction by trying each variant in priority
      * order.
      *
-     * @apiNote
-     * The dispatcher entry point used by Cobalt's SMAX layer to lift an
-     * inbound stanza into the sealed disjunction.
+     * <p>This is the dispatcher entry point used by the SMAX layer to parse a push-config reply.
      *
-     * @implNote
-     * This implementation tries {@link Success}, then
-     * {@link InternalServerError}, then {@link Conflict}, mirroring the
-     * WA Web call order in
-     * {@code WASmaxPushConfigSetRPC.sendSetRPC}.
-     *
+     * @implNote This implementation tries {@link Success}, then {@link InternalServerError}, then
+     * {@link Conflict}, mirroring the WA Web call order in {@code WASmaxPushConfigSetRPC.sendSetRPC}.
      * @param node    the inbound IQ stanza
-     * @param request the original outbound stanza, used to validate
-     *                echoed identifiers
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} on no-match
+     * @param request the original outbound stanza, used to validate echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         variant matches
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPushConfigSetRPC",
@@ -70,11 +57,10 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant.
+     * Represents the {@code Success} reply variant.
      *
-     * @apiNote
-     * Signals that the relay accepted the push-config change; carries
-     * no payload beyond the envelope echo.
+     * <p>Signals that the relay accepted the push-config change; the variant carries no payload
+     * beyond the envelope echo and so holds no per-instance state.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPushConfigSetResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInPushConfigIQResultResponseMixin")
@@ -82,26 +68,21 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Constructs a successful reply.
          *
-         * @apiNote
-         * Used by {@link #of(Node, Node)} after envelope validation; the
-         * type carries no per-instance state.
+         * <p>{@link #of(Node, Node)} builds the instance after envelope validation; the type
+         * carries no per-instance state.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the given reply.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope is not a
-         * well-formed {@code <iq type="result">} echoing the request
-         * identifiers.
+         * <p>Returns {@link Optional#empty()} when the envelope is not a well-formed
+         * {@code <iq type="result">} echoing the request identifiers.
          *
-         * @implNote
-         * This implementation delegates the envelope check to
-         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} because
-         * the success shape carries no further state to extract.
-         *
+         * @implNote This implementation delegates the envelope check to
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} because the success shape carries
+         * no further state to extract.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
@@ -117,11 +98,12 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
          *
-         * @implNote
-         * This implementation treats every instance as equal to every
-         * other because the type carries no state.
+         * @implNote This implementation treats every instance as equal to every other because the
+         * type carries no state.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success}
          */
         @Override
         public boolean equals(Object obj) {
@@ -132,11 +114,9 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a class-level hash code consistent with {@link #equals(Object)}.
          *
-         * @implNote
-         * This implementation returns a class-level hash to stay
-         * consistent with {@link #equals(Object)}.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -144,11 +124,9 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this reply.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -157,14 +135,12 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code InternalServerError} reply variant carrying
+     * Represents the {@code InternalServerError} reply variant carrying
      * {@code (500, "internal-server-error")}.
      *
-     * @apiNote
-     * Signals a transient relay-side failure; embedders should retry
-     * with backoff. WA Web's
-     * {@code WAWebSetPushConfigJob.setPushConfig} logs the failure but
-     * does not retry inside the job; the caller decides.
+     * <p>Signals a transient relay-side failure. The variant carries no payload beyond the fixed
+     * {@code (code, text)} pair; callers decide whether to retry with backoff, since the parse does
+     * no recovery of its own.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPushConfigSetResponseInternalServerError")
     @WhatsAppWebModule(moduleName = "WASmaxInPushConfigIQErrorInternalServerErrorMixin")
@@ -172,10 +148,8 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Constructs an internal-server-error reply.
          *
-         * @apiNote
-         * The shape carries no payload beyond the asserted
-         * {@code (500, "internal-server-error")} pair, so callers
-         * normally let {@link #of(Node, Node)} build the instance.
+         * <p>The shape carries no payload beyond the asserted {@code (500, "internal-server-error")}
+         * pair, so callers normally let {@link #of(Node, Node)} build the instance.
          */
         public InternalServerError() {
         }
@@ -183,10 +157,8 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * Always {@code 500}; included for symmetry with the
-         * {@code (code, text)} pair surfaced by other SMAX error
-         * variants.
+         * <p>Always {@code 500}; surfaced for symmetry with the {@code (code, text)} pair exposed
+         * by other SMAX error variants.
          *
          * @return the code
          */
@@ -197,10 +169,8 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Returns the error text.
          *
-         * @apiNote
-         * Always {@code "internal-server-error"}; included for symmetry
-         * with the {@code (code, text)} pair surfaced by other SMAX
-         * error variants.
+         * <p>Always {@code "internal-server-error"}; surfaced for symmetry with the
+         * {@code (code, text)} pair exposed by other SMAX error variants.
          *
          * @return the text
          */
@@ -209,19 +179,14 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * Tries to parse an {@link InternalServerError} variant.
+         * Tries to parse an {@link InternalServerError} variant from the given reply.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any reply whose error
-         * envelope does not carry exactly
-         * {@code (500, "internal-server-error")}.
+         * <p>Returns {@link Optional#empty()} for any reply whose error envelope does not carry
+         * exactly {@code (500, "internal-server-error")}.
          *
-         * @implNote
-         * This implementation re-uses
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * for envelope validation and then asserts the literal
-         * {@code (500, "internal-server-error")} pair.
-         *
+         * @implNote This implementation re-uses
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} for envelope validation and
+         * then asserts the literal {@code (500, "internal-server-error")} pair.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
@@ -241,11 +206,12 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
          *
-         * @implNote
-         * This implementation treats every instance as equal to every
-         * other because the type carries no per-instance state.
+         * @implNote This implementation treats every instance as equal to every other because the
+         * type carries no per-instance state.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link InternalServerError}
          */
         @Override
         public boolean equals(Object obj) {
@@ -256,11 +222,9 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a class-level hash code consistent with {@link #equals(Object)}.
          *
-         * @implNote
-         * This implementation returns a class-level hash to stay
-         * consistent with {@link #equals(Object)}.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -268,11 +232,9 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this reply.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -281,16 +243,12 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Conflict} reply variant carrying
-     * {@code (409, "conflict")}.
+     * Represents the {@code Conflict} reply variant carrying {@code (409, "conflict")}.
      *
-     * @apiNote
-     * The requested push registration collides with an existing one
-     * (typically two devices vying for the same push token); the relay
-     * keeps the existing registration. Embedders surfacing push
-     * registration UIs should ask the user to drop the conflicting
-     * device or call the {@code Clear} variant of
-     * {@link SmaxPushConfigSetRequest} before retrying.
+     * <p>The requested push registration collides with an existing one (typically two devices
+     * vying for the same push token); the relay keeps the existing registration. Callers surfacing
+     * push-registration UIs should prompt the user to drop the conflicting device or send a
+     * {@link SmaxPushConfigSetSetVariant.Clear} request before retrying.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPushConfigSetResponseConflict")
     @WhatsAppWebModule(moduleName = "WASmaxInPushConfigIQErrorConflictMixin")
@@ -298,10 +256,8 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Constructs a conflict reply.
          *
-         * @apiNote
-         * The shape carries no payload beyond the asserted
-         * {@code (409, "conflict")} pair, so callers normally let
-         * {@link #of(Node, Node)} build the instance.
+         * <p>The shape carries no payload beyond the asserted {@code (409, "conflict")} pair, so
+         * callers normally let {@link #of(Node, Node)} build the instance.
          */
         public Conflict() {
         }
@@ -309,10 +265,8 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * Always {@code 409}; included for symmetry with the
-         * {@code (code, text)} pair surfaced by other SMAX error
-         * variants.
+         * <p>Always {@code 409}; surfaced for symmetry with the {@code (code, text)} pair exposed
+         * by other SMAX error variants.
          *
          * @return the code
          */
@@ -323,10 +277,8 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         /**
          * Returns the error text.
          *
-         * @apiNote
-         * Always {@code "conflict"}; included for symmetry with the
-         * {@code (code, text)} pair surfaced by other SMAX error
-         * variants.
+         * <p>Always {@code "conflict"}; surfaced for symmetry with the {@code (code, text)} pair
+         * exposed by other SMAX error variants.
          *
          * @return the text
          */
@@ -335,18 +287,14 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * Tries to parse a {@link Conflict} variant.
+         * Tries to parse a {@link Conflict} variant from the given reply.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any reply whose error
-         * envelope does not carry exactly {@code (409, "conflict")}.
+         * <p>Returns {@link Optional#empty()} for any reply whose error envelope does not carry
+         * exactly {@code (409, "conflict")}.
          *
-         * @implNote
-         * This implementation re-uses
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * for envelope validation and then asserts the literal
-         * {@code (409, "conflict")} pair.
-         *
+         * @implNote This implementation re-uses
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} for envelope validation and
+         * then asserts the literal {@code (409, "conflict")} pair.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
@@ -366,11 +314,12 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for equality.
          *
-         * @implNote
-         * This implementation treats every instance as equal to every
-         * other because the type carries no per-instance state.
+         * @implNote This implementation treats every instance as equal to every other because the
+         * type carries no per-instance state.
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Conflict}
          */
         @Override
         public boolean equals(Object obj) {
@@ -381,11 +330,9 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a class-level hash code consistent with {@link #equals(Object)}.
          *
-         * @implNote
-         * This implementation returns a class-level hash to stay
-         * consistent with {@link #equals(Object)}.
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -393,11 +340,9 @@ public sealed interface SmaxPushConfigSetResponse extends SmaxOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering of this reply.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * @return the string form
          */
         @Override
         public String toString() {

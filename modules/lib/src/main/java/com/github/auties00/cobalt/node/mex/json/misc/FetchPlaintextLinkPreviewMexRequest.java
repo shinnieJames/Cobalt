@@ -14,38 +14,24 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Outbound MEX query that fetches a rich link preview (title, description,
- * thumbnail handle) for a URL shared in a newsletter message, with the
- * relay acting as a trusted proxy so the preview does not leak reader
- * identity to the link target.
+ * Fetches a rich link preview for a URL shared in a newsletter message, with the relay acting as a
+ * trusted unfurl proxy.
  *
- * @apiNote Issued by WA Web's
- * {@code WAWebNewsletterFetchLinkPreviewAction.fetchPlaintextLinkPreviewAction}
- * while composing or rendering a newsletter post. The relay performs the
- * URL unfurl server-side and returns an
- * {@code xwa2_newsletter_link_preview} envelope; if the relay omits the
- * envelope the WA Web caller falls back to
- * {@code WAWebGenMinimalLinkPreviewChatAction.genMinimalLinkPreview} with
- * preview type {@code NONE}. Cobalt callers may apply the same fallback.
+ * <p>The relay performs the URL unfurl server-side so the preview does not leak reader identity to
+ * the link target, and returns a {@code xwa2_newsletter_link_preview} envelope carrying the title,
+ * description and thumbnail handle. The {@link #input} variable is forwarded as an opaque
+ * caller-supplied JSON string; passing {@code null} omits it from the wire payload.
  *
- * @implNote This implementation forwards the {@code input} variable as an
- * opaque caller-supplied JSON string. WA Web's call-site validates the
- * URL with {@code new URL(e)} and emits
- * {@snippet :
- * String input = "{\"url\":\"https://example.com/post\"}";
- * }
- * Cobalt leaves URL validation to the caller because the codegen pipeline
- * does not model {@code WAWebNewsletterFetchLinkPreviewAction}.
+ * @implNote This implementation leaves URL validation to the caller (WhatsApp Web validates the URL
+ * before sending {@code {"url":"..."}}) because the codegen pipeline does not model the newsletter
+ * link-preview action.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchPlaintextLinkPreviewJob")
 public final class FetchPlaintextLinkPreviewMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
-     * {@code WAWebMexFetchPlaintextLinkPreviewJobQuery} document.
+     * Holds the compiled GraphQL query identifier for the plaintext link-preview query document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebMexFetchPlaintextLinkPreviewJobQuery.graphql}. The relay
-     * maps the id to a server-side persisted operation and never sees the
+     * <p>The relay maps this identifier to a server-side persisted operation and never sees the
      * GraphQL text on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchPlaintextLinkPreviewJobQuery.graphql", exports = "params.id",
@@ -53,28 +39,25 @@ public final class FetchPlaintextLinkPreviewMexRequest implements MexOperation.R
     public static final String QUERY_ID = "9101130456653613";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is
+     * Holds the GraphQL operation name reported to the MEX perf tracker when this query is
      * dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * <p>The name tags the query in latency and error metrics; it is kept on the request so
+     * embedders mirroring that telemetry surface can emit the same tag.
      */
     public static final String OPERATION_NAME = "fetchPlaintextLinkPreview";
 
     /**
-     * The serialised URL and optional preview options bound to the
-     * {@code input} GraphQL variable.
+     * Holds the serialised URL and optional preview options bound to the {@code input} GraphQL
+     * variable.
      */
     private final String input;
 
     /**
-     * Constructs a new request with the serialised {@code input} GraphQL
-     * variable.
+     * Constructs a new request with the serialised {@code input} GraphQL variable.
      *
-     * @apiNote The caller is responsible for producing the JSON payload;
-     * passing {@code null} omits the variable from the wire envelope.
+     * <p>The caller produces the JSON payload; passing {@code null} omits the variable from the
+     * wire envelope.
      *
      * @param input the serialised {@code input} JSON payload, may be {@code null} to omit
      */
@@ -101,10 +84,9 @@ public final class FetchPlaintextLinkPreviewMexRequest implements MexOperation.R
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation streams the GraphQL variables through
-     * fastjson2's {@link JSONWriter}, emits the {@code input} string only
-     * when the constructor argument is non-{@code null}, then wraps the
-     * payload via
+     * @implNote This implementation streams the GraphQL variables through fastjson2's
+     * {@link JSONWriter}, emits the {@code input} string only when the constructor argument is
+     * non-{@code null}, then wraps the payload via
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchPlaintextLinkPreviewJobQuery.graphql", exports = "params.id",

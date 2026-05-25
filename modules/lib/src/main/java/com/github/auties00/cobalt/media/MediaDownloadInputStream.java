@@ -31,17 +31,17 @@ import java.util.zip.Inflater;
  * it is reproduced from the media key on the recipient side via HKDF.
  * Reads drive a four-state machine through {@link State#READ_DATA},
  * {@link State#READ_MAC}, {@link State#VALIDATE_ALL}, and
- * {@link State#DONE}. For inflatable media types (app-state blobs and
- * history-sync payloads) the decrypted bytes are additionally decompressed
- * with zlib before they reach the caller.
+ * {@link State#DONE}. For inflatable media types (history-sync payloads)
+ * the decrypted bytes are additionally decompressed with zlib before they
+ * reach the caller.
  *
- * @apiNote
- * Constructed by {@link MediaConnectionService#tryDownload(MediaProvider, String)}
- * after a {@code 200 OK} from the CDN and surfaced to callers as the
- * return value of {@link MediaConnectionService#download(MediaProvider, com.github.auties00.cobalt.props.ABPropsService)}.
- * Cobalt embedders read it like any {@link InputStream}; the cryptographic
- * verification is implicit and surfaces as
- * {@link WhatsAppMediaException.Download} on any failure.
+ * <p>Constructed by
+ * {@link MediaConnectionService#tryDownload(MediaProvider, String)} after a
+ * {@code 200 OK} from the CDN and surfaced to callers as the return value
+ * of {@link MediaConnectionService#download(MediaProvider)}. The stream is
+ * read like any {@link InputStream}; the cryptographic verification is
+ * implicit and surfaces as {@link WhatsAppMediaException.Download} on any
+ * failure.
  *
  * @implNote
  * This implementation is a streaming adapter over WA Web's batch
@@ -57,19 +57,18 @@ final class MediaDownloadInputStream extends MediaInputStream {
     /**
      * The HTTP client backing the download connection.
      *
-     * @apiNote
-     * Owned by this stream and closed via {@link #close()} when the caller
-     * releases the stream so that the underlying socket is released.
+     * <p>Owned by this stream and closed via {@link #close()} when the
+     * caller releases the stream so that the underlying socket is released.
      */
     private final HttpClient client;
 
     /**
-     * The zlib inflater for inflatable media types, or {@code null} when
-     * no decompression is needed.
+     * The zlib inflater for inflatable media types, or {@code null} when no
+     * decompression is needed.
      *
-     * @apiNote
-     * Only the {@code md-app-state} and {@code md-msg-hist} media types
-     * carry zlib-compressed plaintext.
+     * <p>Only the {@code md-msg-hist} media type carries zlib-compressed
+     * plaintext; {@code md-app-state} blobs are decoded directly from the
+     * decrypted bytes.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsMediaTypes", exports = "MEDIA_TYPES",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -127,9 +126,8 @@ final class MediaDownloadInputStream extends MediaInputStream {
     /**
      * The number of HMAC bytes accumulated into {@link #macBuffer} so far.
      *
-     * @apiNote
-     * Reaches {@link #MAC_LENGTH} once the trailer has been fully read and
-     * the state machine can advance to {@link State#VALIDATE_ALL}.
+     * <p>Reaches {@link #MAC_LENGTH} once the trailer has been fully read
+     * and the state machine can advance to {@link State#VALIDATE_ALL}.
      */
     private int macBufferOffset;
 
@@ -186,10 +184,9 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * The number of ciphertext bytes remaining before the HMAC trailer
      * begins.
      *
-     * @apiNote
-     * Initialised to {@code payloadLength - MAC_LENGTH} on encrypted media
-     * and to {@code payloadLength} on unencrypted media; decremented as
-     * the raw stream is consumed and used by {@link #isDone()} to detect
+     * <p>Initialised to {@code payloadLength - MAC_LENGTH} on encrypted
+     * media and to {@code payloadLength} on unencrypted media; decremented
+     * as the raw stream is consumed and used by {@link #isDone()} to detect
      * the trailer boundary.
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoDecryptMedia", exports = "default",
@@ -207,9 +204,9 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * Constructs a new download stream that transparently decrypts and
      * verifies the payload from the given raw stream.
      *
-     * @apiNote
-     * Invoked from {@link MediaConnectionService#tryDownload(MediaProvider, String)}
-     * once the CDN has produced a {@code 200 OK} and the {@code Content-Length}
+     * <p>Invoked from
+     * {@link MediaConnectionService#tryDownload(MediaProvider, String)} once
+     * the CDN has produced a {@code 200 OK} and the {@code Content-Length}
      * header has been read.
      *
      * @implNote
@@ -292,10 +289,9 @@ final class MediaDownloadInputStream extends MediaInputStream {
     /**
      * Reads a single decrypted (and optionally decompressed) byte.
      *
-     * @apiNote
-     * Drives the state machine through {@link #isDone()} on each invocation
-     * until either a byte is available or the stream is fully consumed and
-     * validated.
+     * <p>Drives the state machine through {@link #isDone()} on each
+     * invocation until either a byte is available or the stream is fully
+     * consumed and validated.
      *
      * @return the next byte of decrypted data, or {@code -1} if the stream
      *         is exhausted and validated
@@ -316,13 +312,12 @@ final class MediaDownloadInputStream extends MediaInputStream {
     }
 
     /**
-     * Reads up to {@code len} decrypted (and optionally decompressed)
-     * bytes into the supplied array.
+     * Reads up to {@code len} decrypted (and optionally decompressed) bytes
+     * into the supplied array.
      *
-     * @apiNote
-     * Drives the state machine through {@link #isDone()} on each
-     * invocation; returns as soon as the next decrypted chunk is staged,
-     * up to {@code len} bytes.
+     * <p>Drives the state machine through {@link #isDone()} on each
+     * invocation; returns as soon as the next decrypted chunk is staged, up
+     * to {@code len} bytes.
      *
      * @param b   the destination buffer
      * @param off the start offset in the destination buffer
@@ -356,8 +351,7 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * output data becomes available or the stream is fully consumed and
      * validated.
      *
-     * @apiNote
-     * Internal pump for {@link #read()} and
+     * <p>Internal pump for {@link #read()} and
      * {@link #read(byte[], int, int)}; reads keep blocking on
      * {@link #rawInputStream} until either a chunk of decrypted (or
      * inflated) bytes is staged or the validation tail completes.
@@ -365,7 +359,7 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * @implNote
      * This implementation collapses WA Web's four functions
      * ({@code mms4Download}, {@code hmacAndDecrypt}, {@code decryptMedia},
-     * and the inflation pass on app-state/history-sync payloads) into a
+     * and the inflation pass on history-sync payloads) into a
      * single state machine driven by {@link State}, so the whole pipeline
      * runs incrementally on one virtual thread without buffering the
      * payload in memory.
@@ -511,8 +505,7 @@ final class MediaDownloadInputStream extends MediaInputStream {
     /**
      * Tests whether this stream is processing encrypted media.
      *
-     * @apiNote
-     * Toggles between the ciphertext-and-HMAC fast path and the raw
+     * <p>Toggles between the ciphertext-and-HMAC fast path and the raw
      * pass-through path inside {@link #isDone()}.
      *
      * @return {@code true} if the cipher is initialised, {@code false} for
@@ -526,9 +519,8 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * Tests whether this stream applies zlib decompression after
      * decryption.
      *
-     * @apiNote
-     * Toggles the inflate branch of the state machine for the
-     * {@code md-app-state} and {@code md-msg-hist} media types.
+     * <p>Toggles the inflate branch of the state machine for the
+     * {@code md-msg-hist} media type.
      *
      * @return {@code true} if the inflater is initialised, {@code false}
      *         otherwise

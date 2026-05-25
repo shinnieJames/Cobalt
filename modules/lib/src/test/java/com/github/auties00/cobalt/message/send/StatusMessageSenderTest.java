@@ -30,23 +30,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link StatusMessageSender}'s SKMSG send shape against the
- * {@code WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg} contract.
- *
- * @apiNote
- * Status broadcasts share the SKMSG group-send pipeline but address the
- * {@code status@broadcast} JID and carry a
- * {@code <meta status_setting=...>} child that mirrors the user's status
- * privacy preference (suppressed on revokes). Revokes whose audience is
- * no longer reachable by SKMSG take a dedicated per-device direct path.
- *
- * @implNote
- * This implementation drives the sender through a captured
- * {@link TestWhatsAppClient} and a
- * stubbed {@link StubDeviceService};
- * the cells exercise the steady-state SKMSG branch and the no-privacy
- * meta-shape branch, both of which can be asserted without seeding a real
- * status audience pipeline.
+ * Covers the {@link StatusMessageSender} SKMSG send shape. Status broadcasts
+ * share the group-send SKMSG pipeline but address the {@code status@broadcast}
+ * JID and carry a {@code <meta status_setting=...>} child mirroring the user's
+ * status privacy preference. The cells exercise the steady-state SKMSG branch
+ * and the no-privacy meta-shape branch through a captured
+ * {@link TestWhatsAppClient} and a stubbed {@link StubDeviceService}, neither
+ * of which needs a real status audience pipeline.
  */
 @DisplayName("StatusMessageSender")
 class StatusMessageSenderTest {
@@ -56,10 +46,6 @@ class StatusMessageSenderTest {
     private static final Jid STATUS = Jid.statusBroadcastAccount();
     private static final Jid AUDIENCE_DEVICE = Jid.of("19254863482:0@s.whatsapp.net");
 
-    /**
-     * Asserts the steady-state SKMSG status stanza shape when every
-     * audience device already holds the sender key.
-     */
     @Test
     @DisplayName("steady-state text status: outer to=status@broadcast, <enc type=skmsg>, no PKMSG distribution")
     void steadyStateStatus() {
@@ -99,10 +85,6 @@ class StatusMessageSenderTest {
         });
     }
 
-    /**
-     * Asserts that the {@code status_setting} attribute is omitted when
-     * no privacy entry is seeded.
-     */
     @Test
     @DisplayName("text status: <meta> child is emitted when present (status_setting omitted when no privacy entry seeded)")
     void metaShapeWhenNoPrivacy() {
@@ -125,19 +107,8 @@ class StatusMessageSenderTest {
         }
     }
 
-    /**
-     * Builds a {@link TestWhatsAppClient} that captures the first emitted
-     * stanza into {@code capturedStanza} and returns a success ack.
-     *
-     * @apiNote
-     * The synthetic ack carries only the {@code t} attribute so
-     * {@link com.github.auties00.cobalt.ack.AckParser} parses
-     * it as a success result with no error code.
-     *
-     * @param store          the sender {@link WhatsAppStore}
-     * @param capturedStanza the slot to capture the emitted stanza into
-     * @return the configured {@link TestWhatsAppClient}
-     */
+    // The returned ack carries only the t attribute, which AckParser reads as
+    // a success result with no error code.
     private static TestWhatsAppClient clientWithCapture(WhatsAppStore store, AtomicReference<Node> capturedStanza) {
         return TestWhatsAppClient.create()
                 .withStore(store)
@@ -151,20 +122,6 @@ class StatusMessageSenderTest {
                 });
     }
 
-    /**
-     * Builds a fully-wired {@link StatusMessageSender} for the supplied
-     * dependencies.
-     *
-     * @apiNote
-     * Shared factory used by the steady-state and meta-shape cells; wires
-     * every dependency the sender needs so the per-test setup only swaps
-     * the store and the {@link StubDeviceService}.
-     *
-     * @param client        the {@link TestWhatsAppClient}
-     * @param store         the sender {@link WhatsAppStore}
-     * @param deviceService the stubbed {@link StubDeviceService}
-     * @return the configured {@link StatusMessageSender}
-     */
     private static StatusMessageSender statusMessageSender(TestWhatsAppClient client, WhatsAppStore store, StubDeviceService deviceService) {
         var ab = client.abPropsService();
         var encryption = new MessageEncryption(store,
@@ -178,19 +135,6 @@ class StatusMessageSenderTest {
                 meta, reporting, wamService);
     }
 
-    /**
-     * Builds a {@link ChatMessageInfo}
-     * targeted at the status broadcast JID.
-     *
-     * @apiNote
-     * Helper used by every status-send test cell; pairs the status
-     * broadcast JID as the parent JID, a fixed sender JID, and the
-     * {@code broadcast} flag.
-     *
-     * @param id        the wire id
-     * @param container the {@link MessageContainer} payload
-     * @return the configured message info
-     */
     private static ChatMessageInfo statusMessage(
             String id, MessageContainer container) {
         var key = new MessageKeyBuilder()

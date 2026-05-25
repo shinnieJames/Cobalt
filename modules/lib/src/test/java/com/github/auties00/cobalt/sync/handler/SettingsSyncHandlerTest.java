@@ -29,24 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link SettingsSyncHandler}'s parity with
- * {@code WAWebSettingsSync.applyMutations} and its inner
- * {@code $SettingsSync$p_1} validator.
- *
- * @apiNote
- * Covers the wire-constant trio, the two-way
- * {@code settings_sync_enabled} primary-feature + AB-prop gate, the
- * platform filter (WEB always, HYBRID only on Windows), the setting-key
- * decode, the malformed/skipped/success outcomes that fall out of the
- * batch dedup map, and the store side-effects for the two keys with a
- * Cobalt-side backing field ({@code LANGUAGE} and
- * {@code DISABLE_LINK_PREVIEWS}).
- *
- * @implNote
- * The test fixture pre-opens both gates so every test that does not
- * specifically exercise the gating branch reaches the validation
- * pipeline; tests exercising the gate disable one or both flags on
- * their local store / props copy.
+ * Verifies {@link SettingsSyncHandler}: applying an incoming settings-sync
+ * mutation and asserting the {@link WhatsAppStore} side-effect, across the
+ * {@code settings_sync_enabled} primary-feature plus AB-prop gate, the
+ * platform filter, the setting-key decode, and the batch dedup outcomes.
+ * The fixture pre-opens both gates so gating-agnostic tests reach the
+ * validation pipeline; gating tests disable one or both flags on their
+ * local {@link WhatsAppStore} or {@link TestABPropsService} copy.
  */
 @DisplayName("SettingsSyncHandler")
 class SettingsSyncHandlerTest {
@@ -64,16 +53,6 @@ class SettingsSyncHandlerTest {
     private WhatsAppClient client;
     private SettingsSyncHandler handler;
 
-    /**
-     * Builds the per-test harness with both
-     * {@code settings_sync_enabled} gates pre-opened.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} and a
-     * fresh AB-props snapshot so gating-flip tests do not leak state
-     * to neighbours.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -85,40 +64,12 @@ class SettingsSyncHandlerTest {
         handler = new SettingsSyncHandler(props);
     }
 
-    /**
-     * Builds a four-slot JSON-encoded settings sync index.
-     *
-     * @apiNote
-     * The slot layout matches WA Web's
-     * {@code [userIndex, platform, settingKey, scope]} convention; the
-     * user-index slot is filled with a literal {@code "u"} because the
-     * handler never reads it.
-     *
-     * @param platformIdx the numeric index of the {@link SettingsSyncAction.SettingPlatform}
-     * @param keyIdx      the numeric index of the {@link SettingsSyncAction.SettingKey}
-     * @param scope       the scope literal ({@code "app"} or a chat JID)
-     * @return the JSON-encoded index string
-     */
+    // Slot layout is [userIndex, platform, settingKey, scope]; the user-index
+    // slot is a literal "u" because the handler never reads it.
     private static String index(int platformIdx, int keyIdx, String scope) {
         return "[\"u\",\"" + platformIdx + "\",\"" + keyIdx + "\",\"" + scope + "\"]";
     }
 
-    /**
-     * Wraps a locale-setting mutation with the given platform, scope,
-     * and locale into a trusted {@code SET}.
-     *
-     * @apiNote
-     * Used by the language-apply tests; the platform index decides
-     * whether the mutation passes
-     * {@link SettingsSyncAction.SettingPlatform#WEB} /
-     * {@link SettingsSyncAction.SettingPlatform#HYBRID} gating.
-     *
-     * @param platformIdx the numeric platform index
-     * @param scope       the scope literal
-     * @param locale      the new locale string
-     * @param ts          the mutation timestamp
-     * @return the trusted mutation
-     */
     private static DecryptedMutation.Trusted languageMutation(int platformIdx, String scope, String locale, Instant ts) {
         var action = new SettingsSyncActionBuilder().language(locale).build();
         var value = new SyncActionValueBuilder().timestamp(ts).settingsSyncAction(action).build();

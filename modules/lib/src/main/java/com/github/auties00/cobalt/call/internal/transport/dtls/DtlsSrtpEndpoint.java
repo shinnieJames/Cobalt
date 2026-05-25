@@ -40,52 +40,58 @@ import java.util.Objects;
 import java.util.Vector;
 
 /**
- * Drives a DTLS-SRTP handshake (RFC 5764) and exposes the resulting
- * 60-byte keying material as an {@link SrtpEndpoint} ready for SRTP
- * packet protect/unprotect.
+ * Drives one side of a DTLS-SRTP handshake (RFC 5764) and exposes the exported keying material as an
+ * {@link SrtpEndpoint} ready for SRTP packet protect and unprotect.
  *
- * <p>Usage:
+ * <p>An endpoint is created as a client via {@link #client(DtlsCertificate, byte[], DatagramTransport)}
+ * or as a server via {@link #server(DtlsCertificate, byte[], DatagramTransport)}, then driven to
+ * completion with {@link #handshake()} or {@link #handshakeWithDtls()}. The handshake authenticates
+ * the peer by comparing its presented certificate against the SHA-256 fingerprint exchanged
+ * out-of-band through call signaling, negotiates the {@code use_srtp} extension, and exports the
+ * SRTP master-key block under the RFC 5705/5764 label {@code "EXTRACTOR-dtls_srtp"}. Typical use:
  *
- * <pre>{@code
- *   var localCert = DtlsCertificate.generate();
- *   // exchange localCert.fingerprintHex() with peer via signaling;
- *   // receive peer's fingerprint from signaling
- *   var endpoint = DtlsSrtpEndpoint.client(localCert, peerFingerprint, transport);
- *   try (var srtp = endpoint.handshake()) {
- *       // use srtp for media
- *   }
- * }</pre>
+ * {@snippet :
+ * var localCert = DtlsCertificate.generate();
+ * // exchange localCert.fingerprintHex() with the peer via signaling, and
+ * // receive the peer's fingerprint the same way
+ * var endpoint = DtlsSrtpEndpoint.client(localCert, peerFingerprint, transport);
+ * try (var srtp = endpoint.handshake()) {
+ *     // use srtp for media
+ * }
+ * }
  *
- * <p>Pure Java via BouncyCastle's {@code org.bouncycastle.tls} —
- * which is the only mainstream Java TLS stack that exposes both the
- * {@code use_srtp} extension and the
- * {@code "EXTRACTOR-dtls_srtp"} keying-material export needed for
- * WebRTC. The standard JSSE provides DTLS but not these
- * WebRTC-specific bits.
+ * <p>Only {@code SRTP_AES128_CM_HMAC_SHA1_80} is advertised in the {@code use_srtp} extension, the
+ * WebRTC default that matches WhatsApp's call engine.
  *
- * <p>Cipher suite: the WebRTC default
- * {@code SRTP_AES128_CM_HMAC_SHA1_80} is the only profile advertised,
- * matching WhatsApp's wasm engine.
+ * @implNote This implementation uses BouncyCastle's {@code org.bouncycastle.tls} stack rather than
+ * JSSE because it is the only mainstream Java TLS provider that exposes both the {@code use_srtp}
+ * extension and the {@code "EXTRACTOR-dtls_srtp"} keying-material export required by WebRTC; JSSE
+ * offers DTLS but neither WebRTC-specific facility.
  */
 public final class DtlsSrtpEndpoint {
     /**
-     * Length, in bytes, of the keying material exported with the
-     * RFC 5764 label {@code "EXTRACTOR-dtls_srtp"} for the
-     * AES-128-CM-HMAC-SHA1-80 profile: {@code 2 * (16 + 14)}.
+     * Length, in bytes, of the keying material exported under the RFC 5764 label
+     * {@code "EXTRACTOR-dtls_srtp"} for the AES-128-CM-HMAC-SHA1-80 profile.
+     *
+     * @implNote This implementation reuses {@link SrtpEndpoint#KEYING_MATERIAL_LENGTH}, which is
+     * {@code 2 * (16 + 14) = 60}: two 16-byte master keys plus two 14-byte master salts, one pair
+     * per direction.
      */
     public static final int KEYING_MATERIAL_LENGTH = SrtpEndpoint.KEYING_MATERIAL_LENGTH;
 
     /**
-     * RFC 5705 / 5764 label for SRTP master-key extraction.
+     * RFC 5705/5764 exporter label under which the SRTP master keys are extracted from the
+     * negotiated DTLS session.
      */
     private static final String EXTRACTOR_LABEL = "EXTRACTOR-dtls_srtp";
 
     /**
-     * Cipher suites both sides advertise, restricted to
-     * ECDHE-ECDSA-only since Cobalt always uses an ECDSA P-256
-     * identity. Restricting here avoids the BC server falling back
-     * to an RSA suite (which would call our unimplemented RSA-signer
-     * credential method and trigger an internal_error alert).
+     * Cipher suites advertised by both sides, restricted to ECDHE-ECDSA.
+     *
+     * @implNote This implementation lists only ECDHE-ECDSA suites because Cobalt always uses an
+     * ECDSA P-256 identity. Restricting them here prevents the BouncyCastle server from selecting an
+     * RSA suite, which would dispatch to the unimplemented RSA-signer credential method and raise an
+     * {@code internal_error} alert.
      */
     private static final int[] CIPHER_SUITES = new int[] {
             CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
@@ -95,35 +101,34 @@ public final class DtlsSrtpEndpoint {
     };
 
     /**
-     * Our DTLS role — determines which side of the handshake we run.
+     * DTLS role, selecting which side of the handshake this endpoint runs.
      */
     private final SrtpRole role;
 
     /**
-     * Local cert + private key.
+     * Local certificate and private key offered as this endpoint's identity.
      */
     private final DtlsCertificate localCert;
 
     /**
-     * Expected SHA-256 fingerprint of the peer's certificate (32
-     * bytes), exchanged out-of-band via signaling.
+     * Expected 32-byte SHA-256 fingerprint of the peer's certificate, exchanged out-of-band via
+     * signaling.
      */
     private final byte[] expectedPeerFingerprint;
 
     /**
-     * Underlying transport — typically a UDP socket adapter.
+     * Datagram transport carrying the handshake, normally a UDP socket adapter.
      */
     private final DatagramTransport transport;
 
     /**
-     * Constructs a new endpoint.
+     * Constructs an endpoint with the given role, identity, expected peer fingerprint, and
+     * transport.
      *
-     * @param role                    our DTLS role
-     * @param localCert               our local cert + private key
-     * @param expectedPeerFingerprint the peer's SHA-256 fingerprint
-     *                                from signaling
-     * @param transport               the datagram transport (UDP
-     *                                adapter)
+     * @param role                    the DTLS role
+     * @param localCert               the local certificate and private key
+     * @param expectedPeerFingerprint the peer's SHA-256 fingerprint from signaling
+     * @param transport               the datagram transport
      */
     private DtlsSrtpEndpoint(SrtpRole role, DtlsCertificate localCert,
                              byte[] expectedPeerFingerprint, DatagramTransport transport) {
@@ -136,17 +141,12 @@ public final class DtlsSrtpEndpoint {
     /**
      * Creates a DTLS client endpoint.
      *
-     * @param localCert               our local cert + private key
-     * @param expectedPeerFingerprint the peer's SHA-256 fingerprint
-     *                                (32 bytes)
-     * @param transport               the underlying datagram
-     *                                transport
-     * @return a new {@code DtlsSrtpEndpoint} configured as the DTLS
-     *         client
-     * @throws NullPointerException if any argument is {@code null}
-     * @throws IllegalArgumentException if
-     *                                  {@code expectedPeerFingerprint}
-     *                                  is not exactly 32 bytes
+     * @param localCert               the local certificate and private key
+     * @param expectedPeerFingerprint the peer's 32-byte SHA-256 fingerprint
+     * @param transport               the underlying datagram transport
+     * @return a new endpoint configured as the DTLS client
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if {@code expectedPeerFingerprint} is not exactly 32 bytes
      */
     public static DtlsSrtpEndpoint client(DtlsCertificate localCert, byte[] expectedPeerFingerprint,
                                           DatagramTransport transport) {
@@ -156,17 +156,12 @@ public final class DtlsSrtpEndpoint {
     /**
      * Creates a DTLS server endpoint.
      *
-     * @param localCert               our local cert + private key
-     * @param expectedPeerFingerprint the peer's SHA-256 fingerprint
-     *                                (32 bytes)
-     * @param transport               the underlying datagram
-     *                                transport
-     * @return a new {@code DtlsSrtpEndpoint} configured as the DTLS
-     *         server
-     * @throws NullPointerException if any argument is {@code null}
-     * @throws IllegalArgumentException if
-     *                                  {@code expectedPeerFingerprint}
-     *                                  is not exactly 32 bytes
+     * @param localCert               the local certificate and private key
+     * @param expectedPeerFingerprint the peer's 32-byte SHA-256 fingerprint
+     * @param transport               the underlying datagram transport
+     * @return a new endpoint configured as the DTLS server
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if {@code expectedPeerFingerprint} is not exactly 32 bytes
      */
     public static DtlsSrtpEndpoint server(DtlsCertificate localCert, byte[] expectedPeerFingerprint,
                                           DatagramTransport transport) {
@@ -174,14 +169,19 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Validates inputs and constructs an endpoint. Shared by
-     * {@link #client} and {@link #server}.
+     * Validates the inputs and constructs an endpoint, shared by {@link #client} and
+     * {@link #server}.
+     *
+     * <p>Defensively clones {@code expectedPeerFingerprint} into the returned endpoint after
+     * checking that it is exactly 32 bytes.
      *
      * @param role                    the DTLS role
-     * @param localCert               our local cert
+     * @param localCert               the local certificate and private key
      * @param expectedPeerFingerprint the expected peer fingerprint
      * @param transport               the datagram transport
      * @return a new endpoint
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if {@code expectedPeerFingerprint} is not exactly 32 bytes
      */
     private static DtlsSrtpEndpoint create(SrtpRole role, DtlsCertificate localCert,
                                            byte[] expectedPeerFingerprint, DatagramTransport transport) {
@@ -198,48 +198,48 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Result of a completed DTLS handshake: an {@link SrtpEndpoint}
-     * primed with the exported keying material plus the BouncyCastle
-     * {@link DTLSTransport} that wraps the application-data layer.
+     * Holds the result of a completed DTLS handshake: the SRTP endpoint primed with the exported
+     * keying material and the BouncyCastle {@link DTLSTransport} wrapping the application-data layer.
      *
-     * <p>The {@code SrtpEndpoint} is used directly for media-plane
-     * traffic; the {@code DTLSTransport} carries the in-band
-     * application-data payloads (SCTP packets in the WebRTC
-     * data-channel layering).
+     * <p>The {@link SrtpEndpoint} is used directly for media-plane traffic; the {@link DTLSTransport}
+     * carries in-band application-data payloads (SCTP packets in the WebRTC data-channel layering),
+     * with {@code send(byte[], int, int)} writing one encrypted record and {@code receive(...)}
+     * reading the next decrypted one.
      *
-     * @param srtp      the negotiated SRTP endpoint
-     * @param dtls      the BC DTLS application-data transport — call
-     *                  {@code send(byte[], int, int)} to write an
-     *                  encrypted record, {@code receive(...)} to read
-     *                  the next decrypted one
+     * @param srtp the negotiated SRTP endpoint
+     * @param dtls the BouncyCastle application-data DTLS transport
      */
     public record HandshakeResult(SrtpEndpoint srtp, DTLSTransport dtls) {
     }
 
     /**
-     * Drives the DTLS handshake to completion. Validates the peer's
-     * cert fingerprint against the signaling-exchanged value, exports
-     * the SRTP keying material, and returns an {@link SrtpEndpoint}
-     * primed with it.
+     * Drives the DTLS handshake to completion and returns the negotiated {@link SrtpEndpoint}.
      *
-     * @return a fresh {@link SrtpEndpoint} keyed on the negotiated
-     *         master keys
-     * @throws IOException        if the handshake fails (peer hung
-     *                            up, transport error, fingerprint
-     *                            mismatch, alert received)
-     * @throws WhatsAppCallException.DtlsHandshake if the negotiated SRTP profile
-     *                                does not match the requested one
+     * <p>Validates the peer's certificate fingerprint against the signaling-exchanged value,
+     * exports the SRTP keying material, and primes a fresh {@link SrtpEndpoint} with it. This is the
+     * SRTP-only convenience over {@link #handshakeWithDtls()}, discarding the application-data
+     * transport.
+     *
+     * @return a fresh {@link SrtpEndpoint} keyed on the negotiated master keys
+     * @throws IOException                          if the handshake fails because the peer hung up,
+     *                                              the transport errored, or an alert was received
+     * @throws WhatsAppCallException.DtlsHandshake  if the peer presents no certificate or its
+     *                                              fingerprint does not match the expected one
      */
     public SrtpEndpoint handshake() throws IOException {
         return handshakeWithDtls().srtp();
     }
 
     /**
-     * Drives the handshake and returns both halves — the SRTP
-     * endpoint AND the application-data DTLS transport.
+     * Drives the handshake to completion and returns both the SRTP endpoint and the application-data
+     * DTLS transport.
      *
-     * @return a {@link HandshakeResult} carrying both
-     * @throws IOException if the handshake fails
+     * <p>Creates a fresh {@link JcaTlsCrypto} seeded from a {@link SecureRandom} and dispatches to
+     * the client or server handshake according to the configured role.
+     *
+     * @return a {@link HandshakeResult} carrying the negotiated endpoint and transport
+     * @throws IOException                          if the handshake fails
+     * @throws WhatsAppCallException.DtlsHandshake  if peer fingerprint validation fails
      */
     public HandshakeResult handshakeWithDtls() throws IOException {
         var crypto = new JcaTlsCryptoProvider().create(new SecureRandom());
@@ -250,10 +250,12 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Drives the client side of the DTLS handshake.
+     * Drives the client side of the DTLS handshake and primes the SRTP endpoint from the exported
+     * keying material.
      *
-     * @param crypto the BC TLS crypto provider
-     * @return a fully-populated {@link HandshakeResult}
+     * @param crypto the BouncyCastle TLS crypto provider
+     * @return a fully populated {@link HandshakeResult}
+     * @throws IOException if the handshake fails
      */
     private HandshakeResult handshakeClient(JcaTlsCrypto crypto) throws IOException {
         var client = new CobaltDtlsClient(crypto, localCert, expectedPeerFingerprint);
@@ -263,10 +265,12 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Drives the server side of the DTLS handshake.
+     * Drives the server side of the DTLS handshake and primes the SRTP endpoint from the exported
+     * keying material.
      *
-     * @param crypto the BC TLS crypto provider
-     * @return a fully-populated {@link HandshakeResult}
+     * @param crypto the BouncyCastle TLS crypto provider
+     * @return a fully populated {@link HandshakeResult}
+     * @throws IOException if the handshake fails
      */
     private HandshakeResult handshakeServer(JcaTlsCrypto crypto) throws IOException {
         var server = new CobaltDtlsServer(crypto, localCert, expectedPeerFingerprint);
@@ -276,8 +280,8 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Builds the use_srtp extension content advertising
-     * {@code SRTP_AES128_CM_HMAC_SHA1_80}.
+     * Builds the {@code use_srtp} extension content advertising the single profile
+     * {@code SRTP_AES128_CM_HMAC_SHA1_80} with an empty MKI.
      *
      * @return a populated {@link UseSRTPData}
      */
@@ -286,40 +290,45 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Returns the {@link DTLSTransport} produced by the DTLS layer
-     * for a given protocol driver. (Currently unused — handshake-only
-     * mode releases the underlying transport once the handshake
-     * completes; future revisions may expose this for handshake +
-     * data-phase orchestration.)
+     * Returns the given {@link DTLSTransport} unchanged.
      *
      * @param transport the wrapper around the negotiated DTLS session
-     * @return the wrapped transport
+     * @return the same transport
      */
     static DTLSTransport unwrap(DTLSTransport transport) {
         return transport;
     }
 
     /**
-     * BouncyCastle {@link DefaultTlsClient} subclass: provides the
-     * Cobalt cert, advertises the {@code use_srtp} extension, and
-     * validates the peer cert via fingerprint.
+     * BouncyCastle {@link DefaultTlsClient} that offers the Cobalt certificate, advertises the
+     * {@code use_srtp} extension, and authenticates the peer by fingerprint.
      */
     private static final class CobaltDtlsClient extends DefaultTlsClient {
         /**
-         * Local cert + private key.
+         * Local certificate and private key offered as the client identity.
          */
         private final DtlsCertificate localCert;
 
         /**
-         * Expected peer fingerprint.
+         * Expected 32-byte SHA-256 fingerprint of the server's certificate.
          */
         private final byte[] expectedPeerFingerprint;
 
         /**
-         * Constructs a new client.
+         * Captured 60-byte SRTP master-key block exported during {@link #notifyHandshakeComplete()}.
          *
-         * @param crypto                the BC TLS crypto provider
-         * @param localCert             our local cert
+         * @implNote This implementation captures the export inside the completion callback because
+         * BouncyCastle zeros the export source once the callback returns, leaving it unavailable to
+         * a later {@link #exportedKeyingMaterial()} call.
+         */
+        private byte[] exported;
+
+        /**
+         * Constructs a client with the given crypto provider, local certificate, and expected peer
+         * fingerprint.
+         *
+         * @param crypto                  the BouncyCastle TLS crypto provider
+         * @param localCert               the local certificate and private key
          * @param expectedPeerFingerprint the expected peer fingerprint
          */
         CobaltDtlsClient(JcaTlsCrypto crypto, DtlsCertificate localCert, byte[] expectedPeerFingerprint) {
@@ -331,8 +340,8 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Restricts the protocol version range to DTLS 1.2 (the
-         * version every WebRTC implementation supports).
+         * <p>Restricts the supported protocol versions to DTLS 1.2, the version every WebRTC
+         * implementation supports.
          */
         @Override
         protected ProtocolVersion[] getSupportedVersions() {
@@ -342,8 +351,8 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Restricts cipher suites to ECDHE-ECDSA only (Cobalt
-         * uses an ECDSA P-256 identity).
+         * <p>Restricts the supported cipher suites to the ECDHE-ECDSA set, matching Cobalt's ECDSA
+         * P-256 identity.
          */
         @Override
         protected int[] getSupportedCipherSuites() {
@@ -353,8 +362,8 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Adds the {@code use_srtp} extension advertising
-         * {@code SRTP_AES128_CM_HMAC_SHA1_80}.
+         * <p>Adds the {@code use_srtp} extension advertising {@code SRTP_AES128_CM_HMAC_SHA1_80} to
+         * the client extensions.
          */
         @Override
         public Hashtable<?, ?> getClientExtensions() throws IOException {
@@ -368,19 +377,11 @@ public final class DtlsSrtpEndpoint {
         }
 
         /**
-         * Captured 60 bytes of SRTP master-key material exported
-         * during {@link #notifyHandshakeComplete}, since BC zeros
-         * the export source once that callback returns.
-         */
-        private byte[] exported;
-
-        /**
          * {@inheritDoc}
          *
-         * <p>Returns a {@link TlsAuthentication} that validates the
-         * peer's cert against the signaling-exchanged SHA-256
-         * fingerprint and offers our local cert if the server
-         * requests client auth.
+         * <p>Returns a {@link FingerprintAuthentication} that validates the server's certificate
+         * against the signaling-exchanged SHA-256 fingerprint and offers the local certificate when
+         * the server requests client authentication.
          */
         @Override
         public TlsAuthentication getAuthentication() {
@@ -391,8 +392,8 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Captures the SRTP keying material before the underlying
-         * BC export source is zeroed.
+         * <p>Exports and captures the SRTP keying material before the underlying BouncyCastle export
+         * source is zeroed.
          */
         @Override
         public void notifyHandshakeComplete() throws IOException {
@@ -402,9 +403,10 @@ public final class DtlsSrtpEndpoint {
         }
 
         /**
-         * Returns the keying material captured during the handshake.
+         * Returns the SRTP master-key block captured during the handshake.
          *
-         * @return the 60-byte SRTP master-key block
+         * @return the 60-byte SRTP master-key block, or {@code null} if the handshake has not
+         * completed
          */
         byte[] exportedKeyingMaterial() {
             return exported;
@@ -412,25 +414,35 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * BouncyCastle {@link DefaultTlsServer} subclass: mirror of
-     * {@link CobaltDtlsClient} for the server side.
+     * BouncyCastle {@link DefaultTlsServer} mirroring {@link CobaltDtlsClient} for the server side:
+     * it offers the Cobalt certificate, requests and authenticates a client certificate by
+     * fingerprint, and confirms the {@code use_srtp} extension.
      */
     private static final class CobaltDtlsServer extends DefaultTlsServer {
         /**
-         * Local cert + private key.
+         * Local certificate and private key offered as the server identity.
          */
         private final DtlsCertificate localCert;
 
         /**
-         * Expected peer fingerprint.
+         * Expected 32-byte SHA-256 fingerprint of the client's certificate.
          */
         private final byte[] expectedPeerFingerprint;
 
         /**
-         * Constructs a new server.
+         * Captured 60-byte SRTP master-key block exported during {@link #notifyHandshakeComplete()}.
          *
-         * @param crypto                  the BC TLS crypto provider
-         * @param localCert               our local cert
+         * @implNote This implementation captures the export inside the completion callback because
+         * BouncyCastle zeros the export source once the callback returns.
+         */
+        private byte[] exported;
+
+        /**
+         * Constructs a server with the given crypto provider, local certificate, and expected peer
+         * fingerprint.
+         *
+         * @param crypto                  the BouncyCastle TLS crypto provider
+         * @param localCert               the local certificate and private key
          * @param expectedPeerFingerprint the expected peer fingerprint
          */
         CobaltDtlsServer(JcaTlsCrypto crypto, DtlsCertificate localCert, byte[] expectedPeerFingerprint) {
@@ -442,7 +454,7 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Restricts the protocol version range to DTLS 1.2.
+         * <p>Restricts the supported protocol versions to DTLS 1.2.
          */
         @Override
         protected ProtocolVersion[] getSupportedVersions() {
@@ -452,7 +464,7 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Restricts cipher suites to ECDHE-ECDSA only.
+         * <p>Restricts the supported cipher suites to the ECDHE-ECDSA set.
          */
         @Override
         protected int[] getSupportedCipherSuites() {
@@ -462,8 +474,7 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Adds the {@code use_srtp} extension on the server-hello
-         * side, confirming
+         * <p>Adds the {@code use_srtp} extension on the server-hello side, confirming
          * {@code SRTP_AES128_CM_HMAC_SHA1_80}.
          */
         @Override
@@ -480,8 +491,8 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Requires client authentication so we can validate the
-         * peer's cert via the signaling-exchanged fingerprint.
+         * <p>Requests an ECDSA client certificate signed under SHA-256 so the peer can be
+         * authenticated by the signaling-exchanged fingerprint.
          */
         @Override
         public CertificateRequest getCertificateRequest() {
@@ -495,8 +506,10 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Validates the peer cert against the expected SHA-256
-         * fingerprint exchanged via signaling.
+         * <p>Validates the client's certificate against the expected SHA-256 fingerprint exchanged
+         * via signaling.
+         *
+         * @throws IOException if the chain is empty or the fingerprint does not match
          */
         @Override
         public void notifyClientCertificate(Certificate clientCertificate) throws IOException {
@@ -504,15 +517,9 @@ public final class DtlsSrtpEndpoint {
         }
 
         /**
-         * Captured 60 bytes of SRTP master-key material exported
-         * during {@link #notifyHandshakeComplete}.
-         */
-        private byte[] exported;
-
-        /**
          * {@inheritDoc}
          *
-         * <p>Provides our ECDSA cert + private key as the server's
+         * <p>Provides the local ECDSA certificate and private key as the server's signing
          * credentials.
          */
         @Override
@@ -523,8 +530,8 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Captures the SRTP keying material before the underlying
-         * BC export source is zeroed.
+         * <p>Exports and captures the SRTP keying material before the underlying BouncyCastle export
+         * source is zeroed.
          */
         @Override
         public void notifyHandshakeComplete() throws IOException {
@@ -534,9 +541,10 @@ public final class DtlsSrtpEndpoint {
         }
 
         /**
-         * Returns the keying material captured during the handshake.
+         * Returns the SRTP master-key block captured during the handshake.
          *
-         * @return the 60-byte SRTP master-key block
+         * @return the 60-byte SRTP master-key block, or {@code null} if the handshake has not
+         * completed
          */
         byte[] exportedKeyingMaterial() {
             return exported;
@@ -544,15 +552,17 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Validates a peer-supplied {@link Certificate} against the
-     * expected SHA-256 fingerprint. The first cert in the chain is
-     * the leaf; we compare its DER-encoded form's SHA-256 to the
-     * expected value.
+     * Validates a peer-supplied {@link Certificate} chain against an expected SHA-256 fingerprint.
      *
-     * @param peer                    the peer cert chain
+     * <p>Treats the first entry in the chain as the leaf and compares the SHA-256 of its DER-encoded
+     * form against {@code expectedPeerFingerprint} via
+     * {@link DtlsCertificate#fingerprintMatches(byte[], byte[])}.
+     *
+     * @param peer                    the peer certificate chain
      * @param expectedPeerFingerprint the expected fingerprint bytes
-     * @throws IOException if the chain is empty or the fingerprint
-     *                     does not match
+     * @throws WhatsAppCallException.DtlsHandshake if the chain is empty or the fingerprint does not
+     *                                             match
+     * @throws IOException                         if the leaf certificate cannot be DER-encoded
      */
     private static void validatePeerFingerprint(Certificate peer, byte[] expectedPeerFingerprint) throws IOException {
         if (peer == null || peer.isEmpty()) {
@@ -565,14 +575,19 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * Builds an ECDSA-flavored {@link TlsCredentialedSigner} wrapping
-     * Cobalt's local cert + private key.
+     * Builds an ECDSA-flavoured {@link TlsCredentialedSigner} wrapping the local certificate and
+     * private key.
      *
-     * @param crypto    the BC TLS crypto provider
-     * @param context   the TLS context the credentials will run in
-     * @param localCert the local cert to wrap
-     * @return a credentialed signer suitable for client- or
-     *         server-side authentication
+     * <p>Wraps {@code localCert} in a BouncyCastle {@link Certificate} and binds it to the private
+     * key under an SHA-256 ECDSA signature algorithm, suitable for either client- or server-side
+     * authentication.
+     *
+     * @param crypto    the BouncyCastle TLS crypto provider
+     * @param context   the TLS context the credentials run in
+     * @param localCert the local certificate to wrap
+     * @return a credentialed signer
+     * @throws IllegalStateException if the local certificate cannot be wrapped for the BouncyCastle
+     *                               TLS layer
      */
     private static TlsCredentialedSigner ecdsaCredentials(JcaTlsCrypto crypto, TlsContext context,
                                                           DtlsCertificate localCert) {
@@ -592,38 +607,37 @@ public final class DtlsSrtpEndpoint {
     }
 
     /**
-     * The client-side {@link TlsAuthentication} that validates the
-     * server's cert via the signaling-exchanged fingerprint and
-     * provides client credentials when the server requests them.
+     * Client-side {@link TlsAuthentication} that authenticates the server by fingerprint and
+     * provides client credentials on request.
      */
     private static final class FingerprintAuthentication implements TlsAuthentication {
         /**
-         * The BC TLS crypto provider.
+         * BouncyCastle TLS crypto provider used to build credentialed signers.
          */
         private final JcaTlsCrypto crypto;
 
         /**
-         * The TLS context (needed by credentialed-signer
-         * construction).
+         * TLS context required by credentialed-signer construction.
          */
         private final TlsContext context;
 
         /**
-         * Local cert + private key.
+         * Local certificate and private key offered when the server requests client authentication.
          */
         private final DtlsCertificate localCert;
 
         /**
-         * Expected peer fingerprint.
+         * Expected 32-byte SHA-256 fingerprint of the server's certificate.
          */
         private final byte[] expectedPeerFingerprint;
 
         /**
-         * Constructs a new authentication.
+         * Constructs an authentication bound to the given crypto provider, context, local
+         * certificate, and expected peer fingerprint.
          *
-         * @param crypto                  the BC TLS crypto provider
+         * @param crypto                  the BouncyCastle TLS crypto provider
          * @param context                 the TLS context
-         * @param localCert               our local cert
+         * @param localCert               the local certificate and private key
          * @param expectedPeerFingerprint the expected peer fingerprint
          */
         FingerprintAuthentication(JcaTlsCrypto crypto, TlsContext context,
@@ -637,8 +651,9 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Validates the server's cert against the expected
-         * fingerprint.
+         * <p>Validates the server's certificate against the expected fingerprint.
+         *
+         * @throws IOException if the chain is empty or the fingerprint does not match
          */
         @Override
         public void notifyServerCertificate(TlsServerCertificate serverCertificate) throws IOException {
@@ -648,7 +663,7 @@ public final class DtlsSrtpEndpoint {
         /**
          * {@inheritDoc}
          *
-         * <p>Provides our local cert + private key when the server
+         * <p>Provides the local certificate and private key as ECDSA credentials when the server
          * requests client authentication.
          */
         @Override

@@ -12,34 +12,20 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Self-loop tests for {@link SrtpEndpoint}: a CLIENT-role endpoint
- * encrypts a packet, the matching SERVER-role endpoint (with the
- * same exported keying material) decrypts it, and the plaintext is
- * asserted byte-equal.
+ * Self-loop tests for {@link SrtpEndpoint}: a {@link SrtpRole#CLIENT}-role endpoint
+ * encrypts a packet, the matching {@link SrtpRole#SERVER}-role endpoint built from the
+ * same exported keying material decrypts it, and the plaintext is asserted byte-equal.
  *
- * <p>Pins:
- *
- * <ul>
- *   <li>The DTLS-SRTP keying-material split per RFC 5764 §4.2 (client
- *       writes with bytes [0..16] + [32..46]; server writes with
- *       [16..32] + [46..60]).</li>
- *   <li>Round-trip integrity for both RTP and RTCP packets under
- *       AES-128-CM-HMAC-SHA1-80.</li>
- *   <li>Auth-tag enforcement (tampered packets fail decrypt).</li>
- * </ul>
+ * <p>The suite pins the DTLS-SRTP keying-material split (RFC 5764 section 4.2: client
+ * writes with bytes [0..16] + [32..46], server writes with [16..32] + [46..60]),
+ * round-trip integrity for both RTP and RTCP under AES-128-CM-HMAC-SHA1-80, auth-tag
+ * enforcement (tampered packets fail decrypt), replay rejection, ROC roll-over, and
+ * per-SSRC context isolation.
  */
 public class SrtpEndpointTest {
 
-    /**
-     * The size of the SSRC field at offset 8 in an RTP/RTCP header.
-     */
     private static final int SSRC = 0x12345678;
 
-    /**
-     * Encrypts an RTP packet with a CLIENT endpoint and decrypts it
-     * with a SERVER endpoint sharing the same keying material;
-     * asserts plaintext equality.
-     */
     @Test
     public void rtpRoundTripsClientToServer() {
         var keying = randomKeying();
@@ -54,11 +40,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * Same round-trip but for the reverse direction (server encrypts,
-     * client decrypts) — verifies the keying-material split handles
-     * both halves.
-     */
     @Test
     public void rtpRoundTripsServerToClient() {
         var keying = randomKeying();
@@ -71,9 +52,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * RTCP round-trip — the per-SSRC SRTCP context derivation path.
-     */
     @Test
     public void rtcpRoundTrips() {
         var keying = randomKeying();
@@ -94,10 +72,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * Tampering with a single byte of an SRTP packet must cause
-     * unprotect to fail with an {@link WhatsAppCallException.Srtp}.
-     */
     @Test
     public void tamperedPacketFailsAuthCheck() {
         var keying = randomKeying();
@@ -105,16 +79,11 @@ public class SrtpEndpointTest {
              var server = SrtpEndpoint.fromDtlsKeyingMaterial(keying, SrtpRole.SERVER)) {
             var rtp = makeRtpPacket(SSRC, 50, 1000, "tamper-test".getBytes());
             var encrypted = client.protectRtp(rtp);
-            // flip a payload byte
             encrypted[15] ^= 0x01;
             assertThrows(WhatsAppCallException.Srtp.class, () -> server.unprotectRtp(encrypted));
         }
     }
 
-    /**
-     * The keying-material length must be exactly 60 bytes; passing
-     * anything else fails fast.
-     */
     @Test
     public void rejectsWrongKeyingMaterialLength() {
         assertThrows(IllegalArgumentException.class,
@@ -123,28 +92,13 @@ public class SrtpEndpointTest {
                 () -> SrtpEndpoint.fromDtlsKeyingMaterial(new byte[61], SrtpRole.CLIENT));
     }
 
-    /**
-     * Generates 60 bytes of random keying material — the same length
-     * a real DTLS-SRTP handshake would export.
-     *
-     * @return a fresh 60-byte array
-     */
+    // 60 bytes matches the length a real DTLS-SRTP handshake exports.
     private static byte[] randomKeying() {
         var k = new byte[SrtpEndpoint.KEYING_MATERIAL_LENGTH];
         new SecureRandom().nextBytes(k);
         return k;
     }
 
-    /**
-     * Builds a minimal RTP packet (V=2, P=0, X=0, CC=0, M=0, PT=0, no
-     * extensions) carrying the given payload.
-     *
-     * @param ssrc     the SSRC to embed at offset 8
-     * @param seq      the sequence number
-     * @param ts       the RTP timestamp
-     * @param payload  the payload bytes
-     * @return the full RTP packet (12-byte header + payload)
-     */
     private static byte[] makeRtpPacket(int ssrc, int seq, int ts, byte[] payload) {
         var pkt = new byte[12 + payload.length];
         pkt[0] = (byte) 0x80; // V=2, P=0, X=0, CC=0
@@ -157,13 +111,6 @@ public class SrtpEndpointTest {
         return pkt;
     }
 
-    /**
-     * Writes a big-endian 32-bit integer at the given offset.
-     *
-     * @param b      the destination array
-     * @param offset the byte offset
-     * @param v      the value to write
-     */
     private static void writeInt(byte[] b, int offset, int v) {
         b[offset]     = (byte) (v >>> 24);
         b[offset + 1] = (byte) (v >>> 16);
@@ -171,22 +118,12 @@ public class SrtpEndpointTest {
         b[offset + 3] = (byte) v;
     }
 
-    /**
-     * Hex-encodes a byte array for assertion error messages.
-     *
-     * @param b the bytes
-     * @return the lower-case hex string
-     */
     private static String toHex(byte[] b) {
         var sb = new StringBuilder(b.length * 2);
         for (var x : b) sb.append(String.format("%02x", x & 0xFF));
         return sb.toString();
     }
 
-    /**
-     * Round-trip with payloads near the maximum SRTP packet size
-     * (typical Ethernet MTU minus headers ≈ 1400 bytes).
-     */
     @Test
     public void rtpRoundTripsLargePayload() {
         var keying = randomKeying();
@@ -202,11 +139,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * Receiving the same SRTP packet twice must accept the first and
-     * reject the second (the replay window is keyed on the 48-bit
-     * packet index per RFC 3711 §3.3.2).
-     */
     @Test
     public void rejectsReplayedRtpPacket() {
         var keying = randomKeying();
@@ -219,12 +151,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * The 32-bit roll-over counter must increment when the 16-bit
-     * sequence number wraps: a packet with SEQ=0 following one with
-     * SEQ=0xFFFF still round-trips, since both ends bump ROC in
-     * lockstep.
-     */
     @Test
     public void rocIncrementsOnSequenceWrap() {
         var keying = randomKeying();
@@ -237,12 +163,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * Packets arriving out of order within the replay window must
-     * still authenticate and decrypt correctly, since the receiver
-     * reconstructs the per-packet index from the highest SEQ seen
-     * and the candidate ROC.
-     */
     @Test
     public void rtpRoundTripsOutOfOrderInWindow() {
         var keying = randomKeying();
@@ -261,10 +181,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * The SRTCP context refuses to accept the same SRTCP index
-     * twice — a replay must throw.
-     */
     @Test
     public void rejectsReplayedRtcpPacket() {
         var keying = randomKeying();
@@ -277,11 +193,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * Two SSRCs in the same direction must each get their own
-     * per-SSRC context; encrypting an SSRC=A packet must not consume
-     * the index/ROC space of SSRC=B.
-     */
     @Test
     public void multipleSsrcsRoundTripIndependently() {
         var keying = randomKeying();
@@ -294,13 +205,6 @@ public class SrtpEndpointTest {
         }
     }
 
-    /**
-     * Builds a minimal Sender Report (PT=200) RTCP packet with the
-     * supplied sender SSRC at offset 4.
-     *
-     * @param ssrc the sender SSRC
-     * @return a 28-byte RTCP packet
-     */
     private static byte[] makeRtcpPacket(int ssrc) {
         var rtcp = new byte[28];
         rtcp[0] = (byte) 0x80; // V=2, P=0, RC=0

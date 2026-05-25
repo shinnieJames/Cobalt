@@ -9,17 +9,13 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Decodes a server {@code <ack>} {@link Node} into a structured
- * {@link AckResult}.
+ * Decodes a server {@code <ack>} {@link Node} into a structured {@link AckResult}.
  *
- * @apiNote
- * Invoked by every send path in
- * {@link com.github.auties00.cobalt.message.send.MessageSendingService} after
- * the wire stanza has been dispatched and the synchronous response has been
- * received. The parser is structurally identical to WA Web's
- * {@code sendMsgAckSyncParser} wap parser; embedders that need to interpret a
- * raw ack node (for example to feed it back into a custom retry loop) can use
- * the public {@link #parse(Node)} entry point directly.
+ * <p>This utility class exposes a single static {@link #parse(Node)} entry point that flattens the
+ * attributes the send pipeline cares about into an {@link AckResult}. It is invoked by every send
+ * path in {@link com.github.auties00.cobalt.message.send.MessageSendingService} after the wire
+ * stanza has been dispatched and the synchronous response received, and it may be called directly by
+ * embedders that need to interpret a raw ack node.
  *
  * @see AckResult
  * @see NackReason
@@ -38,11 +34,11 @@ public final class AckParser {
     /**
      * Parses the given {@code <ack>} node into an {@link AckResult}.
      *
-     * @apiNote
-     * Pulls the {@code t}, {@code sync}, {@code phash}, {@code refresh_lid},
-     * {@code addressing_mode}, {@code count}, and {@code error} attributes off
-     * the supplied node and returns a flattened result; the input must already
-     * be the {@code <ack>} element (not its enclosing {@code <iq>}).
+     * <p>Pulls the {@code t}, {@code sync}, {@code phash}, {@code refresh_lid},
+     * {@code addressing_mode}, {@code count}, and {@code error} attributes off the supplied node and
+     * returns a flattened result. The {@code t} attribute is interpreted as epoch seconds and
+     * converted to an {@link Instant}, and {@code refresh_lid} defaults to {@code false} when absent.
+     * The input must already be the {@code <ack>} element, not its enclosing {@code <iq>}.
      *
      * @param ack the {@code <ack>} node returned by the server
      * @return the parsed {@link AckResult}

@@ -16,12 +16,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Tracks whether the per-bot welcome message has been requested for a given bot chat.
  *
- * @apiNote
- * Drives the bot-chat surface that suppresses the on-open welcome
- * prompt after it has been delivered once. When the welcome request
- * lands on another device, the server replays it here as a
- * {@link BotWelcomeRequestAction}; Cobalt embedders observe the result
- * via
+ * <p>The bot-chat surface suppresses the on-open welcome prompt after it has
+ * been delivered once. When the welcome request lands on another device, the
+ * server replays it here as a {@link BotWelcomeRequestAction}, and the result
+ * is read back via
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findBotWelcomeRequestState(Jid)}.
  *
  * @implNote
@@ -37,9 +35,7 @@ public final class BotWelcomeRequestHandler implements WebAppStateActionHandler 
     /**
      * Constructs the singleton bot-welcome-request handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebBotWelcomeRequestSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public BotWelcomeRequestHandler() {
@@ -67,17 +63,14 @@ public final class BotWelcomeRequestHandler implements WebAppStateActionHandler 
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Reads {@link BotWelcomeRequestAction#isSent()} from the mutation
-     * value, locates the target bot
-     * {@link com.github.auties00.cobalt.model.chat.Chat} by JID, and
-     * upserts the welcome-request state. Returns
-     * {@link MutationApplicationResult#unsupported()} for {@code REMOVE}
-     * operations (WA Web treats {@code REMOVE} as not supported), and
-     * {@link MutationApplicationResult#failed()} for any unknown
-     * operation or thrown exception (mirroring WA Web's surrounding
-     * try/catch which routes the exhaustive-match throw to
-     * {@code Failed}).
+     * <p>Reads {@link BotWelcomeRequestAction#isSent()} from the mutation value,
+     * locates the target bot {@link com.github.auties00.cobalt.model.chat.Chat}
+     * by JID, and upserts the welcome-request state. Returns
+     * {@link MutationApplicationResult#unsupported()} for {@link SyncdOperation#REMOVE}
+     * operations (WA Web treats {@link SyncdOperation#REMOVE} as not supported),
+     * an orphan result keyed by chat JID and model type {@code "Chat"} when the
+     * chat is not in the store, and {@link MutationApplicationResult#failed()}
+     * for any unknown operation or thrown exception.
      *
      * @implNote
      * This implementation derives the {@code requested} boolean via

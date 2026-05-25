@@ -14,10 +14,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed sealed family of inbound reply variants produced by the relay in response to an {@link IqQueryBusinessCategoriesRequest}.
+ * Models the sealed family of inbound reply variants produced by the relay in response to an {@link IqQueryBusinessCategoriesRequest}.
  *
- * @apiNote
- * Use this type to switch over the three documented outcomes of a business-category lookup: {@link Success} carries the typed category list and the {@code not_a_biz} sentinel id, {@link ClientError} surfaces a relay validation rejection, and {@link ServerError} reports a transport or backend failure. The dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node} into the right variant before handing it to the caller.
+ * <p>The three documented outcomes of a business-category lookup are {@link Success}, which carries
+ * the typed category list and the {@code not_a_biz} sentinel id, {@link ClientError}, which
+ * surfaces a relay validation rejection, and {@link ServerError}, which reports a transport or
+ * backend failure. The dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node}
+ * into the right variant.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryBusinessCategoriesJob")
 public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Response
@@ -26,8 +29,8 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
     /**
      * Tries each {@link IqQueryBusinessCategoriesResponse} variant in priority order.
      *
-     * @apiNote
-     * Call this entry from the dispatcher to fan the inbound stanza into the matching sealed variant; the success path is tried first, then the client-error envelope, then the server-error envelope. Returns empty only when none of the three documented shapes apply.
+     * <p>The success path is tried first, then the client-error envelope, then the server-error
+     * envelope. The result is empty only when none of the three documented shapes apply.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -49,39 +52,42 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
     }
 
     /**
-     * The {@code Success} reply variant carrying the typed category list and the {@code not_a_biz} sentinel id.
+     * Carries the typed category list and the {@code not_a_biz} sentinel id for a successful lookup.
      *
-     * @apiNote
-     * Use this variant to render the category picker; the typed {@link Category} entries drive the rows of the picker and the {@code not_a_biz} sentinel id marks the synthetic opt-out row that lets the merchant signal "not a business".
+     * <p>The typed {@link Category} entries drive the rows of the category picker, and the
+     * {@code not_a_biz} sentinel id marks the synthetic opt-out row that lets the merchant signal
+     * "not a business".
      */
     final class Success implements IqQueryBusinessCategoriesResponse {
         /**
-         * One typed category entry decoded from a {@code <category/>} child of the relay reply.
+         * Models one category entry decoded from a {@code <category/>} child of the relay reply.
          *
-         * @apiNote
-         * Use this entry to render one row in the category picker; the {@link #notABiz()} flag marks the synthetic opt-out row.
+         * <p>The {@link #notABiz()} flag marks the synthetic opt-out row.
          */
         public static final class Category {
             /**
-             * The opaque category identifier carried by the {@code id} attribute of the {@code <category/>} child.
+             * Holds the opaque category identifier carried by the {@code id} attribute of the {@code <category/>} child.
              */
             private final String id;
 
             /**
-             * The localised display name shown in the picker UI, lifted from the {@code <category/>} child content.
+             * Holds the localised display name shown in the picker UI, lifted from the {@code <category/>} child content.
              */
             private final String localizedDisplayName;
 
             /**
-             * The {@code not_a_biz} sentinel flag; {@code true} only when the entry's id matches the id carried by the {@code <not_a_biz/>} sentinel block.
+             * Holds the {@code not_a_biz} sentinel flag.
+             *
+             * <p>{@code true} only when the entry's id matches the id carried by the
+             * {@code <not_a_biz/>} sentinel block.
              */
             private final boolean notABiz;
 
             /**
-             * Constructs a typed category entry.
+             * Constructs a typed category entry from a decoded {@code <category/>} child.
              *
-             * @apiNote
-             * Call this constructor when projecting a {@code <category/>} child into the typed model; pass {@code true} for {@code notABiz} only when the entry's id matches the {@code <not_a_biz/>} sentinel.
+             * <p>The {@code notABiz} flag is {@code true} only when the entry's id matches the
+             * {@code <not_a_biz/>} sentinel.
              *
              * @param id                   the category identifier; never {@code null}
              * @param localizedDisplayName the display name; never {@code null}
@@ -96,10 +102,10 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the category identifier.
+             * Returns the opaque category identifier.
              *
-             * @apiNote
-             * Use this getter to read back the opaque category id, which is the value the SMB profile editor sends back through {@link IqEditBusinessProfileRequest} to mark the merchant's category.
+             * <p>This is the value the SMB profile editor sends back through
+             * {@link IqEditBusinessProfileRequest} to mark the merchant's category.
              *
              * @return the identifier; never {@code null}
              */
@@ -108,10 +114,7 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
             }
 
             /**
-             * Returns the localised display name.
-             *
-             * @apiNote
-             * Use this getter to render the per-row label in the category picker.
+             * Returns the localised display name that drives the per-row label in the category picker.
              *
              * @return the display name; never {@code null}
              */
@@ -122,8 +125,8 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
             /**
              * Returns the {@code not_a_biz} sentinel flag.
              *
-             * @apiNote
-             * Use this getter to detect the synthetic opt-out row; consumers render this row differently from the catalogue rows because it does not name a real business category.
+             * <p>Consumers render the synthetic opt-out row differently from the catalogue rows
+             * because it does not name a real business category.
              *
              * @return {@code true} when this entry is the synthetic opt-out
              */
@@ -159,23 +162,22 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         }
 
         /**
-         * The typed category entries in wire order.
+         * Holds the typed category entries in wire order.
          */
         private final List<Category> categories;
 
         /**
-         * The id of the synthetic {@code not_a_biz} sentinel, or the empty string when the relay returned no sentinel block.
+         * Holds the id of the synthetic {@code not_a_biz} sentinel, or the empty string when the relay returned no sentinel block.
          */
         private final String notABizId;
 
         /**
-         * Constructs a typed success reply.
+         * Constructs a typed success reply from the decoded category list and sentinel id.
          *
-         * @apiNote
-         * Call this constructor when projecting the typed category list and the optional {@code not_a_biz} sentinel id into the typed model; pass the empty string when the sentinel block is absent.
+         * <p>The empty string marks an absent {@code not_a_biz} sentinel block.
          *
          * @param categories the category list; never {@code null}
-         * @param notABizId  the sentinel id; never {@code null} (empty string when absent)
+         * @param notABizId  the sentinel id; never {@code null}, empty string when absent
          * @throws NullPointerException if either argument is {@code null}
          */
         public Success(List<Category> categories, String notABizId) {
@@ -187,8 +189,7 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         /**
          * Returns the typed category entries.
          *
-         * @apiNote
-         * Use this getter to iterate the categories when rendering the picker; the list preserves the wire order which mirrors the merchant-facing display order.
+         * <p>The list preserves the wire order, which mirrors the merchant-facing display order.
          *
          * @return an unmodifiable list; never {@code null}
          */
@@ -197,10 +198,9 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the {@code not_a_biz} sentinel id.
+         * Returns the {@code not_a_biz} sentinel id used when filtering the category list.
          *
-         * @apiNote
-         * Use this getter to look up the sentinel id when filtering the category list; the value is the empty string when the relay did not stamp a sentinel block.
+         * <p>The value is the empty string when the relay did not stamp a sentinel block.
          *
          * @return the sentinel id; empty string when absent
          */
@@ -211,11 +211,16 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         /**
          * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqQueryBusinessCategoriesResponse#of(Node, Node)} or directly when only the success branch is interesting; returns empty when the stanza does not carry a {@code result} envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a {@code result} envelope matching
+         * the original request.
          *
          * @implNote
-         * This implementation mirrors the deprecated WAP parser inside {@code WAWebQueryBusinessCategoriesJob.businessCategoriesResponse}: the {@code <response/>} envelope carries an optional {@code <not_a_biz/>} sentinel and a mandatory {@code <categories/>} block. Each {@code <category id/>} child contributes a {@link Category} whose {@code notABiz} flag is set when the entry id matches the sentinel id, replicating the WA Web parser's per-row classification. An empty {@code <response/>} produces an empty list and an empty sentinel id.
+         * This implementation mirrors the deprecated WAP parser inside {@code WAWebQueryBusinessCategoriesJob.businessCategoriesResponse}:
+         * the {@code <response/>} envelope carries an optional {@code <not_a_biz/>} sentinel and a
+         * mandatory {@code <categories/>} block. Each {@code <category id/>} child contributes a
+         * {@link Category} whose {@code notABiz} flag is set when the entry id matches the sentinel
+         * id, replicating the WA Web parser's per-row classification. An empty {@code <response/>}
+         * produces an empty list and an empty sentinel id.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
@@ -278,27 +283,25 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
     }
 
     /**
-     * The {@code ClientError} reply variant surfacing a client-side rejection.
+     * Surfaces a client-side rejection of a category lookup.
      *
-     * @apiNote
-     * Use this variant to react to a refused category lookup; typical examples include a relay validation rejection surfaced as a SMAX error envelope.
+     * <p>Typical examples include a relay validation rejection surfaced as a SMAX error envelope.
      */
     final class ClientError implements IqQueryBusinessCategoriesResponse {
         /**
-         * The numeric error code lifted from the SMAX error envelope.
+         * Holds the numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text lifted from the SMAX error envelope.
+         * Holds the optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a typed client-error reply.
+         * Constructs a typed client-error reply from a decoded client-error envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting a client-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
+         * <p>A {@code null} {@code errorText} marks a wire shape that omitted the text field.
          *
          * @param errorCode the numeric error code
          * @param errorText the human-readable error text; may be {@code null}
@@ -309,10 +312,7 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
+         * Returns the SMAX error code the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -321,10 +321,7 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the human-readable error text, when supplied.
-         *
-         * @apiNote
-         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         * Returns the relay-supplied error explanation, when present.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -335,8 +332,8 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         /**
          * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqQueryBusinessCategoriesResponse#of(Node, Node)} or directly when only the client-error branch is interesting; returns empty when the stanza does not carry a client-error envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a client-error envelope matching
+         * the original request.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
@@ -375,27 +372,26 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
     }
 
     /**
-     * The {@code ServerError} reply variant surfacing a server-side failure.
+     * Surfaces a server-side failure that did not produce a typed category list.
      *
-     * @apiNote
-     * Use this variant to react to a backend failure that did not produce a typed category list; WA Web's {@code WAWebQueryBusinessCategoriesJob.queryBusinessCategories} surfaces this as a {@code ServerStatusCodeError} carrying the relay-supplied status.
+     * <p>WA Web's {@code WAWebQueryBusinessCategoriesJob.queryBusinessCategories} surfaces this as a
+     * {@code ServerStatusCodeError} carrying the relay-supplied status.
      */
     final class ServerError implements IqQueryBusinessCategoriesResponse {
         /**
-         * The numeric error code lifted from the SMAX error envelope.
+         * Holds the numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text lifted from the SMAX error envelope.
+         * Holds the optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a typed server-error reply.
+         * Constructs a typed server-error reply from a decoded server-error envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting a server-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
+         * <p>A {@code null} {@code errorText} marks a wire shape that omitted the text field.
          *
          * @param errorCode the numeric error code
          * @param errorText the human-readable error text; may be {@code null}
@@ -406,10 +402,7 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
+         * Returns the SMAX error code the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -418,10 +411,7 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         }
 
         /**
-         * Returns the human-readable error text, when supplied.
-         *
-         * @apiNote
-         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         * Returns the relay-supplied error explanation, when present.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -432,8 +422,8 @@ public sealed interface IqQueryBusinessCategoriesResponse extends IqOperation.Re
         /**
          * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqQueryBusinessCategoriesResponse#of(Node, Node)} or directly when only the server-error branch is interesting; returns empty when the stanza does not carry a server-error envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a server-error envelope matching
+         * the original request.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}

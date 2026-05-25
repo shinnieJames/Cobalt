@@ -10,110 +10,117 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * A pending inbound call offer, surfaced to the user before any
- * media is exchanged. Delivered via
- * {@code WhatsAppClientListener.onCall} when an
- * {@code <offer>} stanza arrives from the peer; the listener must
- * respond by calling either
+ * Represents a pending inbound call offer, surfaced to the user before
+ * any media is exchanged.
+ *
+ * <p>An offer is delivered through
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onCall(WhatsAppClient, IncomingCall)}
+ * when an inbound call offer arrives from the peer. The listener responds
+ * by calling
  * {@link WhatsAppClient#acceptCall(IncomingCall, CallOptions)} or
- * {@link WhatsAppClient#rejectCall(IncomingCall, CallEndReason)}
- * within the WhatsApp-imposed timeout (~30 s) or the offer will
- * expire on its own.
+ * {@link WhatsAppClient#rejectCall(IncomingCall, CallEndReason)}; an
+ * unanswered offer expires on its own once the WhatsApp-imposed timeout
+ * of around thirty seconds elapses.
  *
- * <p>This class carries the full protocol metadata of the offer
- * (callId, peer JID, timestamps, group/video flags). It is a pure
- * value type: accept/reject live on {@link WhatsAppClient}, which
- * uses {@link #markResponded()} to enforce one-shot semantics.
+ * <p>This class is a pure value type carrying the protocol metadata of
+ * the offer (call identifier, peer JID, timestamps, group and video
+ * flags). The accept and reject operations live on
+ * {@link WhatsAppClient}, which calls {@link #markResponded()} to enforce
+ * one-shot semantics. It is distinct from {@link ActiveCall} because no
+ * media ports or live state exist until the offer is accepted.
  *
- * <p>Distinct from {@link ActiveCall} because there are no media
- * ports or live state until acceptance — only the protocol-level
- * "who is calling and is it audio or video" view.
+ * @apiNote Prefer accepting as audio-only by passing
+ * {@link CallOptions#audio()} even when {@link #videoOffered()} is
+ * {@code true} if the local side has no camera to stream; the caller's
+ * video offer does not obligate the callee to send video.
  */
 public final class IncomingCall {
     /**
-     * The unique identifier for this call, assigned by the caller's
-     * device. Also the message-key id of the corresponding call-log
-     * chat entry.
+     * Holds the unique identifier for this call, assigned by the
+     * caller's device and shared with the message-key id of the
+     * corresponding call-log chat entry.
      */
     private final String callId;
 
     /**
-     * The {@link Jid} of the user who initiated the call — the peer
+     * Holds the {@link Jid} of the user who initiated the call, the peer
      * the local user is talking to.
      */
     private final Jid peer;
 
     /**
-     * The chat where this call's log entry appears: the peer's JID
+     * Holds the chat where this call's log entry appears: the peer's JID
      * for one-to-one calls or the group JID for group calls.
      */
     private final Jid chatJid;
 
     /**
-     * The instant at which the offer was received locally.
+     * Holds the instant at which the offer was received locally.
      */
     private final Instant timestamp;
 
     /**
-     * {@code true} if the caller offered video; {@code false} for an
-     * audio-only call.
+     * Indicates whether the caller offered video; {@code false} denotes
+     * an audio-only call.
      */
     private final boolean videoOffered;
 
     /**
-     * {@code true} for a group call.
+     * Indicates whether this is a group call.
      */
     private final boolean group;
 
     /**
-     * The group's {@link Jid} for group calls; {@code null} for
-     * one-to-one.
+     * Holds the group's {@link Jid} for group calls; {@code null} for
+     * one-to-one calls.
      */
     private final Jid groupJid;
 
     /**
-     * {@code true} if the offer was server-replayed because the
-     * local device was disconnected when the call originally rang.
-     * The notification is informational only — the call cannot be
-     * answered in real time once an offline offer's natural timeout
-     * has elapsed.
+     * Indicates whether the offer was server-replayed because the local
+     * device was disconnected when the call originally rang.
+     *
+     * <p>Such a notification is informational only: the call cannot be
+     * answered in real time once an offline offer's natural timeout has
+     * elapsed.
      */
     private final boolean offlineOffer;
 
     /**
-     * One-shot guard so accept and reject can each succeed at most
-     * once for the lifetime of an offer.
+     * Guards accept and reject so each can succeed at most once for the
+     * lifetime of an offer.
      */
     private final AtomicBoolean responded = new AtomicBoolean(false);
 
     /**
-     * The transport-layer setup carried inside the offer payload —
-     * relay endpoints, session tokens, call key. Parsed by
+     * Holds the transport-layer setup carried inside the offer payload:
+     * relay endpoints, session tokens, and the call key.
+     *
+     * <p>The spec is parsed by
      * {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiver}
      * via {@link OfferTransportSpec#parse(com.github.auties00.cobalt.node.Node)}
      * and read by
-     * {@link com.github.auties00.cobalt.call.internal.transport.ActiveCallTransport#start
-     * ActiveCallTransport.start} after the call is accepted. {@code null}
-     * for signaling-only offers (e.g. Cobalt's own pre-Phase-2 outgoing
-     * offer shape).
+     * {@link com.github.auties00.cobalt.call.internal.transport.ActiveCallTransport#start}
+     * after the call is accepted. It is {@code null} for signaling-only
+     * offers that omit the transport block.
      */
     private final OfferTransportSpec transportSpec;
 
     /**
-     * Constructs a new offer with no transport spec — used by tests
-     * that exercise the signaling layer in isolation.
+     * Constructs an offer with no transport spec.
      *
      * @param callId       the unique call identifier
      * @param peer         the caller's JID
-     * @param chatJid      the chat the offer arrived in (peer JID
-     *                     for 1:1, group JID for group calls)
+     * @param chatJid      the chat the offer arrived in: the peer JID for
+     *                     one-to-one calls, the group JID for group calls
      * @param timestamp    when the offer was received
      * @param videoOffered whether video was offered
      * @param group        whether this is a group call
-     * @param groupJid     the group JID, or {@code null} for 1:1
+     * @param groupJid     the group JID, or {@code null} for one-to-one
      * @param offlineOffer whether the offer was server-replayed
-     * @throws NullPointerException if any non-{@code null} argument
-     *                              is missing
+     * @throws NullPointerException if {@code callId}, {@code peer},
+     *                              {@code chatJid}, or {@code timestamp}
+     *                              is {@code null}
      */
     public IncomingCall(String callId, Jid peer, Jid chatJid, Instant timestamp,
                         boolean videoOffered, boolean group, Jid groupJid,
@@ -122,7 +129,7 @@ public final class IncomingCall {
     }
 
     /**
-     * Constructs a new offer with an attached transport spec.
+     * Constructs an offer with an attached transport spec.
      *
      * @param callId        the unique call identifier
      * @param peer          the caller's JID
@@ -130,12 +137,13 @@ public final class IncomingCall {
      * @param timestamp     when the offer was received
      * @param videoOffered  whether video was offered
      * @param group         whether this is a group call
-     * @param groupJid      the group JID, or {@code null} for 1:1
+     * @param groupJid      the group JID, or {@code null} for one-to-one
      * @param offlineOffer  whether the offer was server-replayed
      * @param transportSpec the parsed transport-layer setup, or
      *                      {@code null} when the offer omitted it
-     * @throws NullPointerException if any non-{@code null} argument
-     *                              is missing
+     * @throws NullPointerException if {@code callId}, {@code peer},
+     *                              {@code chatJid}, or {@code timestamp}
+     *                              is {@code null}
      */
     public IncomingCall(String callId, Jid peer, Jid chatJid, Instant timestamp,
                         boolean videoOffered, boolean group, Jid groupJid,
@@ -152,7 +160,7 @@ public final class IncomingCall {
     }
 
     /**
-     * Returns the parsed transport-layer setup, if the inbound offer
+     * Returns the parsed transport-layer setup if the inbound offer
      * carried it.
      *
      * @return the spec, or {@link Optional#empty()}
@@ -180,8 +188,8 @@ public final class IncomingCall {
     }
 
     /**
-     * Returns the chat the offer arrived in — the peer JID for
-     * one-to-one calls, the group JID for group calls.
+     * Returns the chat the offer arrived in: the peer JID for one-to-one
+     * calls, the group JID for group calls.
      *
      * @return the chat JID
      */
@@ -199,8 +207,9 @@ public final class IncomingCall {
     }
 
     /**
-     * Returns whether the caller offered video. The local side may
-     * still accept as audio-only by passing
+     * Returns whether the caller offered video.
+     *
+     * <p>The local side may still accept as audio-only by passing
      * {@link CallOptions#audio()} to
      * {@link WhatsAppClient#acceptCall(IncomingCall, CallOptions)}.
      *
@@ -222,15 +231,16 @@ public final class IncomingCall {
     /**
      * Returns the group's JID for group calls.
      *
-     * @return the group JID, or empty for one-to-one calls
+     * @return the group JID, or {@link Optional#empty()} for one-to-one
+     * calls
      */
     public Optional<Jid> groupJid() {
         return Optional.ofNullable(groupJid);
     }
 
     /**
-     * Returns whether the offer was server-replayed because the
-     * local device was offline at ring time.
+     * Returns whether the offer was server-replayed because the local
+     * device was offline at ring time.
      *
      * @return {@code true} for offline-replayed offers
      */
@@ -239,16 +249,13 @@ public final class IncomingCall {
     }
 
     /**
-     * Atomically marks the offer as responded-to. The first caller
-     * succeeds; every subsequent caller throws.
+     * Atomically marks the offer as responded-to.
      *
-     * <p>Invoked by
-     * {@link WhatsAppClient#acceptCall(IncomingCall, CallOptions)}
-     * and
-     * {@link WhatsAppClient#rejectCall(IncomingCall, CallEndReason)}
-     * before they touch the call engine, so accept-after-reject and
-     * double-accept fail loudly instead of silently producing a
-     * second {@link ActiveCall}.
+     * <p>The first caller succeeds and every subsequent caller throws.
+     * The accept and reject operations on {@link WhatsAppClient} invoke
+     * this before they touch the call engine, so accept-after-reject and
+     * double-accept fail loudly instead of silently producing a second
+     * {@link ActiveCall}.
      *
      * @throws IllegalStateException if the offer has already been
      *                               responded to

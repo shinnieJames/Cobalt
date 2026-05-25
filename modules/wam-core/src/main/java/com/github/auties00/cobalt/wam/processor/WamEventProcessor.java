@@ -56,6 +56,17 @@ public final class WamEventProcessor extends AbstractProcessor {
                     if (seenQualifiedNames.add(qualifiedName)) {
                         collectedEvents.add(eventElement);
                     }
+                    var fieldCount = eventElement.properties().size();
+                    if (fieldCount > WamImplGenerator.MAP_THRESHOLD) {
+                        processingEnv.getMessager().printMessage(
+                                Diagnostic.Kind.WARNING,
+                                "WAM event '" + eventElement.className().simpleName() + "' has " + fieldCount
+                                        + " fields (over the " + WamImplGenerator.MAP_THRESHOLD + "-field threshold); "
+                                        + "generating a map-backed implementation instead of the efficient per-field "
+                                        + "one to stay within the JVM 255-parameter and 64KB method-size limits.",
+                                element
+                        );
+                    }
                     WamImplGenerator.generate(eventElement)
                             .writeTo(processingEnv.getFiler());
                     WamBuilderGenerator.generate(eventElement)

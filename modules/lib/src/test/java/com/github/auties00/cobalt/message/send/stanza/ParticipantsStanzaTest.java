@@ -15,76 +15,38 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Structural tests for {@link ParticipantsStanza}, mirroring
- * {@code WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza} (the
- * {@code <participants>} branch) and
- * {@code WAWebSendGroupSkmsgJob.encryptAndSendSenderKeyMsg}.
- *
- * @apiNote
- * Pins one dimension per test: empty-input edge cases for both wrappers,
- * the {@code decrypt-fail} default vs override on distribution
- * {@code <enc>}s, RCAT content-binding resolution keyed by user JID, the
- * skip-on-null-recipient rule that excludes the sender-key cipher
- * payload, and the {@link ParticipantsStanza#requiresIdentityNode}
- * predicate.
- *
- * @implNote
- * This implementation drives the two wrappers directly with raw
- * payload/binding inputs; no store seeding is needed.
+ * Covers the static stanza builders on {@link ParticipantsStanza}: the
+ * {@link ParticipantsStanza#buildSenderKeyDistribution(List, Map, String)} sender-key distribution wrapper, the
+ * {@link ParticipantsStanza#buildContentBindingOnly(List, Map)} content-binding-only wrapper, and the
+ * {@link ParticipantsStanza#requiresIdentityNode(List)} pre-key probe. The builders are driven directly with raw
+ * payload and binding inputs, so no store seeding is required.
  */
 @DisplayName("ParticipantsStanza")
 class ParticipantsStanzaTest {
 
-    /**
-     * A device JID for the primary device of the test user.
-     */
     private static final Jid DEVICE_A = Jid.of("12025550100:0@s.whatsapp.net");
 
-    /**
-     * A device JID for a companion device of the same user.
-     */
+    // Companion device of the same user as DEVICE_A; both resolve to USER_A.
     private static final Jid DEVICE_B = Jid.of("12025550100:73@s.whatsapp.net");
 
-    /**
-     * The user JID corresponding to both {@link #DEVICE_A} and
-     * {@link #DEVICE_B}.
-     */
     private static final Jid USER_A = Jid.of("12025550100@s.whatsapp.net");
 
-    /**
-     * Fixture ciphertext bytes used wherever the actual ciphertext does
-     * not matter.
-     */
     private static final byte[] CIPHERTEXT = new byte[]{1, 2, 3};
 
-    /**
-     * Fixture RCAT tag bytes used wherever the actual binding value does
-     * not matter.
-     */
     private static final byte[] RCAT_TAG = new byte[]{4, 5, 6};
 
-    /**
-     * Empty payload list collapses to {@code null}.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: empty payload list returns null")
     void emptyPayloadsReturnsNull() {
         assertNull(ParticipantsStanza.buildSenderKeyDistribution(List.of(), null, null));
     }
 
-    /**
-     * Null payload list collapses to {@code null}.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: null payload list returns null")
     void nullPayloadsReturnsNull() {
         assertNull(ParticipantsStanza.buildSenderKeyDistribution(null, null, null));
     }
 
-    /**
-     * The {@code decrypt-fail} attribute defaults to {@code "hide"} on
-     * every distribution {@code <enc>}.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: decrypt-fail defaults to \"hide\" on every <enc>")
     void defaultDecryptFailHide() {
@@ -98,10 +60,6 @@ class ParticipantsStanzaTest {
                 "SK distribution must never produce a visible decrypt-fail placeholder");
     }
 
-    /**
-     * An explicit {@code decrypt-fail} value overrides the
-     * {@code "hide"} default.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: explicit decrypt-fail overrides the default")
     void overrideDecryptFail() {
@@ -114,11 +72,6 @@ class ParticipantsStanzaTest {
         assertEquals("custom-fail", enc.getAttributeAsString("decrypt-fail").orElseThrow());
     }
 
-    /**
-     * Content bindings are looked up by user JID, not device JID; a
-     * matching user JID attaches a {@code <content_binding>} to every
-     * device of that user.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: content binding is keyed by user JID, not device JID")
     void contentBindingByUserJid() {
@@ -132,10 +85,6 @@ class ParticipantsStanzaTest {
                 "RCAT keyed by user JID must attach <content_binding> under <to> for any matching device");
     }
 
-    /**
-     * A binding for an unrelated user JID does not leak onto the
-     * {@code <to>} for {@link #USER_A}.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: no binding for unmapped user JID")
     void noBindingForUnmappedUser() {
@@ -150,11 +99,6 @@ class ParticipantsStanzaTest {
                 "RCAT for a different user must not bleed onto the <to> node");
     }
 
-    /**
-     * Payloads with a null {@code recipientJid} represent the
-     * sender-key cipher and are skipped from the {@code <participants>}
-     * output.
-     */
     @Test
     @DisplayName("buildSenderKeyDistribution: payloads with null recipientJid are skipped")
     void nullRecipientSkipped() {
@@ -167,10 +111,6 @@ class ParticipantsStanzaTest {
         assertEquals(1, toCount, "payloads with null recipientJid (sender-key group cipher) must be skipped");
     }
 
-    /**
-     * No device whose user matches any binding key collapses
-     * {@link ParticipantsStanza#buildContentBindingOnly} to {@code null}.
-     */
     @Test
     @DisplayName("buildContentBindingOnly: returns null when no bindings match the device list")
     void contentBindingOnlyNullWhenNoMatch() {
@@ -179,10 +119,6 @@ class ParticipantsStanzaTest {
         assertNull(result, "no matching user JID -> entire <participants> node is null");
     }
 
-    /**
-     * Every device whose user matches a binding key produces a
-     * {@code <to><content_binding/></to>} child.
-     */
     @Test
     @DisplayName("buildContentBindingOnly: builds <to><content_binding/></to> only for matched users")
     void contentBindingOnlyEmitsForMatch() {
@@ -198,11 +134,6 @@ class ParticipantsStanzaTest {
         }
     }
 
-    /**
-     * {@link ParticipantsStanza#requiresIdentityNode(List)} returns
-     * {@code true} iff at least one payload is a PreKey message; a null
-     * list returns {@code false} instead of throwing.
-     */
     @Test
     @DisplayName("requiresIdentityNode: true iff at least one payload is a PreKey message")
     void requiresIdentityNode() {

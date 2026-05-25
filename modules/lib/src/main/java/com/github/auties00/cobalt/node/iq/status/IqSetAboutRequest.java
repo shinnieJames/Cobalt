@@ -9,30 +9,27 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="status" type="set">} stanza setting the calling user's "about"
- * text (the short bio shown under the contact name in the profile screen).
+ * Models the outbound legacy-IQ stanza that sets the calling user's "about" text.
  *
- * @apiNote
- * Used by the Settings "edit about" surface via WA Web's
- * {@code WAWebContactStatusBridge}, which wraps the call in a persisted-job envelope so the
- * change is retried across reconnects; the persisted-job definition lives in
- * {@code WAWebPersistedJobDefinitions.setAbout} and the runtime resolution in
- * {@code WAWebPersistedJobInitializers.setAbout}.
+ * <p>The about text is the short bio shown under the contact name in the profile screen.
+ * Dispatching this request as an {@link IqOperation.Request} produces a
+ * {@code <iq xmlns="status" type="set">} envelope addressed to {@link JidServer#user()} and
+ * wrapping a single {@code <status>} child whose content is the new about text. The relay
+ * acknowledges the change with one of the {@link IqSetAboutResponse} variants.
  */
 @WhatsAppWebModule(moduleName = "WAWebSetAboutJob")
 public final class IqSetAboutRequest implements IqOperation.Request {
     /**
-     * New about-text value (UTF-8).
+     * Holds the new about-text value routed verbatim into the {@code <status>} child content.
      *
-     * @apiNote
-     * Routed verbatim into the {@code <status>} child content; an empty string clears the
-     * about field, and the relay enforces its own length cap (typically 139 codepoints,
-     * surfacing as a {@code 406} error when exceeded).
+     * <p>An empty string clears the about field. The relay enforces its own length cap and
+     * rejects an over-long value with an {@link IqSetAboutResponse.ClientError}; Cobalt does
+     * not pre-validate the length client-side.
      */
     private final String about;
 
     /**
-     * Constructs a new set-about request.
+     * Constructs a new set-about request from the given about text.
      *
      * @param about the new about text
      * @throws NullPointerException if {@code about} is {@code null}
@@ -42,7 +39,7 @@ public final class IqSetAboutRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the new about text.
+     * Returns the new about text carried by this request.
      *
      * @return the about-text string, never {@code null}
      */
@@ -53,13 +50,12 @@ public final class IqSetAboutRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Produces a {@code <iq xmlns="status" type="set">} envelope addressed to
-     * {@link JidServer#user()} and wrapping a single {@code <status>} child whose content is
-     * the new about text.
+     * <p>Produces the {@code <iq xmlns="status" type="set">} envelope addressed to
+     * {@link JidServer#user()} wrapping a single {@code <status>} child whose content is the
+     * about text held by this request.
      *
-     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
-     *         {@code <status>} payload
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the {@code <status>}
+     *         payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetAboutJob",
@@ -78,7 +74,11 @@ public final class IqSetAboutRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request with another object for value equality on the about text.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an {@link IqSetAboutRequest} carrying an equal
+     *         about text, {@code false} otherwise
      */
     @Override
     public boolean equals(Object obj) {
@@ -93,7 +93,9 @@ public final class IqSetAboutRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code derived from the about text.
+     *
+     * @return the hash code for this request
      */
     @Override
     public int hashCode() {
@@ -101,7 +103,9 @@ public final class IqSetAboutRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug string rendering the about text.
+     *
+     * @return the string representation of this request
      */
     @Override
     public String toString() {

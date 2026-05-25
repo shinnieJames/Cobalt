@@ -13,25 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link ClearChatMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing clear-chat mutation against the
- * {@code WAWebClearChatSync} JS encoder. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.ClearChatHandler} whose
- * inbound-side coverage lives in {@code ClearChatHandlerTest}.
- *
- * @implNote
- * This implementation rebuilds the {@link SyncActionValueBuilder} graph
- * inline rather than calling {@link ClearChatMutationFactory} so the
- * captured shape (empty {@link ClearChatActionBuilder}, no message range)
- * is pinned independently of any factory-side coalescing.
+ * Covers {@link ClearChatMutationFactory} against the captured WhatsApp Web
+ * encode oracle for {@code handler/clear-chat/encode}. The
+ * {@link SyncActionValueBuilder} graph is rebuilt inline rather than through
+ * the factory so the captured shape (empty {@link ClearChatActionBuilder}, no
+ * message range) is pinned independently of any factory-side coalescing. The
+ * check is gated on {@link SyncFixtures#isOracleAvailable(String)} so it
+ * no-ops cleanly until the fixture is present.
  */
 @DisplayName("ClearChatMutationFactory")
 class ClearChatMutationFactoryTest {
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
     void byteParityWithOracle() {

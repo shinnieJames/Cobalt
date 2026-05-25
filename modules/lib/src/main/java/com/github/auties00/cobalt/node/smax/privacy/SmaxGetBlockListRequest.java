@@ -10,34 +10,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="blocklist" type="get">} stanza that fetches the user's current blocked-contacts list.
+ * Builds the outbound {@code <iq xmlns="blocklist" type="get">} stanza that fetches the user's blocked-contacts list.
  *
- * @apiNote
- * Drives the Settings > Privacy > Blocked contacts surface; the WA Web caller is
- * {@code WAWebGetBlocklistJob.fetchBlocklist}, which seeds the request with the cached digest from
- * {@code WAWebUserPrefsMultiDevice.getBlocklistHash} so the relay can short-circuit to a
- * {@link SmaxGetBlockListResponse.SuccessWithMatch} when the cache is still authoritative.
+ * <p>This stanza backs the Settings blocked-contacts surface. When the caller supplies the digest of the locally
+ * cached blocklist, the relay can short-circuit to a {@link SmaxGetBlockListResponse.SuccessWithMatch} reply when
+ * that cache is still authoritative; otherwise it returns the full list. The reply is parsed by
+ * {@link SmaxGetBlockListResponse}.
  *
- * @implNote
- * This implementation models the optional {@code <item dhash/>} child as a single nullable field; the LID-versus-PN
- * addressing dispatch lives entirely on the response side, since the request envelope is the same on both wires.
+ * @implNote This implementation models the optional {@code <item dhash/>} child as a single nullable field; the
+ * LID-versus-PN addressing dispatch lives entirely on the response side, since the request envelope is identical
+ * on both wires.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsGetBlockListRequest")
 public final class SmaxGetBlockListRequest implements SmaxOperation.Request {
     /**
-     * The cached digest of the local blocklist or {@code null} to request a fresh full list.
+     * The cached digest of the local blocklist, or {@code null} to request a fresh full list.
      *
-     * @apiNote
-     * Populated from {@code WAWebUserPrefsMultiDevice.getBlocklistHash} by the WA Web caller; passing {@code null}
-     * forces the relay to return the full {@code SuccessWithMismatch} body rather than a short-circuit match.
+     * <p>A {@code null} value forces the relay to return a full mismatch body rather than a cache-match
+     * short-circuit.
      */
     private final String itemDhash;
 
     /**
      * Constructs a get-blocklist request.
      *
-     * @apiNote
-     * Pass {@code null} for {@code itemDhash} on first boot or whenever the local cache has been invalidated;
+     * <p>Pass {@code null} for {@code itemDhash} on first boot or whenever the local cache has been invalidated;
      * pass the previously stored digest to opt into the relay's cache-match short-circuit.
      *
      * @param itemDhash the cached blocklist digest, or {@code null} to request a full list
@@ -49,9 +46,8 @@ public final class SmaxGetBlockListRequest implements SmaxOperation.Request {
     /**
      * Returns the cached digest when set.
      *
-     * @apiNote
-     * Lets callers inspect whether the request was issued in cache-match mode; absent means a full re-fetch was
-     * requested.
+     * <p>A present value means the request was issued in cache-match mode; an empty value means a full re-fetch
+     * was requested.
      *
      * @return an {@link Optional} carrying the digest, or empty when no cached digest was supplied
      */
@@ -62,16 +58,14 @@ public final class SmaxGetBlockListRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="blocklist"} and
+     * <p>The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="blocklist"} and
      * {@code type="get"}; the {@code id} attribute is filled in downstream by the central client dispatcher.
      * When {@link #itemDhash()} is present, the builder also attaches a {@code <item dhash="..."/>} child so the
      * relay can compare against the cached digest.
      *
-     * @implNote
-     * This implementation flattens WA Web's {@code makeGetBlockListRequest} and {@code makeGetBlockListRequestItem}
-     * factories into a single method since Cobalt centralises {@code generateId()} on the client and the inner
-     * item factory has no other call sites.
+     * @implNote This implementation flattens the separate WA Web request and request-item factories into a single
+     * method, since Cobalt centralises id generation on the client and the inner item factory has no other call
+     * sites.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -96,6 +90,12 @@ public final class SmaxGetBlockListRequest implements SmaxOperation.Request {
         return iqBuilder;
     }
 
+    /**
+     * Compares this request with another for equality by cached digest.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxGetBlockListRequest} with an equal digest
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -108,11 +108,21 @@ public final class SmaxGetBlockListRequest implements SmaxOperation.Request {
         return Objects.equals(this.itemDhash, that.itemDhash);
     }
 
+    /**
+     * Returns a hash code derived from the cached digest.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(itemDhash);
     }
 
+    /**
+     * Returns a debug representation carrying the cached digest.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxGetBlockListRequest[itemDhash=" + itemDhash + ']';

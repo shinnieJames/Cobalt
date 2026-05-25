@@ -10,26 +10,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The wire-level parser for the {@code BizOptOutBrandID} arm of an opt-out item's {@code biz_opt_out_ids} field.
+ * Parses the {@code BizOptOutBrandID} arm of an opt-out item's {@code biz_opt_out_ids} field.
  *
- * @apiNote
- * Invoked from {@link BizOptOutId#parse(Node)} as the first arm of the brand-id-versus-jid disjunction; reads the
- * {@code biz_opt_out_brand_id} string identifying a marketing brand and the optional {@code biz_jid} echo of the
- * business JID paired with that brand. The resulting pair feeds back into the
- * {@code WAWebGetOptOutList.getOptOutList} brand-id expansion path.
+ * <p>The arm reads the {@code biz_opt_out_brand_id} string identifying a marketing brand together with the
+ * optional {@code biz_jid} echo of the business JID paired with that brand. {@link BizOptOutId#parse(Node)}
+ * invokes this parser first; on a match it lifts the resulting pair into a {@link BizOptOutId.BrandId}.
  *
- * @implNote
- * This implementation collapses WA Web's {@code WAResultOrError} envelope to a plain {@link Optional}: an empty
- * value covers both the required-attribute-missing case and the optional-jid-fails-user-validation case, since no
- * caller introspects the failure shape further.
+ * @implNote This implementation collapses the WA Web result-or-error envelope to a plain {@link Optional}: an
+ * empty value covers both the required-attribute-missing case and the optional-jid-fails-user-validation case,
+ * since no caller introspects the failure shape further.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsBizOptOutBrandIDMixin")
 public final class SmaxBizOptOutBrandIdMixin {
     /**
-     * The unreachable utility-class constructor.
-     *
-     * @apiNote
-     * The class only exposes static parsing helpers; instantiation is forbidden to keep the call site obvious.
+     * Prevents instantiation of this static-only parser holder.
      *
      * @throws AssertionError on every invocation
      */
@@ -40,20 +34,15 @@ public final class SmaxBizOptOutBrandIdMixin {
     /**
      * The decoded {@code BizOptOutBrandID} pair of brand id and optional business JID.
      *
-     * @apiNote
-     * Returned by {@link SmaxBizOptOutBrandIdMixin#parse(Node)} when both attributes parse cleanly. Consumed by
-     * {@link BizOptOutId#parse(Node)} to lift the pair into the {@link BizOptOutId.BrandId} variant.
+     * <p>Returned by {@link SmaxBizOptOutBrandIdMixin#parse(Node)} when both attributes parse cleanly and lifted
+     * into the {@link BizOptOutId.BrandId} variant by {@link BizOptOutId#parse(Node)}.
      *
      * @param bizOptOutBrandId the marketing-brand identifier; never {@code null}
      * @param bizJid           the optional paired business JID; may be {@code null}
      */
     public record Projection(String bizOptOutBrandId, Jid bizJid) {
         /**
-         * Validates the projection payload.
-         *
-         * @apiNote
-         * The compact constructor enforces the wire-level mandatory split; the optional JID arrives pre-validated
-         * by the calling parser.
+         * Validates the projection payload, rejecting a missing brand id.
          *
          * @param bizOptOutBrandId the brand identifier; never {@code null}
          * @param bizJid           the optional business JID; may be {@code null}
@@ -66,9 +55,8 @@ public final class SmaxBizOptOutBrandIdMixin {
         /**
          * Returns the business JID when present.
          *
-         * @apiNote
-         * Use to detect whether the relay echoed a business JID alongside the brand id; consumers without an
-         * {@code Optional} preference may read the raw field via the record accessor instead.
+         * <p>Detects whether the relay echoed a business JID alongside the brand id; consumers without an
+         * {@link Optional} preference may read the raw field via the record accessor instead.
          *
          * @return an {@link Optional} carrying the JID, or empty when the relay omitted {@code biz_jid}
          */
@@ -80,16 +68,14 @@ public final class SmaxBizOptOutBrandIdMixin {
     /**
      * Parses an {@code <item>} node as a {@code BizOptOutBrandID} projection.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the required {@code biz_opt_out_brand_id} attribute is missing or when
-     * an optional {@code biz_jid} is present but is not a user JID (no user server, as enforced by
+     * <p>The result is empty when the required {@code biz_opt_out_brand_id} attribute is missing or when an
+     * optional {@code biz_jid} is present but is not a user JID (no user server, as enforced by
      * {@link Jid#hasUserServer()}). Callers in the {@code biz_opt_out_ids} disjunction fall through to
      * {@link SmaxBizOptOutJidMixin#parse(Node)} on empty.
      *
-     * @implNote
-     * This implementation mirrors WA Web's {@code attrUserJid} validator inline: a present-but-invalid JID rejects
-     * the whole projection rather than degrading silently, which is load-bearing for the
-     * {@link BizOptOutId#parse(Node)} priority chain.
+     * @implNote This implementation rejects the whole projection when a present {@code biz_jid} fails user-JID
+     * validation rather than degrading silently, which is load-bearing for the {@link BizOptOutId#parse(Node)}
+     * priority chain.
      *
      * @param item the source {@code <item>} node; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty when the schema does not match

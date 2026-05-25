@@ -28,7 +28,7 @@ class ShareOwnPnSyncEncodingTest {
         var oracle = SyncFixtures.loadOracle("handler/share-own-pn/encode");
         var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
 
-        // shareOwnPn carries no value payload — only the timestamp field is encoded.
+        // shareOwnPn carries no value payload; only the timestamp field is encoded.
         var value = new SyncActionValueBuilder()
                 .timestamp(Instant.ofEpochSecond(1_700_000_000L))
                 .build();

@@ -16,40 +16,38 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * USync {@code contact} protocol descriptor.
+ * Describes the USync {@code contact} protocol.
  *
- * @apiNote
- * Asks the relay whether each peer is a registered WhatsApp user and, when
- * the addressing mode is LID, resolves usernames or phone numbers to LIDs in
- * the same round trip. Used by contact-import flows (see
- * {@code WAWebContactImportContactVerifier.verifyWhatsAppUsers}) and by
- * username lookups (see {@code WAWebQueryExistsJob}).
+ * This descriptor asks the relay whether each peer is a registered WhatsApp
+ * user and, when the addressing mode is LID, resolves usernames or phone
+ * numbers to LIDs in the same round trip. It also hosts the shared
+ * {@link #parseError(Node)} helper that every other protocol parser reuses,
+ * keeping the per-protocol error decode single-sourced.
  *
  * @implNote
- * This implementation also hosts the shared
- * {@link #parseError(Node)} helper that the
- * other ten protocol parsers reuse, keeping the per-protocol error decode
- * single-sourced.
+ * This implementation centralises {@link #parseError(Node)} here rather than
+ * duplicating it across the eleven parsers; the contact protocol is the
+ * natural owner because it is the addressing protocol most queries start
+ * from.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncContact")
 public final class UsyncContactProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "contact";
 
     /**
-     * Addressing mode this descriptor applies to; {@code null} means the
-     * default phone-number addressing.
+     * Holds the addressing mode this descriptor applies to; {@code null}
+     * means the default phone-number addressing.
      */
     private final UsyncAddressingMode addressingMode;
 
     /**
-     * Builds a contact-protocol descriptor for the given addressing mode.
+     * Creates a contact-protocol descriptor for the given addressing mode.
      *
-     * @apiNote
-     * Pass {@link UsyncAddressingMode#LID} when the local contact database
-     * has been migrated to LID; pass {@link UsyncAddressingMode#PN} or
+     * Pass {@link UsyncAddressingMode#LID} when the local contact database has
+     * been migrated to LID; pass {@link UsyncAddressingMode#PN} or
      * {@code null} otherwise.
      *
      * @param addressingMode the addressing mode, or {@code null} for the
@@ -62,10 +60,9 @@ public final class UsyncContactProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds a contact-protocol descriptor with phone-number addressing.
+     * Creates a contact-protocol descriptor with phone-number addressing.
      *
-     * @apiNote
-     * Convenience shortcut for {@code new UsyncContactProtocol(UsyncAddressingMode.PN)};
+     * Convenience shortcut for {@code new UsyncContactProtocol(UsyncAddressingMode.PN)}
      * used by call sites that build queries without consulting the username
      * gating utility.
      */
@@ -88,8 +85,8 @@ public final class UsyncContactProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation emits the {@code addressing_mode} attribute only
-     * when the LID mode is selected, mirroring the JS {@code DROP_ATTR}
-     * default for the PN mode.
+     * when {@link UsyncAddressingMode#LID} is selected, dropping it for the
+     * phone-number mode.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncContact",
@@ -106,12 +103,11 @@ public final class UsyncContactProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation picks the addressing shape from the slots the
-     * user carries, in priority order: phone number (inline text), username
-     * (with optional {@code pin} and {@code lid} attributes), then contact
-     * type (the {@code type} attribute alone). Users carrying none of these
-     * slots produce {@link Optional#empty()}, matching the JS {@code null}
-     * return in {@code USyncContactProtocol.getUserElement}.
+     * This implementation picks the addressing shape from the slots the user
+     * carries, in priority order: phone number (inline text), username (with
+     * optional {@code pin} and {@code lid} attributes), then contact type
+     * (the {@code type} attribute alone). Users carrying none of these slots
+     * produce {@link Optional#empty()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncContact",
@@ -143,9 +139,7 @@ public final class UsyncContactProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @throws IllegalStateException {@inheritDoc} Also thrown when the
-     *     required {@code type} attribute is missing on a non-error
-     *     response, matching the JS {@code WALogger.ERROR(...).sendLogs("usync-contact-missing-type")}
-     *     branch.
+     *     required {@code type} attribute is missing on a non-error response.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncContact",
@@ -166,13 +160,11 @@ public final class UsyncContactProtocol implements UsyncProtocol {
     }
 
     /**
-     * Probes the optional {@code <error/>} child of a USync protocol
-     * response.
+     * Probes the optional {@code <error/>} child of a USync protocol response.
      *
-     * @apiNote
-     * Reused by every protocol parser so the per-protocol error decode
-     * lives in one place; the {@code error_backoff} attribute (in seconds)
-     * is parsed into a {@link Duration} that the caller can hand back to
+     * Reused by every protocol parser so the per-protocol error decode lives
+     * in one place; the {@code error_backoff} attribute (in seconds) is parsed
+     * into a {@link Duration} that the caller can hand back to
      * {@link com.github.auties00.cobalt.node.usync.UsyncBackoff#setProtocolBackoffMs(String, long)}.
      *
      * @param child the protocol-tagged response node

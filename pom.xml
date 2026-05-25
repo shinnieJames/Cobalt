@@ -2,7 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.auties00</groupId>
-    <artifactId>cobalt-parent</artifactId>
+    <artifactId>cobalt</artifactId>
     <version>0.1.0</version>
     <packaging>pom</packaging>
     <name>${project.groupId}:${project.artifactId}</name>
@@ -79,7 +79,6 @@
         <sl4j.version>2.0.13</sl4j.version>
         <apk.parser.version>2.6.10</apk.parser.version>
         <collections.version>1.0.0</collections.version>
-        <lmdbjava.version>0.9.3</lmdbjava.version>
         <javapoet.version>0.6.0</javapoet.version>
         <jmh.version>1.37</jmh.version>
         <selenium.version>4.27.0</selenium.version>
@@ -145,6 +144,8 @@
                             <additionalOptions>
                                 <additionalOption>--enable-preview</additionalOption>
                                 <additionalOption>--add-modules jdk.incubator.vector</additionalOption>
+                                <additionalOption>-Xmaxerrs 100000</additionalOption>
+                                <additionalOption>-Xmaxwarns 100000</additionalOption>
                             </additionalOptions>
                             <!--
                                 Register the three JDK-standard custom tags so the

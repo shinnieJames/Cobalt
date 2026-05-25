@@ -18,28 +18,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link MessagePreparer}'s population of a
- * {@link ChatMessageInfo} (or
+ * Covers {@link MessagePreparer} populating a {@link ChatMessageInfo} (or
  * {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo})
- * from a raw {@link MessageContainer}.
- *
- * @apiNote
- * Pins the invariants the downstream send pipeline relies on: the key's
- * parent JID equals the chat JID and {@code fromMe} is {@code true}, the
- * key's sender and the info's sender match the local JID, the
- * {@link MessageStatus} starts as
- * {@code PENDING}, the {@code messageSecret} is exactly 32 bytes and is
- * mirrored into the inner container's
- * {@code messageContextInfo}, each call produces a fresh wire id, and
- * status-broadcast chats receive the {@code broadcast} flag. The failure
- * branches (not-logged-in, newsletter-not-joined, null args) are also
- * covered.
- *
- * @implNote
- * This implementation lives in the same package as the production class
- * so it can call the package-private constructor and methods directly,
- * sidestepping the public {@link MessageSendingService}
- * entry point.
+ * from a raw {@link MessageContainer}: parent JID equals the chat JID with
+ * {@code fromMe} set, sender matches the local JID, {@link MessageStatus}
+ * starts {@code PENDING}, the 32-byte {@code messageSecret} is mirrored onto
+ * the inner container's {@code messageContextInfo}, each call mints a fresh
+ * wire id, status-broadcast chats get the {@code broadcast} flag, and the
+ * failure branches (not-logged-in, newsletter-not-joined, null args) reject.
+ * The suite lives in the production package so it can drive the package-private
+ * preparer directly instead of going through {@link MessageSendingService}.
  */
 @DisplayName("MessagePreparer")
 class MessagePreparerTest {
@@ -49,10 +37,6 @@ class MessagePreparerTest {
     private static final Jid CHAT_PN = Jid.of("19254863482@s.whatsapp.net");
     private static final Jid GROUP_JID = Jid.of("120363023250764418@g.us");
 
-    /**
-     * Asserts the basic shape of a prepared chat message: key, status, and
-     * self JID.
-     */
     @Test
     @DisplayName("prepareChat: returns a ChatMessageInfo populated with key, status, secret, and self JID")
     void prepareChatBasic() {
@@ -70,10 +54,6 @@ class MessagePreparerTest {
         assertTrue(key.id().isPresent(), "key must carry a generated id");
     }
 
-    /**
-     * Asserts that the message secret is exactly 32 bytes and is mirrored
-     * onto the inner container's {@code messageContextInfo}.
-     */
     @Test
     @DisplayName("prepareChat: messageSecret is exactly 32 bytes and stamped on the container's messageContextInfo")
     void prepareChatStampsSecret() {
@@ -93,9 +73,6 @@ class MessagePreparerTest {
                 "the container's messageContextInfo must carry the same secret as the outer info");
     }
 
-    /**
-     * Asserts that each call produces a distinct id and secret.
-     */
     @Test
     @DisplayName("prepareChat: each call generates a distinct id and secret")
     void prepareChatFreshIdAndSecret() {
@@ -115,9 +92,6 @@ class MessagePreparerTest {
                 "messageSecret must be sampled fresh per call");
     }
 
-    /**
-     * Asserts that a group send pins the group JID onto the key.
-     */
     @Test
     @DisplayName("prepareChat: groups receive the group JID on the key")
     void prepareChatToGroup() {
@@ -127,10 +101,6 @@ class MessagePreparerTest {
         assertEquals(GROUP_JID, prepared.key().parentJid().orElseThrow());
     }
 
-    /**
-     * Asserts that the {@code broadcast} flag is set for the status
-     * broadcast account.
-     */
     @Test
     @DisplayName("prepareChat: broadcast flag is set when chatJid is the status broadcast account")
     void prepareChatBroadcastFlag() {
@@ -141,10 +111,6 @@ class MessagePreparerTest {
                 "broadcast flag must be true when targeting the status broadcast account");
     }
 
-    /**
-     * Asserts that a not-logged-in store fails fast with
-     * {@link IllegalStateException}.
-     */
     @Test
     @DisplayName("prepareChat: store with no JID throws IllegalStateException (not logged in)")
     void prepareChatNotLoggedIn() {
@@ -155,10 +121,6 @@ class MessagePreparerTest {
                 () -> preparer.prepareChat(CHAT_PN, MessageContainer.of("hi")));
     }
 
-    /**
-     * Asserts that null arguments to {@code prepareChat} fail fast with
-     * {@link NullPointerException}.
-     */
     @Test
     @DisplayName("prepareChat: null arguments throw NullPointerException")
     void prepareChatNullArgs() {
@@ -170,10 +132,6 @@ class MessagePreparerTest {
                 () -> preparer.prepareChat(CHAT_PN, null));
     }
 
-    /**
-     * Asserts that sending to an un-joined newsletter fails fast with
-     * {@link IllegalArgumentException}.
-     */
     @Test
     @DisplayName("prepareNewsletter: throws IllegalArgumentException when the user has not joined the newsletter")
     void prepareNewsletterNotJoined() {
@@ -184,25 +142,12 @@ class MessagePreparerTest {
                 () -> preparer.prepareNewsletter(newsletter, MessageContainer.of("hi")));
     }
 
-    /**
-     * Asserts that the constructor rejects a null store.
-     */
     @Test
     @DisplayName("constructor: null store throws NullPointerException")
     void constructorNullStore() {
         assertThrows(NullPointerException.class, () -> new MessagePreparer(null));
     }
 
-    /**
-     * Builds a temporary {@link WhatsAppStore} pre-configured with the
-     * canonical self PN and LID pair.
-     *
-     * @apiNote
-     * Shared factory used by every test cell to keep the per-test setup
-     * minimal.
-     *
-     * @return the configured {@link WhatsAppStore}
-     */
     private static WhatsAppStore store() {
         return MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
     }

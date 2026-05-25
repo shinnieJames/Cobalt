@@ -10,46 +10,39 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="w:biz" type="set">} stanza that attaches
- * a previously-uploaded cover photo to the current merchant's business
- * profile.
+ * Builds the {@code <iq xmlns="w:biz" type="set">} stanza that attaches a previously-uploaded cover
+ * photo to the current merchant's business profile.
  *
- * @apiNote
- * Use this request from the cover-photo edit surface after the binary
- * upload has succeeded and the mediaWeb upload service has returned the
- * {@code (id, ts, token)} triple identifying the artefact; the
- * {@code WAWebBizCoverPhotoAction.setCoverPhoto} delegate ships this
- * stanza right after the upload completes.
+ * <p>The stanza is sent from the cover-photo edit surface after the binary upload has succeeded and
+ * the media upload service has returned the {@code (id, ts, token)} triple identifying the artefact;
+ * the relay uses the token to validate that the upload still exists and belongs to the calling user.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     /**
-     * The upload id stamped into the {@code id} attribute of the
-     * {@code <cover_photo/>} grandchild.
+     * Holds the upload id stamped into the {@code id} attribute of the {@code <cover_photo/>}
+     * grandchild.
      */
     private final long id;
 
     /**
-     * The upload timestamp (Unix seconds) stamped into the {@code ts}
-     * attribute of the {@code <cover_photo/>} grandchild.
+     * Holds the upload timestamp in Unix seconds, stamped into the {@code ts} attribute of the
+     * {@code <cover_photo/>} grandchild.
      */
     private final long ts;
 
     /**
-     * The opaque upload token stamped into the {@code token} attribute
-     * of the {@code <cover_photo/>} grandchild; the relay uses it to
-     * validate that the upload artefact still exists and belongs to
-     * the calling user.
+     * Holds the opaque upload token stamped into the {@code token} attribute of the
+     * {@code <cover_photo/>} grandchild; the relay uses it to validate that the upload artefact
+     * still exists and belongs to the calling user.
      */
     private final byte[] token;
 
     /**
-     * Constructs a request.
+     * Constructs a request from the {@code (id, ts, token)} triple returned by the media upload
+     * service.
      *
-     * @apiNote
-     * Pass the {@code (id, ts, token)} triple returned by the mediaWeb
-     * upload service; the token is defensively cloned so the caller's
-     * buffer is not retained.
+     * <p>The token is defensively cloned so the caller's buffer is not retained.
      *
      * @param id    the upload id
      * @param ts    the upload timestamp
@@ -64,12 +57,7 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the upload id.
-     *
-     * @apiNote
-     * Use this getter to read back the upload id the stanza will
-     * stamp; the value is taken verbatim from the mediaWeb upload
-     * service response.
+     * Returns the upload id, taken verbatim from the media upload service response.
      *
      * @return the id
      */
@@ -78,12 +66,7 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the upload timestamp.
-     *
-     * @apiNote
-     * Use this getter to read back the upload timestamp the stanza
-     * will stamp; the value is taken verbatim from the mediaWeb upload
-     * service response.
+     * Returns the upload timestamp, taken verbatim from the media upload service response.
      *
      * @return the timestamp
      */
@@ -94,10 +77,8 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     /**
      * Returns a defensive copy of the upload token.
      *
-     * @apiNote
-     * Use this getter to read back the upload token the stanza will
-     * stamp; the returned array is a fresh clone so callers may mutate
-     * it freely without disturbing this request.
+     * <p>The returned array is a fresh clone so callers may mutate it freely without disturbing this
+     * request.
      *
      * @return the token; never {@code null}
      */
@@ -109,12 +90,9 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by
-     * the {@code WAWebBusinessProfileJob.sendCoverPhoto} export: a
-     * {@code <cover_photo op="update" id ts token/>} grandchild wrapped
-     * in a {@code <business_profile v="3" mutation_type="delta"/>}
-     * envelope and a {@code w:biz set} IQ frame routed to the WhatsApp
-     * service.
+     * This implementation materialises a {@code <cover_photo op="update" id ts token/>} grandchild
+     * wrapped in a {@code <business_profile v="3" mutation_type="delta"/>} envelope and a
+     * {@code w:biz set} IQ frame routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob",
@@ -142,7 +120,10 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request with another for value equality across the id, timestamp and token.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal request
      */
     @Override
     public boolean equals(Object obj) {
@@ -159,7 +140,9 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -168,7 +151,9 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string naming the upload id and timestamp; the token is elided.
+     *
+     * @return the string form
      */
     @Override
     public String toString() {

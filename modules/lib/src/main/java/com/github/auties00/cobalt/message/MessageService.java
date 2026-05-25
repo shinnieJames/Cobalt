@@ -23,31 +23,31 @@ import com.github.auties00.libsignal.groups.SignalGroupCipher;
 import java.util.Objects;
 
 /**
- * Single-facade entry point that fans message traffic between the outbound
- * send pipeline and the inbound receive pipeline.
+ * Fans message traffic between the outbound send pipeline and the inbound
+ * receive pipeline behind a single facade.
  *
- * @apiNote Application code that wants to send or react to messages talks to
- * this class instead of touching the {@link MessageSendingService} and
+ * <p>Code that wants to send or react to messages talks to this class instead
+ * of touching the {@link MessageSendingService} and
  * {@link MessageReceivingService} pair directly. The two sub-services are
- * assembled from the supplied collaborators in the constructor.
+ * assembled from the supplied collaborators in the constructor and share the
+ * {@link WhatsAppClient#store() client store}, so the send and receive sides
+ * observe a single source of truth for sessions, devices, and pending-message
+ * caches.
  *
  * @implNote This implementation collapses WA Web's two separate entry points,
  * {@code WAWebSendMsgJob.encryptAndSendMsg} for outbound fanout and
  * {@code WAWebCommsHandleMessagingStanza.handleMessagingStanza} for inbound
- * dispatch, into one facade and owns no state of its own. The two underlying
- * services share the {@link WhatsAppClient#store() client store} so the send
- * and receive sides observe a single source of truth for sessions, devices,
- * and pending-message caches.
+ * dispatch, into one facade that owns no state of its own.
  */
 public final class MessageService {
     /**
-     * Outbound pipeline owning device fetch, fanout, encryption, and stanza
-     * emission.
+     * Holds the outbound pipeline owning device fetch, fanout, encryption, and
+     * stanza emission.
      */
     private final MessageSendingService sendingService;
 
     /**
-     * Inbound pipeline owning stanza parsing, Signal decryption, and
+     * Holds the inbound pipeline owning stanza parsing, Signal decryption, and
      * {@link MessageInfo} construction.
      */
     private final MessageReceivingService receivingService;
@@ -55,13 +55,12 @@ public final class MessageService {
     /**
      * Wires the send and receive pipelines from the supplied collaborators.
      *
-     * @apiNote The two pipelines share the {@link WhatsAppClient#store() client
-     * store} and the {@code SignalSessionCipher}/{@code SignalGroupCipher} pair
-     * so encrypted state stays consistent across both directions of traffic.
-     *
-     * @implSpec The session and group ciphers passed in must be backed by the
-     * same store as {@code client.store()}; otherwise the send and receive
-     * sides will see different Signal session records.
+     * <p>The two pipelines share the {@link WhatsAppClient#store() client store}
+     * and the {@link SignalSessionCipher}/{@link SignalGroupCipher} pair so
+     * encrypted state stays consistent across both directions of traffic. The
+     * ciphers passed in must be backed by the same store as
+     * {@link WhatsAppClient#store()}; otherwise the send and receive sides see
+     * different Signal session records.
      *
      * @param client              the {@link WhatsAppClient} used to send
      *                            stanzas and to register inbound stanza
@@ -115,10 +114,10 @@ public final class MessageService {
     /**
      * Sends a fresh outbound message to the given chat.
      *
-     * @apiNote Allocates a message id, resolves the sender and recipient
-     * device lists, encrypts the payload, ships the fanout, and blocks on the
-     * server acknowledgment. Use this overload for plain user-facing sends;
-     * the caller does not need to pre-build a {@link MessageInfo}.
+     * <p>This allocates a message id, resolves the sender and recipient device
+     * lists, encrypts the payload, ships the fanout, and blocks on the server
+     * acknowledgment. This overload is for plain user-facing sends where the
+     * caller does not need to pre-build a {@link MessageInfo}.
      *
      * @param chatJid   the recipient chat JID
      * @param container the message payload
@@ -135,11 +134,10 @@ public final class MessageService {
      * Sends a pre-populated {@link MessageInfo} the caller has already keyed,
      * timestamped, and decorated with any extension metadata.
      *
-     * @apiNote Use this overload when the message has been prepared by the
-     * caller (for example when rehydrating a stored draft or re-transmitting
-     * after a nack). The sending service does not mutate the supplied
-     * {@link MessageInfo}; the same instance can safely be passed again on a
-     * retry.
+     * <p>This overload is for messages prepared by the caller, for example when
+     * rehydrating a stored draft or re-transmitting after a nack. The sending
+     * service does not mutate the supplied {@link MessageInfo}; the same
+     * instance can safely be passed again on a retry.
      *
      * @param messageInfo the prepared outbound message, either a
      *                    {@link ChatMessageInfo} or a {@link NewsletterMessageInfo}
@@ -152,13 +150,13 @@ public final class MessageService {
     }
 
     /**
-     * Sends a peer protocol message to one of the current account's own
-     * linked devices.
+     * Sends a peer protocol message to one of the current account's own linked
+     * devices.
      *
-     * @apiNote Peer messages never reach other users; they carry app-state
-     * sync payloads, key share notifications, and fatal-exception reports
-     * between linked devices of the same account. The {@code targetDevice}
-     * argument is normally the account's primary device JID.
+     * <p>Peer messages never reach other users; they carry app-state sync
+     * payloads, key share notifications, and fatal-exception reports between
+     * linked devices of the same account. The {@code targetDevice} argument is
+     * normally the account's primary device JID.
      *
      * @param targetDevice the target device JID
      * @param messageInfo  the peer protocol message
@@ -172,15 +170,14 @@ public final class MessageService {
     }
 
     /**
-     * Processes a single inbound {@code <message>} stanza and returns the
-     * typed {@link MessageInfo} ready for application consumption.
+     * Processes a single inbound {@code <message>} stanza and returns the typed
+     * {@link MessageInfo} ready for consumption.
      *
-     * @apiNote Newsletter messages are returned as
-     * {@link NewsletterMessageInfo}; every other shape goes through the
-     * Signal decryption pipeline and is returned as {@link ChatMessageInfo}.
-     * Fanout placeholders for messages the server failed to deliver produce a
-     * {@code null} return so the caller can distinguish them from genuine
-     * payloads.
+     * <p>Newsletter messages are returned as {@link NewsletterMessageInfo};
+     * every other shape goes through the Signal decryption pipeline and is
+     * returned as {@link ChatMessageInfo}. Fanout placeholders for messages the
+     * server failed to deliver produce a {@code null} return so the caller can
+     * distinguish them from genuine payloads.
      *
      * @param node the raw inbound {@code <message>} node
      * @return the processed {@link MessageInfo}, or {@code null} for
@@ -198,12 +195,9 @@ public final class MessageService {
      * Clears the pending-message deduplication cache held by the receiving
      * service.
      *
-     * @apiNote Invoke when the offline-delivery phase ends so stanzas
-     * replayed in a new session are not mistakenly treated as duplicates of
-     * pre-reconnect traffic. Mirrors WA Web's
-     * {@code WAWebMessageDedupUtils.maybeClearPendingMessages} call inside
-     * {@code WAWebHandleInfoBulletin}, which clears the cache once the
-     * offline-counter info-bulletin arrives.
+     * <p>This runs when the offline-delivery phase ends so stanzas replayed in a
+     * new session are not mistakenly treated as duplicates of pre-reconnect
+     * traffic.
      *
      * @see MessageReceivingService#clearPendingMessages()
      */

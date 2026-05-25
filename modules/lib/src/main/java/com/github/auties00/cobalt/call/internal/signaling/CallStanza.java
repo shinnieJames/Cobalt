@@ -14,57 +14,49 @@ import java.util.Objects;
 import com.github.auties00.cobalt.call.CallEndReason;
 
 /**
- * Stanza-building helpers for the VoIP signalling layer.
+ * Builds the {@code <call>} stanzas the VoIP signalling layer sends to the server.
  *
- * <p>Every method returns a fully-formed {@code <call to="..." id?="...">...</call>}
- * envelope ready for dispatch through
- * {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNodeWithNoResponse(Node)}.
- * The {@code id} attribute is left for the dispatcher to assign (matching
- * {@code WAWebVoipSendSignalingXmpp}'s use of {@code WAWap.generateId}).
- *
- * <p>The wire format mirrors {@code WAWebVoipSendSignalingXmpp}'s output and
- * the live captures gathered against the production WhatsApp Web client. Note
- * that the offer this class builds intentionally omits the per-device
- * {@code <destination>} fanout with Signal {@code pkmsg} payloads, the
- * {@code <device-identity>} envelope, and the {@code <encopt>}/{@code <privacy>}
- * children: those carry data produced by the WebRTC media plane, which Cobalt
- * does not implement. The resulting offer is a signalling-only announcement,
- * the same shape the previous in-line WhatsAppClient builders emitted, just
- * factored out so it can be reused and extended without touching that class.
+ * <p>Every factory method returns a complete {@code <call to="...">...</call>} envelope ready for
+ * dispatch through {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNodeWithNoResponse(Node)}.
+ * The {@code id} attribute is left unset for the dispatcher to assign. The offer this class builds is
+ * a signalling-only announcement: it deliberately omits the per-device fanout with Signal
+ * {@code pkmsg} payloads, the device-identity envelope, and the encryption-option and privacy
+ * children, all of which carry data produced by the WebRTC media plane that Cobalt does not implement.
+ * The receive-side counterpart that parses these stanzas is {@link CallReceiver}.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipSendSignalingXmpp")
 public final class CallStanza {
     /**
-     * Hidden constructor — this class is a static helper.
+     * Prevents instantiation of this static helper.
+     *
+     * @throws AssertionError always, since this class is not instantiable
      */
     private CallStanza() {
         throw new AssertionError("CallStanza is not instantiable");
     }
 
     /**
-     * Builds a {@code <call><offer call-id call-creator [group-jid]>...</offer></call>}
-     * stanza for an outgoing 1:1 or group call.
+     * Builds an offer stanza for an outgoing one-to-one or group call.
      *
-     * <p>The optional {@code participants} are placed inside a
-     * {@code <group_info>} child mirroring the format
-     * {@link CallReceiver} parses on the receive side. When the call is a
-     * video call, an empty {@code <video/>} marker is included.
+     * <p>The returned envelope wraps an {@code <offer call-id call-creator [group-jid]>} payload. When
+     * {@code groupJid} is non-{@code null} and {@code participants} is non-empty, each participant is
+     * emitted as a {@code <participant jid="..."/>} entry inside a {@code <group_info>} child, matching
+     * the shape {@link CallReceiver} parses on the receive side. When {@code video} is {@code true}, an
+     * empty {@code <video/>} marker is added. The {@code group-jid} attribute is present only for group
+     * calls.
      *
-     * @param target       the JID the {@code <call to>} attribute is set to
-     *                     (the peer for 1:1 calls, the group JID for group
-     *                     calls); must not be {@code null}
-     * @param creator      the local user's device JID, placed on
-     *                     {@code call-creator}; must not be {@code null}
-     * @param callId       the locally-generated call identifier; must not be
+     * @param target       the value of the {@code <call to>} attribute (the peer for one-to-one calls,
+     *                     the group JID for group calls); must not be {@code null}
+     * @param creator      the local user's device JID, placed on {@code call-creator}; must not be
      *                     {@code null}
+     * @param callId       the locally generated call identifier; must not be {@code null}
      * @param video        whether to advertise this as a video call
-     * @param groupJid     the group JID for group calls, or {@code null} for
-     *                     1:1 calls
-     * @param participants the participants to invite for a group call; ignored
-     *                     when {@code groupJid} is {@code null}
+     * @param groupJid     the group JID for group calls, or {@code null} for one-to-one calls
+     * @param participants the participants to invite for a group call; ignored when {@code groupJid} is
+     *                     {@code null}
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code target}, {@code creator}, or
-     *                              {@code callId} is {@code null}
+     * @throws NullPointerException if {@code target}, {@code creator}, or {@code callId} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -103,21 +95,17 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><preaccept call-id call-creator/></call>} stanza.
+     * Builds a pre-accept stanza.
      *
-     * <p>WA Web emits this as soon as its receive-side
-     * {@code WAWebHandleVoipCall} pipeline has validated the incoming offer
-     * and decided that the ringing UI should be shown to the user, but
-     * before the user has actually answered.
+     * <p>The returned envelope wraps a {@code <preaccept call-id call-creator/>} payload. This stanza
+     * is sent once the incoming offer has been validated and the device decides to show the ringing UI,
+     * but before the user has answered.
      *
-     * @param caller the JID of the call creator; routed back as
-     *               {@code <call to>} and as {@code call-creator}; must not
-     *               be {@code null}
-     * @param callId the call identifier from the original offer; must not be
-     *               {@code null}
+     * @param caller the JID of the call creator; routed back as both the {@code <call to>} attribute
+     *               and {@code call-creator}; must not be {@code null}
+     * @param callId the call identifier from the original offer; must not be {@code null}
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code caller} or {@code callId} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code caller} or {@code callId} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -126,13 +114,14 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><accept call-id call-creator/></call>} stanza.
+     * Builds an accept stanza.
+     *
+     * <p>The returned envelope wraps an {@code <accept call-id call-creator/>} payload.
      *
      * @param caller the JID of the call creator; must not be {@code null}
      * @param callId the call identifier; must not be {@code null}
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code caller} or {@code callId} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code caller} or {@code callId} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -141,13 +130,14 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><reject call-id call-creator/></call>} stanza.
+     * Builds a reject stanza.
+     *
+     * <p>The returned envelope wraps a {@code <reject call-id call-creator/>} payload.
      *
      * @param caller the JID of the call creator; must not be {@code null}
      * @param callId the call identifier; must not be {@code null}
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code caller} or {@code callId} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code caller} or {@code callId} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -156,21 +146,18 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><terminate reason call-id call-creator/></call>}
-     * stanza.
+     * Builds a terminate stanza.
      *
-     * <p>The {@code reason} attribute carries the
-     * {@link CallEndReason#wireValue()} of the chosen end reason. The
-     * {@code <call to>} attribute is the other party (the JID the local
-     * user is talking to), and {@code call-creator} is whichever JID
-     * actually started the call (which may be the local user or the peer).
+     * <p>The returned envelope wraps a {@code <terminate reason call-id call-creator/>} payload. The
+     * {@code reason} attribute carries the {@link CallEndReason#wireValue()} of the chosen end reason.
+     * The {@code <call to>} attribute is the other party, while {@code call-creator} is whichever party
+     * started the call, which may be the local user or the peer.
      *
-     * @param target       the JID of the other party — placed on
-     *                     {@code <call to>}; must not be {@code null}
-     * @param creator      the JID of the call creator — placed on
-     *                     {@code call-creator}; must not be {@code null}
-     * @param callId       the call identifier; must not be {@code null}
-     * @param reason       the end reason; must not be {@code null}
+     * @param target  the JID of the other party, placed on {@code <call to>}; must not be {@code null}
+     * @param creator the JID of the call creator, placed on {@code call-creator}; must not be
+     *                {@code null}
+     * @param callId  the call identifier; must not be {@code null}
+     * @param reason  the end reason; must not be {@code null}
      * @return the {@code <call>} stanza ready for dispatch
      * @throws NullPointerException if any argument is {@code null}
      */
@@ -191,23 +178,22 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><mute_v2 call-id call-creator mute-state="0|1"/></call>}
-     * stanza announcing that the local user has muted or unmuted their mic.
+     * Builds a mute-state stanza announcing that the local user has muted or unmuted their microphone.
      *
-     * <p>Wire shape verified against captured fixtures (see
-     * {@code fixtures/call/1to1/mute-toggle.*.jsonl}): the attribute is
-     * {@code mute-state} with values {@code "1"} for muted and {@code "0"}
-     * for unmuted — not the legacy {@code state="muted"|"unmuted"} the
-     * older WA Web snapshot used.
+     * <p>The returned envelope wraps a {@code <mute_v2 call-id call-creator mute-state="0|1"/>} payload,
+     * with {@code mute-state} set to {@code "1"} for a mute and {@code "0"} for an unmute.
+     *
+     * @implNote This implementation emits the {@code mute-state} attribute on a {@code mute_v2} payload
+     * rather than the legacy {@code state="muted"|"unmuted"} attribute on a {@code mute} payload; the
+     * captured {@code fixtures/call/1to1/mute-toggle.*.jsonl} corpus confirms the current shape.
      *
      * @param target  the JID of the other party; must not be {@code null}
      * @param creator the JID of the call creator; must not be {@code null}
      * @param callId  the call identifier; must not be {@code null}
-     * @param muted   {@code true} if announcing a mute, {@code false} for
-     *                an unmute
+     * @param muted   {@code true} to announce a mute, {@code false} to announce an unmute
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code target}, {@code creator}, or
-     *                              {@code callId} is {@code null}
+     * @throws NullPointerException if {@code target}, {@code creator}, or {@code callId} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -225,17 +211,18 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><video_state call-id call-creator state=...></call>}
-     * stanza announcing that the local user has turned video on or off.
+     * Builds a video-state stanza announcing that the local user has turned video on or off.
+     *
+     * <p>The returned envelope wraps a {@code <video_state call-id call-creator state="on|off"/>}
+     * payload, with {@code state} set to {@code "on"} for a video-on and {@code "off"} for a video-off.
      *
      * @param target  the JID of the other party; must not be {@code null}
      * @param creator the JID of the call creator; must not be {@code null}
      * @param callId  the call identifier; must not be {@code null}
-     * @param enabled {@code true} if announcing a video-on,
-     *                {@code false} for video-off
+     * @param enabled {@code true} to announce a video-on, {@code false} to announce a video-off
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code target}, {@code creator}, or
-     *                              {@code callId} is {@code null}
+     * @throws NullPointerException if {@code target}, {@code creator}, or {@code callId} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -253,20 +240,20 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><group_update call-id call-creator action=...></call>}
-     * stanza adding or removing participants from an in-progress group call.
+     * Builds a group-update stanza that adds or removes participants in an in-progress group call.
+     *
+     * <p>The returned envelope wraps a {@code <group_update call-id call-creator action="add|remove">}
+     * payload whose {@code <group_info>} child lists one {@code <participant jid="..."/>} entry per
+     * supplied participant. The {@code action} attribute is {@code "add"} when {@code add} is
+     * {@code true} and {@code "remove"} otherwise.
      *
      * @param target       the group JID; must not be {@code null}
-     * @param creator      the JID of the call creator; must not be
-     *                     {@code null}
+     * @param creator      the JID of the call creator; must not be {@code null}
      * @param callId       the call identifier; must not be {@code null}
-     * @param add          {@code true} if announcing additions,
-     *                     {@code false} for removals
-     * @param participants the participants to add or remove; must not be
-     *                     {@code null} or empty
+     * @param add          {@code true} to announce additions, {@code false} to announce removals
+     * @param participants the participants to add or remove; must not be {@code null} or empty
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException     if any reference argument is
-     *                                  {@code null}
+     * @throws NullPointerException     if any reference argument is {@code null}
      * @throws IllegalArgumentException if {@code participants} is empty
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
@@ -301,14 +288,14 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a {@code <call><ringing call-id call-creator/></call>} stanza
-     * confirming the device is alerting the local user.
+     * Builds a ringing stanza confirming the device is alerting the local user.
+     *
+     * <p>The returned envelope wraps a {@code <ringing call-id call-creator/>} payload.
      *
      * @param caller the JID of the call creator; must not be {@code null}
      * @param callId the call identifier; must not be {@code null}
      * @return the {@code <call>} stanza ready for dispatch
-     * @throws NullPointerException if {@code caller} or {@code callId} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code caller} or {@code callId} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSendSignalingXmpp", exports = "sendWAWebVoipSignalingXmpp",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -317,13 +304,16 @@ public final class CallStanza {
     }
 
     /**
-     * Builds a payload-less {@code <call to=...><tag call-id call-creator/></call>}
-     * envelope.
+     * Builds a content-less call payload carrying only the call-id and call-creator attributes.
      *
-     * @param caller the JID of the call creator
+     * <p>The returned envelope wraps a {@code <tag call-id call-creator/>} payload, where {@code tag}
+     * is the supplied wire tag, and routes it to {@code caller} as the {@code <call to>} attribute.
+     *
+     * @param caller the JID of the call creator, also used as the {@code <call to>} target
      * @param callId the call identifier
-     * @param tag    the wire tag for the payload (e.g. {@code "accept"})
-     * @return the wrapped stanza
+     * @param tag    the wire tag for the payload, for example {@code "accept"}
+     * @return the wrapped {@code <call>} stanza
+     * @throws NullPointerException if {@code caller} or {@code callId} is {@code null}
      */
     private static Node simple(Jid caller, String callId, String tag) {
         Objects.requireNonNull(caller, "caller cannot be null");
@@ -337,12 +327,11 @@ public final class CallStanza {
     }
 
     /**
-     * Wraps the given payload in a {@code <call to=target>...</call>}
-     * envelope.
+     * Wraps a payload in a {@code <call to="...">...</call>} envelope.
      *
-     * @param target  the {@code to} attribute
-     * @param payload the inner payload
-     * @return the wrapped stanza
+     * @param target  the value of the {@code to} attribute
+     * @param payload the inner payload node
+     * @return the wrapped {@code <call>} stanza
      */
     private static Node wrap(Jid target, Node payload) {
         return new NodeBuilder()

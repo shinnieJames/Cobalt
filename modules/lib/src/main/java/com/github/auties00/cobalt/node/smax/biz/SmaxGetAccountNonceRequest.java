@@ -11,54 +11,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code GetAccountNonce} IQ request stanza for the
- * SMB business-linking nonce bridge.
+ * Builds the outbound {@code GetAccountNonce} IQ request for the SMB business-linking nonce bridge.
+ * <p>
+ * Drives the click-to-WhatsApp ads page-binding handshake: the relay returns a one-shot
+ * account-binding nonce that the CTWA ad-creation surface forwards to Meta's ads backend to prove
+ * ownership of the linked Facebook page.
  *
- * @apiNote
- * Used by Cobalt clients that mirror WA Web's
- * {@code WAWebQueryLinkedAccountNonceJob.queryNonce} flow, which
- * runs from {@code WAWebBusinessAdCreationUtils} as the
- * Click-to-WhatsApp ads page-binding handshake; the relay returns a
- * one-shot account-binding nonce that the CTWA ad-creation surface
- * forwards to Meta's ads backend to prove ownership of the linked
- * Facebook page.
- *
- * @implNote
- * This implementation mirrors WA Web's
- * {@code makeGetAccountNonceRequest} by stamping the static
- * {@code xmlns="fb:thrift_iq"} envelope; the {@code id} attribute is
- * not stamped here because Cobalt's send-path delegates id
- * generation to {@link com.github.auties00.cobalt.WhatsAppClient}'s
- * {@code sendNode} dispatcher, matching the WA Web
- * {@code generateId()} insertion point.
+ * @implNote This implementation stamps the static {@code xmlns="fb:thrift_iq"} envelope; the
+ * {@code id} attribute is not stamped here because Cobalt's send path delegates id generation to
+ * {@code WhatsAppClient}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizLinkingGetAccountNonceRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizLinkingHackBaseIQGetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizLinkingBaseIQGetRequestMixin")
 public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
     /**
-     * The optional {@code scope} attribute of the
-     * {@code <identifier>} child; {@code null} omits the child
-     * entirely.
+     * The optional {@code scope} attribute of the {@code <identifier>} child; {@code null} omits the
+     * child entirely.
      */
     private final String identifierScope;
 
     /**
-     * The optional {@code from} attribute echoed onto the outbound
-     * IQ via the {@code HackBaseIQGetRequestMixin}; the active user
-     * {@link Jid} is the only legal value and {@code null} omits the
-     * attribute.
+     * The optional {@code from} attribute echoed onto the outbound IQ; the active user {@link Jid}
+     * is the only legal value and {@code null} omits the attribute.
      */
     private final Jid fromUserJid;
 
     /**
-     * Constructs a request without an {@code <identifier>} child and
-     * with no {@code from} echo.
-     *
-     * @apiNote
-     * The default shape invoked by
-     * {@code WAWebQueryLinkedAccountNonceJob.queryNonce}: a bare
-     * IQ-get with no payload, suitable for the standard CTWA
+     * Constructs a request without an {@code <identifier>} child and with no {@code from} echo.
+     * <p>
+     * This is the default shape: a bare IQ-get with no payload, suitable for the standard CTWA
      * ad-creation nonce fetch.
      */
     public SmaxGetAccountNonceRequest() {
@@ -66,37 +48,26 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Constructs a request optionally carrying an
-     * {@code <identifier scope="..."/>} child and no {@code from}
-     * echo.
+     * Constructs a request optionally carrying an {@code <identifier scope="..."/>} child and no
+     * {@code from} echo.
+     * <p>
+     * The scope literal is passed through verbatim to the relay.
      *
-     * @apiNote
-     * Use to scope the nonce request to a specific identifier
-     * domain; the scope literal is passed through verbatim to the
-     * relay.
-     *
-     * @param identifierScope the {@code scope} attribute; may be
-     *                        {@code null} to omit the child
+     * @param identifierScope the {@code scope} attribute; may be {@code null} to omit the child
      */
     public SmaxGetAccountNonceRequest(String identifierScope) {
         this(identifierScope, null);
     }
 
     /**
-     * Constructs a request with the optional scope and an optional
-     * {@code from} echo.
+     * Constructs a request with the optional scope and an optional {@code from} echo.
+     * <p>
+     * Supply {@code fromUserJid} when a companion linked device proxies the request on behalf of the
+     * active user; the relay validates that the echoed JID matches the authenticated session.
      *
-     * @apiNote
-     * Use the {@code fromUserJid} overload when a companion linked
-     * device proxies the request on behalf of the active user; the
-     * relay validates that the echoed JID matches the authenticated
-     * session.
-     *
-     * @param identifierScope the {@code scope} attribute; may be
-     *                        {@code null} to omit the child
-     * @param fromUserJid     the optional user {@link Jid} to echo
-     *                        onto the {@code from} attribute; may
-     *                        be {@code null}
+     * @param identifierScope the {@code scope} attribute; may be {@code null} to omit the child
+     * @param fromUserJid     the optional user {@link Jid} to echo onto the {@code from} attribute;
+     *                        may be {@code null}
      */
     public SmaxGetAccountNonceRequest(String identifierScope, Jid fromUserJid) {
         this.identifierScope = identifierScope;
@@ -105,14 +76,10 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
 
     /**
      * Returns the optional identifier scope.
+     * <p>
+     * Empty when the request was constructed without an {@code <identifier>} child.
      *
-     * @apiNote
-     * The returned {@link Optional} is empty when the request was
-     * constructed without an {@code <identifier>} child, matching
-     * the default {@code queryNonce} path.
-     *
-     * @return an {@link Optional} carrying the scope, or empty when
-     *         the child is omitted
+     * @return an {@link Optional} carrying the scope, or empty when the child is omitted
      */
     public Optional<String> identifierScope() {
         return Optional.ofNullable(identifierScope);
@@ -120,13 +87,10 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
 
     /**
      * Returns the optional {@code from} echo.
+     * <p>
+     * Empty unless a companion-device proxy supplied the active user's {@link Jid}.
      *
-     * @apiNote
-     * Empty unless a companion-device proxy supplied the active
-     * user's {@link Jid}.
-     *
-     * @return an {@link Optional} carrying the user {@link Jid}, or
-     *         empty when no echo was supplied
+     * @return an {@link Optional} carrying the user {@link Jid}, or empty when no echo was supplied
      */
     public Optional<Jid> fromUserJid() {
         return Optional.ofNullable(fromUserJid);
@@ -135,18 +99,12 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @implNote
-     * This implementation composes three WA Web mixins in a single
-     * pass: {@code makeGetAccountNonceRequest} stamps the
-     * {@code xmlns="fb:thrift_iq"} envelope,
-     * {@code mergeHackBaseIQGetRequestMixin} stamps {@code to} and
-     * the optional {@code from}, and
-     * {@code mergeBaseIQGetRequestMixin} stamps {@code type="get"};
-     * the {@code id} attribute is appended by Cobalt's send path,
-     * matching WA's {@code generateId()} insertion point.
+     * @implNote This implementation stamps the {@code xmlns="fb:thrift_iq"} envelope, the {@code to}
+     * and optional {@code from} attributes, and {@code type="get"} in a single pass; the {@code id}
+     * attribute is appended by Cobalt's send path.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the optional {@code <identifier/>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the optional {@code <identifier/>}
+     *         payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizLinkingGetAccountNonceRequest",
@@ -177,7 +135,12 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to {@code obj} for structural equality on the scope and the optional
+     * {@code from} echo.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxGetAccountNonceRequest} with matching
+     *         {@link #identifierScope()} and {@link #fromUserJid()}
      */
     @Override
     public boolean equals(Object obj) {
@@ -193,7 +156,9 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash of the scope and the optional {@code from} echo
      */
     @Override
     public int hashCode() {
@@ -201,7 +166,9 @@ public final class SmaxGetAccountNonceRequest implements SmaxOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug-friendly rendering naming the scope and the optional {@code from} echo.
+     *
+     * @return a record-style string with the scope and {@code from} echo
      */
     @Override
     public String toString() {

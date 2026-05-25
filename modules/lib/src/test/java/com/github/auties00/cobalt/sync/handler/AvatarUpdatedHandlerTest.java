@@ -28,27 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link AvatarUpdatedHandler}, Cobalt's adapter for
- * {@code WAWebStickersAvatarUpdatedSyncAction}.
- *
- * <p>The handler routes the {@code "avatar_updated_action"} mutation and
- * carries side effects: it toggles the {@code hasAvatar} flag on the store
- * and clears the recent-avatar-sticker cache.
- *
- * <p>Matrix:
- * <ul>
- *   <li>Metadata wire constants.</li>
- *   <li>AB-prop gate disabled returns {@code UNSUPPORTED}.</li>
- *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
- *   <li>Missing action sub-message or missing {@code eventType} is
- *       {@code MALFORMED}.</li>
- *   <li>Pairing-timestamp gate skips older mutations.</li>
- *   <li>Happy path: {@code CREATED}/{@code UPDATED}/{@code DELETED} flip
- *       the local {@code hasAvatar} flag and clear avatar stickers.</li>
- *   <li>Default conflict resolution (n/a override).</li>
- *   <li>Default batch dispatch (n/a override).</li>
- *   <li>Builder methods (n/a - handler has none).</li>
- * </ul>
+ * Covers {@link AvatarUpdatedHandler}, which routes the {@code "avatar_updated_action"} mutation,
+ * toggling the {@code hasAvatar} flag on the store and clearing the recent-avatar-sticker cache.
+ * The mutation is gated twice: behind the {@link ABProp#ENABLE_AVATARS_ON_WEB_COMPANION} feature
+ * flag and behind the store pairing timestamp. The harness installs a per-test
+ * {@link TestABPropsService} that defaults the flag off, so tests enable it explicitly.
  */
 @DisplayName("AvatarUpdatedHandler")
 class AvatarUpdatedHandlerTest {
@@ -60,10 +44,6 @@ class AvatarUpdatedHandlerTest {
     private TestABPropsService props;
     private AvatarUpdatedHandler handler;
 
-    /**
-     * Builds a fresh store and test client with an empty AB-props service that
-     * defaults the avatar feature flag to its declared default ({@code false}).
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -74,22 +54,10 @@ class AvatarUpdatedHandlerTest {
         handler = new AvatarUpdatedHandler(props);
     }
 
-    /**
-     * Enables the {@code enable_avatars_on_web_companion} AB prop on the
-     * per-test props service.
-     */
     private void enableAvatars() {
         props.set(ABProp.ENABLE_AVATARS_ON_WEB_COMPANION, true);
     }
 
-    /**
-     * Builds a trusted SET mutation carrying the given event type and an
-     * empty index (the WA Web action carries no index parts).
-     *
-     * @param eventType the avatar event type
-     * @param timestamp the mutation timestamp
-     * @return the trusted mutation
-     */
     private static DecryptedMutation.Trusted setMutation(AvatarUpdatedAction.AvatarEventType eventType, Instant timestamp) {
         var action = new AvatarUpdatedActionBuilder().eventType(eventType).build();
         var value = new SyncActionValueBuilder()
@@ -261,17 +229,12 @@ class AvatarUpdatedHandlerTest {
         @Test
         @DisplayName("the handler does not parse indexParts beyond position 0, so index malformations are not checked")
         void notExercised() {
-            // The WA Web handler index is literally ["avatar_updated_action"]; nothing is read
-            // from indexParts[1..]. The malformed-index branch is therefore not reachable for
-            // this handler. This @Nested exists to make that "n/a" outcome explicit, per the
-            // per-handler matrix requirement.
+            // The handler reads nothing past indexParts[0], so even a non-JSON index still succeeds.
             enableAvatars();
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var action = new AvatarUpdatedActionBuilder()
                     .eventType(AvatarUpdatedAction.AvatarEventType.CREATED).build();
             var value = new SyncActionValueBuilder().timestamp(ts).avatarUpdatedAction(action).build();
-            // Even with a wildly malformed index, the handler still succeeds because it does
-            // not look at the index at all in WA Web.
             var mutation = new DecryptedMutation.Trusted("not-json", value, SyncdOperation.SET, ts, 7);
             assertEquals(SyncActionState.SUCCESS,
                     handler.applyMutation(testClient, mutation).actionState());

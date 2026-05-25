@@ -14,31 +14,27 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing app-state mutations that toggle enrolment in the
- * WhatsApp Web and Desktop beta program.
+ * Builds outgoing app-state mutations that toggle enrolment in the WhatsApp Web and Desktop beta
+ * program.
  *
- * @apiNote
- * Drives the public beta opt-in switch exposed on every linked Web and
- * Desktop installation; the same JS bundle backs both surfaces so the
- * mutation flips the flag for both at once. Mutations produced here are
- * consumed on receiving devices by
- * {@link com.github.auties00.cobalt.sync.handler.ExternalWebBetaHandler}
- * which updates the local opt-in flag.
+ * Drives the beta opt-in switch exposed on every linked Web and Desktop installation; the same JS
+ * bundle backs both surfaces so the mutation flips the flag for both at once. This factory is the
+ * outgoing-mutation counterpart of
+ * {@link com.github.auties00.cobalt.sync.handler.ExternalWebBetaHandler}, which updates the local
+ * opt-in flag on receiving devices.
  *
  * @implNote
- * This implementation mirrors
- * {@code WAWebExternalBetaOptInAction.setOptInBetaAction}, which is the
- * programmatic entry point WA Web exposes for the toggle. The mutation
- * is a singleton ({@code [external_web_beta]}); each new mutation
- * overwrites the previous opt-in value rather than appending a new one.
+ * This implementation mirrors {@code WAWebExternalBetaOptInAction.setOptInBetaAction}, the
+ * programmatic entry point WA Web exposes for the toggle. The mutation is a singleton
+ * ({@code [external_web_beta]}); each new mutation overwrites the previous opt-in value rather than
+ * appending a new one.
  */
 public final class ExternalWebBetaMutationFactory {
     /**
      * Constructs an external-web-beta mutation factory.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across
-     * the lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public ExternalWebBetaMutationFactory() {
 
@@ -47,22 +43,14 @@ public final class ExternalWebBetaMutationFactory {
     /**
      * Builds a pending SET mutation that toggles the beta opt-in flag.
      *
-     * @apiNote
-     * Invoked from the public beta-enrollment setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient}; the index
-     * carries only the action name because the preference is a singleton
-     * per account.
+     * The index carries only the action name because the preference is a singleton per account.
      *
      * @implNote
-     * This implementation captures the timestamp via
-     * {@link Instant#now()}; WA Web's
-     * {@code WAWebExternalBetaOptInAction.setOptInBetaAction} uses
-     * {@code WATimeUtils.unixTimeMs()} for the same purpose.
+     * This implementation captures the timestamp via {@link Instant#now()}; WA Web's
+     * {@code setOptInBetaAction} uses {@code WATimeUtils.unixTimeMs()} for the same purpose.
      *
-     * @param enrolled {@code true} to opt the account into the beta
-     *                 program, {@code false} to opt out
-     * @return the pending mutation ready to be queued for outbound
-     *         app-state sync
+     * @param enrolled {@code true} to opt the account into the beta program, {@code false} to opt out
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalBetaOptInAction", exports = "setOptInBetaAction", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getExternalWebBetaMutation(boolean enrolled) {

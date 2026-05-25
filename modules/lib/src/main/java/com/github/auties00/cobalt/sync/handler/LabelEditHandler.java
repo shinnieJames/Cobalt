@@ -17,32 +17,20 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code label_edit} app-state sync action that creates, edits or
  * deletes a chat label.
  *
- * @apiNote
- * Drives the SMB/Business "manage labels" sheet: when the primary device
- * adds, renames, recolours or removes a label the corresponding
- * mutation fans out across the {@link SyncPatchType#REGULAR} collection
- * so companion devices show the same set of labels. The mutation index
- * keys each entry by the server-assigned label id, formatted as
+ * <p>The action fans out across the {@link SyncPatchType#REGULAR} collection so
+ * companion devices show the same set of labels. The mutation index keys each
+ * entry by the server-assigned label id, formatted as
  * {@snippet :
  *     ["label_edit", labelId]
  * }
  *
  * @implNote
- * This implementation merges incoming edits into the existing
- * {@link Label} in place rather than rebuilding the row from scratch,
- * matching WA Web's
- * {@code LabelCollection.add(R, {merge: true})} semantics so that the
- * assignments populated by {@link LabelAssociationHandler} survive the
- * edit. Server-assigned labels (type
- * {@link LabelEditAction.ListType#SERVER_ASSIGNED}) are intentionally
- * not added to the main label collection because WA Web's
- * {@code WAWebLabelCollection.initializeFromCache} filters them out;
- * Cobalt has no equivalent server-assigned id map yet, so the
- * {@code predefinedId} mapping is currently dropped. The
- * {@code WAWebWamLabelSyncTrackingReporter} telemetry, the
- * AI-handoff/AI-responding deduplication paths and the IndexedDB
- * {@code lock("label", "label-association", "chat")} are not modelled
- * because Cobalt's store is a flat in-memory map.
+ * This implementation merges incoming edits into the existing {@link Label} in
+ * place so the assignments populated by {@link LabelAssociationHandler} survive
+ * the edit. Server-assigned labels (type
+ * {@link LabelEditAction.ListType#SERVER_ASSIGNED}) are not added to the main
+ * collection because Cobalt has no server-assigned id map yet, so the
+ * {@code predefinedId} mapping is currently dropped.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelSync")
 public final class LabelEditHandler implements WebAppStateActionHandler {
@@ -85,22 +73,23 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()} and a missing label id or
+     * action payload as malformed. A {@link LabelEditAction#deleted()} action
+     * removes the label via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#removeLabel(String)};
+     * otherwise the row is upserted, merging into an existing {@link Label} in
+     * place when one is found or building a new one via {@link LabelBuilder}.
+     *
      * @implNote
      * This implementation classifies a missing label-id slot as
-     * {@link MutationApplicationResult#malformed()} explicitly to avoid
-     * an out-of-bounds exception on
-     * {@code JSON.parseArray}. On a delete the label is removed via a
-     * single {@link com.github.auties00.cobalt.store.WhatsAppStore#removeLabel(String)}
-     * call that collapses WA Web's
-     * {@code getLabelTable().remove + LabelCollection.remove} into one
-     * operation. On an upsert the existing
-     * {@link Label#assignments()} set survives because the merge path
-     * mutates the existing row in place. The
-     * {@code isActive} and {@code isImmutable} flags coalesce
-     * {@code null} to {@code false} per the project's
-     * "no Optional&lt;Boolean&gt;" rule, so a {@code true} reading is
-     * persisted but a {@code false} reading does not clobber a
-     * previously-set {@code true}.
+     * {@link MutationApplicationResult#malformed()} before parsing to avoid an
+     * out-of-bounds exception on {@code JSON.parseArray}. On an upsert the
+     * existing {@link Label#assignments()} set survives because the merge path
+     * mutates the existing row. Because the {@code isActive} and
+     * {@code isImmutable} flags coalesce {@code null} to {@code false}, a
+     * {@code true} reading is persisted but a {@code false} reading does not
+     * clobber a previously-set {@code true}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -132,10 +121,8 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
 
         var type = action.type().orElse(null);
         if (type == LabelEditAction.ListType.SERVER_ASSIGNED) {
-            // TODO: persist the server-assigned label id to predefined id mapping. WA Web
-            //       calls LabelCollection.addToServerAssignedLabelIdMap(c, S); Cobalt has
-            //       no equivalent store field yet, so the predefinedId association is
-            //       currently dropped on the floor.
+            // TODO: persist the server-assigned label id to predefined id mapping; Cobalt has
+            //       no equivalent store field yet, so the predefinedId association is dropped.
             return MutationApplicationResult.success();
         }
 

@@ -3,7 +3,12 @@ import type {
   DependencyTraceNode,
   LiteralCrossRef,
   ModuleMetadataResponse,
+  NativeCallGraphNode,
+  NativeDataMatch,
   NativeModuleMetadataResponse,
+  NativeReferenceResult,
+  NativeVtable,
+  NativeVtableSlot,
   ReferenceSearchResult,
   ResolvedExport,
   SymbolSourceResult,
@@ -25,6 +30,8 @@ import type {
 import type { WasmAnalysis, WasmCrossReference } from "../types/wasm.js";
 import { ModuleSearchService } from "./search.js";
 import { LruCache } from "./lru-cache.js";
+import { analyzeWasm } from "../analysis/wasm-analyzer.js";
+import { buildWasmIndex, type WasmIndex } from "../analysis/wasm-index.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("catalog");
@@ -52,6 +59,8 @@ export class SnapshotCatalog {
   private literalsByValue = new Map<string, Set<string>>();
   private crossModuleEdgesByCallee = new Map<string, CrossModuleCallEdgeRecord[]>();
   private crossModuleEdgesByCaller = new Map<string, CrossModuleCallEdgeRecord[]>();
+  private nativeAnalysisCache = new Map<string, WasmAnalysis>();
+  private wasmIndexCache = new LruCache<string, Promise<WasmIndex>>(3);
 
   constructor(
     public readonly manifest: SnapshotManifest,
@@ -504,11 +513,55 @@ export class SnapshotCatalog {
   }
 
   async getNativeModuleAnalysis(name: string): Promise<WasmAnalysis> {
+    const cached = this.nativeAnalysisCache.get(name);
+    if (cached) return cached;
+
     const record = this.getNativeModuleRecord(name);
     if (!this.loadNativeAnalysisByPath) {
       throw new Error("Native module analysis loading not configured");
     }
-    return this.loadNativeAnalysisByPath(record.analysisPath);
+    const analysis = await this.loadNativeAnalysisByPath(record.analysisPath);
+
+    // Backfill the element/data descriptors for analyses produced before those
+    // sections were parsed, so old snapshots need no re-extraction. Fresh
+    // extractions already carry them and skip this path.
+    if ((!analysis.elements || !analysis.dataSegments) && this.loadNativeBinaryByPath) {
+      try {
+        const binary = await this.loadNativeBinaryByPath(record.filePath);
+        const fresh = analyzeWasm(name, binary);
+        analysis.elements = fresh.elements;
+        analysis.dataSegments = fresh.dataSegments;
+      } catch (err) {
+        log.warn(`failed to backfill element/data segments for native module "${name}": ${String(err)}`);
+      }
+    }
+
+    this.nativeAnalysisCache.set(name, analysis);
+    return analysis;
+  }
+
+  /**
+   * Returns the derived reverse-engineering index for a native module, built
+   * lazily from the raw binary and memoized by content hash. Concurrent callers
+   * share one in-flight build (the cache stores the promise, not the result).
+   */
+  async getWasmIndex(name: string): Promise<WasmIndex> {
+    const record = this.getNativeModuleRecord(name);
+    if (!this.loadNativeBinaryByPath) {
+      throw new Error("Native module binary loading not configured");
+    }
+    const cached = this.wasmIndexCache.get(record.contentHash);
+    if (cached) return cached;
+
+    const build = (async () => {
+      const [binary, analysis] = await Promise.all([
+        this.loadNativeBinaryByPath!(record.filePath),
+        this.getNativeModuleAnalysis(name),
+      ]);
+      return buildWasmIndex(binary, analysis);
+    })();
+    this.wasmIndexCache.set(record.contentHash, build);
+    return build;
   }
 
   async getNativeModuleBinary(
@@ -585,4 +638,217 @@ export class SnapshotCatalog {
       referencingModules: [...new Set(referencingModules)],
     };
   }
+
+  // Native reverse-engineering queries (the WASM analogue of find_references /
+  // search_code / trace_dependencies, plus C++ vtable recovery) ---
+
+  /**
+   * Finds the functions in a native module that reference a target. A numeric
+   * target (decimal or {@code 0x...}) is treated as a linear-memory address and
+   * resolved to the data string containing it; otherwise the target is matched
+   * as a substring of extracted data strings.
+   */
+  async findNativeReferences(
+    name: string,
+    target: string,
+    maxResults: number
+  ): Promise<NativeReferenceResult[]> {
+    const idx = await this.getWasmIndex(name);
+    const out: NativeReferenceResult[] = [];
+    const addr = parseAddress(target);
+    if (addr != null) {
+      const str = idx.stringContaining(addr);
+      if (str) {
+        for (const fn of idx.functionsReferencing(str)) {
+          if (out.length >= maxResults) break;
+          out.push({ funcIndex: fn, name: idx.nameOf(fn), strings: [str] });
+        }
+      }
+      return out;
+    }
+    for (const fn of idx.functionsReferencingSubstring(target)) {
+      if (out.length >= maxResults) break;
+      const matched = (idx.stringRefs().byFunction.get(fn) ?? []).filter((s) => s.includes(target));
+      out.push({ funcIndex: fn, name: idx.nameOf(fn), strings: matched });
+    }
+    return out;
+  }
+
+  /** Searches a native module's extracted data strings by regex or literal. */
+  async searchNativeData(
+    name: string,
+    pattern: string,
+    mode: "regex" | "literal",
+    maxResults: number
+  ): Promise<NativeDataMatch[]> {
+    const idx = await this.getWasmIndex(name);
+    const re =
+      mode === "regex"
+        ? new RegExp(pattern, "i")
+        : new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    return idx.matchStrings((s) => re.test(s), maxResults).map((m) => ({
+      address: m.address,
+      value: m.value,
+      referencedBy: idx.functionsReferencing(m.value),
+    }));
+  }
+
+  /** Finds functions whose body contains a given {@code i32.const} value. */
+  async findNativeConst(name: string, value: number, maxResults: number): Promise<NativeReferenceResult[]> {
+    const idx = await this.getWasmIndex(name);
+    return idx
+      .functionsWithI32Const(value)
+      .slice(0, maxResults)
+      .map((fn) => ({ funcIndex: fn, name: idx.nameOf(fn) }));
+  }
+
+  /** BFS over a native module's function call graph from a starting function. */
+  async traceNativeCallGraph(
+    name: string,
+    funcIndex: number,
+    depth: number,
+    direction: "forward" | "reverse"
+  ): Promise<NativeCallGraphNode[]> {
+    const idx = await this.getWasmIndex(name);
+    const graph = idx.callGraph();
+    const maxDepth = Math.max(0, depth);
+    const visited = new Set<number>();
+    const queue: Array<{ fn: number; depth: number }> = [{ fn: funcIndex, depth: 0 }];
+    const out: NativeCallGraphNode[] = [];
+
+    while (queue.length > 0) {
+      const next = queue.shift()!;
+      if (visited.has(next.fn) || next.depth > maxDepth) continue;
+      visited.add(next.fn);
+
+      const calls = [...(graph.calls.get(next.fn) ?? [])].sort((a, b) => a - b);
+      const callers = [...(graph.callers.get(next.fn) ?? [])].sort((a, b) => a - b);
+      const indirect = (graph.indirect.get(next.fn) ?? []).map((s) => ({
+        typeIndex: s.typeIndex,
+        tableIndex: s.tableIndex,
+        candidates: idx.resolveIndirect(s.typeIndex, s.tableIndex),
+      }));
+      out.push({ funcIndex: next.fn, name: idx.nameOf(next.fn), depth: next.depth, direction, calls, callers, indirect });
+
+      const neighbors = direction === "forward" ? calls : callers;
+      if (next.depth < maxDepth) {
+        for (const n of neighbors) if (!visited.has(n)) queue.push({ fn: n, depth: next.depth + 1 });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Recovers C++ vtables for a given Itanium typeinfo name (mangled, e.g.
+   * {@code N8facebook3rtc...E}, or a substring). Walks the data image:
+   * {@code _ZTS} name string -> enclosing {@code _ZTI} object -> the vtable slot
+   * that points at it -> the address point -> consecutive table-index slots
+   * mapped to function indices. Reports failure modes (missing RTTI, passive
+   * segments, unusual layouts) in {@code notes} rather than throwing.
+   */
+  async recoverNativeVtables(name: string, typeName: string, maxResults: number): Promise<NativeVtable[]> {
+    const idx = await this.getWasmIndex(name);
+    const out: NativeVtable[] = [];
+
+    let candidates = idx.matchStrings((s) => s === typeName, 4);
+    if (candidates.length === 0) candidates = idx.matchStrings((s) => s.includes(typeName), 4);
+    if (candidates.length === 0) {
+      return [
+        {
+          typeName,
+          demangled: demangleItanium(typeName),
+          ztsAddr: -1,
+          ztiAddr: null,
+          vtableAddr: null,
+          addressPoint: null,
+          slots: [],
+          notes: ["typeinfo name string not found in active data segments"],
+        },
+      ];
+    }
+
+    for (const cand of candidates) {
+      if (out.length >= maxResults) break;
+      const notes: string[] = [];
+      const ztsAddr = cand.address;
+      let ztiAddr: number | null = null;
+      let vtableAddr: number | null = null;
+      let addressPoint: number | null = null;
+      const slots: NativeVtableSlot[] = [];
+
+      // The _ZTI typeinfo object holds a pointer to the _ZTS name string as its
+      // second word, so the object begins one pointer earlier.
+      for (const namePtr of idx.findWordsEqualTo(ztsAddr)) {
+        const ztiCandidate = namePtr - 4;
+        const typeinfoSlots = idx.findWordsEqualTo(ztiCandidate);
+        if (typeinfoSlots.length === 0) continue;
+        ztiAddr = ztiCandidate;
+        for (const tiSlot of typeinfoSlots) {
+          const ap = tiSlot + 4; // address point: first virtual function slot
+          const fns = readVtableSlots(idx, ap);
+          if (fns.length === 0) continue;
+          vtableAddr = tiSlot - 4; // offset-to-top precedes the typeinfo slot
+          addressPoint = ap;
+          for (let k = 0; k < fns.length; k++) {
+            slots.push({ slot: k, funcIndex: fns[k], name: idx.nameOf(fns[k]) });
+          }
+          break;
+        }
+        if (addressPoint != null) break;
+      }
+
+      if (addressPoint == null) {
+        notes.push(
+          "could not anchor a vtable for this typeinfo (RTTI may be absent, initialized from a passive segment, or use a multi-inheritance layout)"
+        );
+      }
+      out.push({ typeName: cand.value, demangled: demangleItanium(cand.value), ztsAddr, ztiAddr, vtableAddr, addressPoint, slots, notes });
+    }
+    return out;
+  }
+}
+
+/** Parses a decimal or {@code 0x}-prefixed hex address, or returns {@code null}. */
+function parseAddress(s: string): number | null {
+  const t = s.trim();
+  if (/^0x[0-9a-fA-F]+$/.test(t)) return Number.parseInt(t, 16);
+  if (/^\d+$/.test(t)) return Number.parseInt(t, 10);
+  return null;
+}
+
+/** Reads consecutive vtable slots from the address point, mapping each table
+ * index to a function index; stops at the first slot that is not a valid
+ * function-table entry (the vtable boundary). */
+function readVtableSlots(idx: WasmIndex, addressPoint: number): number[] {
+  const out: number[] = [];
+  const MAX_SLOTS = 4096;
+  for (let k = 0; k < MAX_SLOTS; k++) {
+    const word = idx.readU32(addressPoint + 4 * k);
+    if (word == null) break;
+    const fn = idx.funcAtSlot(word, 0);
+    if (fn < 0) break;
+    out.push(fn);
+  }
+  return out;
+}
+
+/** Minimal Itanium demangler for nested names ({@code N..E}) and length-prefixed
+ * source names; returns the input unchanged when it does not match. */
+function demangleItanium(name: string): string {
+  const m = /^_Z(?:TS|TI|TV)(.*)$/.exec(name);
+  const body = m ? m[1] : name;
+  let i = 0;
+  const nested = body[i] === "N";
+  if (nested) i++;
+  const parts: string[] = [];
+  while (i < body.length) {
+    if (nested && body[i] === "E") break;
+    const lenMatch = /^\d+/.exec(body.slice(i));
+    if (!lenMatch) break;
+    const len = Number.parseInt(lenMatch[0], 10);
+    i += lenMatch[0].length;
+    parts.push(body.slice(i, i + len));
+    i += len;
+  }
+  return parts.length > 0 ? parts.join("::") : name;
 }

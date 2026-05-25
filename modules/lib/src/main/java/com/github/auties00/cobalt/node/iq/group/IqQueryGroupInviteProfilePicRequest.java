@@ -11,77 +11,63 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound IQ request that fetches the profile picture of an
- * invite-only group before the caller has joined it.
+ * Models the outbound IQ request that fetches the profile picture of an invite-only group before the caller has joined it.
  *
- * @apiNote
- * Send this when implementing the "preview group avatar from an
- * invite" surface, fed by either a {@code chat.whatsapp.com/<code>}
- * link or an in-chat invite-message attachment. The two flows ship
- * different stanza shapes, selected by
- * {@link IqQueryGroupInviteProfilePicMode}: the link mode addresses
- * the group JID under {@code w:g2} and only carries the invite code,
- * while the message mode addresses {@code s.whatsapp.net} under
- * {@code w:profile:picture} and additionally carries the inviting
- * admin JID and the invite-message expiration timestamp. The relay
- * responds with the CDN URL and a stable picture id that the caller
- * can pass back on subsequent fetches to short-circuit when the cached
- * id is still authoritative.
+ * <p>This request backs the "preview group avatar from an invite" surface, fed by either a
+ * {@code chat.whatsapp.com/<code>} link or an in-chat invite-message attachment. The two flows ship
+ * different stanza shapes, selected by {@link IqQueryGroupInviteProfilePicMode}: the link mode
+ * addresses the group JID under {@code w:g2} and only carries the invite code, while the message
+ * mode addresses {@code s.whatsapp.net} under {@code w:profile:picture} and additionally carries
+ * the inviting admin JID and the invite-message expiration timestamp. The relay responds with the
+ * CDN URL and a stable picture id that the caller can pass back on subsequent fetches to
+ * short-circuit when the cached id is still authoritative.
  *
  * @implNote
- * This implementation collapses WA Web's
- * {@code queryGroupInviteLinkProfilePic} and
- * {@code queryGroupInviteMessageProfilePic} exports into a single
- * request class keyed by {@link IqQueryGroupInviteProfilePicMode};
- * the WA Web exports take an options object
- * {@code {id, type, query}}, which Cobalt maps to the
- * {@link #pictureId()}, {@link #pictureType()} and
- * {@link #pictureQuery()} accessors.
+ * This implementation collapses the link and message picture queries into a single request class
+ * keyed by {@link IqQueryGroupInviteProfilePicMode}, mapping the picture options object onto the
+ * {@link #pictureId()}, {@link #pictureType()} and {@link #pictureQuery()} accessors.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryGroupInviteProfilePicApi")
 public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Request {
     /**
-     * The dispatch mode.
+     * Holds the dispatch mode.
      */
     private final IqQueryGroupInviteProfilePicMode mode;
 
     /**
-     * The target group JID.
+     * Holds the target group JID.
      */
     private final Jid groupJid;
 
     /**
-     * The invite code being previewed.
+     * Holds the invite code being previewed.
      */
     private final String code;
 
     /**
-     * The previously-cached picture identifier, or {@code null} when
-     * no cached id is supplied.
+     * Holds the previously-cached picture identifier, or {@code null} when no cached id is
+     * supplied.
      */
     private final String pictureId;
 
     /**
-     * The picture variant, or {@code null} when the caller defers to
-     * the relay default.
+     * Holds the picture variant, or {@code null} when the caller defers to the relay default.
      */
     private final String pictureType;
 
     /**
-     * The picture-query mode, or {@code null} when the caller defers
-     * to the relay default.
+     * Holds the picture-query mode, or {@code null} when the caller defers to the relay default.
      */
     private final String pictureQuery;
 
     /**
-     * The inviting admin JID, only used in
+     * Holds the inviting admin JID, only used in
      * {@link IqQueryGroupInviteProfilePicMode#INVITE_MESSAGE}.
      */
     private final Jid adminJid;
 
     /**
-     * The invite-message expiration timestamp (seconds since the
-     * epoch), only used in
+     * Holds the invite-message expiration timestamp (seconds since the epoch), only used in
      * {@link IqQueryGroupInviteProfilePicMode#INVITE_MESSAGE}.
      */
     private final String expiration;
@@ -89,17 +75,12 @@ public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Re
     /**
      * Constructs a request with the given parameters.
      *
-     * @apiNote
-     * Pass {@code pictureId} when the caller already holds a cached
-     * picture id from an earlier fetch; the relay then omits the
-     * {@code <picture>} child entirely on the success reply (signalling
-     * "your cached id is still authoritative"). Pass
-     * {@code pictureType = "preview"} for the low-resolution thumbnail
-     * and {@code pictureType = "image"} for the full-size avatar; the
-     * {@link WhatsAppWebModule
-     * WAWebInviteProfilePicAction} module hard-codes
-     * {@code {type: "preview", query: "url"}} for link mode and
-     * {@code {type: "image", query: "url"}} for message mode.
+     * <p>Pass {@code pictureId} when the caller already holds a cached picture id from an earlier
+     * fetch; the relay then omits the {@code <picture>} child entirely on the success reply,
+     * signalling that the cached id is still authoritative. Pass {@code pictureType = "preview"}
+     * for the low-resolution thumbnail and {@code pictureType = "image"} for the full-size avatar;
+     * the upstream link flow uses {@code {type: "preview", query: "url"}} and the message flow uses
+     * {@code {type: "image", query: "url"}}.
      *
      * @param mode         the dispatch mode; never {@code null}
      * @param groupJid     the target group {@link Jid}; never {@code null}
@@ -203,19 +184,14 @@ public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Re
     }
 
     /**
-     * Builds the outbound IQ stanza as a {@link NodeBuilder} ready
-     * for dispatch.
+     * Builds the outbound IQ stanza as a {@link NodeBuilder} ready for dispatch.
+     *
+     * <p>Switches on {@link #mode()} and delegates to either {@link #buildInviteLinkStanza()} or
+     * {@link #buildInviteMessageStanza()}.
      *
      * @implNote
-     * This implementation switches on {@link #mode()} and delegates
-     * to either {@link #buildInviteLinkStanza()} or
-     * {@link #buildInviteMessageStanza()}; the two helpers mirror
-     * WA Web's {@code queryGroupInviteLinkProfilePic} and
-     * {@code queryGroupInviteMessageProfilePic} bodies verbatim,
-     * including the WA Web idiom of dropping omitted picture-option
-     * attributes via {@code DROP_ATTR} (Cobalt achieves the same by
-     * skipping the {@code attribute(...)} calls when the field is
-     * {@code null}).
+     * This implementation drops omitted picture-option attributes by skipping the corresponding
+     * {@code attribute(...)} calls when the field is {@code null}.
      *
      * @return the IQ envelope builder
      */
@@ -234,16 +210,11 @@ public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Re
     }
 
     /**
-     * Builds the {@link IqQueryGroupInviteProfilePicMode#INVITE_LINK}
-     * stanza variant.
+     * Builds the {@link IqQueryGroupInviteProfilePicMode#INVITE_LINK} stanza variant.
      *
-     * @implNote
-     * This implementation matches WA Web's
-     * {@code queryGroupInviteLinkProfilePic} body verbatim: the IQ
-     * envelope is {@code {to:GROUP_JID(a), type:"get", xmlns:"w:g2"}}
-     * and the {@code <picture>} child carries the invite code under
-     * the {@code invite} attribute plus the optional
-     * {@code id}/{@code type}/{@code query} picture options.
+     * <p>The IQ envelope is addressed to the group JID under {@code w:g2}, and the
+     * {@code <picture>} child carries the invite code under the {@code invite} attribute plus the
+     * optional {@code id}, {@code type} and {@code query} picture options.
      *
      * @return the IQ envelope builder
      */
@@ -269,19 +240,12 @@ public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Re
     }
 
     /**
-     * Builds the
-     * {@link IqQueryGroupInviteProfilePicMode#INVITE_MESSAGE} stanza
-     * variant.
+     * Builds the {@link IqQueryGroupInviteProfilePicMode#INVITE_MESSAGE} stanza variant.
      *
-     * @implNote
-     * This implementation matches WA Web's
-     * {@code queryGroupInviteMessageProfilePic} body verbatim: the IQ
-     * envelope is
-     * {@code {to:S_WHATSAPP_NET, type:"get", target:GROUP_JID(l), xmlns:"w:profile:picture"}},
-     * and the {@code <picture>} child wraps an
-     * {@code <add_request code expiration admin/>} grandchild that
-     * proves the caller holds a valid in-chat invite-message context
-     * for the target group.
+     * <p>The IQ envelope is addressed to {@code s.whatsapp.net} under {@code w:profile:picture}
+     * with the group JID in the {@code target} attribute, and the {@code <picture>} child wraps an
+     * {@code <add_request code expiration admin/>} grandchild that proves the caller holds a valid
+     * in-chat invite-message context for the target group.
      *
      * @return the IQ envelope builder
      */
@@ -312,6 +276,15 @@ public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Re
                 .content(pictureBuilder.build());
     }
 
+    /**
+     * Compares this request with another object for equality.
+     *
+     * <p>Two requests are equal when they carry the same mode, group JID, code, picture options,
+     * admin JID and expiration.
+     *
+     * @param obj the object to compare with; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal request, {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -331,12 +304,22 @@ public final class IqQueryGroupInviteProfilePicRequest implements IqOperation.Re
                 && Objects.equals(this.expiration, that.expiration);
     }
 
+    /**
+     * Returns a hash code derived from all request fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(mode, groupJid, code, pictureId, pictureType, pictureQuery,
                 adminJid, expiration);
     }
 
+    /**
+     * Returns a debug string describing all request fields.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "IqQueryGroupInviteProfilePicRequest[mode=" + mode

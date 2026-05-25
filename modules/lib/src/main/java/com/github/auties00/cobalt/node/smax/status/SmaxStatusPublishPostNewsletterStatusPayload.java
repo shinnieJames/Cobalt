@@ -11,37 +11,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The addressing mode of a
- * {@link SmaxStatusPublishPostNewsletterStatusRequest}: either a
- * status-reaction keyed by the target status's server-id
- * ({@link WithServerId}), or a brand-new status keyed by stanza-id
- * only ({@link WithClientIdOnly}).
+ * The addressing mode of a {@link SmaxStatusPublishPostNewsletterStatusRequest}.
  *
- * @apiNote
- * Pick {@link WithServerId} when publishing a
- * status-newsletter-reaction or status-newsletter-reaction-revoke;
- * pick {@link WithClientIdOnly} when publishing a brand-new status
- * (which today is the status-revoke flow driven by
- * {@code WAWebNewsletterRevokeStatusQueryJob} or the
- * status-send flow driven by
- * {@code WAWebNewsletterSendStatusQueryJob}).
+ * <p>A publish is keyed either by the target status's server-id ({@link WithServerId}), used for
+ * status-reaction and status-reaction-revoke publishes, or by a locally generated stanza-id only
+ * ({@link WithClientIdOnly}), used for brand-new status posts such as the status-send and
+ * status-revoke flows. Callers pre-build the inner content as a {@link Node} before wrapping it in
+ * one of the two variants.
  *
  * @implNote
  * This implementation models the WA Web
- * {@code clientPostNewsletterStatusAndServerOrPostNewsletterStatusIDMixinGroup}
- * disjunction as a sealed interface with two final implementations;
- * callers pre-build the inner content as a {@link Node}.
+ * {@code clientPostNewsletterStatusAndServerOrPostNewsletterStatusIDMixinGroup} disjunction as a
+ * sealed interface with two final implementations.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishClientPostNewsletterStatusAndServerOrPostNewsletterStatusIDMixinGroup")
 public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits SmaxStatusPublishPostNewsletterStatusPayload.WithServerId, SmaxStatusPublishPostNewsletterStatusPayload.WithClientIdOnly {
 
     /**
-     * The addressing variant for a publish that references a
-     * previously published status by its server-id.
+     * The addressing variant for a publish that references a previously published status by its
+     * server-id.
      *
-     * @apiNote
-     * Pick this variant for status-reaction and
-     * status-reaction-revoke publishes.
+     * <p>Callers select this variant for status-reaction and status-reaction-revoke publishes.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishPostNewsletterStatusClientAndServerIDMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishStatusNewsletterReactionStatusNewsletterReactionOrStatusNewsletterReactionRevokeMixinGroup")
@@ -64,19 +54,10 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         /**
          * Constructs a server-id-addressed payload.
          *
-         * @apiNote
-         * Use this when assembling a
-         * {@link SmaxStatusPublishPostNewsletterStatusRequest} that
-         * targets a previously published status.
-         *
-         * @param stanzaId       the publish stanza id; never
-         *                       {@code null}
+         * @param stanzaId       the publish stanza id; never {@code null}
          * @param statusServerId the targeted status's server-id
-         * @param innerContent   the variant-shaped inner payload;
-         *                       never {@code null}
-         * @throws NullPointerException if {@code stanzaId} or
-         *                              {@code innerContent} is
-         *                              {@code null}
+         * @param innerContent   the variant-shaped inner payload; never {@code null}
+         * @throws NullPointerException if {@code stanzaId} or {@code innerContent} is {@code null}
          */
         public WithServerId(String stanzaId, long statusServerId, Node innerContent) {
             this.stanzaId = Objects.requireNonNull(stanzaId, "stanzaId cannot be null");
@@ -105,10 +86,8 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         /**
          * Returns the pre-built inner content node.
          *
-         * @apiNote
-         * Read by
-         * {@link SmaxStatusPublishPostNewsletterStatusRequest#toNode()}
-         * when fanning out the publish.
+         * <p>Read by {@link SmaxStatusPublishPostNewsletterStatusRequest#toNode()} when building
+         * the publish stanza.
          *
          * @return the node; never {@code null}
          */
@@ -120,8 +99,7 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
          * Compares this payload to another for value equality.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a
-         *         {@link WithServerId} with identical fields
+         * @return {@code true} when {@code obj} is a {@link WithServerId} with identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -150,9 +128,7 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         /**
          * Returns a debug-friendly representation of this payload.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of any contract.
          *
          * @return the string form
          */
@@ -167,12 +143,8 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
     /**
      * The addressing variant for a brand-new status post.
      *
-     * @apiNote
-     * Pick this variant for status posts that do not reference a
-     * prior status (i.e. send-new and revoke-existing flows the
-     * caller drives through
-     * {@code WAWebNewsletterSendStatusQueryJob} /
-     * {@code WAWebNewsletterRevokeStatusQueryJob}).
+     * <p>Callers select this variant for status posts that do not reference a prior status, namely
+     * the send-new and revoke-existing flows.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishPostNewsletterStatusClientIDMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishNewsletterClientIdContent")
@@ -190,17 +162,9 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         /**
          * Constructs a brand-new-post payload.
          *
-         * @apiNote
-         * Use this when assembling a
-         * {@link SmaxStatusPublishPostNewsletterStatusRequest} for a
-         * new status.
-         *
-         * @param stanzaId        the publish stanza id; never
-         *                        {@code null}
-         * @param clientIdContent the inner client-id content node;
-         *                        never {@code null}
-         * @throws NullPointerException if either argument is
-         *                              {@code null}
+         * @param stanzaId        the publish stanza id; never {@code null}
+         * @param clientIdContent the inner client-id content node; never {@code null}
+         * @throws NullPointerException if either argument is {@code null}
          */
         public WithClientIdOnly(String stanzaId, Node clientIdContent) {
             this.stanzaId = Objects.requireNonNull(stanzaId, "stanzaId cannot be null");
@@ -229,8 +193,7 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
          * Compares this payload to another for value equality.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a
-         *         {@link WithClientIdOnly} with identical fields
+         * @return {@code true} when {@code obj} is a {@link WithClientIdOnly} with identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -258,9 +221,7 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         /**
          * Returns a debug-friendly representation of this payload.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of any contract.
          *
          * @return the string form
          */

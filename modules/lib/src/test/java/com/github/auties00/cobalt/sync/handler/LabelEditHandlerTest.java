@@ -30,29 +30,17 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link LabelEditHandler} adapter for
- * {@code WAWebLabelSync}.
+ * Covers the {@link LabelEditHandler} for the {@code label_edit} app-state sync
+ * action: metadata, the insert / merge / delete branches, the
+ * {@link LabelEditAction.ListType#SERVER_ASSIGNED} short-circuit, the
+ * malformed-input fallbacks, timestamp-based conflict resolution and the
+ * {@link LabelEditMutationFactory} builder.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code label_edit} app-state
- * sync action across metadata, the insert / merge / delete
- * branches, the
- * {@link LabelEditAction.ListType#SERVER_ASSIGNED}
- * short-circuit, the malformed-input fallbacks, the inherited
- * timestamp-based conflict resolution and the
- * {@link LabelEditMutationFactory}
- * builder.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#findLabel(String)}
- * read-back can be asserted directly. The merge path mutates the
- * existing
- * {@link com.github.auties00.cobalt.model.preference.Label} in place
- * so chat-jid assignments from
- * {@link LabelAssociationHandler} are preserved across edits.
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the {@link WhatsAppStore#findLabel(String)}
+ * read-back can be asserted directly. The merge path mutates the existing
+ * {@link com.github.auties00.cobalt.model.preference.Label} in place so chat-jid
+ * assignments from {@link LabelAssociationHandler} are preserved across edits.
  */
 @DisplayName("LabelEditHandler")
 class LabelEditHandlerTest {
@@ -72,24 +60,6 @@ class LabelEditHandlerTest {
         factory = new LabelEditMutationFactory();
     }
 
-    /**
-     * Builds a {@link SyncdOperation#SET} {@link DecryptedMutation.Trusted}
-     * carrying the given label-edit action under the canonical
-     * {@code ["label_edit", labelId]} index.
-     *
-     * @apiNote
-     * Used by every SET-path test to keep mutation construction
-     * boilerplate out of the test bodies. The {@code action} parameter
-     * is nullable so the malformed-value path can be exercised
-     * without re-implementing the envelope.
-     *
-     * @param labelId the label identifier
-     * @param action  the action payload, may be {@code null} to omit it
-     * @param ts      the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} carrying the
-     *         optionally-present
-     *         {@link LabelEditAction}
-     */
     private DecryptedMutation.Trusted buildSet(String labelId, LabelEditAction action, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) valueBuilder.labelEditAction(action);

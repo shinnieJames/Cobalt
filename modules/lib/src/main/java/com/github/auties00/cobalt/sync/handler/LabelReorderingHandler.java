@@ -15,28 +15,18 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code label_reordering} app-state sync action that publishes a
  * new sort order for the user's chat labels.
  *
- * @apiNote
- * Drives the SMB/Business "drag to reorder labels" affordance: when the
- * primary device reorders the label list the resulting sorted id array
- * fans out across the {@link SyncPatchType#REGULAR} collection so
- * companion devices render the same order. The mutation index has no
- * variable parts and is always
+ * <p>The sorted id array fans out across the {@link SyncPatchType#REGULAR}
+ * collection so companion devices render the same order. The mutation index
+ * has no variable parts and is always
  * {@snippet :
  *     ["label_reordering"]
  * }
  *
  * @implNote
- * This implementation walks the
- * {@link LabelReorderingAction#sortedLabelIds()} list and writes each
- * label's zero-based position into
- * {@link Label#orderIndex()} via {@link Label#setOrderIndex(Integer)},
- * mirroring the {@code orderIndex: position} merge that WA Web's
- * {@code WAWebDBLabelsReorder.updateLabelsSortOrder} performs against
- * the IndexedDB rows. Labels referenced by the action but missing from
- * the local store are silently skipped, matching the {@code bulkGet}
- * non-null filter on the WA Web side. The
- * {@code WAWebWamLabelSyncTrackingReporter} telemetry and the
- * {@code frontendFireAndForget("reorderLabels")} RPC are not modelled.
+ * This implementation walks {@link LabelReorderingAction#sortedLabelIds()} and
+ * writes each label's zero-based position into {@link Label#orderIndex()} via
+ * {@link Label#setOrderIndex(Integer)}. Ids referenced by the action but
+ * missing from the local store are silently skipped.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelReorderingSync")
 public final class LabelReorderingHandler implements WebAppStateActionHandler {
@@ -79,17 +69,14 @@ public final class LabelReorderingHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation rejects an empty
-     * {@link LabelReorderingAction#sortedLabelIds()} list as
-     * {@link MutationApplicationResult#malformed()}, mirroring WA Web's
-     * {@code SKIP_EMPTY_LIST} reporter outcome. Each id is matched
-     * against the in-memory store via
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()}, an absent action payload
+     * and an empty {@link LabelReorderingAction#sortedLabelIds()} list as
+     * malformed. Each id is matched against the store via
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#findLabel(String)};
-     * absent ids are skipped, present rows have their
-     * {@link Label#orderIndex()} set to the loop position. Labels
-     * present in the store but absent from the action keep their
-     * existing {@link Label#orderIndex()}.
+     * present rows have their {@link Label#orderIndex()} set to the loop
+     * position while absent ids are skipped. Labels present in the store but
+     * absent from the action keep their existing {@link Label#orderIndex()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelReorderingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

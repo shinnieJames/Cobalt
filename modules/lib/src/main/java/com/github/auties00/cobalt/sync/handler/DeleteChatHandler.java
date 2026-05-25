@@ -20,12 +20,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code deleteChat} app-state sync action that removes a chat
  * across the user's linked devices.
  *
- * @apiNote
- * Drives the chat-list "Delete chat" affordance that the primary device fans
- * out to its companions through the {@link SyncPatchType#REGULAR_HIGH}
- * collection. The mutation index encodes the target chat and a
- * {@code deleteMedia} flag selecting whether attached media should be erased
- * alongside the messages, formatted as
+ * <p>This handler drives the chat-list "Delete chat" affordance that the
+ * primary device fans out to its companions through the
+ * {@link SyncPatchType#REGULAR_HIGH} collection. The mutation index encodes the
+ * target chat and a {@code deleteMedia} flag selecting whether attached media
+ * should be erased alongside the messages, formatted as
  * {@snippet :
  *     ["deleteChat", chatJid, deleteMedia]   // deleteMedia = "0" keeps media, "1" deletes
  * }

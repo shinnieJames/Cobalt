@@ -81,11 +81,9 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * The input stream supplying the wire bytes the server sends
      * during the handshake.
      *
-     * @apiNote
-     * The handshake runs while the stream is in pre-handshake
-     * passthrough mode (no decryption); once the keys are derived
-     * the caller installs them via
-     * {@link WhatsAppDatagramInputStream#setReadKey(SecretKey)}.
+     * <p>The handshake runs while the stream is in pre-handshake passthrough
+     * mode (no decryption); once the keys are derived the caller installs
+     * them via {@link WhatsAppDatagramInputStream#setReadKey(SecretKey)}.
      */
     private final WhatsAppDatagramInputStream inputStream;
 
@@ -93,11 +91,9 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * The output stream that frames each outbound handshake message
      * into one wire datagram.
      *
-     * @apiNote
-     * The first {@link #writeClientHandshake(HandshakeMessage)} call
-     * prepends {@link #prologue} so the prologue and the
-     * {@code ClientHello} ride inside the same WebSocket frame on
-     * the browser client.
+     * <p>The first {@link #writeClientHandshake(HandshakeMessage)} call
+     * prepends {@link #prologue} so the prologue and the {@code ClientHello}
+     * ride inside the same WebSocket frame on the browser client.
      */
     private final WhatsAppDatagramOutputStream outputStream;
 
@@ -147,7 +143,7 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
     private SecretKeySpec salt;
 
     /**
-     * The current symmetric AES key used as AAD-bearing payload
+     * The current symmetric AES key used as the AAD-bearing payload
      * cipher.
      */
     private SecretKeySpec cryptoKey;
@@ -162,12 +158,10 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * Initializes the handshake state, captures the I/O streams and
      * mixes the prologue into the running hash.
      *
-     * @apiNote
-     * Constructed once per WhatsApp socket connect, inside a
+     * <p>One instance is constructed per WhatsApp socket connect, inside a
      * try-with-resources block in
-     * {@link WhatsAppSocketClient#performNoiseHandshake()} so the AES
-     * key is destroyed promptly when the handshake completes or
-     * fails.
+     * {@link WhatsAppSocketClient#performNoiseHandshake()}, so the AES key is
+     * destroyed promptly when the handshake completes or fails.
      *
      * @implNote
      * This implementation merges WA Web's {@code constructor} and
@@ -209,13 +203,12 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * (one of {@code ClientHello} or {@code ClientFinish}) and emits
      * it as one wire datagram on the underlying output stream.
      *
-     * @apiNote
-     * The first call passes the Noise prologue to
-     * {@link WhatsAppDatagramOutputStream#beginDatagram(byte[], int)}
-     * so the prologue and the {@code ClientHello} ride inside the
-     * same WebSocket frame on the browser client; subsequent calls
-     * pass {@code null} as the prologue argument so only the
-     * {@code int24}-framed handshake bytes hit the wire.
+     * <p>The first call passes the Noise prologue to
+     * {@link WhatsAppDatagramOutputStream#beginDatagram(byte[], int)} so the
+     * prologue and the {@code ClientHello} ride inside the same WebSocket
+     * frame on the browser client; subsequent calls pass {@code null} as the
+     * prologue argument so only the {@code int24}-framed handshake bytes hit
+     * the wire.
      *
      * @param message the handshake message to send
      * @throws IOException if the underlying write fails
@@ -234,11 +227,10 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * Reads exactly one wire datagram from the underlying input
      * stream and decodes its payload as a {@link HandshakeMessage}.
      *
-     * @apiNote
-     * Used to drain the server's {@code ServerHello} between the
-     * client's {@code ClientHello} and {@code ClientFinish}; a
-     * second call would attempt to read a fourth handshake message
-     * that the protocol does not define.
+     * <p>This drains the server's {@code ServerHello} between the client's
+     * {@code ClientHello} and {@code ClientFinish}; a second call would
+     * attempt to read a fourth handshake message that the protocol does not
+     * define.
      *
      * @implNote
      * This implementation builds a bounded anonymous
@@ -301,11 +293,10 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * {@code SHA-256(hash || data)} and storing the digest as the
      * new hash.
      *
-     * @apiNote
-     * Each {@code authenticate} step in WA Web's NoiseHandshake
-     * corresponds to one call here; the running hash binds every
-     * handshake message (and the prologue) so the final AES keys
-     * cannot be replayed against a different handshake transcript.
+     * <p>Each {@code authenticate} step in WA Web's Noise handshake
+     * corresponds to one call here; the running hash binds every handshake
+     * message (and the prologue) so the final AES keys cannot be replayed
+     * against a different handshake transcript.
      *
      * @param data the bytes to mix into the running hash
      */
@@ -321,11 +312,10 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * the running hash as AES-GCM AAD and the monotonic nonce
      * counter.
      *
-     * @apiNote
-     * Encryption mixes the produced ciphertext into the running
-     * hash; decryption mixes the input ciphertext. The 64-bit nonce
-     * counter is appended big-endian to a 4-byte zero prefix to form
-     * the 12-byte GCM IV.
+     * <p>Encryption mixes the produced ciphertext into the running hash;
+     * decryption mixes the input ciphertext. The 64-bit nonce counter is
+     * appended big-endian to a 4-byte zero prefix to form the 12-byte GCM
+     * IV.
      *
      * @param text    plaintext when {@code encrypt} is {@code true},
      *                ciphertext when {@code false}
@@ -360,13 +350,12 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      * Derives the final 64 bytes of key material from the current
      * salt via HKDF with an empty IKM.
      *
-     * @apiNote
-     * The first 32 bytes are the write key and the remaining 32
-     * bytes are the read key. WA Web wraps the same material in a
-     * {@code NoiseSocket}; Cobalt returns the raw bytes so the
-     * caller can install them on the datagram streams directly via
-     * {@link WhatsAppDatagramOutputStream#setWriteKey(SecretKey)}
-     * and {@link WhatsAppDatagramInputStream#setReadKey(SecretKey)}.
+     * <p>The first 32 bytes are the write key and the remaining 32 bytes are
+     * the read key. WA Web wraps the same material in a {@code NoiseSocket};
+     * Cobalt returns the raw bytes so the caller can install them on the
+     * datagram streams directly via
+     * {@link WhatsAppDatagramOutputStream#setWriteKey(SecretKey)} and
+     * {@link WhatsAppDatagramInputStream#setReadKey(SecretKey)}.
      *
      * @return the concatenated write and read key material
      * @throws GeneralSecurityException if HKDF expansion fails
@@ -383,11 +372,9 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
     /**
      * Folds new key material into the handshake state.
      *
-     * @apiNote
-     * Called after each Diffie-Hellman shared secret is computed
-     * during the handshake; rotating the salt and cipher key after
-     * every DH operation is what gives Noise XX its forward-secrecy
-     * guarantees.
+     * <p>This is called after each Diffie-Hellman shared secret is computed
+     * during the handshake; rotating the salt and cipher key after every DH
+     * operation is what gives Noise XX its forward-secrecy guarantees.
      *
      * @implNote
      * This implementation runs HKDF-Extract-and-Expand under the

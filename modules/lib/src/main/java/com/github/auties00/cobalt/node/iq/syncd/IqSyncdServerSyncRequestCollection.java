@@ -8,18 +8,17 @@ import java.util.Optional;
  * A single {@code <collection/>} entry inside an outbound
  * {@link IqSyncdServerSyncRequest}.
  *
- * @apiNote
- * Construct one entry per collection name (e.g. {@code "regular"}, {@code "regular_low"},
- * {@code "regular_high"}, {@code "critical_block"}, {@code "critical_unblock_low"}) per
- * sync iteration. Pass {@code version = null} to request an initial snapshot; pass a
- * known {@code version} to fetch only the patches above it. Pass {@code patch} bytes
- * to upload encrypted local mutations as part of the same iteration; pass
- * {@code null} when the entry only fetches remote state.
+ * <p>One entry is constructed per collection name (for example {@code "regular"},
+ * {@code "regular_low"}, {@code "regular_high"}, {@code "critical_block"} or
+ * {@code "critical_unblock_low"}) per sync iteration. A {@code null} version
+ * requests an initial snapshot; a known version fetches only the patches above
+ * it. Supplying {@code patch} bytes uploads encrypted local mutations as part of
+ * the same iteration, while a {@code null} patch fetches only remote state.
  */
 public final class IqSyncdServerSyncRequestCollection {
     /**
-     * Holds the collection name (one of the values in WA Web's
-     * {@code WASyncdConst.CollectionName}).
+     * Holds the collection name, one of the values in WA Web's
+     * {@code WASyncdConst.CollectionName}.
      */
     private final String name;
 
@@ -31,20 +30,18 @@ public final class IqSyncdServerSyncRequestCollection {
 
     /**
      * Holds the encoded {@code SyncdPatch} protobuf carrying encrypted local
-     * mutations to push, or {@code null} when this entry only fetches remote state.
+     * mutations to push, or {@code null} when this entry only fetches remote
+     * state.
      */
     private final byte[] patch;
 
     /**
      * Constructs a new outbound collection entry.
      *
-     * @apiNote
-     * The {@code patch} parameter is the already-encrypted-and-encoded protobuf
-     * bytes produced by WA Web's
-     * {@code WAWebSyncdRequestBuilderBuild._buildCollectionNodes} pipeline (LtHash
-     * computation, per-mutation encryption, snapshot/patch-MAC computation, and
-     * SyncdPatch encoding); pass {@code null} when the caller has no local
-     * mutations to ship.
+     * <p>The {@code patch} parameter is the already-encrypted-and-encoded protobuf
+     * produced by the syncd request-build pipeline (LtHash computation, per-mutation
+     * encryption, snapshot or patch MAC computation, and {@code SyncdPatch}
+     * encoding); it is {@code null} when the caller has no local mutations to ship.
      *
      * @param name    the collection name; never {@code null}
      * @param version the locally-known version, or {@code null} when the caller
@@ -87,6 +84,15 @@ public final class IqSyncdServerSyncRequestCollection {
         return Optional.ofNullable(patch);
     }
 
+    /**
+     * Compares this entry to another for equality across name, version and patch
+     * bytes.
+     *
+     * @param obj the object to compare against, or {@code null}
+     * @return {@code true} when {@code obj} is an
+     *         {@link IqSyncdServerSyncRequestCollection} with equal name, version
+     *         and patch content
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -101,11 +107,24 @@ public final class IqSyncdServerSyncRequestCollection {
                 && Arrays.equals(this.patch, that.patch);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)} over name,
+     * version and patch bytes.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(name, version, Arrays.hashCode(patch));
     }
 
+    /**
+     * Returns a debugging representation that elides the patch bytes to their
+     * length.
+     *
+     * @return a string of the form
+     *         {@code IqSyncdServerSyncRequestCollection[name=..., version=..., patch=byte[N]]}
+     */
     @Override
     public String toString() {
         return "IqSyncdServerSyncRequestCollection[name=" + name

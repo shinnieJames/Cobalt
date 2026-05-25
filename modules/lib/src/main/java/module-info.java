@@ -1,9 +1,39 @@
+/**
+ * Defines the Cobalt library, a Java reimplementation of the WhatsApp Web, Desktop, and Mobile clients.
+ *
+ * <p>This module is the primary entry point for applications that want to connect to WhatsApp, exchange
+ * messages, place and receive calls, and manage session state without depending on the official clients.
+ * It bundles the connection, protocol, persistence, and media capabilities behind a small public surface
+ * and keeps the wire-level and cryptographic internals encapsulated.
+ *
+ * <p>The exported capability surface is organised as follows:
+ * <ul>
+ *   <li>Connection and control through {@link com.github.auties00.cobalt.client.WhatsAppClient}, the
+ *       single facade for pairing, connecting, sending and receiving traffic, and driving every other
+ *       feature.</li>
+ *   <li>Event delivery through {@link com.github.auties00.cobalt.client.WhatsAppClientListener}, the
+ *       callback interface for incoming messages, presence, calls, and other asynchronous notifications.</li>
+ *   <li>Session and entity persistence through {@link com.github.auties00.cobalt.store.WhatsAppStore},
+ *       which holds chats, contacts, messages, and the Signal protocol material for a session.</li>
+ *   <li>The {@code call} packages, which expose voice and video calling together with audio and video
+ *       frame sources, sinks, and filters.</li>
+ *   <li>The {@code node} packages, which expose the stanza model used to build and read IQ, MEX, SMAX,
+ *       and USync protocol nodes.</li>
+ *   <li>The {@code exception} package, which exposes the configurable error hierarchy raised across the
+ *       library.</li>
+ *   <li>The {@code wam.event} and {@code wam.type} packages, which expose the metrics event
+ *       specifications and types so applications can emit their own WAM events.</li>
+ * </ul>
+ *
+ * <p>The data model and the WAM internals live in separate modules; the cryptography, serialization,
+ * media, and transport dependencies this library relies on are not re-exported.
+ */
 module com.github.auties00.cobalt {
     // Source provenance annotations
     requires static com.github.auties00.cobalt.meta;
 
     // Vector API
-    requires jdk.incubator.vector;
+    requires static jdk.incubator.vector;
 
     // Http client
     requires java.net.http;
@@ -32,9 +62,6 @@ module com.github.auties00.cobalt {
     // Logging
     requires java.logging;
 
-    // LMDB key-value store
-    requires static lmdbjava; // Not necessary if the user doesn't want a persistent store
-
     // PDF rendering (document thumbnails in the upload transcoder)
     requires org.apache.pdfbox;
 
@@ -62,14 +89,15 @@ module com.github.auties00.cobalt {
     exports com.github.auties00.cobalt.call.filter;
     exports com.github.auties00.cobalt.call.session;
 
-    // Client
+    // Client API
     exports com.github.auties00.cobalt.client;
 
     // Exceptions
     exports com.github.auties00.cobalt.exception;
 
     // Node/Stanza
-    // Exported so the user can
+    // Exported so the user can make his own queries
+    // TODO: Should we expose IQ/MEX/SMAX implementations queries as well?
     exports com.github.auties00.cobalt.node;
     exports com.github.auties00.cobalt.node.iq;
     exports com.github.auties00.cobalt.node.mex;
@@ -85,5 +113,4 @@ module com.github.auties00.cobalt {
     // Don't export the WAM internals
     exports com.github.auties00.cobalt.wam.event;
     exports com.github.auties00.cobalt.wam.type;
-
 }

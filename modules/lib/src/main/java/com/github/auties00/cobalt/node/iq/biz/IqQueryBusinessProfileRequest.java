@@ -12,36 +12,43 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The typed outbound {@code <iq xmlns="w:biz" type="get">} stanza that fetches one or more typed business profiles.
+ * Models the typed outbound {@code <iq xmlns="w:biz" type="get">} stanza that fetches one or more typed business profiles.
  *
- * @apiNote
- * Use this request to populate the business-profile collection from a list of merchant JIDs; chat openers, post-search profile sheets and the merchant directory all consume the matching response to render the merchant's banner, description, categories, contact details and hours. Each entry materialises one {@code <profile jid tag/>} child, and the optional version tag lets the relay short-circuit when the cached profile matches the supplied tag so the relay can return a header-only acknowledgement instead of the full body.
+ * <p>Chat openers, post-search profile sheets and the merchant directory populate the
+ * business-profile collection from a list of merchant JIDs and consume the matching response to
+ * render the merchant's banner, description, categories, contact details and hours. Each entry
+ * materialises one {@code <profile jid tag/>} child; the optional version tag lets the relay
+ * short-circuit when the cached profile matches the supplied tag, returning a header-only
+ * acknowledgement instead of the full body.
  *
  * @implNote
- * This implementation matches {@code WAWebQueryBusinessProfileJob}, which is invoked by {@code WAWebQueryBusinessProfile.queryBusinessProfile} with a version derived from {@code WAWebBusinessProfileVersioningBridge.getBusinessProfileQueryVersion}; Cobalt routes the version verbatim into the {@code v} attribute of the {@code <business_profile/>} envelope.
+ * This implementation matches {@code WAWebQueryBusinessProfileJob}, invoked by
+ * {@code WAWebQueryBusinessProfile.queryBusinessProfile} with a version derived from
+ * {@code WAWebBusinessProfileVersioningBridge.getBusinessProfileQueryVersion}; the version is
+ * routed verbatim into the {@code v} attribute of the {@code <business_profile/>} envelope.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryBusinessProfileJob")
 public final class IqQueryBusinessProfileRequest implements IqOperation.Request {
     /**
-     * The list of {@code (businessJid, tag)} entries fanned out as {@code <profile jid tag/>} children of the {@code <business_profile/>} envelope.
+     * Holds the {@code (businessJid, tag)} entries fanned out as {@code <profile jid tag/>} children of the {@code <business_profile/>} envelope.
      */
     private final List<IqQueryBusinessProfileRequestEntry> entries;
 
     /**
-     * The protocol version routed verbatim into the {@code v} attribute of the {@code <business_profile/>} envelope.
+     * Holds the protocol version routed verbatim into the {@code v} attribute of the {@code <business_profile/>} envelope.
      */
     private final int version;
 
     /**
-     * Constructs a typed request.
+     * Constructs a typed request over the given entries and protocol version.
      *
-     * @apiNote
-     * Call this constructor with the list of merchants to query and the protocol version derived from {@code WAWebBusinessProfileVersioningBridge.getBusinessProfileQueryVersion}; the list must contain at least one entry because the relay rejects an empty fan-out.
+     * <p>The version is derived from {@code WAWebBusinessProfileVersioningBridge.getBusinessProfileQueryVersion}.
+     * The list must contain at least one entry because the relay rejects an empty fan-out.
      *
      * @param entries the list of entries; never {@code null} and must be non-empty
-     * @param version the protocol version; routed verbatim into the {@code v} attribute
+     * @param version the protocol version, routed verbatim into the {@code v} attribute
      * @throws NullPointerException     if {@code entries} is {@code null}
-     * @throws IllegalArgumentException when {@code entries} is empty
+     * @throws IllegalArgumentException if {@code entries} is empty
      */
     public IqQueryBusinessProfileRequest(List<IqQueryBusinessProfileRequestEntry> entries, int version) {
         Objects.requireNonNull(entries, "entries cannot be null");
@@ -55,8 +62,7 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
     /**
      * Returns the requested entries.
      *
-     * @apiNote
-     * Use this getter to read back the merchant entries that the fan-out will name; the list preserves the caller-supplied order.
+     * <p>The list preserves the caller-supplied order, which the fan-out mirrors on the wire.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -65,10 +71,10 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
     }
 
     /**
-     * Returns the protocol version.
+     * Returns the protocol version stamped into the {@code v} attribute.
      *
-     * @apiNote
-     * Use this getter to read back the protocol version that the stanza will stamp into the {@code v} attribute; the value is taken verbatim from the caller and must match what the relay expects for the current snapshot.
+     * <p>The value is taken verbatim from the caller and must match what the relay expects for the
+     * current snapshot.
      *
      * @return the protocol version
      */
@@ -80,7 +86,11 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by the {@code WAWebQueryBusinessProfileJob} default export: one {@code <profile jid/>} child per queried entry, with the {@code tag} attribute stamped when the entry carries one, wrapped in a {@code <business_profile v/>} envelope routed to the WhatsApp service.
+     * This implementation materialises the WAP envelope produced by the
+     * {@code WAWebQueryBusinessProfileJob} default export: one {@code <profile jid/>} child per
+     * queried entry, with the {@code tag} attribute stamped when the entry carries one, wrapped in
+     * a {@code <business_profile v/>} envelope routed to the WhatsApp service via
+     * {@link JidServer#user()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryBusinessProfileJob",
@@ -109,9 +119,6 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
                 .content(businessProfileNode);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -125,17 +132,11 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
                 && Objects.equals(this.entries, that.entries);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int hashCode() {
         return Objects.hash(entries, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String toString() {
         return "IqQueryBusinessProfileRequest[entries=" + entries

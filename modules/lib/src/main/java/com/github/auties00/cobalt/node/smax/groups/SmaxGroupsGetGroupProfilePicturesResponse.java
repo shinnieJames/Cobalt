@@ -17,35 +17,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to a
- * {@link SmaxGroupsGetGroupProfilePicturesRequest}.
+ * Models the inbound reply to a {@link SmaxGroupsGetGroupProfilePicturesRequest} as a sealed variant family.
  *
- * @apiNote
- * Pattern-match the result returned by {@link #of(Node, Node)} to drive the group-pictures fetch surface
- * equivalent to WA Web's {@code WAWebGroupGetProfilePicsJob} switch: {@link Success} carries the
- * per-requested-group picture rows; the two error variants surface caller-side and relay-side failures.
+ * <p>{@link Success} carries the per-requested-group picture rows; {@link ClientError} and {@link ServerError}
+ * surface caller-side and relay-side failures. Callers pattern-match the variant returned by
+ * {@link #of(Node, Node)}.
  */
 public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOperation.Response
         permits SmaxGroupsGetGroupProfilePicturesResponse.Success, SmaxGroupsGetGroupProfilePicturesResponse.ClientError, SmaxGroupsGetGroupProfilePicturesResponse.ServerError {
 
     /**
-     * Parses the inbound IQ stanza into the first matching
-     * {@link SmaxGroupsGetGroupProfilePicturesResponse} variant.
+     * Parses the inbound IQ stanza into the first matching variant.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WASmaxGroupsGetGroupProfilePicturesRPC.sendGetGroupProfilePicturesRPC}
-     * fall-through cascade: {@link Success}, {@link ClientError}, {@link ServerError}. An empty
-     * {@link Optional} signals a stanza shape outside the documented union.
+     * <p>The probes run in priority order: {@link Success}, {@link ClientError}, then {@link ServerError}. An
+     * empty {@link Optional} signals a stanza shape outside the documented union.
      *
      * @implNote
-     * This implementation runs the variant probes in the same priority order as WA Web; it does not throw a
-     * parsing-failure exception, leaving the recovery decision to the caller.
+     * This implementation does not throw a parsing-failure exception, leaving the recovery decision to the
+     * caller.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
-     * @param request the original outbound {@link SmaxGroupsGetGroupProfilePicturesRequest} stanza; used to
+     * @param request the original outbound {@link SmaxGroupsGetGroupProfilePicturesRequest} stanza, used to
      *                validate the echoed {@code id} attribute; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
-     *         documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented
+     *         variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsGetGroupProfilePicturesRPC",
@@ -65,11 +60,10 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * The success variant returned when the relay echoed the {@code <pictures/>} wrapper carrying one
-     * {@link Picture} per requested group.
+     * Reports that the relay echoed the {@code <pictures/>} wrapper carrying one {@link Picture} per requested
+     * group.
      *
-     * @apiNote
-     * Iterate {@link #pictures()} in lock-step with the request's
+     * <p>Callers iterate {@link #pictures()} in lock-step with the request's
      * {@link SmaxGroupsGetGroupProfilePicturesRequest#pictures()} to surface per-group results; each entry
      * carries either a URL projection, an inline blob, or a partial-branch marker.
      */
@@ -79,15 +73,15 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsParentOrSubGroupMixinGroup")
     final class Success implements SmaxGroupsGetGroupProfilePicturesResponse {
         /**
-         * The per-group picture replies, one per requested group.
+         * Holds the per-group picture replies, one per requested group.
          */
         private final List<Picture> pictures;
 
         /**
          * Constructs a success variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * <p>Production instances are typically produced by {@link #of(Node, Node)}; direct construction seeds
+         * test fixtures.
          *
          * @param pictures the per-picture replies; never {@code null}
          * @throws NullPointerException if {@code pictures} is {@code null}
@@ -109,15 +103,14 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Parses the inbound stanza into a {@link Success} variant.
          *
-         * @apiNote
-         * Invoked as the first probe in the variant cascade by
+         * <p>Runs as the first probe in the variant cascade of
          * {@link SmaxGroupsGetGroupProfilePicturesResponse#of(Node, Node)}.
          *
          * @implNote
-         * This implementation validates the IQ envelope via {@link SmaxIqResultResponseMixin#validate(Node, Node)},
-         * extracts the {@code <pictures/>} wrapper, then iterates its {@code <picture/>} children and parses
-         * each one via {@link Picture#of(Node)}. Any failed child parse short-circuits and the whole variant
-         * is rejected.
+         * This implementation validates the IQ envelope via
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, extracts the {@code <pictures/>} wrapper, then
+         * iterates its {@code <picture/>} children and parses each one via {@link Picture#of(Node)}. Any failed
+         * child parse short-circuits and the whole variant is rejected.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -150,6 +143,12 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return Optional.of(new Success(pictures));
         }
 
+        /**
+         * Compares this variant to {@code obj} for value equality across the picture replies.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical picture replies
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -162,11 +161,21 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return Objects.equals(this.pictures, that.pictures);
         }
 
+        /**
+         * Returns a hash composed of the picture replies.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(pictures);
         }
 
+        /**
+         * Returns a debug string carrying the picture replies.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetGroupProfilePicturesResponse.Success[pictures=" + pictures + ']';
@@ -174,20 +183,18 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * Per-group picture projection inside a {@link Success}.
+     * Carries a per-group picture projection inside a {@link Success}.
      *
-     * @apiNote
-     * The relay's per-picture response is a disjunction of two sub-shapes: a success projection (carrying
+     * <p>The relay's per-picture response is a disjunction of two sub-shapes: a success projection (carrying
      * either a URL plus {@code direct_path} or inline blob bytes) and a partial projection (carrying a
-     * {@code did_not_change} / {@code not_found} / error marker). This record unifies both branches;
-     * {@link #url()}, {@link #directPath()}, and {@link #blob()} are populated only on the success branch,
-     * and the verbatim {@code <picture/>} child is exposed via {@link #raw()} so callers can inspect any
+     * {@code did_not_change} / {@code not_found} / error marker). This class unifies both branches;
+     * {@link #url()}, {@link #directPath()}, and {@link #blob()} are populated only on the success branch, and
+     * the verbatim {@code <picture/>} child is exposed via {@link #raw()} so callers can inspect any
      * partial-branch marker.
      *
      * @implNote
-     * This implementation collapses the two WA Web mixin modules ({@code SuccessProfilePictureResponseMixin}
-     * and {@code PartialProfilePictureResponseMixin}) into one Java class because the two branches are
-     * distinguishable by inspecting the absence or presence of the URL / blob payload, removing the need
+     * This implementation collapses the two WA Web mixin modules into one Java class because the two branches
+     * are distinguishable by inspecting the absence or presence of the URL or blob payload, removing the need
      * for a sealed-interface oneof at this leaf level.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesSuccessProfilePictureResponseMixin")
@@ -196,45 +203,45 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsProfilePictureBlobResponseMixin")
     final class Picture {
         /**
-         * The parent-group {@link Jid} when this entry targets a parent group; mutually exclusive with
+         * Holds the parent-group {@link Jid} when this entry targets a parent group; mutually exclusive with
          * {@link #subGroupJid}.
          */
         private final Jid parentGroupJid;
 
         /**
-         * The sub-group {@link Jid} when this entry targets a sub-group; mutually exclusive with
+         * Holds the sub-group {@link Jid} when this entry targets a sub-group; mutually exclusive with
          * {@link #parentGroupJid}.
          */
         private final Jid subGroupJid;
 
         /**
-         * The picture id echoed by the relay; {@code null} when omitted.
+         * Holds the picture id echoed by the relay; {@code null} when omitted.
          */
         private final String pictureId;
 
         /**
-         * The picture type ({@code "image"} or {@code "preview"}) echoed by the relay; {@code null} when
+         * Holds the picture type ({@code "image"} or {@code "preview"}) echoed by the relay; {@code null} when
          * omitted.
          */
         private final String pictureType;
 
         /**
-         * The picture URL; populated only on the URL-projection success branch.
+         * Holds the picture URL; populated only on the URL-projection success branch.
          */
         private final String url;
 
         /**
-         * The {@code direct_path} attribute; populated only on the URL-projection success branch.
+         * Holds the {@code direct_path} attribute; populated only on the URL-projection success branch.
          */
         private final String directPath;
 
         /**
-         * The inline blob bytes; populated only on the blob-projection success branch.
+         * Holds the inline blob bytes; populated only on the blob-projection success branch.
          */
         private final byte[] blob;
 
         /**
-         * The raw {@code <picture/>} node carrying any partial-branch marker
+         * Holds the raw {@code <picture/>} node carrying any partial-branch marker
          * ({@code did_not_change} / {@code not_found} / {@code bad_*}).
          */
         private final Node raw;
@@ -242,8 +249,8 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Constructs a picture entry.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node)}; direct construction is used to seed test fixtures.
+         * <p>Production instances are typically produced by {@link #of(Node)}; direct construction seeds test
+         * fixtures.
          *
          * @param parentGroupJid optional parent-group {@link Jid}
          * @param subGroupJid    optional sub-group {@link Jid}
@@ -337,9 +344,8 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
          * Returns the raw {@code <picture/>} node carrying any partial-branch sub-marker
          * ({@code did_not_change} / {@code not_found} / {@code bad_*}).
          *
-         * @apiNote
-         * Inspect this node when {@link #url()}, {@link #directPath()}, and {@link #blob()} are all empty
-         * to disambiguate the partial-branch reason.
+         * <p>Callers inspect this node when {@link #url()}, {@link #directPath()}, and {@link #blob()} are all
+         * empty to disambiguate the partial-branch reason.
          *
          * @return the raw {@link Node}; never {@code null}
          */
@@ -350,8 +356,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Parses a {@link Picture} from the given {@code <picture/>} child.
          *
-         * @apiNote
-         * Called by {@link Success#of(Node, Node)} for each {@code <picture/>} child inside the
+         * <p>Called by {@link Success#of(Node, Node)} for each {@code <picture/>} child inside the
          * {@code <pictures/>} wrapper.
          *
          * @implNote
@@ -384,6 +389,12 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return Optional.of(picture);
         }
 
+        /**
+         * Compares this entry to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Picture} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -403,12 +414,22 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
                     && Objects.equals(this.raw, that.raw);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(parentGroupJid, subGroupJid, pictureId, pictureType,
                     url, directPath, Arrays.hashCode(blob), raw);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetGroupProfilePicturesResponse.Picture[parentGroupJid="
@@ -421,21 +442,20 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * The client-error variant returned when the relay rejected the request as malformed or unauthorised.
+     * Reports that the relay rejected the request as malformed or unauthorised.
      *
-     * @apiNote
-     * Forwarded by WA Web's {@code WAWebGroupGetProfilePicsJob} as a {@code ServerStatusCodeError}.
+     * <p>Carries the numeric {@link #errorCode()} and optional {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseClientError")
     final class ClientError implements SmaxGroupsGetGroupProfilePicturesResponse {
         /**
-         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * Holds the numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
          * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * Holds the human-readable error text echoed by the relay; {@code null} when the relay omitted the
          * {@code <error text="...">} attribute.
          */
         private final String errorText;
@@ -443,8 +463,8 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Constructs a client-error variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * <p>Production instances are typically produced by {@link #of(Node, Node)}; direct construction seeds
+         * test fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -475,8 +495,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Parses the inbound stanza into a {@link ClientError} envelope.
          *
-         * @apiNote
-         * Invoked as the second probe in the variant cascade by
+         * <p>Runs as the second probe in the variant cascade of
          * {@link SmaxGroupsGetGroupProfilePicturesResponse#of(Node, Node)}.
          *
          * @implNote
@@ -500,6 +519,12 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -512,11 +537,21 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetGroupProfilePicturesResponse.ClientError[errorCode="
@@ -525,22 +560,20 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * The server-error variant returned when the relay encountered a transient internal failure.
+     * Reports that the relay encountered a transient internal failure.
      *
-     * @apiNote
-     * Forwarded by WA Web's {@code WAWebGroupGetProfilePicsJob} as a {@code ServerStatusCodeError}; callers
-     * can decide whether to retry based on the surfaced {@link #errorCode()}.
+     * <p>Callers decide whether to retry based on the surfaced {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseServerError")
     final class ServerError implements SmaxGroupsGetGroupProfilePicturesResponse {
         /**
-         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * Holds the numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
          * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * Holds the human-readable error text echoed by the relay; {@code null} when the relay omitted the
          * {@code <error text="...">} attribute.
          */
         private final String errorText;
@@ -548,8 +581,8 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Constructs a server-error variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * <p>Production instances are typically produced by {@link #of(Node, Node)}; direct construction seeds
+         * test fixtures.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -580,8 +613,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Parses the inbound stanza into a {@link ServerError} envelope.
          *
-         * @apiNote
-         * Invoked as the terminal probe in the variant cascade by
+         * <p>Runs as the terminal probe in the variant cascade of
          * {@link SmaxGroupsGetGroupProfilePicturesResponse#of(Node, Node)}.
          *
          * @implNote
@@ -605,6 +637,12 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -617,11 +655,21 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetGroupProfilePicturesResponse.ServerError[errorCode="

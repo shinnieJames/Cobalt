@@ -20,24 +20,15 @@ import java.util.OptionalInt;
  * The sealed family of inbound reply variants produced by the relay
  * in response to a {@link SmaxGetSMBMeteredMessagingCheckoutRequest}.
  *
- * @apiNote
- * Surfaced by the SMB metered-messaging checkout flow whose JS
- * caller
- * {@code WAWebGetSMBMeteredMessagingCheckoutJob.getSMBMeteredMessagingCheckout}
- * fetches the cost projection, integrity-eligibility marker,
- * account-balance triple and optional quota state before a small
- * business confirms a paid-conversation purchase; the three variants
- * split the wire outcome into {@link Success} (full checkout
- * projection), {@link ClientError} (relay rejected the lookup with a
- * documented {@code 4xx} envelope; the JS caller throws a
- * {@code ServerStatusCodeError}) and {@link ServerError} (transient
- * {@code 5xx} relay failure).
+ * <p>The checkout flow fetches the cost projection, integrity-eligibility marker, account-balance
+ * triple and optional quota state before a small business confirms a paid-conversation purchase.
+ * The three variants split the wire outcome into {@link Success} (full checkout projection),
+ * {@link ClientError} (relay rejected the lookup with a documented {@code 4xx} envelope) and
+ * {@link ServerError} (transient {@code 5xx} relay failure).
  *
  * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRPC.sendGetSMBMeteredMessagingCheckoutRPC}
- * by trying each variant in priority order via {@link #of} and
- * returning the first successful parse.
+ * This implementation tries each variant in priority order via {@link #of(Node, Node)} and returns
+ * the first successful parse.
  */
 public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxOperation.Response
         permits SmaxGetSMBMeteredMessagingCheckoutResponse.Success, SmaxGetSMBMeteredMessagingCheckoutResponse.ClientError, SmaxGetSMBMeteredMessagingCheckoutResponse.ServerError {
@@ -47,12 +38,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
      * variant in priority order and returns the first that parses
      * cleanly.
      *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxGetSMBMeteredMessagingCheckoutRequest}; the
-     * priority order matches WA Web's {@code parsing} dispatch
-     * table so that a malformed {@code Success} stanza falls
-     * through to {@link ClientError} rather than masking an error.
+     * <p>Invoked by the smax reply pump after dispatching a
+     * {@link SmaxGetSMBMeteredMessagingCheckoutRequest}. The priority order ensures a malformed
+     * {@link Success} stanza falls through to {@link ClientError} rather than masking an error.
      *
      * @implNote
      * This implementation invokes {@link Success#of(Node, Node)}
@@ -91,17 +79,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
      * The {@code Success} reply variant carrying the full SMB
      * metered-messaging checkout projection.
      *
-     * @apiNote
-     * Projected by
-     * {@link SmaxGetSMBMeteredMessagingCheckoutResponse#of(Node, Node)}
-     * when the relay returns the documented
-     * {@code <cost>/<integrity>/<account_balance>/<quota>} tree;
-     * WA Web's {@code getSMBMeteredMessagingCheckout} flattens the
-     * fields into the {@code accountBalanceAvailable},
-     * {@code costBase}, {@code costBeforeTax}, {@code costCurrency},
-     * {@code costOffset}, {@code costTax}, {@code discounts},
-     * {@code quotaRemaining}, {@code totalAvailableCredits} shape
-     * consumed by the checkout UI.
+     * <p>Projected by {@link SmaxGetSMBMeteredMessagingCheckoutResponse#of(Node, Node)} when the
+     * relay returns the documented {@code <cost>}, {@code <integrity>}, {@code <account_balance>}
+     * and {@code <quota>} tree consumed by the checkout UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
     final class Success implements SmaxGetSMBMeteredMessagingCheckoutResponse {
@@ -132,9 +112,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Constructs a new successful reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after all four child
-         * projections have been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after all four child projections have been
+         * validated.
          *
          * @param cost                the cost projection; never
          *                            {@code null}
@@ -170,10 +149,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Returns the integrity-eligibility marker.
          *
-         * @apiNote
-         * Reflects whether the business satisfies the integrity
-         * checks WA Web requires before allowing a paid-conversation
-         * purchase.
+         * <p>Reflects whether the business satisfies the integrity checks required before allowing
+         * a paid-conversation purchase.
          *
          * @return the marker; never {@code null}
          */
@@ -310,16 +287,10 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
          * The {@code <cost/>} child projection carrying the full
          * cost breakdown for the metered-messaging checkout.
          *
-         * @apiNote
-         * Aggregates the mandatory pre-tax cost, tax amount,
-         * currency offset and currency identifier with the optional
-         * pre-discount {@code base}, {@code base_formatted},
-         * {@code discount_percent}, {@code before_discount},
-         * {@code before_discount_formatted} fields and the optional
-         * list of applied discounts; WA Web's
-         * {@code getSMBMeteredMessagingCheckout} unwraps the
-         * structure field-by-field into the projected
-         * {@code costBeforeTax}/{@code costTax}/etc. record.
+         * <p>Aggregates the mandatory pre-tax cost, tax amount, currency offset and currency
+         * identifier with the optional pre-discount {@code base}, {@code base_formatted},
+         * {@code discount_percent}, {@code before_discount}, {@code before_discount_formatted}
+         * fields and the optional list of applied discounts.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
         public static final class Cost {
@@ -393,10 +364,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Constructs a new cost projection.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after every mandatory
-             * attribute has been read and the optional pre-discount
-             * and discount-list fields have been resolved.
+             * <p>Invoked by {@link #of(Node)} after every mandatory attribute has been read and the
+             * optional pre-discount and discount-list fields have been resolved.
              *
              * @param beforeTax               the pre-tax cost in
              *                                currency-minor units
@@ -466,10 +435,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Returns the currency offset.
              *
-             * @apiNote
-             * Apply by shifting the minor-unit integers
-             * {@link #beforeTax()} and {@link #tax()} right by this
-             * many decimal places when rendering to the UI.
+             * <p>Apply by shifting the minor-unit integers {@link #beforeTax()} and {@link #tax()}
+             * right by this many decimal places when rendering to the UI.
              *
              * @return the offset (number of decimal places)
              */
@@ -549,12 +516,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
 
             /**
              * Tries to parse the cost projection from the given
-             * {@code <cost/>} node.
-             *
-             * @apiNote
-             * Used internally by {@link Success#of(Node, Node)} to
-             * decode the {@code <cost>} child of the
-             * checkout-response stanza.
+             * {@code <cost/>} node, decoding the {@code <cost>} child of the checkout-response
+             * stanza for {@link Success#of(Node, Node)}.
              *
              * @implNote
              * This implementation reads the four mandatory
@@ -688,11 +651,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
              * A single applied discount entry under the
              * {@code <discounts><discount/></discounts>} subtree.
              *
-             * @apiNote
-             * Projects the {@code (type, percentage, amount,
-             * amountFormatted)} record WA Web's
-             * {@code getSMBMeteredMessagingCheckout} maps into the
-             * {@code discounts[]} array passed to the checkout UI.
+             * <p>Projects the {@code (type, percentage, amount, amountFormatted)} record passed to
+             * the checkout UI as one entry of its discounts array.
              */
             @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
             public static final class Discount {
@@ -725,10 +685,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                 /**
                  * Constructs a new discount entry.
                  *
-                 * @apiNote
-                 * Invoked by {@link #of(Node)} after every
-                 * mandatory attribute has been read and the
-                 * optional {@code percentage} has been resolved.
+                 * <p>Invoked by {@link #of(Node)} after every mandatory attribute has been read and
+                 * the optional {@code percentage} has been resolved.
                  *
                  * @param type            the discount type; never
                  *                        {@code null}
@@ -791,12 +749,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
 
                 /**
                  * Tries to parse a discount entry from the given
-                 * {@code <discount/>} node.
-                 *
-                 * @apiNote
-                 * Used internally by {@link Cost#of(Node)} to
-                 * decode each child of the {@code <discounts>}
-                 * grandchild.
+                 * {@code <discount/>} node, decoding each child of the {@code <discounts>}
+                 * grandchild for {@link Cost#of(Node)}.
                  *
                  * @implNote
                  * This implementation requires the {@code type}
@@ -881,15 +835,11 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
 
         /**
          * The {@code <account_balance/>} child projection carrying
-         * the billing / available / offset triple for the calling
+         * the billing, available and offset triple for the calling
          * business's metered-messaging wallet.
          *
-         * @apiNote
-         * WA Web's {@code getSMBMeteredMessagingCheckout} forwards
-         * the {@code accountBalanceAvailable} field to the checkout
-         * UI to show "available balance" alongside the cost
-         * breakdown; the {@code billing} and {@code offset} fields
-         * support consistent minor-unit rendering.
+         * <p>The available balance drives the "available balance" disclosure shown alongside the
+         * cost breakdown; the billing and offset fields support consistent minor-unit rendering.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
         public static final class AccountBalance {
@@ -913,9 +863,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Constructs a new balance projection.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after every mandatory
-             * attribute has been read.
+             * <p>Invoked by {@link #of(Node)} after every mandatory attribute has been read.
              *
              * @param billing   the billed-to-date balance in
              *                  currency-minor units
@@ -959,12 +907,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
 
             /**
              * Tries to parse the balance projection from the given
-             * {@code <account_balance/>} node.
-             *
-             * @apiNote
-             * Used internally by {@link Success#of(Node, Node)} to
-             * decode the {@code <account_balance>} child of the
-             * checkout-response stanza.
+             * {@code <account_balance/>} node, decoding the {@code <account_balance>} child of the
+             * checkout-response stanza for {@link Success#of(Node, Node)}.
              *
              * @implNote
              * This implementation requires the three mandatory
@@ -1037,13 +981,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
          * The optional {@code <quota/>} child projection carrying
          * the calling business's free-message quota state.
          *
-         * @apiNote
-         * Projects the {@code (remaining, totalMonthly,
-         * singleCredits, totalAvailableCredits)} quadruple WA Web's
-         * {@code getSMBMeteredMessagingCheckout} forwards as
-         * {@code quotaRemaining} and {@code totalAvailableCredits}
-         * to the checkout UI for the "free messages remaining this
-         * month" disclosure.
+         * <p>Projects the {@code (remaining, totalMonthly, singleCredits, totalAvailableCredits)}
+         * quadruple forwarded to the checkout UI for the "free messages remaining this month"
+         * disclosure.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
         public static final class Quota {
@@ -1072,10 +1012,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Constructs a new quota projection.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the two mandatory
-             * attributes have been read and the two optional
-             * attributes have been resolved.
+             * <p>Invoked by {@link #of(Node)} after the two mandatory attributes have been read and
+             * the two optional attributes have been resolved.
              *
              * @param remaining             the remaining-message
              *                              quota
@@ -1141,12 +1079,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
 
             /**
              * Tries to parse the quota projection from the given
-             * {@code <quota/>} node.
-             *
-             * @apiNote
-             * Used internally by {@link Success#of(Node, Node)} to
-             * decode the optional {@code <quota>} child of the
-             * checkout-response stanza.
+             * {@code <quota/>} node, decoding the optional {@code <quota>} child of the
+             * checkout-response stanza for {@link Success#of(Node, Node)}.
              *
              * @implNote
              * This implementation reads the two mandatory integer
@@ -1231,13 +1165,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
      * The {@code ClientError} reply variant carrying a documented
      * {@code 4xx} SMB-metered-messaging rejection.
      *
-     * @apiNote
-     * Surfaced when the relay rejected the checkout lookup via one
-     * of the {@code WASmaxInSmbMeteredMessagingAccountGetSmbMeteredMessagingCheckoutIqErrors}
-     * mixin arms; WA Web's {@code getSMBMeteredMessagingCheckout}
-     * unwraps the {@code (code, text)} pair and throws a
-     * {@code WAWebBackendErrors.ServerStatusCodeError} to the
-     * checkout UI rather than retrying.
+     * <p>Surfaced when the relay rejected the checkout lookup. The caller treats this branch as a
+     * terminal status-code error and surfaces it to the checkout UI rather than retrying.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSmbMeteredMessagingCheckoutIqErrors")
@@ -1257,9 +1186,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Constructs a new client-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code 4xx}
-         * envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 4xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may
@@ -1356,10 +1283,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
      * The {@code ServerError} reply variant carrying a transient
      * {@code 5xx} relay failure.
      *
-     * @apiNote
-     * Surfaced when the relay returned a transient internal failure
-     * while computing the checkout projection; the caller can
-     * re-issue the request with backoff.
+     * <p>Surfaced when the relay returned a transient internal failure while computing the checkout
+     * projection; the caller can re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseError")
     final class ServerError implements SmaxGetSMBMeteredMessagingCheckoutResponse {
@@ -1378,9 +1303,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Constructs a new server-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code 5xx}
-         * envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 5xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may

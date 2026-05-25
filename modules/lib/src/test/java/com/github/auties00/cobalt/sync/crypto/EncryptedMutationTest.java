@@ -23,56 +23,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Exercises the outgoing-mutation wire format produced by
- * {@link EncryptedMutation}.
- *
- * @apiNote
- * Covers the production class that wraps
- * {@code WAWebSyncdEncryptMutations.syncdEncryptMutation} and
- * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}. The matrix
- * pins down the {@code IV || ciphertext || valueMac} layout of
+ * {@link EncryptedMutation}: the {@code IV || ciphertext || valueMac} layout of
  * {@code encryptedValue}, the associated-data prefix invariant (SET prepends
- * {@code 0x01}, REMOVE prepends {@code 0x02}), the {@code valueMac()}
- * accessor, round-trip with {@link DecryptedMutation.Untrusted#of}, and a
- * WA Web byte-equality oracle for captured plaintext/ciphertext pairs.
- *
- * @implNote
- * Fresh-IV randomness is verified by encrypting the same plaintext twice and
- * checking that the IV prefix differs; the matching deterministic-output
- * check lives on the fixed-IV overload exercised in {@link MutationKeysTest}.
+ * {@code 0x01}, REMOVE prepends {@code 0x02}), fresh-IV randomness, round-trip
+ * with {@link DecryptedMutation.Untrusted#of}, key isolation, and a WA Web
+ * byte-equality oracle for captured plaintext/ciphertext pairs. Fresh-IV
+ * randomness is verified by encrypting the same plaintext twice and checking
+ * that the IV prefix differs; the matching deterministic-output check lives on
+ * the fixed-IV overload exercised in {@link MutationKeysTest}.
  */
 @DisplayName("EncryptedMutation")
 class EncryptedMutationTest {
-    /**
-     * The 32-byte sync key all tests in this class derive their
-     * {@link MutationKeys} from.
-     */
     private static final byte[] SYNC_KEY = filled(32, 0x42);
 
-    /**
-     * The sync key id all tests in this class pin to the AAD prefix.
-     */
     private static final byte[] KEY_ID = new byte[]{0x10, 0x20, 0x30, 0x40};
 
-    /**
-     * Builds a byte array filled with a single byte value.
-     *
-     * @param length the array length
-     * @param value  the fill value, truncated to a byte
-     * @return a freshly allocated array
-     */
     private static byte[] filled(int length, int value) {
         var out = new byte[length];
         for (var i = 0; i < length; i++) out[i] = (byte) value;
         return out;
     }
 
-    /**
-     * Builds a pending archive mutation under the given operation and timestamp.
-     *
-     * @param op the operation to attach
-     * @param ts the timestamp to attach
-     * @return a fresh pending mutation
-     */
     private static SyncPendingMutation pendingArchive(SyncdOperation op, Instant ts) {
         var action = new ArchiveChatActionBuilder()
                 .archived(true)
@@ -86,12 +57,6 @@ class EncryptedMutationTest {
         return new SyncPendingMutation(trusted, 0);
     }
 
-    /**
-     * Builds a pending pin mutation under SET and the given timestamp.
-     *
-     * @param ts the timestamp to attach
-     * @return a fresh pending mutation
-     */
     private static SyncPendingMutation pendingPin(Instant ts) {
         var pin = new PinActionBuilder().pinned(true).build();
         var value = new SyncActionValueBuilder()
@@ -258,20 +223,6 @@ class EncryptedMutationTest {
             }
         }
 
-        /**
-         * Decrypts the wire blob under the opposite operation and asserts the
-         * value MAC step rejects it.
-         *
-         * @apiNote
-         * Helper for the AAD prefix invariant: a SET ciphertext decrypted
-         * under REMOVE (and vice versa) must fail at the value MAC step
-         * because the AAD byte differs.
-         *
-         * @param keys     the sync keys used during encryption
-         * @param ev       the wire encrypted value
-         * @param indexMac the wire index MAC
-         * @param wrongOp  the opposite operation
-         */
         private void assertCrossOpFails(MutationKeys keys, byte[] ev, byte[] indexMac, SyncdOperation wrongOp) {
             Assertions.assertThrows(
                     WhatsAppWebAppStateSyncException.ValueMacMismatch.class,

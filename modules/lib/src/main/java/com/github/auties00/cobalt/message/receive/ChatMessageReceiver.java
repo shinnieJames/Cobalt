@@ -45,9 +45,8 @@ import java.util.Objects;
  * {@link DeviceSentMessage} envelope for self-sent messages, and assembles the final
  * {@link ChatMessageInfo}.
  *
- * @apiNote
- * Selected by {@link MessageReceivingService#process(Node)} for every stanza whose
- * {@code from} JID is not a newsletter; covers 1:1, group, broadcast, status, and
+ * <p>Selected by {@link MessageReceivingService#process(Node)} for every stanza whose
+ * {@code from} JID is not a newsletter; this covers 1:1, group, broadcast, status, and
  * peer-protocol messages.
  *
  * @implNote
@@ -74,19 +73,14 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * Decryption service used for the per-enc iteration in the decryption phase.
      *
-     * @apiNote
-     * Owns the per-device Signal cipher (PKMSG/MSG), the group sender-key cipher
-     * (SKMSG), and the bot AES-GCM scheme (MSMSG); injected so the same service can
-     * be reused across receivers and stubbed in tests.
+     * <p>Owns the per-device Signal cipher (PKMSG/MSG), the group sender-key cipher
+     * (SKMSG), and the bot AES-GCM scheme (MSMSG); injected so the same service can be
+     * reused across receivers and stubbed in tests.
      */
     private final MessageDecryption decryption;
 
     /**
      * Constructs a chat receiver bound to the given store and decryption service.
-     *
-     * @apiNote
-     * Invoked only by {@link MessageReceivingService}; never called by embedders
-     * directly.
      *
      * @param store      the central session store
      * @param decryption the decryption service for the Signal protocol and bot
@@ -103,8 +97,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Runs the full two-phase decrypt-then-decode pipeline; returns {@code null} for
+     * <p>Runs the full two-phase decrypt-then-decode pipeline; returns {@code null} for
      * unavailable fanout placeholders that should be silently acknowledged.
      *
      * @implNote
@@ -185,10 +178,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Rejects stanzas that carry a {@code recipient_pn} or {@code recipient_lid}
      * attribute when the sender is not the logged-in user's own device.
      *
-     * @apiNote
-     * The recipient attributes are reserved for peer-protocol messages echoed
+     * <p>The recipient attributes are reserved for peer-protocol messages echoed
      * between the user's own devices; receiving them from any other sender is a
-     * protocol violation that WhatsApp Web's incoming parser rejects up front.
+     * protocol violation that is rejected up front.
      *
      * @param stanza the parsed stanza
      * @throws WhatsAppMessageException.Receive.InvalidMessage if a recipient
@@ -210,11 +202,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Rejects stanzas from a hosted companion device that target a group, community,
      * broadcast, or status chat.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code InvalidHostedCompanionStanza} NACK branch in
-     * the incoming parser; hosted companions (the WhatsApp Business
-     * coexistence-mode devices) may only participate in 1:1 chats with their
-     * primary, so anything else is dropped as an invalid stanza.
+     * <p>Hosted companions (the WhatsApp Business coexistence-mode devices) may only
+     * participate in 1:1 chats with their primary, so anything else is dropped as an
+     * invalid stanza.
      *
      * @param stanza the parsed stanza
      * @throws WhatsAppMessageException.Receive.InvalidMessage if a hosted companion
@@ -245,11 +235,10 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Resolves the effective chat JID for storing the message, applying bot-specific
      * target overrides.
      *
-     * @apiNote
-     * Bot-server messages can re-target a different chat via the
-     * {@code target_chat_jid} or {@code target_chat_jid_lid} stanza attribute;
-     * Cobalt routes the resulting {@link ChatMessageInfo} into that chat instead of
-     * the bot's own JID so the user sees the reply in the originating thread.
+     * <p>Bot-server messages can re-target a different chat via the
+     * {@code target_chat_jid} or {@code target_chat_jid_lid} stanza attribute; the
+     * resulting {@link ChatMessageInfo} is routed into that chat instead of the bot's
+     * own JID so the user sees the reply in the originating thread.
      *
      * @param stanza the parsed stanza
      * @return the effective chat JID
@@ -271,11 +260,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * Returns whether the stanza is a status update older than 24 hours.
      *
-     * @apiNote
-     * Used by {@link #receive(Node, Jid)} to silently drop decryption errors on
-     * expired status content rather than triggering a retry receipt for a story
-     * the user can no longer view; mirrors WhatsApp Web's local {@code L}
-     * helper inside {@code WAWebMsgProcessingDecryptionHandler}.
+     * <p>{@link #receive(Node, Jid)} uses this to silently drop decryption errors on
+     * expired status content rather than triggering a retry receipt for a story the
+     * user can no longer view.
      *
      * @implNote
      * This implementation uses {@link ChronoUnit#HOURS} arithmetic for the 24-hour
@@ -301,11 +288,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Warns when a stanza presents an SKMSG payload before the per-device Signal
      * payload in a two-enc stanza.
      *
-     * @apiNote
-     * The expected ordering is per-device-first so the SKMSG can be validated
-     * against the sender-key distribution that lives in the per-device payload;
-     * WhatsApp Web's {@code WAWebMsgProcessingDecryptApi.decryptE2EPayload} also
-     * only logs and continues here rather than aborting.
+     * <p>The expected ordering is per-device-first so the SKMSG can be validated
+     * against the sender-key distribution that lives in the per-device payload. An
+     * out-of-order pair is logged and processing continues rather than aborting.
      *
      * @param stanza the parsed stanza
      */
@@ -325,11 +310,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Validates the ADV (Auxiliary Device Validation) identity when the stanza
      * sender is a companion device and carries a PKMSG payload.
      *
-     * @apiNote
-     * Ensures that a companion device with a freshly-established Signal session
-     * cannot impersonate the primary; mirrors WhatsApp Web's
-     * {@code WAWebAdvSignatureApi.validateADVwithEncs} call inside
-     * {@code decryptE2EPayload}.
+     * <p>Ensures that a companion device with a freshly-established Signal session
+     * cannot impersonate the primary.
      *
      * @implNote
      * This implementation extracts the identity key from the PKMSG ciphertext via
@@ -400,11 +382,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Iterates over every encrypted payload in the stanza, dispatching to the
      * appropriate cipher and returning the first successful plaintext.
      *
-     * @apiNote
-     * Every enc is attempted even after the first success so the Signal session
-     * state is updated for every encryption type; this matches WA Web's loop in
-     * {@code decryptE2EPayload} which always advances the
-     * {@link MessageDecryptionHandler} state across both slots.
+     * <p>Every enc is attempted even after the first success so the Signal session
+     * state is advanced for every encryption type via the
+     * {@link MessageDecryptionHandler} across both slots.
      *
      * @implNote
      * This implementation rethrows the dominant failure surfaced via
@@ -463,9 +443,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Dispatches a single encrypted payload to the cipher matching its
      * {@link MessageEncryptionType}.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebMsgProcessingDecryptEnc.decryptEnc}
-     * switch; the four ciphertext types map to the three public entry points on
+     * <p>The four ciphertext types map to the three Signal entry points on
      * {@link MessageDecryption} plus the special MSMSG bot-message scheme.
      *
      * @implNote
@@ -528,11 +506,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * Resolves the Signal sender JID used to look up a per-device session.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebMsgProcessingDecryptEnc.decryptEnc} branch
-     * that picks {@code i} (participant) for group and broadcast chats and the
-     * {@code from} JID otherwise; the Signal cipher needs the device-level JID, not
-     * the chat JID.
+     * <p>Picks the participant JID for group and broadcast chats and the {@code from}
+     * JID otherwise, since the Signal cipher needs the device-level JID rather than the
+     * chat JID.
      *
      * @param stanza the parsed stanza
      * @return the sender device JID for Signal session lookup
@@ -556,18 +532,13 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Resolves the {@code messageSecret} for a bot message by looking up the target
      * message in the store.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's
-     * {@code WAWebBotMessageSecret.decryptMsmsgBotMessage} {@code C} helper that
-     * resolves the target message via {@code WAWebMsmsgMsgSecretCache} and falls
-     * back to the message table on a cache miss; Cobalt skips the cache layer and
-     * goes straight to the store.
-     *
      * @implNote
-     * This implementation looks up the target by {@code (targetChatJid, targetId)}
-     * and accepts the result only when the cached
-     * {@link ChatMessageInfo#messageSecret()} is non-empty; an absent secret raises
-     * an {@link WhatsAppMessageException.Receive.InvalidMessage} rather than WA
+     * This implementation skips WhatsApp Web's {@code WAWebMsmsgMsgSecretCache} layer
+     * and reads the target message straight from the store via
+     * {@link WhatsAppStore#findMessageById(com.github.auties00.cobalt.model.jid.JidProvider, String)},
+     * keyed by {@code (targetChatJid, targetId)}. The result is accepted only when the
+     * resolved {@link ChatMessageInfo#messageSecret()} is non-empty; an absent secret
+     * raises {@link WhatsAppMessageException.Receive.InvalidMessage} rather than WA
      * Web's {@code WAWebOrphanBotMsgError} because Cobalt does not yet model the
      * orphan-bot-message deferral path.
      *
@@ -602,11 +573,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * Flushes the Signal protocol store after a successful decryption pass.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's
-     * {@code SignalProtocolStore.flushBufferToDiskIfNotMemOnlyMode} call at the end
-     * of {@code decryptE2EPayload}; session state updated during PKMSG installation
-     * and MSG ratcheting must be durable before the next stanza is processed.
+     * <p>Session state updated during PKMSG installation and MSG ratcheting must be
+     * durable before the next stanza is processed.
      *
      * @implNote
      * This implementation logs and swallows any flush failure so a transient store
@@ -627,9 +595,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * Rejects stanzas whose HSM flag disagrees with the decoded protobuf content.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebHandleMsgProcessUtils.preProcessMsg}
-     * branch that throws {@code HsmMismatchError}; the mismatch always resolves to
+     * <p>The mismatch resolves to
      * {@link com.github.auties00.cobalt.message.receive.crypto.MessageDecryptionResult#HSM_MISMATCH},
      * which the receipt handler treats as a silent drop.
      *
@@ -654,11 +620,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Imports the sender-key distribution embedded in the decoded protobuf, when
      * present.
      *
-     * @apiNote
-     * Lets future SKMSG payloads from the same sender in the same group decrypt
-     * without an extra round-trip; mirrors WhatsApp Web's
-     * {@code WAWebMsgProcessingApiUtils.parseSenderKeyDistribution} validation
-     * followed by {@code WAWebSignal.Session.createGroupSignalSession}.
+     * <p>Importing the distribution lets future SKMSG payloads from the same sender in
+     * the same group decrypt without an extra round-trip.
      *
      * @implNote
      * This implementation validates that the embedded group id matches the stanza
@@ -718,11 +681,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Returns whether the decoded protobuf for a self-sent stanza should carry a
      * {@link DeviceSentMessage} wrapper.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's
-     * {@code WAWebMsgProcessingApiUtils.parseMessage} type-switch that selects
-     * between {@code k} (DSM-required) and {@code x} (DSM-rejected) helpers; a
-     * missing DSM on a type that requires one resolves to
+     * <p>A missing DSM on a type that requires one resolves to
      * {@link WhatsAppMessageException.Receive.InvalidDeviceSentMessage} with
      * {@link DsmErrorType#MISSING_DSM}.
      *
@@ -763,11 +722,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * {@code messageContextInfo} fields from the outer envelope into the inner
      * message.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's
-     * {@code WAWebDeviceSentMessageProtoUtils.unwrapDeviceSentMessage}: the inner
-     * message takes priority for the bot/secret/thread fields and the outer
-     * envelope supplies {@code limitSharingV2}.
+     * <p>The inner message takes priority for the bot, secret, and thread fields and
+     * the outer envelope supplies {@code limitSharingV2}.
      *
      * @implNote
      * This implementation preserves Cobalt-only inner context fields
@@ -867,11 +823,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * Builds the final {@link ChatMessageInfo} from the stanza metadata and the
      * decoded (and possibly DSM-unwrapped) container.
      *
-     * @apiNote
-     * Mirrors WhatsApp Web's {@code WAWebMsgProcessingApiUtils.generateBaseMsg}
-     * with the stanza-level fields layered on top; the result is the
-     * {@link ChatMessageInfo} returned by {@link #receive(Node, Jid)} and persisted
-     * by the orchestrator.
+     * <p>The result is the {@link ChatMessageInfo} returned by
+     * {@link #receive(Node, Jid)} and persisted by the orchestrator.
      *
      * @implNote
      * This implementation always stamps the resulting status as

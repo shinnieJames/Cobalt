@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.wam.binary;
 
+import java.util.Map;
+
 /**
  * A pure size-calculation utility for the WhatsApp Metrics (WAM) custom
  * binary protocol.
@@ -249,5 +251,32 @@ public final class WamEventSizes {
      */
     public static int floatFieldSize(int fieldId) {
         return floatSize(fieldId);
+    }
+
+    /**
+     * Returns the number of bytes required to encode a complete event,
+     * marker and fields, from a map of decoded wire values.
+     *
+     * <p>Each field's size is computed from its {@link WamWireValue}
+     * variant. This mirrors {@link WamEventEncoder#writeEvent} so that a
+     * caller pre-allocating a buffer reserves exactly the bytes the encoder
+     * will write.
+     *
+     * @param eventId the numeric event identifier
+     * @param weight  the resolved sampling weight
+     * @param fields  the fields to size; must not be {@code null}
+     * @return the encoded size in bytes
+     */
+    public static int sizeOf(int eventId, int weight, Map<Integer, WamWireValue> fields) {
+        var size = eventMarkerSize(eventId, weight);
+        for (var entry : fields.entrySet()) {
+            int fieldId = entry.getKey();
+            size += switch (entry.getValue()) {
+                case WamWireValue.WamInt value -> intFieldSize(fieldId, value.value());
+                case WamWireValue.WamFloat value -> floatFieldSize(fieldId);
+                case WamWireValue.WamString value -> stringFieldSize(fieldId, value.value());
+            };
+        }
+        return size;
     }
 }

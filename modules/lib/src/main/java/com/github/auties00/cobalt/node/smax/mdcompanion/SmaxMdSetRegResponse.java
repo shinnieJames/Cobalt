@@ -12,146 +12,112 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed projection of the inbound
- * {@code <iq xmlns="md" type="set"><pair-success/></iq>} stanza that
+ * Models the inbound {@code <iq xmlns="md" type="set"><pair-success/></iq>} stanza that
  * concludes a successful multi-device pair-device handshake.
  *
- * @apiNote
- * Companions consume this stanza to learn the JID assigned to them by
- * the relay, the signed ADV device-identity bundle they must
- * countersign, the platform string of the primary device, and the
- * optional post-pair payload that
- * {@code WAWebHandleCanonicalRegistration.handleCanonicalRegistration}
- * unwraps via the embedded {@link SmaxMdSetRegEncryptionMetadata}.
- * Once verified the companion responds with either a
- * {@link SmaxMdSetRegResponseClient} (regular pair-device-sign reply),
- * a {@link SmaxMdSetRegResponseHostedClient} (hosted-pair-set reply),
- * or a {@link SmaxMdSetRegResponseError} when verification fails.
+ * <p>The companion consumes this stanza to learn the JID assigned to it by the relay, the signed
+ * ADV device-identity bundle it must countersign, the platform string of the primary device, and
+ * the optional post-pair payload carried in the embedded {@link SmaxMdSetRegEncryptionMetadata}.
+ * Once verified the companion responds with either a {@link SmaxMdSetRegResponseClient} (regular
+ * pair-device-sign reply), a {@link SmaxMdSetRegResponseHostedClient} (hosted-pair-set reply), or
+ * a {@link SmaxMdSetRegResponseError} when verification fails.
  *
- * @implNote
- * This implementation enforces WA Web's full
- * {@code parseSetRegRequest} schema: the outer tag is {@code iq}, the
- * {@code xmlns} is {@code md}, the {@code type} is {@code set}, the
- * {@code from} is the {@code s.whatsapp.net} domain, the inner
- * {@code <pair-success/>} child carries a non-empty
- * {@code <device-identity/>} payload (WA Web caps the byte length to
- * {@code [1..500]}; Cobalt skips the cap), a {@code <device/>} child
- * exposing a {@code jid} attribute and an optional {@code lid} and
- * {@code beta} attribute, a {@code <platform name="..."/>} child, and
- * the three optional children {@code <biz name="..."/>},
- * {@code <client-props/>}, and {@code <encryption-metadata/>}.
+ * @implNote This implementation enforces WA Web's full schema: the outer tag is {@code iq}, the
+ * {@code xmlns} is {@code md}, the {@code type} is {@code set}, the {@code from} is the
+ * {@code s.whatsapp.net} domain, the inner {@code <pair-success/>} child carries a non-empty
+ * {@code <device-identity/>} payload, a {@code <device/>} child exposing a {@code jid} attribute
+ * and an optional {@code lid} and {@code beta}, a {@code <platform name="..."/>} child, and the
+ * three optional children {@code <biz name="..."/>}, {@code <client-props/>}, and
+ * {@code <encryption-metadata/>}. Upstream caps the {@code <device-identity/>} byte length to
+ * {@code [1..500]}; Cobalt skips that cap.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInMdSetRegRequest")
 public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
-     * The {@code id} attribute of the inbound IQ stanza.
+     * Holds the {@code id} attribute of the inbound IQ stanza.
      *
-     * @apiNote
-     * Echoed back into the matching
-     * {@link SmaxMdSetRegResponseClient}, {@link SmaxMdSetRegResponseHostedClient}
-     * or {@link SmaxMdSetRegResponseError} reply so the relay can pair
-     * request and response.
+     * <p>Echoed back into the matching {@link SmaxMdSetRegResponseClient},
+     * {@link SmaxMdSetRegResponseHostedClient}, or {@link SmaxMdSetRegResponseError} reply so the
+     * relay can pair request and response.
      */
     private final String iqId;
 
     /**
-     * The signed device-identity bytes carried in
+     * Holds the signed device-identity bytes carried in
      * {@code <pair-success><device-identity/></pair-success>}.
      *
-     * @apiNote
-     * Decoded as an ADV {@code ADVSignedDeviceIdentityHMAC} by the
-     * post-pairing flow; WA Web verifies the HMAC against the ADV
-     * secret key and then countersigns the inner
+     * <p>Decoded as an ADV {@code ADVSignedDeviceIdentityHMAC} by the post-pairing flow, which
+     * verifies the HMAC against the ADV secret key and then countersigns the inner
      * {@code ADVSignedDeviceIdentity}.
      */
     private final byte[] pairSuccessDeviceIdentity;
 
     /**
-     * The device JID assigned to the companion by the relay, carried
-     * in {@code <pair-success><device jid="..."/></pair-success>}.
+     * Holds the device JID assigned to the companion by the relay, carried in
+     * {@code <pair-success><device jid="..."/></pair-success>}.
      *
-     * @apiNote
-     * Pinned as the canonical "me" identity by
-     * {@code WAWebUserPrefsMeUser.setMe} during post-pairing.
+     * <p>Pinned as the canonical "me" identity during post-pairing.
      */
     private final Jid pairSuccessDeviceJid;
 
     /**
-     * The optional LID-form device JID, carried in the same
-     * {@code <device/>} element via the {@code lid} attribute.
+     * Holds the optional LID-form device JID, carried in the same {@code <device/>} element via
+     * the {@code lid} attribute.
      *
-     * @apiNote
-     * When present, additionally pinned as the "me lid" via
-     * {@code setMeLid}. Empty for devices on accounts that the relay
-     * has not migrated to LID-form addressing.
+     * <p>When present, additionally pinned as the "me lid" identity. Empty for devices on accounts
+     * the relay has not migrated to LID-form addressing.
      */
     private final Jid pairSuccessDeviceLid;
 
     /**
-     * The optional {@code beta} attribute on {@code <device/>},
-     * restricted to {@code "true"} or {@code "false"}.
+     * Holds the optional {@code beta} attribute on {@code <device/>}, restricted to {@code "true"}
+     * or {@code "false"}.
      *
-     * @apiNote
-     * Signals the primary device's beta-channel enrolment to the
-     * companion; preserved on the projection for embedders that wish
-     * to mirror the flag in their own state. WA Web does not consume
-     * the value directly inside {@code handlePairSuccess}.
+     * <p>Signals the primary device's beta-channel enrolment to the companion and is preserved on
+     * the projection for embedders that mirror the flag; the post-pair handler does not consume
+     * the value directly.
      */
     private final String pairSuccessDeviceBeta;
 
     /**
-     * The {@code name} attribute of the {@code <platform/>} child,
-     * such as {@code "android"}, {@code "iphone"} or {@code "smbi"}.
+     * Holds the {@code name} attribute of the {@code <platform/>} child, such as
+     * {@code "android"}, {@code "iphone"}, or {@code "smbi"}.
      *
-     * @apiNote
-     * Stored as {@code Conn.platform} in WA Web; downstream consumers
-     * key feature gates off this value.
+     * <p>Stored as the connection platform; downstream consumers key feature gates off this value.
      */
     private final String pairSuccessPlatformName;
 
     /**
-     * The optional business-account display name, carried in the
-     * {@code <biz name="..."/>} child.
+     * Holds the optional business-account display name, carried in the {@code <biz name="..."/>}
+     * child.
      *
-     * @apiNote
-     * Present only for business-account pairings; surfaced through
-     * {@link #pairSuccessBizName()} for embedders that wish to display
-     * the business name during the post-pair handshake.
+     * <p>Present only for business-account pairings; surfaced through {@link #pairSuccessBizName()}
+     * for embedders that wish to display the business name during the post-pair handshake.
      */
     private final String pairSuccessBizName;
 
     /**
-     * The optional client-pairing-properties bytes carried in
-     * {@code <client-props/>}.
+     * Holds the optional client-pairing-properties bytes carried in {@code <client-props/>}.
      *
-     * @apiNote
-     * Encoded as a {@code ClientPairingPropsSpec} protobuf; WA Web's
-     * {@code handlePairSuccess} decodes the bytes to learn whether the
-     * primary advertises a LID-migrated chat database, a syncd pure
-     * LID session, syncd snapshot recovery support, and any seed
-     * subscription-sync payload.
+     * <p>Encoded as a {@code ClientPairingPropsSpec} protobuf; the post-pair handler decodes the
+     * bytes to learn whether the primary advertises a LID-migrated chat database, a syncd pure-LID
+     * session, syncd snapshot recovery support, and any seed subscription-sync payload.
      */
     private final byte[] pairSuccessClientProps;
 
     /**
-     * The optional encryption-metadata projection carried in
-     * {@code <encryption-metadata/>}.
+     * Holds the optional encryption-metadata projection carried in {@code <encryption-metadata/>}.
      *
-     * @apiNote
-     * Wraps the post-pairing key payload consumed by
-     * {@code handleCanonicalRegistration}; empty for primaries that do
-     * not ship a canonical-registration payload.
+     * <p>Wraps the post-pairing key payload; empty for primaries that do not ship a
+     * canonical-registration payload.
      */
     private final SmaxMdSetRegEncryptionMetadata pairSuccessEncryptionMetadata;
 
     /**
-     * Constructs the typed projection from already-validated component
-     * fields.
+     * Constructs the typed projection from already-validated component fields.
      *
-     * @apiNote
-     * Library code does not normally call this constructor; it is the
-     * target of {@link #of(Node)} after parsing has succeeded. Public
-     * visibility is preserved so unit tests can construct fixtures.
+     * <p>This is the target of {@link #of(Node)} after parsing has succeeded. Public visibility is
+     * preserved so unit tests can construct fixtures.
      *
      * @param iqId                          the IQ id; never {@code null}
      * @param pairSuccessDeviceIdentity     the device-identity bytes; never {@code null}
@@ -185,10 +151,7 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     }
 
     /**
-     * Returns the IQ id.
-     *
-     * @apiNote
-     * Echoed back as the matching reply's {@code id} attribute.
+     * Returns the IQ id echoed back as the matching reply's {@code id} attribute.
      *
      * @return the id; never {@code null}
      */
@@ -199,10 +162,8 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
      * Returns the signed device-identity bytes.
      *
-     * @apiNote
-     * Decoded as an ADV {@code ADVSignedDeviceIdentityHMAC} by the
-     * companion's post-pair handler; the HMAC must verify against the
-     * ADV secret key before the companion countersigns.
+     * <p>Decoded as an ADV {@code ADVSignedDeviceIdentityHMAC} by the companion's post-pair
+     * handler; the HMAC must verify against the ADV secret key before the companion countersigns.
      *
      * @return the bytes; never {@code null}
      */
@@ -222,12 +183,10 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
      * Returns the optional LID-form device JID.
      *
-     * @apiNote
-     * Present only for LID-addressed accounts; callers should fall back
-     * to {@link #pairSuccessDeviceJid()} when this is empty.
+     * <p>Present only for LID-addressed accounts; callers fall back to
+     * {@link #pairSuccessDeviceJid()} when this is empty.
      *
-     * @return an {@link Optional} carrying the LID, or empty when the
-     *         relay omitted the attribute
+     * @return an {@link Optional} carrying the LID, or empty when the relay omitted the attribute
      */
     public Optional<Jid> pairSuccessDeviceLid() {
         return Optional.ofNullable(pairSuccessDeviceLid);
@@ -236,9 +195,8 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
      * Returns the optional beta flag.
      *
-     * @return an {@link Optional} carrying {@code "true"} or
-     *         {@code "false"}, or empty when the relay omitted the
-     *         attribute
+     * @return an {@link Optional} carrying {@code "true"} or {@code "false"}, or empty when the
+     *         relay omitted the attribute
      */
     public Optional<String> pairSuccessDeviceBeta() {
         return Optional.ofNullable(pairSuccessDeviceBeta);
@@ -256,8 +214,7 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
      * Returns the optional business-account display name.
      *
-     * @return an {@link Optional} carrying the name, or empty for
-     *         non-business pairings
+     * @return an {@link Optional} carrying the name, or empty for non-business pairings
      */
     public Optional<String> pairSuccessBizName() {
         return Optional.ofNullable(pairSuccessBizName);
@@ -266,14 +223,10 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
      * Returns the optional client-pairing-properties bytes.
      *
-     * @apiNote
-     * Decoded as a {@code ClientPairingPropsSpec} protobuf by
-     * embedders that mirror WA Web's
-     * {@code applyClientPairingProps}; callers that do not consume the
-     * payload may safely ignore it.
+     * <p>Decoded as a {@code ClientPairingPropsSpec} protobuf by embedders that apply the client
+     * pairing props; callers that do not consume the payload may ignore it.
      *
-     * @return an {@link Optional} carrying the bytes, or empty when the
-     *         relay omitted the child
+     * @return an {@link Optional} carrying the bytes, or empty when the relay omitted the child
      */
     public Optional<byte[]> pairSuccessClientProps() {
         return Optional.ofNullable(pairSuccessClientProps);
@@ -282,10 +235,8 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     /**
      * Returns the optional encryption-metadata projection.
      *
-     * @apiNote
-     * Empty for primaries that do not ship a canonical-registration
-     * payload; otherwise feeds the GCM unwrap step inside
-     * {@code handleCanonicalRegistration}.
+     * <p>Empty for primaries that do not ship a canonical-registration payload; otherwise feeds
+     * the GCM unwrap step.
      *
      * @return an {@link Optional} carrying the projection, or empty
      */
@@ -294,33 +245,24 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
     }
 
     /**
-     * Parses an inbound {@code <iq><pair-success/></iq>} stanza into
-     * the typed projection.
+     * Parses an inbound {@code <iq><pair-success/></iq>} stanza into the typed projection.
      *
-     * @apiNote
-     * Companions call this on every inbound IQ-set whose first child
-     * is {@code <pair-success/>}; the returned {@link Optional} is
-     * empty when the stanza shape diverges from the documented
-     * schema, matching WA Web's {@code SmaxParsingFailure} swallowing
-     * in {@code WAWebHandlePairSuccess}.
+     * <p>The companion calls this on every inbound IQ-set whose first child is
+     * {@code <pair-success/>}; the result is {@link Optional#empty()} when the stanza shape
+     * diverges from the documented schema, rather than an exception.
      *
-     * @implNote
-     * This implementation runs the same eleven checks as WA Web's
-     * {@code parseSetRegRequest}: tag equality on {@code iq},
-     * attribute literal on {@code xmlns="md"} and {@code type="set"},
-     * domain-JID literal on {@code from}, presence of an {@code id}
-     * attribute, a present {@code <pair-success/>} child with a
-     * non-empty {@code <device-identity/>} body, a {@code <device/>}
-     * with a {@code jid} attribute (plus optional {@code lid} and
-     * {@code beta}), a {@code <platform/>} with a {@code name}
-     * attribute, and the three optional children. Upstream restricts
-     * {@code <device-identity/>} content to {@code [1..500]} bytes;
-     * Cobalt skips the upper-bound check and lets downstream protobuf
-     * decoding fail on oversize payloads.
+     * @implNote This implementation runs eleven checks: tag equality on {@code iq}, attribute
+     * literals on {@code xmlns="md"} and {@code type="set"}, a domain-JID literal on {@code from},
+     * presence of an {@code id} attribute, a present {@code <pair-success/>} child with a
+     * non-empty {@code <device-identity/>} body, a {@code <device/>} with a {@code jid} attribute
+     * (plus optional {@code lid} and {@code beta}), a {@code <platform/>} with a {@code name}
+     * attribute, and the three optional children. Upstream restricts {@code <device-identity/>}
+     * content to {@code [1..500]} bytes; Cobalt skips the upper-bound check and lets downstream
+     * protobuf decoding fail on oversize payloads.
      *
      * @param node the inbound IQ stanza
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza shape diverges from the schema
+     * @return an {@link Optional} carrying the projection, or empty when the stanza shape diverges
+     *         from the schema
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMdSetRegRequest",
@@ -389,6 +331,15 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
                 platformName, bizName, clientProps, encryptionMetadata));
     }
 
+    /**
+     * Compares this projection to another object for value equality.
+     *
+     * <p>Two projections are equal when their IQ id, JID and string fields, and byte-payload
+     * fields match, with byte arrays compared element by element.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an equal projection
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -409,6 +360,14 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
                 && Objects.equals(this.pairSuccessEncryptionMetadata, that.pairSuccessEncryptionMetadata);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * <p>The byte-payload fields contribute through {@link Arrays#hashCode(byte[])} so equal
+     * contents yield equal codes.
+     *
+     * @return the hash code derived from all fields
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(iqId, pairSuccessDeviceJid, pairSuccessDeviceLid,
@@ -419,6 +378,11 @@ public final class SmaxMdSetRegResponse implements SmaxOperation.Response {
         return result;
     }
 
+    /**
+     * Returns a debug string listing every field of the projection.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxMdSetRegResponse[iqId=" + iqId

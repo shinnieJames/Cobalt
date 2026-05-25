@@ -16,30 +16,24 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that delete an AI thread on a Meta-AI bot chat.
  *
- * @apiNote
- * Drives the Meta-AI bot UI's "delete thread" affordance: when the local user
- * removes a thread from a bot chat, the resulting {@link SyncPendingMutation}
- * is pushed through {@link com.github.auties00.cobalt.sync.WebAppStateService}
- * so every linked device drops the same thread from its bulk thread-metadata
- * store. The factory is the outgoing-mutation counterpart of
- * {@link AiThreadDeleteHandler}; the handler resolves the inbound mutation by
- * invoking {@code WAWebThreadMetadataBulkJob.bulkDeleteThreads}.
+ * <p>When the local user removes a thread from a bot chat, the resulting
+ * {@link SyncPendingMutation} is enqueued through
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches} so
+ * every linked device drops the same thread from its bulk thread-metadata
+ * store. This factory builds the outgoing mutation; the inbound counterpart
+ * is {@link AiThreadDeleteHandler}.
  *
  * @implNote
- * This implementation gates only on the bot/thread identifiers; the WA Web
- * {@code applyMutations} branch additionally checks
- * {@code WAWebBotBaseGating.isBotEnabled()} and
- * {@code isAiChatThreadsInfraEnabled()}, but those gates are receive-side
- * only and Cobalt callers are expected to skip the factory call when the
- * surface is gated off.
+ * This implementation gates only on the bot/thread identifiers; WA Web
+ * additionally checks {@code WAWebBotBaseGating.isBotEnabled()} and
+ * {@code isAiChatThreadsInfraEnabled()} on the receive side, so Cobalt callers
+ * are expected to skip the factory call when the surface is gated off.
  */
 public final class AiThreadDeleteMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; instantiation is cheap and a single instance
-     * may be shared across the lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public AiThreadDeleteMutationFactory() {
 
@@ -48,23 +42,20 @@ public final class AiThreadDeleteMutationFactory {
     /**
      * Returns a {@link SyncPendingMutation} that deletes the given AI thread from the bot chat.
      *
-     * @apiNote
-     * Call this when the user removes an AI thread; the returned mutation
+     * <p>Call this when the user removes an AI thread; the returned mutation
      * must be enqueued via
-     * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
-     * to fan it out to linked devices. The mutation index follows
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches} to
+     * fan it out to linked devices. The mutation index follows
      * {@snippet :
      *     ["ai_thread_delete", chatJid.toString(), threadId]
      * }
-     * and the action carries no sub-message because the index alone identifies the thread.
+     * and the action carries no sub-message because the index alone identifies
+     * the thread.
      *
      * @implNote
      * This implementation emits the {@link DecryptedMutation.Trusted} variant
-     * with {@link SyncdOperation#SET}; WA Web's
-     * {@code WAWebAiThreadDeleteSync.buildMutation} delegates to
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} with the same
-     * collection, version, and operation values that
-     * {@link AiThreadDeleteHandler#ACTION_VERSION} pins.
+     * with {@link SyncdOperation#SET}, pinning the version to
+     * {@link AiThreadDeleteHandler#ACTION_VERSION}.
      *
      * @param chatJid  the bot {@link Jid} owning the thread
      * @param threadId the thread identifier as exposed by the bot

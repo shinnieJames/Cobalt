@@ -14,10 +14,9 @@ import java.util.Optional;
  * Closed family of reply variants observable on the one-shot registration-time pre-key upload
  * {@link IqUploadPrekeysForRegRequest} roundtrip.
  *
- * @apiNote
- * Wire-shape identical to {@link IqUploadPreKeysResponse}; kept as a separate typed surface so
- * the registration code path can match against its own response type and avoid coupling the
- * device-link bootstrap to the steady-state retry policy.
+ * <p>The wire shape is identical to {@link IqUploadPreKeysResponse}; this stays a separate typed
+ * surface so the registration code path can match against its own response type and avoid coupling
+ * the device-link bootstrap to the steady-state retry policy.
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPrekeysForRegTask")
 public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Response
@@ -27,9 +26,8 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
      * Parses the inbound stanza into the first matching {@link IqUploadPrekeysForRegResponse}
      * variant.
      *
-     * @apiNote
-     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
-     * {@link ServerError#of(Node, Node)}.
+     * <p>Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)},
+     * then {@link ServerError#of(Node, Node)}.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza
@@ -56,8 +54,7 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
     /**
      * Successful echo from the relay; the registration-time pre-key bundle is now live.
      *
-     * @apiNote
-     * Carries no payload; the device-link bootstrap proceeds to the next companion stage on the
+     * <p>Carries no payload; the device-link bootstrap proceeds to the next companion stage on the
      * presence of this variant.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPrekeysForRegTask")
@@ -71,8 +68,7 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
         /**
          * Parses a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
+         * <p>Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -90,8 +86,7 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
         /**
          * Compares this success envelope to another instance for equality.
          *
-         * @apiNote
-         * All instances are interchangeable; equality reduces to a class-identity check.
+         * <p>All instances are interchangeable; equality reduces to a class-identity check.
          *
          * @param obj the candidate instance
          * @return {@code true} when {@code obj} is a non-{@code null} {@code Success}
@@ -129,8 +124,7 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
      * Client-error variant; the relay rejected the registration-time upload with a {@code 4xx}
      * envelope.
      *
-     * @apiNote
-     * Mirrors {@link IqUploadPreKeysResponse.ClientError}; the documented case is {@code 406}
+     * <p>Mirrors {@link IqUploadPreKeysResponse.ClientError}; the documented case is {@code 406}
      * "uploaded invalid keys".
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPrekeysForRegTask")
@@ -177,8 +171,7 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
         /**
          * Parses a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -239,10 +232,9 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
      * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope
      * during the registration-time upload.
      *
-     * @apiNote
-     * WA Web's {@code WAWebUploadPrekeysForRegTask} logs the code and lets the surrounding
-     * device-link flow drop the {@code KeyUpload} passive task; the next link attempt re-runs the
-     * stage from scratch.
+     * <p>WA Web's {@code WAWebUploadPrekeysForRegTask} logs the code and lets the surrounding
+     * device-link flow drop the key-upload passive task; the next link attempt re-runs the stage
+     * from scratch.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPrekeysForRegTask")
     final class ServerError implements IqUploadPrekeysForRegResponse {
@@ -288,8 +280,7 @@ public sealed interface IqUploadPrekeysForRegResponse extends IqOperation.Respon
         /**
          * Parses a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

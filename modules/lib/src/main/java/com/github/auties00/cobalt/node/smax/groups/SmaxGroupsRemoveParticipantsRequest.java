@@ -17,8 +17,8 @@ import java.util.Optional;
 /**
  * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that removes participants from an existing group.
  *
- * @apiNote Drives the "Remove from group" affordance on the participant context menu. The relay accepts up to
- * 1024 entries per request and returns a per-participant outcome list in the matching
+ * <p>Backs the "Remove from group" affordance on the participant context menu. The relay accepts up to 1024
+ * entries per request and returns a per-participant outcome list in the matching
  * {@link SmaxGroupsRemoveParticipantsResponse.Success#participants()}. When the optional
  * {@link #removeLinkedGroups()} flag is set, the relay additionally drops the listed participants from every
  * sub-group of a community parent group; the flag has no effect on a non-community group.
@@ -45,7 +45,7 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
     /**
      * Constructs a remove-participants request.
      *
-     * @apiNote The relay enforces a 1..1024 cardinality on the {@code <participant>} children; callers should
+     * <p>The relay enforces a 1..1024 cardinality on the {@code <participant>} children; callers should
      * pre-batch larger contact lists. The participant list is defensively copied so post-construction mutation
      * of the caller's list has no effect on the request.
      *
@@ -69,7 +69,7 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -89,8 +89,8 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
     /**
      * Returns whether the linked-groups cascade is enabled.
      *
-     * @apiNote Only honoured by the relay when {@link #groupJid()} is a community parent group; ignored on
-     * regular groups.
+     * <p>Only honoured by the relay when {@link #groupJid()} is a community parent group; ignored on regular
+     * groups.
      *
      * @return {@code true} when the {@code linked_groups="true"} attribute is emitted on the {@code <remove>}
      *         child
@@ -102,7 +102,7 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <remove linked_groups="true">

@@ -14,79 +14,65 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:biz:catalog" type="get">} stanza that
- * fetches a list of products from a merchant catalog by id.
+ * Builds the {@code <iq xmlns="w:biz:catalog" type="get">} stanza that fetches a list of products
+ * from a merchant catalog by id.
  *
- * @apiNote
- * Use this request to populate the catalog grid or to refresh a product
- * carousel from a list of opaque product ids surfaced by an earlier
- * product-message or by the merchant directory; the response carries
- * the typed product entries together with their images and videos at
- * the requested resolution.
+ * <p>The stanza names a merchant catalog, a list of opaque product ids and a requested image
+ * resolution; the reply carries the typed product entries together with their images and videos
+ * rendered at that resolution. The direct-connection encrypted-info blob is attached only when the
+ * cart is operating under the direct-connection flow.
  *
  * @implNote
- * This implementation models the legacy WAP-IQ path only; WA Web routes
- * the same call through the Relay GraphQL endpoint when the catalog
- * belongs to the calling user and the
- * {@code graphQLForGetProductListEnabled} gating flag is on, falling
- * back to the WAP-IQ payload on failure, but Cobalt keeps the WAP-IQ
- * payload as the single transport.
+ * This implementation models the legacy WAP-IQ path only; WA Web routes the same call through the
+ * Relay GraphQL endpoint when the catalog belongs to the calling user and the
+ * {@code graphQLForGetProductListEnabled} gating flag is on, falling back to the WAP-IQ payload on
+ * failure, but Cobalt keeps the WAP-IQ payload as the single transport.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryProductListCatalogJob")
 public final class IqQueryProductListCatalogRequest implements IqOperation.Request {
     /**
-     * The merchant catalog JID stamped into the {@code jid} attribute
-     * of the {@code <product_list/>} child.
+     * Holds the merchant catalog JID stamped into the {@code jid} attribute of the
+     * {@code <product_list/>} child.
      */
     private final Jid catalogJid;
 
     /**
-     * The list of opaque product ids to fetch; each id becomes one
+     * Holds the opaque product ids to fetch; each id becomes one
      * {@code <product><id>...</id></product>} grandchild.
      */
     private final List<String> productIds;
 
     /**
-     * The requested image width in pixels stamped into the
-     * {@code <width/>} grandchild.
+     * Holds the requested image width in pixels stamped into the {@code <width/>} grandchild.
      */
     private final int width;
 
     /**
-     * The requested image height in pixels stamped into the
-     * {@code <height/>} grandchild.
+     * Holds the requested image height in pixels stamped into the {@code <height/>} grandchild.
      */
     private final int height;
 
     /**
-     * The optional opaque direct-connection encrypted-info blob,
-     * stamped into the {@code <direct_connection_encrypted_info/>}
-     * grandchild when present.
+     * Holds the optional opaque direct-connection encrypted-info blob, stamped into the
+     * {@code <direct_connection_encrypted_info/>} grandchild when present.
      */
     private final String directConnectionEncryptedInfo;
 
     /**
-     * Constructs a request.
+     * Constructs a request from the catalog JID, the non-empty list of product ids, the requested
+     * image resolution and the optional direct-connection encrypted-info blob.
      *
-     * @apiNote
-     * Pass the merchant catalog JID, the non-empty list of product ids
-     * and the requested image resolution; the
-     * direct-connection-encrypted-info blob is only required when the
-     * cart UI is operating under the direct-connection flow.
+     * <p>The product id list is defensively copied so the caller may mutate the source freely after
+     * construction. The encrypted-info blob is required only when the cart UI is operating under the
+     * direct-connection flow and may otherwise be {@code null}.
      *
-     * @param catalogJid                    the catalog JID; never
-     *                                      {@code null}
-     * @param productIds                    the product ids; never
-     *                                      {@code null} and must be
-     *                                      non-empty
+     * @param catalogJid                    the catalog JID; never {@code null}
+     * @param productIds                    the product ids; never {@code null} and must be non-empty
      * @param width                         the requested image width
      * @param height                        the requested image height
-     * @param directConnectionEncryptedInfo the optional encrypted-info
-     *                                      blob; may be {@code null}
-     * @throws NullPointerException     if {@code catalogJid} or
-     *                                  {@code productIds} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException when {@code productIds} is empty
+     * @param directConnectionEncryptedInfo the optional encrypted-info blob; may be {@code null}
+     * @throws NullPointerException     if {@code catalogJid} or {@code productIds} is {@code null}
+     * @throws IllegalArgumentException if {@code productIds} is empty
      */
     public IqQueryProductListCatalogRequest(Jid catalogJid,
                    List<String> productIds,
@@ -107,10 +93,8 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     /**
      * Returns the merchant catalog JID.
      *
-     * @apiNote
-     * Use this getter to read back the catalog JID the stanza will
-     * name; the value is routed verbatim into the {@code jid}
-     * attribute of the resulting {@code <product_list/>} child.
+     * <p>The value is routed verbatim into the {@code jid} attribute of the resulting
+     * {@code <product_list/>} child.
      *
      * @return the catalog JID; never {@code null}
      */
@@ -119,11 +103,7 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the requested product ids.
-     *
-     * @apiNote
-     * Use this getter to read back the product ids the fan-out will
-     * fetch; the order is the caller-supplied wire order.
+     * Returns the requested product ids in caller-supplied wire order.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -132,11 +112,7 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the requested image width.
-     *
-     * @apiNote
-     * Use this getter to read back the width the relay will use to
-     * size the rendered image URLs.
+     * Returns the requested image width the relay uses to size the rendered image URLs.
      *
      * @return the width
      */
@@ -145,11 +121,7 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the requested image height.
-     *
-     * @apiNote
-     * Use this getter to read back the height the relay will use to
-     * size the rendered image URLs.
+     * Returns the requested image height the relay uses to size the rendered image URLs.
      *
      * @return the height
      */
@@ -158,12 +130,9 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the direct-connection encrypted-info blob.
+     * Returns the direct-connection encrypted-info blob the stanza attaches.
      *
-     * @apiNote
-     * Use this getter to read back the optional encrypted-info blob
-     * the stanza will attach; an empty optional means the request is
-     * not operating under the direct-connection flow.
+     * <p>An empty optional means the request is not operating under the direct-connection flow.
      *
      * @return an {@link Optional} carrying the blob
      */
@@ -175,13 +144,10 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by
-     * the {@code WAWebQueryProductListCatalogJob} export: one
-     * {@code <product><id/></product>} grandchild per id, plus the
-     * {@code <width/>}, {@code <height/>} and (optionally)
-     * {@code <direct_connection_encrypted_info/>} grandchildren of the
-     * {@code <product_list jid/>} child, wrapped in the
-     * {@code w:biz:catalog get} IQ frame routed to the WhatsApp service.
+     * This implementation materialises one {@code <product><id/></product>} grandchild per id, plus
+     * the {@code <width/>}, {@code <height/>} and (optionally)
+     * {@code <direct_connection_encrypted_info/>} grandchildren of the {@code <product_list jid/>}
+     * child, wrapped in the {@code w:biz:catalog get} IQ frame routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryProductListCatalogJob",
@@ -226,7 +192,10 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request with another for value equality across every wire-bearing field.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal request
      */
     @Override
     public boolean equals(Object obj) {
@@ -245,7 +214,9 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -253,7 +224,9 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string naming the catalog JID, product ids and requested resolution.
+     *
+     * @return the string form
      */
     @Override
     public String toString() {

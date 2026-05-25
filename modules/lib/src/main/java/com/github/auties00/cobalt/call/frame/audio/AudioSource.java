@@ -1,36 +1,40 @@
 package com.github.auties00.cobalt.call.frame.audio;
 
+import com.github.auties00.cobalt.call.ActiveCall;
+
 /**
- * Producer of {@link AudioFrame}s — the Java side of the call's
- * outbound audio path. {@code ActiveCall.localAudioSink()}
- * consumes from one of these, encoding each frame with Opus and
- * shipping it over SRTP. Implementations are typically:
+ * Produces {@link AudioFrame}s for a call to transmit.
  *
- * <ul>
- *   <li>OS microphone capture (via the {@code cobalt-media-local}
- *       companion module).</li>
- *   <li>A demuxed audio track from an MP3/MP4 file (also in
- *       {@code cobalt-media-local}).</li>
- *   <li>A bridge from another {@code ActiveCall.remoteAudioSource()},
- *       for multi-party mixing.</li>
- *   <li>A synthetic generator for tests.</li>
- * </ul>
+ * <p>A source is the origin of the outbound audio path. {@link ActiveCall} pulls frames from a
+ * source, encodes each one with Opus, and ships it over SRTP to the remote participant. Frames must
+ * carry 16 kHz mono signed 16-bit PCM, as described by {@link AudioFrame}. Typical implementations
+ * capture from an operating system microphone, demux an audio track from a media file, bridge from
+ * a remote source for multi-party mixing, or generate synthetic samples for tests.
  *
- * <p>{@link #next()} blocks until the next frame is available and
- * may be interrupted; returning {@code null} signals end-of-stream
- * (the call's encoder treats this as "stop consuming from this
- * source"). Cobalt drives sources from a virtual thread, so blocking
- * is the idiomatic shape.
+ * <p>{@link #next()} blocks until the next frame is available and returns {@code null} to signal
+ * end-of-stream, after which the call stops consuming from this source.
+ *
+ * @apiNote Implement this interface to feed call audio from a custom capture or playback origin,
+ * then hand the implementation to the call so it becomes the outbound stream. Return {@code null}
+ * only when the stream is permanently finished, not to indicate a transient gap; produce a silent
+ * frame for a gap instead.
  */
 @FunctionalInterface
 public interface AudioSource {
     /**
-     * Returns the next {@link AudioFrame}, blocking until one is
-     * available, or {@code null} if the source has been exhausted.
+     * Returns the next frame, blocking until one is available, or {@code null} on end-of-stream.
      *
-     * @return the next frame, or {@code null} on end-of-stream
-     * @throws InterruptedException if the calling thread is
-     *                              interrupted while waiting
+     * <p>Blocks while no frame is ready. Returning a frame transfers it to the call for encoding;
+     * returning {@code null} ends the stream and the call stops polling this source.
+     *
+     * @implSpec Implementations may block the calling thread until a frame is ready; Cobalt drives
+     * this method from a virtual thread, so blocking is the expected shape. Each returned frame must
+     * be a fresh {@link AudioFrame} whose buffer the call may retain; an implementation must not
+     * mutate a buffer it has already returned. An implementation that is interrupted while waiting
+     * must throw {@link InterruptedException} rather than returning {@code null}, so a transient
+     * interruption is not mistaken for end-of-stream.
+     * @return the next frame, or {@code null} once the source is permanently exhausted
+     * @throws InterruptedException if the calling thread is interrupted while waiting for a frame
      */
     AudioFrame next() throws InterruptedException;
 }

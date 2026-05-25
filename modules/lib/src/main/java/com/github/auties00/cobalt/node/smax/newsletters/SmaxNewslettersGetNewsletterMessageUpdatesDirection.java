@@ -15,27 +15,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the pagination cursor of a
- * {@link SmaxNewslettersGetNewsletterMessageUpdatesRequest}.
+ * Selects the pagination cursor of a {@link SmaxNewslettersGetNewsletterMessageUpdatesRequest}.
  *
- * @apiNote
- * Pick this when polling the message-updates delta for a single
- * newsletter; one of {@link Before} or {@link After} must be supplied,
- * never both and never neither. {@link After} drives the WA Web
- * forward-walk pattern in
- * {@code WAWebNewsletterGetMessageUpdatesQuery.getNewsletterMessageUpdatesQuery},
- * which paginates updates after the last-seen server-id.
+ * <p>Exactly one of {@link Before} or {@link After} must be supplied when polling the
+ * message-updates delta for a single newsletter; the relay rejects a {@code <message_updates>}
+ * element that carries both or neither.</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersMessageUpdatesBeforeOrAfterMixinMixinGroup")
 public sealed interface SmaxNewslettersGetNewsletterMessageUpdatesDirection permits SmaxNewslettersGetNewsletterMessageUpdatesDirection.Before, SmaxNewslettersGetNewsletterMessageUpdatesDirection.After {
 
     /**
-     * The variant that walks backwards from a pivot server-id.
+     * Selects message updates with server-ids strictly below a pivot.
      *
-     * @apiNote
-     * Selects message updates with server-ids strictly less than
-     * {@link #pivot()}, materialised as the {@code before} attribute on
-     * the wire {@code <message_updates>} element.
+     * <p>Materialised as the {@code before} attribute on the wire {@code <message_updates>}
+     * element; used to paginate older message updates one slice at a time.</p>
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersMessageUpdatesBeforeMixinMixin")
     final class Before implements SmaxNewslettersGetNewsletterMessageUpdatesDirection {
@@ -47,12 +40,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessageUpdatesDirection perm
         /**
          * Constructs a backward-walking cursor at the given pivot.
          *
-         * @apiNote
-         * Used when paginating older message updates one slice at a
-         * time.
-         *
-         * @param pivot the server-id pivot; the relay returns updates
-         *              strictly less than this value
+         * @param pivot the server-id pivot; the relay returns updates strictly less than this value
          */
         public Before(long pivot) {
             this.pivot = pivot;
@@ -71,8 +59,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessageUpdatesDirection perm
          * Compares two cursors for value equality on {@link #pivot()}.
          *
          * @param obj the reference object to compare against
-         * @return {@code true} when {@code obj} is a {@link Before}
-         *         carrying the same pivot
+         * @return {@code true} when {@code obj} is a {@link Before} carrying the same pivot
          */
         @Override
         public boolean equals(Object obj) {
@@ -101,13 +88,11 @@ public sealed interface SmaxNewslettersGetNewsletterMessageUpdatesDirection perm
     }
 
     /**
-     * The variant that walks forwards from a pivot server-id.
+     * Selects message updates with server-ids strictly above a pivot.
      *
-     * @apiNote
-     * Selects message updates with server-ids strictly greater than
-     * {@link #pivot()}, materialised as the {@code after} attribute on
-     * the wire {@code <message_updates>} element. This is the variant
-     * WA Web's background delta-sync defaults to.
+     * <p>Materialised as the {@code after} attribute on the wire {@code <message_updates>}
+     * element; this is the cursor a forward delta-sync poll uses to fetch updates past its
+     * last-seen server-id.</p>
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersMessageUpdatesAfterMixinMixin")
     final class After implements SmaxNewslettersGetNewsletterMessageUpdatesDirection {
@@ -119,12 +104,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessageUpdatesDirection perm
         /**
          * Constructs a forward-walking cursor at the given pivot.
          *
-         * @apiNote
-         * Used when polling for new message updates strictly past the
-         * caller's last-seen server-id.
-         *
-         * @param pivot the server-id pivot; the relay returns updates
-         *              strictly greater than this value
+         * @param pivot the server-id pivot; the relay returns updates strictly greater than this value
          */
         public After(long pivot) {
             this.pivot = pivot;
@@ -143,8 +123,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessageUpdatesDirection perm
          * Compares two cursors for value equality on {@link #pivot()}.
          *
          * @param obj the reference object to compare against
-         * @return {@code true} when {@code obj} is an {@link After}
-         *         carrying the same pivot
+         * @return {@code true} when {@code obj} is an {@link After} carrying the same pivot
          */
         @Override
         public boolean equals(Object obj) {

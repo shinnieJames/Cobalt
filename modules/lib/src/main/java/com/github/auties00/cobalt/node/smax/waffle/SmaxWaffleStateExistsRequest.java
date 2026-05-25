@@ -13,37 +13,25 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="waffle" smax_id="142" type="get"/>}
- * Waffle state-existence probe.
- *
- * @apiNote
- * Powers the boot-time check in
- * {@code WAWebAccountLinkingAPI.stateExists}, which asks the relay
- * whether this device is currently linked to a Facebook account and
- * caches the answer as one of {@code UNLINKED}, {@code ACTIVE}, or
- * {@code PAUSED} (the {@code AccountLinkingStateExists} enum in
- * {@code WAWebAccountLinkingConstants}). The reply is paired with
- * {@link SmaxWaffleStateExistsResponse}. The request body carries only
- * a {@code <timestamp/>} child; the relay identifies the caller from
- * the authenticated session.
+ * Models the outbound Waffle state-existence probe.
+ * <p>
+ * This request asks the relay whether the device is currently linked to a Facebook account; the reply
+ * reports an unlinked, active, or paused state. The body carries only a {@code <timestamp/>} child, since the
+ * relay identifies the caller from the authenticated session. The reply is parsed by
+ * {@link SmaxWaffleStateExistsResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleStateExistsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
 public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request {
     /**
-     * The client wall-clock at request time, in seconds since the Unix
-     * epoch.
+     * Holds the client wall-clock value stamped at request time, in seconds since the Unix epoch.
      */
     private final long timestamp;
 
     /**
      * Constructs a state-existence probe stamped at the given timestamp.
-     *
-     * @apiNote
-     * WA Web stamps the request with {@code Date.now()} (milliseconds
-     * since the Unix epoch) for this RPC; the value is opaque to the
-     * relay and is echoed back inside the reply for clock-skew
-     * diagnostics.
+     * <p>
+     * The timestamp is opaque to the relay and is echoed back inside the reply for clock-skew diagnostics.
      *
      * @param timestamp the request timestamp
      */
@@ -62,16 +50,12 @@ public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     * <p>
+     * The result is an {@code <iq xmlns="waffle" smax_id="142" type="get" to="s.whatsapp.net">} envelope
+     * carrying a single {@code <timestamp/>} child. The dispatch path stamps a fresh {@code id} attribute on
+     * every outbound stanza so the reply parser can match it back to this request.
      *
-     * @apiNote
-     * Produces
-     * {@code <iq xmlns="waffle" smax_id="142" type="get" to="s.whatsapp.net">
-     * <timestamp>...</timestamp></iq>}; the dispatch path stamps a fresh
-     * {@code id} attribute on every outbound stanza so the reply parser
-     * can match it back to this request.
-     *
-     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
-     *         and the {@code <timestamp/>} payload; never {@code null}
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the {@code <timestamp/>} payload; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleStateExistsRequest",
@@ -91,8 +75,7 @@ public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxWaffleStateExistsRequest} with an equal timestamp.
+     * Returns whether the given object is a {@link SmaxWaffleStateExistsRequest} with an equal timestamp.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when both timestamps match

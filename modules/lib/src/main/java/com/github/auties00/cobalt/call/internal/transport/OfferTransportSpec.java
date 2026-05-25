@@ -9,49 +9,31 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Captures the transport-layer setup carried inside a WhatsApp Web
- * {@code <offer>} payload.
+ * Captures the transport-layer setup carried inside a WhatsApp Web {@code <offer>} payload.
  *
- * <p>WA's call offers ship the full WebRTC-equivalent transport
- * blueprint as XML children: WA's TURN-like relay endpoints
- * ({@code <te2>}), the per-call session tokens ({@code <token>},
- * {@code <auth_token>}, {@code <key>}, {@code <hbh_key>}), the
- * negotiated participants ({@code <participant>}), and a single
- * Real-Time-Engine identifier ({@code <rte>}). Subsequent phases use
- * these to perform the relay handshake, derive SRTP keying material,
- * and route media.
+ * <p>WA's call offers ship the full WebRTC-equivalent transport blueprint as XML children: the
+ * TURN-like relay endpoints ({@code <te2>}), the per-call session tokens ({@code <token>},
+ * {@code <auth_token>}, {@code <key>}, {@code <hbh_key>}), the negotiated participants
+ * ({@code <participant>}), and a single Real-Time-Engine identifier ({@code <rte>}). Downstream
+ * layers use these to perform the relay handshake, derive SRTP keying material, and route media.
  *
- * <p>The fields below mirror the captured-offer attribute and child
- * shape exactly — the source-of-truth fixtures are in
- * {@code modules/lib/src/test/resources/fixtures/call/1to1/}.
+ * <p>The fields below mirror the captured-offer attribute and child shape exactly; the
+ * source-of-truth fixtures live in {@code modules/lib/src/test/resources/fixtures/call/1to1/}.
  *
- * @param relayUuid    the {@code uuid} attribute on {@code <relay>} —
- *                     opaque session id used by WA's relay protocol
- * @param peerPid      the {@code peer_pid} attribute — the peer's
- *                     participant id within this call's relay session
- * @param selfPid      the {@code self_pid} attribute — the local
- *                     participant id
- * @param participants the parsed {@code <participant>} children — one
- *                     entry per group-call participant in
+ * @param relayUuid    the {@code uuid} attribute on {@code <relay>}, the opaque session id used by WA's relay protocol
+ * @param peerPid      the {@code peer_pid} attribute, the peer's participant id within this call's relay session
+ * @param selfPid      the {@code self_pid} attribute, the local participant id
+ * @param participants the parsed {@code <participant>} children, one entry per group-call participant in
  *                     participant-id order
- * @param tokens       the parsed {@code <token>} children — the
- *                     per-relay session tokens, indexed by their
+ * @param tokens       the parsed {@code <token>} children, the per-relay session tokens indexed by their
  *                     {@code id} attribute
- * @param authTokens   the parsed {@code <auth_token>} children — the
- *                     authentication tokens that are paired with
- *                     {@code te2_endpoints} entries by
- *                     {@code auth_token_id}
- * @param te2Endpoints the parsed {@code <te2>} children — each names
- *                     one candidate WA relay endpoint with its
- *                     {@code domain_name}, {@code relay_name}, and
- *                     opaque address bytes
- * @param callKey      the bytes of the {@code <key>} child — the
- *                     per-call session key (raw 24 base64 chars in
- *                     the wire, decoded here)
- * @param hbhKey       the bytes of the {@code <hbh_key>} child — the
- *                     hop-by-hop key, raw bytes as above
- * @param rte          the bytes of the {@code <rte>} child — the
- *                     Real-Time-Engine identifier (typically 6 bytes)
+ * @param authTokens   the parsed {@code <auth_token>} children, the authentication tokens paired with
+ *                     {@code te2} endpoints by {@code auth_token_id}
+ * @param te2Endpoints the parsed {@code <te2>} children, each naming one candidate WA relay endpoint with its
+ *                     {@code domain_name}, {@code relay_name}, and opaque address bytes
+ * @param callKey      the bytes of the {@code <key>} child, the per-call session key
+ * @param hbhKey       the bytes of the {@code <hbh_key>} child, the hop-by-hop key
+ * @param rte          the bytes of the {@code <rte>} child, the Real-Time-Engine identifier (typically 6 bytes)
  */
 public record OfferTransportSpec(
         String relayUuid,
@@ -66,7 +48,10 @@ public record OfferTransportSpec(
         byte[] rte
 ) {
     /**
-     * Compact ctor that null-safes the list and byte-array fields.
+     * Normalizes the list fields to unmodifiable copies, mapping {@code null} to an empty list.
+     *
+     * <p>The byte-array fields ({@code callKey}, {@code hbhKey}, {@code rte}) are left as supplied,
+     * including {@code null}.
      */
     public OfferTransportSpec {
         participants = participants == null ? List.of() : List.copyOf(participants);
@@ -76,7 +61,7 @@ public record OfferTransportSpec(
     }
 
     /**
-     * One {@code <participant pid jid />} entry.
+     * Represents one {@code <participant pid jid />} child of the {@code <relay>} node.
      *
      * @param pid the {@code pid} attribute
      * @param jid the {@code jid} attribute
@@ -85,16 +70,16 @@ public record OfferTransportSpec(
     }
 
     /**
-     * One {@code <token id>bytes</token>} entry.
+     * Represents one {@code <token id>bytes</token>} child of the {@code <relay>} node.
      *
      * @param id    the {@code id} attribute
-     * @param bytes the raw token bytes (the element's content)
+     * @param bytes the raw token bytes, that is, the element's content
      */
     public record RelayToken(int id, byte[] bytes) {
     }
 
     /**
-     * One {@code <auth_token id>bytes</auth_token>} entry.
+     * Represents one {@code <auth_token id>bytes</auth_token>} child of the {@code <relay>} node.
      *
      * @param id    the {@code id} attribute
      * @param bytes the raw auth-token bytes
@@ -103,7 +88,7 @@ public record OfferTransportSpec(
     }
 
     /**
-     * One {@code <te2>} entry — a candidate WA relay endpoint.
+     * Represents one {@code <te2>} child, a candidate WA relay endpoint.
      *
      * @param authTokenId the {@code auth_token_id} attribute
      * @param relayId     the {@code relay_id} attribute
@@ -111,8 +96,7 @@ public record OfferTransportSpec(
      * @param domainName  the {@code domain_name} attribute
      * @param relayName   the {@code relay_name} attribute
      * @param c2rRtt      the {@code c2r_rtt} attribute
-     * @param bytes       the raw {@code <te2>} content bytes (the
-     *                    encoded relay address)
+     * @param bytes       the raw {@code <te2>} content bytes, the encoded relay address
      */
     public record Te2Endpoint(int authTokenId, int relayId, int tokenId,
                               String domainName, String relayName, int c2rRtt,
@@ -122,15 +106,21 @@ public record OfferTransportSpec(
     /**
      * Parses an {@code <offer>} payload node into a transport spec.
      *
-     * <p>The supplied node must be the inner {@code <offer>} child of
-     * the {@code <call>} envelope — NOT the envelope itself.
+     * <p>The supplied node must be the inner {@code <offer>} child of the {@code <call>} envelope,
+     * not the envelope itself. The {@code <relay>} child supplies the {@code uuid}, {@code peer_pid},
+     * and {@code self_pid} attributes and is iterated for its {@code participant}, {@code token},
+     * {@code auth_token}, {@code key}, {@code hbh_key}, and {@code te2} children; unrecognised
+     * children are skipped. The {@code rte} child is read from the {@code <offer>} node directly. A
+     * {@code participant}, {@code token}, {@code auth_token}, or {@code te2} child is admitted only
+     * when all of its required attributes and content are present; partially populated children are
+     * dropped. The {@code key} and {@code hbh_key} contents are decoded as raw bytes, falling back to
+     * the UTF-8 bytes of the content string.
      *
-     * @param offer the {@code <offer>} payload
-     * @return the parsed spec, or {@link Optional#empty()} when no
-     *         {@code <relay>} child is present (which happens for
-     *         signaling-only offers like Cobalt's own current
+     * @param offer the {@code <offer>} payload, or {@code null}
+     * @return the parsed spec, or {@link Optional#empty()} when {@code offer} is {@code null} or has
+     *         no {@code <relay>} child, which happens for signaling-only offers such as the output of
      *         {@link com.github.auties00.cobalt.call.internal.signaling.CallStanza#offer
-     *         CallStanza.offer} output)
+     *         CallStanza.offer}
      */
     public static Optional<OfferTransportSpec> parse(Node offer) {
         if (offer == null) {
@@ -204,7 +194,7 @@ public record OfferTransportSpec(
                                 bytes));
                     }
                 }
-                default -> { /* skip unrecognised children */ }
+                default -> {}
             }
         }
 

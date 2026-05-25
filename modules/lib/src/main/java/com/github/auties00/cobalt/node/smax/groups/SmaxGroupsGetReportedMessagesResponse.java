@@ -16,26 +16,23 @@ import java.util.Optional;
 
 /**
  * The sealed reply family for a {@link SmaxGroupsGetReportedMessagesRequest}.
- *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
- * cases: {@link Success} carries the per-message {@link Report} rows that drive the admin moderation drawer, the two
- * error variants surface the relay's reason codes. The {@code WAWebReportToAdminJob.getReportedMsgs} caller in WA Web
- * uses the same dispatch shape and additionally folds the LID-to-PN mappings into
- * {@code WAWebDBCreateLidPnMappings.createLidPnMappings}.
+ * <p>
+ * Exactly one of three variants matches a given inbound stanza: {@link Success} carries the per-message {@link Report}
+ * rows, {@link ClientError} carries a caller-side rejection code, and {@link ServerError} carries a transient
+ * relay-side failure code.
  */
 public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperation.Response
         permits SmaxGroupsGetReportedMessagesResponse.Success, SmaxGroupsGetReportedMessagesResponse.ClientError, SmaxGroupsGetReportedMessagesResponse.ServerError {
 
     /**
-     * Dispatches the inbound IQ across each {@link SmaxGroupsGetReportedMessagesResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsGetReportedMessagesResponse} variant and returns the first
+     * that parses cleanly.
+     * <p>
+     * Variants are tried in priority order: {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     * The result is empty when the stanza matches none of the three variants.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsGetReportedMessagesRPC}:
-     * {@link Success} first, then {@link ClientError}, then {@link ServerError}.
-     *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation defers the no-match decision to the caller by returning an empty {@link Optional}
+     * rather than throwing, so the caller can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound request
@@ -60,10 +57,9 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
     /**
      * The reply variant emitted when the relay returned the pending moderation queue.
-     *
-     * @apiNote Surfaces as the {@code GetReportedMessagesResponseSuccess} case in {@code WAWebReportToAdminJob};
-     * each {@link Report} entry is keyed by the reported message id and the admin moderation drawer renders the
-     * matching reporter list.
+     * <p>
+     * {@link #reports()} holds one {@link Report} per flagged message, each keyed by the reported message id and
+     * carrying its reporter list.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetReportedMessagesResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
@@ -95,9 +91,10 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxIqResultResponseMixin#validate(Node, Node)} for envelope validation, then
-         * matches the {@code <reports>} wrapper holding zero or more {@code <report/>} entries.
+         * <p>
+         * The envelope is validated through {@link SmaxIqResultResponseMixin#validate(Node, Node)} and the
+         * {@code <reports>} wrapper must be present; each {@code <report/>} child is parsed via {@link Report#of(Node)}
+         * and a single failed child fails the whole parse. An empty wrapper yields an empty report list.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -167,10 +164,9 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
     /**
      * Per-report projection carrying the reported message id and the non-empty reporter list.
-     *
-     * @apiNote Mirrors the {@code <report/>} child shape; the {@link #messageId()} corresponds to the stanza id of the
-     * original group message and the {@link #reporters()} list is guaranteed non-empty because the relay omits the
-     * row entirely when no reporters remain.
+     * <p>
+     * The {@link #messageId()} is the stanza id of the original group message; the {@link #reporters()} list is
+     * guaranteed non-empty because the relay omits the row entirely when no reporters remain.
      */
     final class Report {
         /**
@@ -179,7 +175,7 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         private final String messageId;
 
         /**
-         * The reporters who flagged the message.
+         * The reporters who flagged the message; never empty.
          */
         private final List<Reporter> reporters;
 
@@ -220,8 +216,8 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
         /**
          * Tries to parse a {@link Report} from the given {@code <report/>} child.
-         *
-         * @apiNote Matches when the child carries the {@code message_id} attribute and at least one
+         * <p>
+         * Parsing succeeds when the child carries the {@code message_id} attribute and at least one
          * {@code <reporter/>} grandchild; the relay never emits an empty report row.
          *
          * @param node the {@code <report/>} child node
@@ -293,11 +289,8 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
     }
 
     /**
-     * Per-reporter projection carrying the reporting user's JID and the unix-seconds timestamp at which the report
-     * was filed.
-     *
-     * @apiNote Mirrors the {@code IdentityMixin} shape; WA Web folds the LID-to-PN identity mapping carried alongside
-     * into {@code WAWebDBCreateLidPnMappings.createLidPnMappings} as a side effect.
+     * Per-reporter projection carrying the reporting user's JID and the unix-seconds timestamp at which the report was
+     * filed.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsIdentityMixin")
     final class Reporter {
@@ -347,8 +340,8 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
         /**
          * Tries to parse a {@link Reporter} from the given {@code <reporter/>} child.
-         *
-         * @apiNote Matches when the child carries the {@code jid} and {@code timestamp} attributes.
+         * <p>
+         * Parsing succeeds when the child carries the {@code jid} and {@code timestamp} attributes.
          *
          * @param node the {@code <reporter/>} child node
          * @return an {@link Optional} carrying the parsed reporter, or empty when the child does not match
@@ -412,9 +405,9 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
     /**
      * The reply variant emitted when the relay rejected the moderation-queue query as malformed or unauthorised.
-     *
-     * @apiNote Surfaces as the {@code GetReportedMessagesResponseClientError} case in {@code WAWebReportToAdminJob},
-     * which logs the {@link #errorCode()} as the HTTP-style status passed back to the admin moderation drawer.
+     * <p>
+     * The {@link #errorCode()} carries the HTTP-style status assigned by the relay and {@link #errorText()} carries
+     * the optional human-readable reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetReportedMessagesResponseClientError")
     final class ClientError implements SmaxGroupsGetReportedMessagesResponse {
@@ -424,7 +417,7 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -459,9 +452,9 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which matches only client-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -520,10 +513,10 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
     /**
      * The reply variant emitted on transient relay-side failure.
-     *
-     * @apiNote Surfaces as the {@code GetReportedMessagesResponseServerError} case in {@code WAWebReportToAdminJob},
-     * where it is logged at the same severity as {@link ClientError} but typically signals retry-eligible relay
-     * outages rather than caller error.
+     * <p>
+     * Unlike {@link ClientError} this code typically signals a retry-eligible relay outage rather than a malformed or
+     * unauthorised request; {@link #errorCode()} carries the server-range status and {@link #errorText()} the optional
+     * reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetReportedMessagesResponseServerError")
     final class ServerError implements SmaxGroupsGetReportedMessagesResponse {
@@ -533,7 +526,7 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -568,9 +561,9 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
 
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which matches only server-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

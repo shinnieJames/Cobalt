@@ -7,101 +7,109 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
- * Encodes a {@link CallInteraction} into the RTP/RTCP-shaped wire
- * envelope WhatsApp Web's wasm produces and writes to the
- * pre-negotiated DataChannel.
+ * Encodes a {@link CallInteraction} into the RTP/RTCP-shaped wire envelope written to the pre-negotiated DataChannel.
  *
- * @apiNote The output is the PLAINTEXT 12-byte header concatenated
- * with a per-interaction body — ready to be handed to an SRTP
- * encryptor before transmission. Per-interaction (byte0, byte1) tag
- * pairs are stable across calls; the SSRC, sequence, and timestamp
- * come from the per-call {@link InteractionStreamState}. See
- * {@code reference_wa_voip_interaction_wire_format} memory for the
- * envelope mapping table.
- * @implNote The encoder is intentionally empirical: WhatsApp Web's
- * encrypted SRTP body cannot be recovered without keys, so the
- * plaintext body inside each interaction is built from the most
- * plausible plain shape (e.g. reaction body = ~12-byte wrapper +
- * UTF-8 emoji bytes, matching the 2-byte length delta observed
- * between thumbsup and heart captures). The exact wrapper bytes are
- * unknown and filled with zeros pending Phase 8 end-to-end
- * validation against a real WA peer.
+ * <p>Each interaction is serialized as a fixed 12-byte header concatenated with a per-interaction body. The header is
+ * an RTP/RTCP-shaped tuple: a byte-0 version/padding/extension/CSRC bitfield, a byte-1 marker/payload-type bitfield, a
+ * 16-bit sequence number, a 32-bit timestamp, and a 32-bit SSRC, all big-endian. The (byte0, byte1) tag pair is fixed
+ * per interaction kind, while the sequence, timestamp, and SSRC are drawn from the per-call {@link InteractionStreamState}.
+ * The returned bytes are plaintext: callers hand them to an SRTP encryptor before transmission.
+ *
+ * @implNote This implementation is empirical: WhatsApp Web's encrypted SRTP body cannot be recovered without keys, so the
+ * plaintext body of each interaction is reconstructed from the most plausible plain shape inferred from live captures. A
+ * reaction body is a {@link #REACTION_WRAPPER_LEN}-byte wrapper followed by the UTF-8 emoji bytes, matching the 2-byte
+ * length delta observed between thumbs-up and heart captures. The wrapper bytes themselves are unknown and zero-filled
+ * pending end-to-end validation against a real WhatsApp peer.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipStackInterfaceWeb")
 public final class CallInteractionEncoder {
     /**
-     * RTP version 2, no padding, no extension, no CSRC count.
+     * Encodes the RTP byte-0 bitfield for version 2 with no padding, no extension, and a CSRC count of zero.
      */
     private static final int RTP_V2 = 0x80;
+
     /**
-     * RTP version 2, no padding, no extension, CSRC count = 1.
+     * Encodes the RTP byte-0 bitfield for version 2 with no padding, no extension, and a CSRC count of one.
      */
     private static final int RTP_V2_CC1 = 0x81;
+
     /**
-     * RTP version 2, marker bit set, no padding/extension/CSRC.
+     * Encodes the RTP byte-1 bitfield for version 2 with the marker bit set and no padding, extension, or CSRC.
      */
     private static final int RTP_V2_MARKER = 0x90;
+
     /**
-     * RTP version 2, marker bit set, CSRC count = 1.
+     * Encodes the RTP byte-1 bitfield for version 2 with the marker bit set and a CSRC count of one.
      */
     private static final int RTP_V2_MARKER_CC1 = 0x91;
 
     /**
-     * Reaction payload type (RTP PT 119).
+     * Encodes the RTP payload type for reactions, payload type 119.
      */
     private static final int PT_REACTION = 0x77;
+
     /**
-     * Generic request payload type (RTP PT 120) — used for
-     * keyFrame and peerMute requests.
+     * Encodes the RTP payload type for generic requests, payload type 120, shared by key-frame and peer-mute requests.
      */
     private static final int PT_REQUEST = 0x78;
+
     /**
-     * RTCP sender-report packet type (200).
+     * Encodes the RTCP sender-report packet type, 200.
      */
     private static final int RTCP_SR = 0xc8;
 
     /**
-     * Fixed body length for raise/lower hand packets (110-byte body
-     * + 12-byte header = 122-byte packet, matching live captures).
+     * Holds the fixed body length, in bytes, of a raise-hand or lower-hand packet.
+     *
+     * @implNote This implementation uses 110, which with the 12-byte header yields the 122-byte packet observed in live
+     * captures.
      */
     private static final int RAISE_HAND_BODY_LEN = 110;
+
     /**
-     * Fixed body length for video-upgrade packets (110-byte body +
-     * 12-byte header = 122-byte packet, matching live captures).
+     * Holds the fixed body length, in bytes, of a video-upgrade packet.
+     *
+     * @implNote This implementation uses 110, which with the 12-byte header yields the 122-byte packet observed in live
+     * captures.
      */
     private static final int VIDEO_UPGRADE_BODY_LEN = 110;
+
     /**
-     * Plaintext wrapper size around the emoji UTF-8 in a reaction
-     * body. Derived from live capture: 28-byte thumbsup packet -
-     * 12-byte header - 4-byte UTF-8(thumbsup) = 12 bytes; 30-byte
-     * heart packet - 12 - 6 = 12 bytes (consistent).
+     * Holds the plaintext wrapper size, in bytes, that precedes the UTF-8 emoji in a reaction body.
+     *
+     * @implNote This implementation uses 12, derived from live captures: the 28-byte thumbs-up packet minus the 12-byte
+     * header minus the 4 UTF-8 bytes of the thumbs-up emoji is 12, and the 30-byte heart packet minus 12 minus 6 is also
+     * 12.
      */
     private static final int REACTION_WRAPPER_LEN = 12;
+
     /**
-     * Best-effort empirical body size for a peer-mute or key-frame
-     * request. Live captures saw 40-238 bytes depending on the
-     * target WID encoding. We size as {@code 16} bytes of wrapper +
-     * the WID UTF-8 bytes; subject to revision after Phase 8
-     * validation.
+     * Holds the plaintext wrapper size, in bytes, that precedes the target-WID UTF-8 bytes in a peer-mute or key-frame
+     * request body.
+     *
+     * @implNote This implementation uses 16, a best-effort value: live captures saw bodies of 40 to 238 bytes depending
+     * on the target-WID encoding, modeled as 16 bytes of wrapper plus the WID UTF-8 bytes, subject to revision after
+     * end-to-end validation.
      */
     private static final int REQUEST_WRAPPER_LEN = 16;
 
     /**
-     * Private constructor — class is a stateless namespace.
+     * Prevents instantiation of this stateless utility class.
      */
     private CallInteractionEncoder() {
     }
 
     /**
-     * Encodes one interaction packet, including the 12-byte
-     * RTP/RTCP-shaped header.
+     * Encodes one interaction into a plaintext packet comprising the 12-byte RTP/RTCP-shaped header and its body.
+     *
+     * <p>The interaction kind selects the header tag pair, the logical stream, and the body layout. The sequence,
+     * timestamp, and SSRC written into the header are drawn from {@code state}, which is mutated as a side effect: the
+     * sequence and timestamp counters of the selected stream advance by one packet.
      *
      * @param interaction the interaction to encode
-     * @param state       the per-call stream state from which to
-     *                    draw SSRC, sequence, and timestamp
-     * @return the plaintext packet (header + body), ready for SRTP
-     * encryption
-     * @throws NullPointerException if any argument is {@code null}
+     * @param state       the per-call stream state from which to draw the SSRC, sequence, and timestamp
+     * @return the plaintext packet, header followed by body, ready for SRTP encryption
+     * @throws NullPointerException if {@code interaction} or {@code state} is {@code null}
      */
     public static byte[] encode(CallInteraction interaction, InteractionStreamState state) {
         Objects.requireNonNull(interaction, "interaction cannot be null");
@@ -117,10 +125,13 @@ public final class CallInteractionEncoder {
     }
 
     /**
-     * Builds a reaction packet: header (V2/PT=119) + 12-byte wrapper
-     * + UTF-8 emoji bytes.
+     * Encodes a {@link CallInteraction.Reaction} into a reaction packet.
      *
-     * @param reaction the reaction
+     * <p>The packet carries the {@link #RTP_V2} byte-0 tag and the {@link #PT_REACTION} payload type, a
+     * {@link #REACTION_WRAPPER_LEN}-byte zero wrapper, and the UTF-8 bytes of the reaction emoji. It is framed on the
+     * {@link InteractionStreamState.Stream#REACTION} stream.
+     *
+     * @param reaction the reaction whose emoji is encoded
      * @param state    the per-call stream state
      * @return the encoded packet
      */
@@ -133,14 +144,17 @@ public final class CallInteractionEncoder {
     }
 
     /**
-     * Builds a raise/lower-hand packet: header (RTCP SR shape) +
-     * fixed-size body. The single bool is encoded into byte 0 of
-     * the body; remaining bytes are zeros pending Phase 8
-     * validation.
+     * Encodes a raise-hand or lower-hand gesture into a hand-toggle packet.
      *
-     * @param raised whether the hand is raised (vs lowered)
+     * <p>The packet carries the {@link #RTP_V2_CC1} byte-0 tag and the {@link #RTCP_SR} packet type and a fixed
+     * {@link #RAISE_HAND_BODY_LEN}-byte body whose byte 0 holds 1 for raised and 0 for lowered; the remaining bytes are
+     * zero. It is framed on the {@link InteractionStreamState.Stream#CONTROL} stream.
+     *
+     * @param raised {@code true} to encode a raise-hand gesture, {@code false} to encode a lower-hand gesture
      * @param state  the per-call stream state
      * @return the encoded packet
+     * @implNote This implementation zero-fills every body byte after byte 0; the true layout of the remaining bytes is
+     * unrecovered.
      */
     private static byte[] encodeHandToggle(boolean raised, InteractionStreamState state) {
         var body = new byte[RAISE_HAND_BODY_LEN];
@@ -150,10 +164,14 @@ public final class CallInteractionEncoder {
     }
 
     /**
-     * Builds a peer-mute or key-frame request packet: header (RTP
-     * PT=120) + 16-byte wrapper + target-WID UTF-8 bytes.
+     * Encodes a peer-mute or key-frame request into a request packet.
      *
-     * @param target the target user/peer WID as a string
+     * <p>The packet carries the {@link #RTP_V2_MARKER} byte-0 tag and the {@link #PT_REQUEST} payload type, a
+     * {@link #REQUEST_WRAPPER_LEN}-byte zero wrapper, and the UTF-8 bytes of {@code target}. A key-frame request passes
+     * an empty target, yielding a body of only the wrapper. The packet is framed on the
+     * {@link InteractionStreamState.Stream#CONTROL} stream.
+     *
+     * @param target the target peer WID in string form, or the empty string for a key-frame request
      * @param state  the per-call stream state
      * @return the encoded packet
      */
@@ -166,8 +184,11 @@ public final class CallInteractionEncoder {
     }
 
     /**
-     * Builds a video-upgrade request packet: header (RTCP with
-     * extension) + fixed-size empty body.
+     * Encodes a video-upgrade request into a video-upgrade packet.
+     *
+     * <p>The packet carries the {@link #RTP_V2_MARKER_CC1} byte-0 tag and the {@link #RTCP_SR} packet type and a fixed
+     * {@link #VIDEO_UPGRADE_BODY_LEN}-byte zero body. It is framed on the
+     * {@link InteractionStreamState.Stream#VIDEO_UPGRADE} stream.
      *
      * @param state the per-call stream state
      * @return the encoded packet
@@ -179,15 +200,18 @@ public final class CallInteractionEncoder {
     }
 
     /**
-     * Assembles a 12-byte RTP/RTCP-shaped header plus the given body
-     * into one packet. Pulls fresh sequence + timestamp from the
-     * stream state; reads the stream's SSRC.
+     * Assembles a 12-byte RTP/RTCP-shaped header and the given body into one packet.
      *
-     * @param byte0  the header byte-0 (V/P/X/CC bitfield)
-     * @param byte1  the header byte-1 (M/PT bitfield)
+     * <p>The header is laid out big-endian as byte 0, byte 1, a 16-bit sequence number, a 32-bit timestamp, and a 32-bit
+     * SSRC. The sequence and timestamp are pulled fresh from the stream state via {@link InteractionStreamState#nextSequence}
+     * and {@link InteractionStreamState#nextTimestamp}, advancing those counters; the SSRC is read with
+     * {@link InteractionStreamState#ssrc}. The body is copied verbatim after the header.
+     *
+     * @param byte0  the header byte 0, the version/padding/extension/CSRC bitfield
+     * @param byte1  the header byte 1, the marker/payload-type bitfield
      * @param state  the per-call stream state
-     * @param stream the logical stream
-     * @param body   the body bytes (appended after the header)
+     * @param stream the logical stream whose counters and SSRC are used
+     * @param body   the body bytes appended after the header
      * @return the assembled packet
      */
     private static byte[] frame(int byte0, int byte1,

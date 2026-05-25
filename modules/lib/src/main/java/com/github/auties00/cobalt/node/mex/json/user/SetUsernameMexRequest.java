@@ -15,16 +15,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Builds the MEX IQ stanza that claims, reserves, or updates a WhatsApp
- * username.
+ * Builds the MEX IQ stanza that claims, reserves, or updates a WhatsApp username.
  *
- * @apiNote Powers the username picker on the Settings screen and the
- * username step during onboarding. WA Web's {@code WAWebSetUsernameJob}
- * dispatches this mutation with {@code source="USER_INPUT"} during the
- * standard settings flow and toggles {@code reserved} based on the
- * current {@code WAWebUserPrefsUsername.getUsernameState()}. Pair the
- * dispatched stanza with {@link SetUsernameMexResponse} to consume the
- * reply.
+ * <p>This request backs the username picker on the Settings screen and the username step during
+ * onboarding. The candidate name is sent as the {@code input} variable, with {@code reserved},
+ * {@code session_id}, and {@code source} as optional companion variables; setting
+ * {@code reserved=true} pre-claims the username during onboarding without finalising it, and the
+ * standard settings flow tags {@code source} with {@code "USER_INPUT"}. The reply is consumed
+ * through {@link SetUsernameMexResponse}.
  *
  * @see SetUsernameMexResponse
  */
@@ -33,10 +31,7 @@ public final class SetUsernameMexRequest implements MexOperation.Request.Json {
     /**
      * The compiled-document id the relay maps to the persisted mutation.
      *
-     * @apiNote Used as the {@code query_id} attribute of the outbound
-     * {@code <query>} node. Matches the {@code params.id} field of
-     * {@code WAWebMexSetUsernameJobMutation.graphql} for the snapshot this
-     * file was generated against.
+     * <p>Emitted as the {@code query_id} attribute of the outbound {@code <query>} node.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -44,10 +39,6 @@ public final class SetUsernameMexRequest implements MexOperation.Request.Json {
 
     /**
      * The GraphQL operation name reported alongside this request.
-     *
-     * @apiNote Mirrors {@code params.name} on
-     * {@code WAWebMexSetUsernameJobMutation.graphql}; WA Web tags the value
-     * to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJobMutation.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -76,18 +67,14 @@ public final class SetUsernameMexRequest implements MexOperation.Request.Json {
     /**
      * Constructs a set-username mutation request.
      *
-     * @apiNote {@code reserved=true} pre-claims the username during
-     * onboarding without finalising it; the typical post-onboarding flow
-     * later re-dispatches with {@code reserved=false}. {@code sessionId}
-     * ties the reservation to a registration flow; {@code source} tags
-     * the entry point ({@code "USER_INPUT"} is the value WA Web emits
-     * from the settings UI).
+     * <p>Passing {@code reserved=true} pre-claims the username during onboarding without finalising
+     * it; the typical post-onboarding flow later re-dispatches with {@code reserved=false}.
+     * {@code sessionId} ties the reservation to a registration flow, and {@code source} tags the
+     * entry point ({@code "USER_INPUT"} is the value the settings UI emits).
      *
      * @param input the candidate username to claim or update
-     * @param reserved whether the username should be reserved, or
-     *                 {@code null} to omit the flag
-     * @param sessionId the registration-flow session identifier, or
-     *                  {@code null} to omit
+     * @param reserved whether the username should be reserved, or {@code null} to omit the flag
+     * @param sessionId the registration-flow session identifier, or {@code null} to omit
      * @param source the entry-point tag, or {@code null} to omit
      */
     public SetUsernameMexRequest(String input, Boolean reserved, String sessionId, String source) {
@@ -116,13 +103,10 @@ public final class SetUsernameMexRequest implements MexOperation.Request.Json {
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation mirrors WA Web's
-     * {@code isStringNullOrEmpty(t.input) ? {} : t} gate: when
-     * {@link #input} is {@code null} or empty, the variables object is
-     * emitted as {@code {}} regardless of the other fields. When
-     * {@link #input} is present, the remaining variables
-     * ({@code reserved}, {@code session_id}, {@code source}) are forwarded
-     * whenever non-{@code null}. Envelope construction is delegated to
+     * @implNote This implementation gates the whole {@code variables} body on {@link #input}: when
+     * {@code input} is {@code null} or empty the object is emitted as {@code {}} regardless of the
+     * other fields, otherwise {@code reserved}, {@code session_id}, and {@code source} are forwarded
+     * whenever non-{@code null}; envelope construction is delegated to
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",

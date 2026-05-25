@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.call.filter;
 
 import com.github.auties00.cobalt.call.frame.audio.AudioFrame;
 import com.github.auties00.cobalt.call.frame.audio.AudioSource;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -12,13 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link ResamplingAudioSource}.
+ * Covers {@link ResamplingAudioSource} pulling from a delegate {@link AudioSource}: equal in and out
+ * rates pass through, a 48 kHz to 16 kHz drop yields fixed-size frames with a pts that advances by
+ * the configured frame duration, the source exhausts once the delegate ends and its buffer drains,
+ * and the constructor enforces a non-null delegate with positive rates and frame size.
+ * {@code constantFrameSource} emits a fixed frame for a bounded number of pulls then ends the stream.
  */
 class ResamplingAudioSourceTest {
-    /**
-     * Pass-through when input rate equals output rate.
-     */
     @Test
+    @DisplayName("Pass-through when input rate equals output rate")
     void passThroughWhenRatesMatch() throws InterruptedException {
         var src = new ResamplingAudioSource(constantFrameSource(new short[160], 1), 16_000, 16_000, 160);
         var frame = src.next();
@@ -26,11 +29,8 @@ class ResamplingAudioSourceTest {
         assertEquals(160, frame.pcm().length);
     }
 
-    /**
-     * 48 kHz → 16 kHz produces frames of the right size and the
-     * output pts increments by the configured frame duration.
-     */
     @Test
+    @DisplayName("48 kHz -> 16 kHz: fixed-size frames with pts advancing by the frame duration")
     void downsample48to16() throws InterruptedException {
         var src = new ResamplingAudioSource(constantFrameSource(new short[480], 10), 48_000, 16_000, 160);
         var first = src.next();
@@ -43,11 +43,8 @@ class ResamplingAudioSourceTest {
         assertEquals(10L, second.ptsMs() - first.ptsMs());
     }
 
-    /**
-     * Returns null after the delegate exhausts and the buffer is
-     * drained.
-     */
     @Test
+    @DisplayName("Returns null after the delegate exhausts and the buffer is drained")
     void exhaustsAfterDelegate() throws InterruptedException {
         var calls = new AtomicInteger();
         AudioSource inner = () -> calls.getAndIncrement() < 1
@@ -58,10 +55,8 @@ class ResamplingAudioSourceTest {
         assertNull(src.next());
     }
 
-    /**
-     * Constructor rejects null and non-positive arguments.
-     */
     @Test
+    @DisplayName("Constructor rejects null and non-positive arguments")
     void rejectsBadArgs() {
         AudioSource any = () -> null;
         assertThrows(NullPointerException.class, () -> new ResamplingAudioSource(null, 16_000, 16_000, 160));
@@ -70,14 +65,6 @@ class ResamplingAudioSourceTest {
         assertThrows(IllegalArgumentException.class, () -> new ResamplingAudioSource(any, 16_000, 16_000, 0));
     }
 
-    /**
-     * Returns an audio source that emits the given pcm payload
-     * for {@code count} calls then null.
-     *
-     * @param pcm   payload
-     * @param count emit count
-     * @return the source
-     */
     private static AudioSource constantFrameSource(short[] pcm, int count) {
         var calls = new AtomicInteger();
         return () -> {

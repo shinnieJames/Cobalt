@@ -15,49 +15,25 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link BusinessBroadcastCampaignMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing business-broadcast-campaign mutation against
- * the {@code WAWebBroadcastCampaignSync} JS encoder. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.BusinessBroadcastCampaignHandler}
- * whose inbound-side coverage lives in
- * {@code BusinessBroadcastCampaignHandlerTest}.
- *
- * @implNote
- * This implementation builds a fixed sample campaign action so the encoded
- * bytes are deterministic; the WA Web oracle is captured with the same
- * field values.
+ * Covers {@link BusinessBroadcastCampaignMutationFactory} against the captured
+ * WhatsApp Web encode oracle for
+ * {@code handler/business-broadcast-campaign/encode}. The sample campaign
+ * action built by {@code sampleAction()} uses fixed field values that must
+ * stay in lockstep with those the oracle was captured under for byte equality
+ * to hold. The check is gated on {@link SyncFixtures#isOracleAvailable(String)}
+ * so it no-ops cleanly until the fixture is present.
  */
 @DisplayName("BusinessBroadcastCampaignMutationFactory")
 class BusinessBroadcastCampaignMutationFactoryTest {
-    /**
-     * The broadcast JID used by the sample campaign action.
-     */
     private static final String BROADCAST_JID = "123-1234567890@broadcast";
 
-    /**
-     * The factory under test; rebuilt before each scenario.
-     */
     private BusinessBroadcastCampaignMutationFactory factory;
 
-    /**
-     * Builds a fresh {@link BusinessBroadcastCampaignMutationFactory} before each test.
-     */
     @BeforeEach
     void setUp() {
         factory = new BusinessBroadcastCampaignMutationFactory();
     }
 
-    /**
-     * Returns a fixed {@link BusinessBroadcastCampaignAction} matching the WA Web capture.
-     *
-     * @apiNote
-     * Test fixture; the field values must stay in lockstep with the
-     * captured oracle for byte-equality to hold.
-     *
-     * @return the canonical sample action
-     */
     private BusinessBroadcastCampaignAction sampleAction() {
         return new BusinessBroadcastCampaignActionBuilder()
                 .deviceId(0)
@@ -71,9 +47,6 @@ class BusinessBroadcastCampaignMutationFactoryTest {
                 .build();
     }
 
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
     void byteEqualityWithOracle() {

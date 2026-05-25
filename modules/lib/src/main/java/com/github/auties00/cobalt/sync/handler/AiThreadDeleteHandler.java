@@ -17,12 +17,10 @@ import java.util.logging.Logger;
 /**
  * Removes a Meta-AI conversation thread from the local store in response to an {@code ai_thread_delete} sync mutation.
  *
- * @apiNote
- * Drives the Meta-AI chat surface where the user has pressed
- * "Delete chat" on a single AI conversation thread (a bot WID can host
- * multiple named threads). When that delete is performed on another
- * device, the server replays it to this device as a sync mutation that
- * lands here. Cobalt embedders observe the effect through
+ * <p>A single bot JID can host multiple named AI conversation threads. When
+ * one such thread is deleted on another device, the server replays the delete
+ * here, and the matching entry is removed; the surviving thread titles are
+ * read back through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findAiThreadTitle(String)}.
  *
  * @implNote
@@ -38,20 +36,17 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
     /**
      * The handler-scoped {@link Logger} used to record failed mutation attempts.
      *
-     * @apiNote
-     * Used to record the {@link Exception} message of a mutation that
-     * threw before completing; matches the WA Web {@code WALogger.WARN}
-     * call in the same {@code catch} arm.
+     * <p>Records the {@link Exception} message of a mutation that threw before
+     * completing.
      */
     private static final Logger LOGGER = Logger.getLogger(AiThreadDeleteHandler.class.getName());
 
     /**
      * The wire string {@code "ai_thread_delete"} that identifies this action in the sync collection.
      *
-     * @apiNote
-     * Equal to {@link #actionName()}; exposed as a public constant so
-     * outbound mutation builders and tests can reference the wire name
-     * without instantiating the handler.
+     * <p>Equal to the value returned by {@link #actionName()}; exposed as a
+     * public constant so outbound mutation builders and tests can reference the
+     * wire name without instantiating the handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public static final String ACTION_NAME = "ai_thread_delete";
@@ -59,11 +54,9 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
     /**
      * The mutation format version {@code 7} declared by WA Web for {@code ai_thread_delete}.
      *
-     * @apiNote
-     * Used by the sync engine to gate which incoming mutations are
-     * dispatched to this handler. Mutations with a higher version are
-     * skipped to avoid processing with logic that does not yet match
-     * the wire shape.
+     * <p>The sync engine gates dispatch on this value; mutations whose on-wire
+     * version is greater than {@code 7} are skipped so a payload shape this
+     * handler does not understand is never applied.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int ACTION_VERSION = 7;
@@ -71,10 +64,9 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
     /**
      * The {@link SyncPatchType#REGULAR_HIGH} collection that hosts {@code ai_thread_delete} mutations.
      *
-     * @apiNote
-     * Equal to {@link #collectionName()}; the {@code regular_high}
-     * collection groups latency-sensitive chat-state changes such as AI
-     * thread deletes.
+     * <p>Equal to the value returned by {@link #collectionName()}; the
+     * {@link SyncPatchType#REGULAR_HIGH} collection groups latency-sensitive
+     * chat-state changes such as AI thread deletes.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public static final SyncPatchType COLLECTION_NAME = SyncPatchType.REGULAR_HIGH;
@@ -82,9 +74,7 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton AI thread delete handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public AiThreadDeleteHandler() {
@@ -112,15 +102,14 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the JSON index {@code ["ai_thread_delete", chatJid, threadId]},
-     * confirms the chat JID is a bot, gates on AI-thread support, and
-     * removes the keyed entry from
+     * <p>Validates the JSON index {@code ["ai_thread_delete", chatJid, threadId]},
+     * confirms the chat JID is a bot, gates on AI-thread support, and removes
+     * the entry keyed by {@code "<chatJid>|<threadId>"} via
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#removeAiThreadTitle(String)}.
-     * Returns {@link SyncActionState#UNSUPPORTED} for non-{@code SET}
-     * operations or when AI-thread support is off,
-     * {@link SyncActionState#ORPHAN} when no matching thread is in the
-     * store, and {@link SyncActionState#FAILED} on any thrown exception.
+     * Returns {@link SyncActionState#UNSUPPORTED} for non-{@link SyncdOperation#SET}
+     * operations or when AI-thread support is off, {@link SyncActionState#ORPHAN}
+     * when no matching thread is in the store, and {@link SyncActionState#FAILED}
+     * on any thrown exception.
      *
      * @implNote
      * This implementation maps WA Web's

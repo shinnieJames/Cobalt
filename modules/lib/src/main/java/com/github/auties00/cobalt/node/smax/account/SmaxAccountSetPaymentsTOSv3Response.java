@@ -13,46 +13,32 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The reply produced by the relay for a
- * {@link SmaxAccountSetPaymentsTOSv3Request}; either a {@link Success}
- * acknowledging the acceptance or an {@link Error} explaining why the
- * acceptance was rejected.
+ * Models the reply produced by the relay for a
+ * {@link SmaxAccountSetPaymentsTOSv3Request}.
  *
- * @apiNote
- * Returned by the smax send pipeline that
- * {@code WAWebPaymentsTosJob.acceptBRPayTos} drives. The {@link Success}
- * arm tells the caller to persist the acceptance locally
- * ({@code WAWebUserPrefsPaymentTos.setPaymentTos}); the {@link Error}
- * arm carries one of six documented {@code (code, text)} pairs that
- * the caller logs and may surface in UI.
+ * <p>The reply is either a {@link Success} acknowledging the acceptance or an
+ * {@link Error} explaining why the acceptance was rejected. The {@link Success}
+ * arm tells the caller it may persist the acceptance locally; the
+ * {@link Error} arm carries one of six documented {@code (code, text)} pairs
+ * that the caller logs and may surface in UI.
  */
 public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperation.Response
         permits SmaxAccountSetPaymentsTOSv3Response.Success, SmaxAccountSetPaymentsTOSv3Response.Error {
 
     /**
-     * Resolves an inbound IQ reply into the first matching response
-     * variant.
+     * Resolves an inbound IQ reply into the first matching response variant.
      *
-     * @apiNote
-     * Called by the smax send pipeline after dispatching a
-     * {@link SmaxAccountSetPaymentsTOSv3Request}; {@link Success} is
-     * tried first and falls through to {@link Error} when the success
-     * schema does not match. An empty result means the stanza is
-     * neither a documented success nor a documented error.
-     *
-     * @implNote
-     * This implementation mirrors the WA Web
-     * {@code sendSetPaymentsTOSv3RPC} disjunction: the success parse
-     * runs first and the error parse only runs when success returns
-     * empty.
+     * <p>Called by the smax send pipeline after dispatching a
+     * {@link SmaxAccountSetPaymentsTOSv3Request}. {@link Success} is tried
+     * first and falls through to {@link Error} when the success schema does not
+     * match. An empty result means the stanza is neither a documented success
+     * nor a documented error.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound IQ stanza used for
-     *                {@code id}/{@code from} echo checks; never
-     *                {@code null}
+     *                {@code id}/{@code from} echo checks; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched
+     *         {@link Optional#empty()} when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxAccountSetPaymentsTOSv3RPC",
@@ -69,26 +55,23 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
     }
 
     /**
-     * Validates the {@code <iq>} envelope on an inbound reply by
-     * cross-checking the description, {@code type}, {@code id} and
-     * {@code from} attributes against the originating request.
+     * Validates the {@code <iq>} envelope on an inbound reply by cross-checking
+     * the description, {@code type}, {@code id} and {@code from} attributes
+     * against the originating request.
      *
-     * @apiNote
-     * Used internally by {@link Success#of(Node, Node)} and
-     * {@link Error#of(Node, Node)} to gate further parsing; a failed
-     * envelope short-circuits the variant before any payload
-     * inspection.
+     * <p>Used by {@link Success#of(Node, Node)} and {@link Error#of(Node, Node)}
+     * to gate further parsing; a failed envelope short-circuits the variant
+     * before any payload inspection.
      *
      * @implNote
-     * This implementation collapses the WA Web
-     * {@code parseIQResultResponseMixin} and
-     * {@code parseIQErrorResponseMixin} into a single helper
-     * parametrised on the expected {@code type} attribute.
+     * This implementation collapses the WA Web {@code parseIQResultResponseMixin}
+     * and {@code parseIQErrorResponseMixin} into a single helper parametrised
+     * on the expected {@code type} attribute.
      *
      * @param reply        the inbound IQ stanza
      * @param request      the originating outbound IQ stanza
-     * @param expectedType the expected {@code type} attribute value;
-     *                     either {@code "result"} or {@code "error"}
+     * @param expectedType the expected {@code type} attribute value; either
+     *                     {@code "result"} or {@code "error"}
      * @return {@code true} when the envelope passes every echo check;
      *         {@code false} otherwise
      */
@@ -118,27 +101,24 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
     }
 
     /**
-     * The positive reply variant carrying the relay-echoed acceptance
+     * Models the positive reply variant carrying the relay-echoed acceptance
      * payload.
      *
-     * @apiNote
-     * Surfaced to callers when the relay accepted a v3 payments-ToS
-     * acceptance; carries the echoed service literal and notice list,
-     * plus the optional outage and sandbox markers used by
-     * {@code WAWebPaymentsTosJob} to decide whether to defer the
+     * <p>Surfaced to callers when the relay accepted a v3 payments-ToS
+     * acceptance; carries the echoed service literal and notice list plus the
+     * outage and sandbox markers that let callers decide whether to defer the
      * local persistence step.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInAccountSetPaymentsTOSv3ResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInAccountSetPaymentsTOSv3BRConsumerOrSetPaymentsTOSv3UPIConsumerPaymentsTOSv3ResponseMixinGroup")
     final class Success implements SmaxAccountSetPaymentsTOSv3Response {
         /**
-         * The accepted Brazilian-FBPAY notice literals enforced by
-         * the success schema.
+         * Holds the accepted Brazilian-FBPAY notice literals enforced by the
+         * success schema.
          *
-         * @apiNote
-         * Used to reject {@code <additional_notice notice=...>}
-         * children carrying a literal outside this set when the
-         * echoed {@code service} attribute is {@code "FBPAY"}.
+         * <p>Used to reject {@code <additional_notice notice=...>} children
+         * carrying a literal outside this set when the echoed {@code service}
+         * attribute is {@code "FBPAY"}.
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAccountEnums",
                 exports = "ENUM_BRP2PCONSENT_BRPAYPRIVACYPOLICY_BRPAYTOS_BRPAYWATOS",
@@ -150,13 +130,12 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
                 "br_pay_wa_tos");
 
         /**
-         * The accepted Indian-UPI notice literals enforced by the
+         * Holds the accepted Indian-UPI notice literals enforced by the
          * success schema.
          *
-         * @apiNote
-         * Used to reject {@code <additional_notice notice=...>}
-         * children carrying a literal outside this set when the
-         * echoed {@code service} attribute is {@code "UPI"}.
+         * <p>Used to reject {@code <additional_notice notice=...>} children
+         * carrying a literal outside this set when the echoed {@code service}
+         * attribute is {@code "UPI"}.
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAccountEnums",
                 exports = "ENUM_PAYTOSV3_UPIPAYPRIVACYPOLICY",
@@ -166,83 +145,75 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
                 "upi_pay_privacy_policy");
 
         /**
-         * Whether the {@code <accept_pay outage="1"/>} marker was set
-         * by the relay.
+         * Holds whether the {@code <accept_pay outage="1"/>} marker was set by
+         * the relay.
          *
-         * @apiNote
-         * Read by callers wanting to defer persistence when the
-         * payments backend is in a degraded state.
+         * <p>Read by callers wanting to defer persistence when the payments
+         * backend is in a degraded state.
          */
         private final boolean outage;
 
         /**
-         * Whether the {@code <accept_pay sandbox="1"/>} marker was
-         * set by the relay.
+         * Holds whether the {@code <accept_pay sandbox="1"/>} marker was set by
+         * the relay.
          *
-         * @apiNote
-         * Read by callers wanting to route the acceptance through a
+         * <p>Read by callers wanting to route the acceptance through a
          * sandbox-aware persistence path.
          */
         private final boolean sandbox;
 
         /**
-         * The synthesised consumer-variant name; one of
+         * Holds the synthesised consumer-variant name; one of
          * {@code "BRConsumerPaymentsTOSv3Response"} or
          * {@code "UPIConsumerPaymentsTOSv3Response"}.
          *
-         * @apiNote
-         * Lets callers branch on the variant without re-reading the
-         * service attribute.
+         * <p>Lets callers branch on the variant without re-reading the service
+         * attribute.
          */
         private final String consumerVariantName;
 
         /**
-         * The echoed {@code service} literal; either {@code "FBPAY"}
+         * Holds the echoed {@code service} literal; either {@code "FBPAY"}
          * (Brazilian) or {@code "UPI"} (Indian).
          *
-         * @apiNote
-         * Mirrors the value
-         * {@link SmaxAccountSetPaymentsTOSv3Request#toNode()} stamped
-         * onto the outbound stanza.
+         * <p>Mirrors the value
+         * {@link SmaxAccountSetPaymentsTOSv3Request#toNode()} stamped onto the
+         * outbound stanza.
          */
         private final String service;
 
         /**
-         * The echoed {@code <additional_notice/>} list.
+         * Holds the echoed {@code <additional_notice/>} list.
          *
-         * @apiNote
-         * For {@code service="FBPAY"} each entry is one of
+         * <p>For {@code service="FBPAY"} each entry is one of
          * {@code "br_p2p_consent"}, {@code "br_pay_privacy_policy"},
-         * {@code "br_pay_tos"}, {@code "br_pay_wa_tos"}; for
-         * {@code service="UPI"} each entry is one of
-         * {@code "pay_tos_v3"} or {@code "upi_pay_privacy_policy"}.
+         * {@code "br_pay_tos"}, or {@code "br_pay_wa_tos"}; for
+         * {@code service="UPI"} each entry is one of {@code "pay_tos_v3"} or
+         * {@code "upi_pay_privacy_policy"}.
          */
         private final List<String> additionalNotices;
 
         /**
          * Constructs a successful reply carrying the echoed payload.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after a successful parse;
-         * not intended for direct caller use.
+         * <p>Called by {@link #of(Node, Node)} after a successful parse; not
+         * intended for direct caller use.
          *
          * @implNote
          * This implementation defensively copies the notice list and
-         * substitutes an empty list when the input is {@code null} so
-         * the {@link #additionalNotices()} accessor never returns
-         * {@code null}.
+         * substitutes an empty list when the input is {@code null} so the
+         * {@link #additionalNotices()} accessor never returns {@code null}.
          *
          * @param outage              whether the outage marker was set
          * @param sandbox             whether the sandbox marker was set
-         * @param consumerVariantName the synthesised variant name;
-         *                            never {@code null}
-         * @param service             the echoed service literal;
-         *                            never {@code null}
+         * @param consumerVariantName the synthesised variant name; never
+         *                            {@code null}
+         * @param service             the echoed service literal; never
+         *                            {@code null}
          * @param additionalNotices   the echoed notice list; may be
          *                            {@code null}, treated as empty
-         * @throws NullPointerException if {@code consumerVariantName}
-         *                              or {@code service} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code consumerVariantName} or
+         *                              {@code service} is {@code null}
          */
         public Success(boolean outage,
                        boolean sandbox,
@@ -257,13 +228,10 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         }
 
         /**
-         * Reports whether the {@code <accept_pay outage="1"/>} marker
-         * was set.
+         * Reports whether the {@code <accept_pay outage="1"/>} marker was set.
          *
-         * @apiNote
-         * Drives whether callers defer the local
-         * {@code WAWebUserPrefsPaymentTos.setPaymentTos} write when
-         * the payments backend signals a partial outage.
+         * <p>Drives whether callers defer the local payments-ToS persistence
+         * write when the payments backend signals a partial outage.
          *
          * @return {@code true} when the marker was set
          */
@@ -272,12 +240,10 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         }
 
         /**
-         * Reports whether the {@code <accept_pay sandbox="1"/>} marker
-         * was set.
+         * Reports whether the {@code <accept_pay sandbox="1"/>} marker was set.
          *
-         * @apiNote
-         * Lets callers route the acceptance through a sandbox
-         * persistence path during integration testing.
+         * <p>Lets callers route the acceptance through a sandbox persistence
+         * path during integration testing.
          *
          * @return {@code true} when the marker was set
          */
@@ -288,11 +254,10 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Returns the synthesised consumer-variant name.
          *
-         * @apiNote
-         * Reads {@code "BRConsumerPaymentsTOSv3Response"} or
-         * {@code "UPIConsumerPaymentsTOSv3Response"} depending on the
-         * echoed {@link #service()}; lets callers branch on a single
-         * field rather than re-parsing the service literal.
+         * <p>Reads {@code "BRConsumerPaymentsTOSv3Response"} or
+         * {@code "UPIConsumerPaymentsTOSv3Response"} depending on the echoed
+         * {@link #service()}; lets callers branch on a single field rather than
+         * re-parsing the service literal.
          *
          * @return the variant name; never {@code null}
          */
@@ -303,9 +268,8 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Returns the echoed payments-service literal.
          *
-         * @apiNote
-         * Reads {@code "FBPAY"} for Brazilian terms or {@code "UPI"}
-         * for Indian terms.
+         * <p>Reads {@code "FBPAY"} for Brazilian terms or {@code "UPI"} for
+         * Indian terms.
          *
          * @return the service literal; never {@code null}
          */
@@ -314,16 +278,13 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         }
 
         /**
-         * Returns the echoed {@code <additional_notice notice=...>}
-         * literals.
+         * Returns the echoed {@code <additional_notice notice=...>} literals.
          *
-         * @apiNote
-         * Lets callers cross-check that the relay accepted every
-         * notice originally submitted via the matching
+         * <p>Lets callers cross-check that the relay accepted every notice
+         * originally submitted via the matching
          * {@link SmaxAccountSetPaymentsTOSv3ConsumerVariant}.
          *
-         * @return an unmodifiable list of accepted literals; never
-         *         {@code null}
+         * @return an unmodifiable list of accepted literals; never {@code null}
          */
         public List<String> additionalNotices() {
             return additionalNotices;
@@ -333,25 +294,23 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
          * Parses a {@code Success} reply from the given inbound stanza
          * cross-checked against the originating request.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any deviation from the
-         * documented success schema (missing
-         * {@code <accept_pay/>}, unknown {@code service} literal,
-         * empty or oversize notice list, notice literal outside the
-         * service-specific enum).
+         * <p>Returns {@link Optional#empty()} for any deviation from the
+         * documented success schema (missing {@code <accept_pay/>}, unknown
+         * {@code service} literal, empty or oversize notice list, or a notice
+         * literal outside the service-specific enum).
          *
          * @implNote
          * This implementation tracks the BR-vs-UPI choice via the
-         * {@code service} attribute and validates each notice against
-         * the matching {@link #BR_CONSUMER_NOTICE_VALUES} or
-         * {@link #UPI_CONSUMER_NOTICE_VALUES} set, replacing WA Web's
-         * separate per-variant mixins with a single branch.
+         * {@code service} attribute and validates each notice against the
+         * matching {@link #BR_CONSUMER_NOTICE_VALUES} or
+         * {@link #UPI_CONSUMER_NOTICE_VALUES} set, replacing WA Web's separate
+         * per-variant mixins with a single branch.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not
-         *         match the success schema
+         *         {@link Optional#empty()} when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAccountSetPaymentsTOSv3ResponseSuccess",
                 exports = "parseSetPaymentsTOSv3ResponseSuccess",
@@ -421,9 +380,9 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
          * Compares this success reply to another for value equality.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a {@link Success}
-         *         with identical markers, variant name, service
-         *         literal, and notice list
+         * @return {@code true} when {@code obj} is a {@link Success} with
+         *         identical markers, variant name, service literal, and notice
+         *         list
          */
         @Override
         public boolean equals(Object obj) {
@@ -452,11 +411,9 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         }
 
         /**
-         * Returns a debug-friendly representation of this success
-         * reply.
+         * Returns a debug-friendly representation of this success reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
+         * <p>The format is intended for logging and is not part of any
          * contract.
          *
          * @return the string form
@@ -472,16 +429,14 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
     }
 
     /**
-     * The negative reply variant carrying the relay's rejection code
+     * Models the negative reply variant carrying the relay's rejection code
      * and human-readable text.
      *
-     * @apiNote
-     * Surfaced to callers when the relay rejected the acceptance with
-     * one of six documented error mixins: internal-server-error/500,
-     * service-unavailable/503, pay-upgrade-required/443,
-     * config-mismatch/453, forbidden/403, bad-request/400. The
-     * synthesised {@link #variantName()} disambiguates without
-     * re-parsing the code-text pair.
+     * <p>Surfaced to callers when the relay rejected the acceptance with one of
+     * six documented error mixins: internal-server-error/500,
+     * service-unavailable/503, pay-upgrade-required/443, config-mismatch/453,
+     * forbidden/403, or bad-request/400. The synthesised {@link #variantName()}
+     * disambiguates without re-parsing the code-text pair.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInAccountSetPaymentsTOSv3ResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInAccountSetPaymentsTosErrors")
@@ -493,56 +448,42 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
     @WhatsAppWebModule(moduleName = "WASmaxInAccountIQErrorServiceUnavailableMixin")
     final class Error implements SmaxAccountSetPaymentsTOSv3Response {
         /**
-         * The numeric error code carried by the relay; one of
-         * {@code 400}, {@code 403}, {@code 443}, {@code 453},
-         * {@code 500}, {@code 503}.
-         *
-         * @apiNote
-         * Mirrors the HTTP-style code WA Web logs in
-         * {@code WAWebPaymentsTosJob}.
+         * Holds the numeric error code carried by the relay; one of
+         * {@code 400}, {@code 403}, {@code 443}, {@code 453}, {@code 500}, or
+         * {@code 503}.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          *
-         * @apiNote
-         * Mirrors the variant-specific literal (e.g.
-         * {@code "bad-request"}, {@code "internal-server-error"})
-         * used by the WA Web error-mixin disjunction.
+         * <p>Carries the variant-specific literal (e.g. {@code "bad-request"},
+         * {@code "internal-server-error"}) used to classify the error mixin.
          */
         private final String errorText;
 
         /**
-         * The synthesised variant name disambiguating which of the
-         * six error mixins matched.
+         * Holds the synthesised variant name disambiguating which of the six
+         * error mixins matched.
          *
-         * @apiNote
-         * One of {@code "IQErrorBadRequest"},
-         * {@code "IQErrorForbidden"},
-         * {@code "IQErrorPayUpgradeRequired"},
-         * {@code "IQErrorConfigMismatch"},
-         * {@code "IQErrorInternalServerError"},
+         * <p>One of {@code "IQErrorBadRequest"}, {@code "IQErrorForbidden"},
+         * {@code "IQErrorPayUpgradeRequired"}, {@code "IQErrorConfigMismatch"},
+         * {@code "IQErrorInternalServerError"}, or
          * {@code "IQErrorServiceUnavailable"}.
          */
         private final String variantName;
 
         /**
-         * Constructs an error reply with a pre-classified variant
-         * name.
+         * Constructs an error reply with a pre-classified variant name.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after
-         * {@link #classifyError(int, String)} matched the code-text
-         * pair; not intended for direct caller use.
+         * <p>Called by {@link #of(Node, Node)} after
+         * {@link #classifyError(int, String)} matched the code-text pair; not
+         * intended for direct caller use.
          *
          * @param errorCode   the numeric error code
-         * @param errorText   the human-readable error text; may be
-         *                    {@code null}
-         * @param variantName the classified variant name; never
-         *                    {@code null}
-         * @throws NullPointerException if {@code variantName} is
-         *                              {@code null}
+         * @param errorText   the human-readable error text; may be {@code null}
+         * @param variantName the classified variant name; never {@code null}
+         * @throws NullPointerException if {@code variantName} is {@code null}
          */
         public Error(int errorCode, String errorText, String variantName) {
             this.errorCode = errorCode;
@@ -553,9 +494,8 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Returns the relay-supplied numeric error code.
          *
-         * @apiNote
-         * Lets callers branch on the code (e.g. retry on
-         * {@code 503}, surface UI on {@code 400}/{@code 443}).
+         * <p>Lets callers branch on the code (e.g. retry on {@code 503},
+         * surface UI on {@code 400}/{@code 443}).
          *
          * @return the code
          */
@@ -566,10 +506,9 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Returns the optional relay-supplied error text.
          *
-         * @apiNote
-         * The relay always sets a text for the six documented
-         * variants; the wrapping {@link Optional} accommodates the
-         * undocumented case where the text was omitted.
+         * <p>The relay always sets a text for the six documented variants; the
+         * wrapping {@link Optional} accommodates the undocumented case where the
+         * text was omitted.
          *
          * @return an {@link Optional} carrying the text, or
          *         {@link Optional#empty()} when omitted
@@ -581,10 +520,8 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Returns the classified error-variant name.
          *
-         * @apiNote
-         * Lets callers branch on a single field rather than
-         * re-parsing the {@code (code, text)} pair against the six
-         * error mixins.
+         * <p>Lets callers branch on a single field rather than re-parsing the
+         * {@code (code, text)} pair against the six error mixins.
          *
          * @return the variant name; never {@code null}
          */
@@ -595,22 +532,21 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Parses an {@code Error} reply from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any deviation from the
-         * documented error schema (missing {@code <error/>} child,
-         * unparseable {@code code} attribute, code-text pair outside
-         * the documented six mixins).
+         * <p>Returns {@link Optional#empty()} for any deviation from the
+         * documented error schema (missing {@code <error/>} child, unparseable
+         * {@code code} attribute, or a code-text pair outside the documented
+         * six mixins).
          *
          * @implNote
          * This implementation derives {@link #variantName} via
-         * {@link #classifyError(int, String)} which encodes the six
-         * documented mixins as a static priority cascade.
+         * {@link #classifyError(int, String)} which encodes the six documented
+         * mixins as a static priority cascade.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not
-         *         match any documented error variant
+         *         {@link Optional#empty()} when the stanza does not match any
+         *         documented error variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAccountSetPaymentsTOSv3ResponseError",
                 exports = "parseSetPaymentsTOSv3ResponseError",
@@ -637,26 +573,23 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         }
 
         /**
-         * Classifies a {@code (code, text)} pair into one of the six
-         * documented payments-ToS error mixin variants.
+         * Classifies a {@code (code, text)} pair into one of the six documented
+         * payments-ToS error mixin variants.
          *
-         * @apiNote
-         * Returns {@code null} for any pair outside the six documented
+         * <p>Returns {@code null} for any pair outside the six documented
          * mixins; the caller treats {@code null} as a parse failure.
          *
          * @implNote
          * This implementation runs the WA Web priority order verbatim
-         * (internal-server-error, service-unavailable,
-         * pay-upgrade-required, config-mismatch, forbidden,
-         * bad-request) so the synthesised variant name is identical
-         * to WA Web's branch label even when multiple pairs would
-         * match.
+         * (internal-server-error, service-unavailable, pay-upgrade-required,
+         * config-mismatch, forbidden, bad-request) so the synthesised variant
+         * name is identical to WA Web's branch label even when multiple pairs
+         * would match.
          *
          * @param code the numeric error code
-         * @param text the human-readable error text; may be
-         *             {@code null}
-         * @return the variant name, or {@code null} when the pair is
-         *         not one of the six documented mixins
+         * @param text the human-readable error text; may be {@code null}
+         * @return the variant name, or {@code null} when the pair is not one of
+         *         the six documented mixins
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAccountSetPaymentsTosErrors",
                 exports = "parseSetPaymentsTosErrors",
@@ -705,8 +638,8 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
          * Compares this error reply to another for value equality.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is an {@link Error}
-         *         with identical code, text, and variant name
+         * @return {@code true} when {@code obj} is an {@link Error} with
+         *         identical code, text, and variant name
          */
         @Override
         public boolean equals(Object obj) {
@@ -735,8 +668,7 @@ public sealed interface SmaxAccountSetPaymentsTOSv3Response extends SmaxOperatio
         /**
          * Returns a debug-friendly representation of this error reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
+         * <p>The format is intended for logging and is not part of any
          * contract.
          *
          * @return the string form

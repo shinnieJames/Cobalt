@@ -69,6 +69,9 @@ LIBWEBP_REF=v1.5.0
 FFMPEG_REPO=https://github.com/FFmpeg/FFmpeg.git
 FFMPEG_REF=n7.1
 
+MDBX_REPO=https://github.com/erthink/libmdbx.git
+MDBX_REF=v0.14.2
+
 log()  { echo "[build-natives] $*"; }
 fail() { echo "[build-natives] FAIL: $*" >&2; exit 1; }
 
@@ -372,6 +375,28 @@ EOF
     done
 }
 
+build_mdbx() {
+    local dest="$DEPS/libmdbx/bin/$CLASSIFIER"
+    mkdir -p "$dest"
+    log "mdbx"
+    ensure_src MDBX_SRC "$MDBX_REPO" "$MDBX_REF" mdbx
+    local dist="$MDBX_SRC"
+    [ -f "$dist/mdbx.c" ] || fail "mdbx amalgamated source (mdbx.c) not found under $MDBX_SRC"
+    local b="$BUILD/build-mdbx"
+    rm -rf "$b" && mkdir -p "$b"
+    local cc="${CC:-cc}"
+    local wrap="$DEPS/libmdbx/mdbx_openu.c"
+    local def="-DNDEBUG -DLIBMDBX_EXPORTS=1 -DMDBX_BUILD_SHARED_LIBRARY=1"
+    case "$OS" in
+        linux)   "$cc" -O3 $def -fPIC -shared -I "$dist" "$dist/mdbx.c" "$wrap" -o "$b/libmdbx.so"    -lpthread ;;
+        darwin)  "$cc" -O3 $def -fPIC -shared -I "$dist" "$dist/mdbx.c" "$wrap" -o "$b/libmdbx.dylib" ;;
+        windows) "$cc" -O3 $def       -shared -I "$dist" "$dist/mdbx.c" "$wrap" -o "$b/mdbx.dll"      -lntdll -lwinmm ;;
+    esac
+    vendor_headers "$dist" "$DEPS/libmdbx/headers"
+    wipe_dest "$dest"
+    ship_binary "$dest" mdbx "$b"
+}
+
 build_opus
 build_openh264
 build_speexdsp
@@ -379,4 +404,5 @@ build_usrsctp
 build_libvpx
 build_libwebp
 build_ffmpeg
+build_mdbx
 log "done $CLASSIFIER"

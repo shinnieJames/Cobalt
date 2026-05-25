@@ -12,25 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link LidMigrationService#getMeUserLidOrJidForChat(com.github.auties00.cobalt.model.chat.Chat,
- * LidMigrationService.TranslateMsgKeyType)}.
- *
- * @apiNote
- * Pins the helper that decides which form (LID or PN) of the
- * current user's JID should appear as the {@code participant} of
- * an outgoing
- * {@link com.github.auties00.cobalt.model.message.MessageKey}; the
- * five-input decision table (chat on LID server, chat is a group,
- * chat is a Community Announcement Group, group metadata reports
- * {@code isLidAddressingMode}, and the chosen
- * {@link LidMigrationService.TranslateMsgKeyType}) is exercised
- * branch by branch.
- *
- * @implNote
- * This implementation uses isolated harnesses through
- * {@link MigrationFixtures#temporaryStore(Jid, Jid)} and exercises
- * the missing-self-LID and missing-self-PN failure paths by
- * mutating the store directly.
+ * Covers {@link LidMigrationService#getMeUserLidOrJidForChat(com.github.auties00.cobalt.model.chat.Chat,
+ * LidMigrationService.TranslateMsgKeyType)}: the helper that picks which form (LID or PN) of the
+ * current user's JID appears as the participant of an outgoing
+ * {@link com.github.auties00.cobalt.model.message.MessageKey}. The cases walk the five-input
+ * decision table (chat on LID server, chat is a group, chat is a Community Announcement Group,
+ * group metadata reports {@code isLidAddressingMode}, and the chosen
+ * {@link LidMigrationService.TranslateMsgKeyType}) branch by branch, and drive the missing-self-LID
+ * and missing-self-PN failure paths by mutating the store directly.
  */
 @DisplayName("LidMigrationService.getMeUserLidOrJidForChat")
 class LidMigrationServiceMeUserForChatTest {
@@ -43,23 +32,8 @@ class LidMigrationServiceMeUserForChatTest {
     private static final Jid PEER_LID = Jid.of("258252122116273@lid");
     private static final Jid GROUP = Jid.of("120363012345678901@g.us");
 
-    /**
-     * Bundles the test client and the service under test.
-     *
-     * @param client  the test client harness
-     * @param service the service under test
-     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
-    /**
-     * Builds a fresh harness with explicit self-PN and self-LID
-     * values so the missing-self-LID and missing-self-PN failure
-     * paths can be exercised.
-     *
-     * @param selfPn  the local user's PN
-     * @param selfLid the local user's LID, or {@code null}
-     * @return a fresh {@link Harness}
-     */
     private static Harness build(Jid selfPn, Jid selfLid) {
         var props = TestABPropsService.builder().build();
         var store = MigrationFixtures.temporaryStore(selfPn, selfLid);
@@ -69,18 +43,10 @@ class LidMigrationServiceMeUserForChatTest {
         return new Harness(client, service);
     }
 
-    /**
-     * Builds a fresh harness with the default self-PN and self-LID.
-     *
-     * @return a fresh {@link Harness}
-     */
     private static Harness build() {
         return build(SELF_PN, SELF_LID);
     }
 
-    /**
-     * Verifies that LID-server 1:1 chat -> me-LID for all translate types.
-     */
     @Test
     @DisplayName("LID-server 1:1 chat -> me-LID for all translate types")
     void lidChatAllTypes() {
@@ -95,9 +61,6 @@ class LidMigrationServiceMeUserForChatTest {
                 h.service.getMeUserLidOrJidForChat(chat, LidMigrationService.TranslateMsgKeyType.EDIT_MESSAGE));
     }
 
-    /**
-     * Verifies that 1:1 PN chat (no metadata) -> me-PN for all translate types.
-     */
     @Test
     @DisplayName("1:1 PN chat (no metadata) -> me-PN for all translate types")
     void pnChatAllTypes() {
@@ -112,9 +75,6 @@ class LidMigrationServiceMeUserForChatTest {
                 h.service.getMeUserLidOrJidForChat(chat, LidMigrationService.TranslateMsgKeyType.EDIT_MESSAGE));
     }
 
-    /**
-     * Verifies that non-CAG group, isLidAddressingMode=true -> me-LID for all types.
-     */
     @Test
     @DisplayName("non-CAG group, isLidAddressingMode=true -> me-LID for all types")
     void groupLidModeAllTypes() {
@@ -135,9 +95,6 @@ class LidMigrationServiceMeUserForChatTest {
                 h.service.getMeUserLidOrJidForChat(chat, LidMigrationService.TranslateMsgKeyType.EDIT_MESSAGE));
     }
 
-    /**
-     * Verifies that non-CAG group, isLidAddressingMode=false -> me-PN for all types.
-     */
     @Test
     @DisplayName("non-CAG group, isLidAddressingMode=false -> me-PN for all types")
     void groupPnModeAllTypes() {
@@ -158,9 +115,6 @@ class LidMigrationServiceMeUserForChatTest {
                 h.service.getMeUserLidOrJidForChat(chat, LidMigrationService.TranslateMsgKeyType.EDIT_MESSAGE));
     }
 
-    /**
-     * Verifies that CAG, isLidAddressingMode=true -> me-LID for all types.
-     */
     @Test
     @DisplayName("CAG, isLidAddressingMode=true -> me-LID for all types")
     void cagLidModeAllTypes() {
@@ -181,9 +135,6 @@ class LidMigrationServiceMeUserForChatTest {
                 h.service.getMeUserLidOrJidForChat(chat, LidMigrationService.TranslateMsgKeyType.EDIT_MESSAGE));
     }
 
-    /**
-     * Verifies that CAG, isLidAddressingMode=false: ADDON -> me-LID (isCAG short-circuit).
-     */
     @Test
     @DisplayName("CAG, isLidAddressingMode=false: ADDON -> me-LID (isCAG short-circuit)")
     void cagPnModeAddonUsesLid() {
@@ -201,9 +152,6 @@ class LidMigrationServiceMeUserForChatTest {
                 "isCAG triggers LID for ADDON even when isLidAddressingMode=false");
     }
 
-    /**
-     * Verifies that CAG, isLidAddressingMode=false: MESSAGE and EDIT_MESSAGE -> me-PN.
-     */
     @Test
     @DisplayName("CAG, isLidAddressingMode=false: MESSAGE and EDIT_MESSAGE -> me-PN")
     void cagPnModeMessageAndEditUsePn() {
@@ -224,9 +172,6 @@ class LidMigrationServiceMeUserForChatTest {
                 "CAG without LID addressing routes EDIT_MESSAGE through PN");
     }
 
-    /**
-     * Verifies that missing self-LID throws IllegalStateException on LID-route.
-     */
     @Test
     @DisplayName("missing self-LID throws IllegalStateException on LID-route")
     void missingSelfLidThrows() {
@@ -238,9 +183,6 @@ class LidMigrationServiceMeUserForChatTest {
                 () -> h.service.getMeUserLidOrJidForChat(chat, LidMigrationService.TranslateMsgKeyType.MESSAGE));
     }
 
-    /**
-     * Verifies that missing self-PN throws IllegalStateException on PN-route (CAG MESSAGE without LID addressing).
-     */
     @Test
     @DisplayName("missing self-PN throws IllegalStateException on PN-route (CAG MESSAGE without LID addressing)")
     void missingSelfPnThrows() {

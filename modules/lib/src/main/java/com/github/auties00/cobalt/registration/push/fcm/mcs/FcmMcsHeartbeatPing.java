@@ -5,28 +5,30 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 /**
- * Wire shape for both heartbeat directions.
+ * Models a heartbeat ping on the MCS stream, in either direction.
  *
- * @apiNote
- * MCS frame tag {@code 0} (ping) is sent outbound on the 10-minute
- * timer and inbound from the server; the server may also send tag
- * {@code 1} (ack), which uses the same field shape via
- * {@link FcmMcsHeartbeatAck}.
+ * <p>A ping is sent outbound on the periodic heartbeat timer to keep the TLS
+ * stream alive, and is also received inbound when the server probes the client.
+ * Either side answers a ping with {@link FcmMcsHeartbeatAck}, which shares this
+ * field shape plus a status field.
+ *
+ * @implNote This implementation carries the MCS frame tag {@code 0}; the tag is
+ * written as the frame's length-prefixed type byte by the connection layer, not
+ * by this message.
  */
 @ProtobufMessage(name = "FcmMcsHeartbeatPing")
 public final class FcmMcsHeartbeatPing {
     /**
-     * Last stream id the sender has observed.
+     * Holds the last stream id the sender has observed.
      *
-     * @apiNote
-     * Lets the peer infer the cursor without parsing any stanza
+     * <p>This lets the peer infer the cursor without parsing any stanza
      * payload.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.INT64)
     long lastStreamIdReceived;
 
     /**
-     * Constructs a new ping.
+     * Constructs a new ping advertising the given cursor.
      *
      * @param lastStreamIdReceived the last stream id observed
      */

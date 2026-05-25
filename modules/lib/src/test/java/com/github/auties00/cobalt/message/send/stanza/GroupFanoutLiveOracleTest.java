@@ -12,33 +12,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Wire-shape byte-equality oracle tests for group and SKMSG fanout,
- * anchored to captured {@code <message to="...@g.us">} stanzas under
- * {@code fixtures/message/send/}.
- *
- * @apiNote
- * Covers three regimes: small-group SKMSG steady-state (every recipient
- * has the sender key, so the outgoing stanza is a bare
- * {@code <enc type="skmsg">}), large-group SKMSG (same shape at higher
- * cardinality, asserted only on outer attributes), and the CAG
+ * Wire-shape oracle for group and SKMSG fanout, comparing Cobalt output
+ * against captured {@code <message to="...@g.us">} stanzas under
+ * {@code fixtures/message/send/} for three regimes: small-group SKMSG
+ * steady-state (every recipient has the sender key, so the outgoing stanza
+ * is a bare {@code <enc type="skmsg">}), large-group SKMSG (same shape at
+ * higher cardinality, asserted only on outer attributes), and the CAG
  * announcement-subgroup first-time distribution (per-device PKMSG fanout
  * under {@code <participants>}). Cross-references
- * {@link GroupSkmsgFanoutStanza}.
- *
- * @implNote
- * This implementation skips each test when its topic fixture is not
- * available locally; the {@link #loadOutgoingMessage(String)} helper
- * centralises the load+rebuild sequence.
+ * {@link GroupSkmsgFanoutStanza}. Each test is skipped when its topic
+ * fixture is not available locally.
  */
 @DisplayName("Group fanout live wire oracle")
 class GroupFanoutLiveOracleTest {
 
-    /**
-     * Small-group steady-state SKMSG: a bare
-     * {@code <enc type="skmsg">} sibling under the outer
-     * {@code <message>} with {@code addressing_mode="lid"},
-     * {@code phash}, and the recipient {@code @g.us} JID.
-     */
     @Test
     @DisplayName("small group steady-state: <message addressing_mode=\"lid\" type=\"text\"> with bare <enc type=\"skmsg\">")
     void smallGroupSkmsgSteadyState() {
@@ -64,11 +51,7 @@ class GroupFanoutLiveOracleTest {
                 "steady-state group send must NOT emit <participants> (sender-key only)");
     }
 
-    /**
-     * Large-group SKMSG has the same outer attribute shape as
-     * small-group; only the outer header is asserted to keep the test
-     * resilient to corpus-size changes.
-     */
+    // Only the outer header is asserted to keep the test resilient to corpus-size changes.
     @Test
     @DisplayName("large group: outer <message to=\"...@g.us\" addressing_mode=\"lid\" type=\"text\">")
     void largeGroupHeaders() {
@@ -82,11 +65,6 @@ class GroupFanoutLiveOracleTest {
         assertTrue(message.getAttributeAsString("phash").isPresent());
     }
 
-    /**
-     * CAG announcement-subgroup first send: every recipient must
-     * receive an SKMSG distribution under {@code <participants>} with a
-     * LID-form participant JID.
-     */
     @Test
     @DisplayName("CAG announcement subgroup: text fanout with per-device PKMSG participants list (initial distribution)")
     void cagInitialDistribution() {
@@ -114,17 +92,6 @@ class GroupFanoutLiveOracleTest {
         }
     }
 
-    /**
-     * Loads the first outgoing {@code <message>} for a topic and
-     * rebuilds the captured event as a Cobalt {@link Node}.
-     *
-     * @apiNote
-     * Helper for single-message group topics; centralises the find +
-     * rebuild boilerplate.
-     *
-     * @param topic the fixture topic
-     * @return the rebuilt outgoing message node
-     */
     private static Node loadOutgoingMessage(String topic) {
         var events = MessageFixtures.loadEvents(topic);
         var outgoing = events.stream()

@@ -16,57 +16,42 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The optional add-request sub-payload of a
- * {@link SmaxProfilePictureGetRequest}; carries the join-code,
- * optional admin JID, and expiration timestamp the relay needs to
- * validate a group-join-link invitation while fetching a picture.
+ * Carries the join-code, optional admin JID, and expiration timestamp that turn
+ * a {@link SmaxProfilePictureGetRequest} into a group-join-link picture fetch.
  *
- * @apiNote
- * Pass an instance to
- * {@link SmaxProfilePictureGetRequest}'s constructor when fetching a
- * picture as part of a group-add-request flow; the relay correlates
- * the join intent with the picture fetch so the UI can show the
- * inviter's avatar alongside the join prompt.
- *
- * @implNote
- * This implementation projects the WA Web
- * {@code mergeAddRequestMixin} payload as a single
- * {@link #toNode()} call rather than a separate smax-mixin merge.
+ * <p>An instance is passed to {@link SmaxProfilePictureGetRequest} when fetching
+ * a picture as part of a group-add-request flow; the relay correlates the join
+ * intent with the picture fetch so the UI can show the inviter's avatar
+ * alongside the join prompt. The values populate a single
+ * {@code <add_request code expiration admin?/>} child stamped by
+ * {@link #toNode()}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePictureAddRequestMixin")
 public final class SmaxProfilePictureGetAddRequestMixin {
     /**
-     * The mandatory {@code code} attribute carrying the
-     * group-join-link token.
+     * The mandatory {@code code} attribute carrying the group-join-link token.
      */
     private final String addRequestCode;
 
     /**
-     * The optional {@code admin} attribute carrying the admin JID
-     * that issued the join link.
+     * The optional {@code admin} attribute carrying the admin JID that issued
+     * the join link.
      */
     private final Jid addRequestAdmin;
 
     /**
-     * The mandatory {@code expiration} attribute carrying the join
-     * link's expiry timestamp.
+     * The mandatory {@code expiration} attribute carrying the join link's
+     * expiry timestamp.
      */
     private final long addRequestExpiration;
 
     /**
-     * Constructs an add-request payload.
+     * Constructs an add-request payload from the given join-link fields.
      *
-     * @apiNote
-     * Use this when assembling a {@link SmaxProfilePictureGetRequest}
-     * for a join-link-triggered picture fetch.
-     *
-     * @param addRequestCode       the join-link code; never
-     *                             {@code null}
-     * @param addRequestAdmin      the optional admin JID; may be
-     *                             {@code null}
+     * @param addRequestCode       the join-link code; never {@code null}
+     * @param addRequestAdmin      the optional admin JID; may be {@code null}
      * @param addRequestExpiration the expiry timestamp
-     * @throws NullPointerException if {@code addRequestCode} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code addRequestCode} is {@code null}
      */
     public SmaxProfilePictureGetAddRequestMixin(String addRequestCode, Jid addRequestAdmin, long addRequestExpiration) {
         this.addRequestCode = Objects.requireNonNull(addRequestCode, "addRequestCode cannot be null");
@@ -86,12 +71,11 @@ public final class SmaxProfilePictureGetAddRequestMixin {
     /**
      * Returns the optional admin JID.
      *
-     * @apiNote
-     * Read by {@link #toNode()} to decide whether to stamp the
-     * {@code <add_request admin=...>} attribute.
+     * <p>{@link #toNode()} reads this value to decide whether to stamp the
+     * {@code admin} attribute on the {@code <add_request>} child.
      *
-     * @return an {@link Optional} carrying the JID, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the JID, or {@link Optional#empty()}
+     *         when omitted
      */
     public Optional<Jid> addRequestAdmin() {
         return Optional.ofNullable(addRequestAdmin);
@@ -109,11 +93,12 @@ public final class SmaxProfilePictureGetAddRequestMixin {
     /**
      * Builds the {@code <add_request>} child node.
      *
-     * @apiNote
-     * The node has shape
+     * <p>The node has shape
      * {@snippet lang=xml :
      * <add_request code="..." expiration="N" admin="..."?/>
      * }
+     * where the {@code admin} attribute is present only when an admin JID was
+     * supplied.
      *
      * @return the {@link Node}
      */
@@ -134,10 +119,12 @@ public final class SmaxProfilePictureGetAddRequestMixin {
     /**
      * Compares this payload to another for value equality.
      *
+     * <p>Two payloads are equal when they carry the same code, admin JID, and
+     * expiration timestamp.
+     *
      * @param obj the object to compare against
      * @return {@code true} when {@code obj} is a
-     *         {@link SmaxProfilePictureGetAddRequestMixin} with
-     *         identical fields
+     *         {@link SmaxProfilePictureGetAddRequestMixin} with identical fields
      */
     @Override
     public boolean equals(Object obj) {
@@ -166,9 +153,7 @@ public final class SmaxProfilePictureGetAddRequestMixin {
     /**
      * Returns a debug-friendly representation of this payload.
      *
-     * @apiNote
-     * Intended for logging; the format is not part of the public
-     * contract.
+     * <p>The format is intended for logging and is not part of the contract.
      *
      * @return the string form
      */

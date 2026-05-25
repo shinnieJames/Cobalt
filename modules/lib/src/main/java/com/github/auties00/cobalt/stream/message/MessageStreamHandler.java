@@ -37,7 +37,6 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecovery;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
@@ -86,54 +85,41 @@ import java.util.Optional;
 import java.util.zip.GZIPInputStream;
 
 /**
- * Top-level entry point for inbound {@code <message>} stanzas pushed by
- * the WhatsApp server.
+ * Dispatches inbound {@code <message>} stanzas pushed by the WhatsApp
+ * server to the parse, decrypt, persist, notify, and receipt pipeline.
  *
- * <p>The handler dispatches each stanza along one of three branches:
- * <ul>
- *   <li>{@code type="medianotify"} stanzas, which carry no E2E payload,
- *       skip the parser/decryptor and return after the transport ack;</li>
- *   <li>stanzas whose {@code from} JID lives on a newsletter server
- *       are forwarded to {@link #handleNewsletterMessage(Node)}, which
- *       performs plaintext processing without sending a delivery
- *       receipt;</li>
- *   <li>every other stanza is parsed by
- *       {@link MessageReceiveStanzaParser}, processed by
- *       {@link MessageService}, then optionally enriched with a delivery
- *       receipt or bot-invoke ack through the {@link MessageReceiptHandler}.</li>
- * </ul>
+ * <p>Each stanza is routed along one of three branches: {@code medianotify}
+ * stanzas carry no end-to-end payload and return after the transport ack;
+ * stanzas whose {@code from} JID lives on a newsletter server are forwarded
+ * to {@link #handleNewsletterMessage(Node)} for plaintext processing without
+ * a delivery receipt; every other stanza is parsed by
+ * {@link MessageReceiveStanzaParser}, processed by {@link MessageService},
+ * then optionally enriched with a delivery receipt or bot-invoke ack through
+ * the {@link MessageReceiptHandler}.
  *
  * <p>Every inbound {@code <message>} receives an unconditional
  * {@code <ack class="message">} via {@link AckSender#sendAck} before any
- * branch decision is made; that ack is the transport-level
- * acknowledgement the WhatsApp relay requires for every delivered
- * stanza. Delivery, retry, NACK, and bot-invoke receipts layered on top
- * are higher-level state, not transport acks.
+ * branch decision is made; that ack is the transport-level acknowledgement
+ * the WhatsApp relay requires for every delivered stanza. Delivery, retry,
+ * NACK, and bot-invoke receipts layered on top are higher-level state, not
+ * transport acks.
  *
  * <p>Successfully processed stanzas additionally trigger protocol-message
- * handling (key share / key request, snapshot recovery, LID migration
+ * handling (key share, key request, snapshot recovery, LID migration
  * mapping sync, history sync, security-notification setting sync),
  * orphan-payment reconciliation, and a fan-out to every registered
- * listener.
- *
- * @apiNote
- * Implements the {@code "message"} arm of
- * {@code WAWebCommsHandleMessagingStanza.handleMessagingStanza}, which
- * is the master demultiplexer WA Web hangs off every inbound XMPP
- * stanza; the actual decryption pipeline matches
- * {@code WAWebHandleMsg.default} and its worker-compatible counterpart.
- * Application code does not invoke this handler directly; it is wired
- * into the socket stream at client construction and receives stanzas
- * via {@link #handle(Node)}.
+ * listener. The handler is wired into the socket stream at client
+ * construction and receives stanzas through {@link #handle(Node)}; it is
+ * not invoked directly by application code.
  *
  * @implNote
- * This implementation collapses WA Web's split between
- * {@code WAWebHandleMsg}, {@code WAWebCommsHandleMessagingStanza}, and
- * {@code WAWebCommsHandleWorkerCompatibleStanza} into a single class
- * because Cobalt has no equivalent of WA Web's worker-vs-main split.
- * WAM emission helpers are colocated with the dispatch path that
- * triggers each event so that the receipt and metric are committed
- * atomically with the processing outcome.
+ * This implementation collapses WA Web's split between {@code WAWebHandleMsg},
+ * {@code WAWebCommsHandleMessagingStanza}, and
+ * {@code WAWebCommsHandleWorkerCompatibleStanza} into a single class because
+ * Cobalt has no equivalent of WA Web's worker-vs-main split. WAM emission
+ * helpers are colocated with the dispatch path that triggers each event so
+ * that the receipt and metric are committed atomically with the processing
+ * outcome.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsg")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleMessagingStanza")
@@ -149,143 +135,132 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * Retry-count threshold (inclusive) that triggers the
      * {@code MessageHighRetryCount} WAM metric.
      *
-     * @apiNote
-     * Mirrors the private module-level constant
-     * {@code WAWebPostMessageHighRetryCountMetric.MAX_RETRY = 5}: the
-     * metric is committed only when the post-increment retry attempt
-     * is greater than or equal to this value.
+     * <p>The metric is committed only when the post-increment retry attempt
+     * is greater than or equal to this value, so it fires on the fifth retry
+     * attempt and beyond, never on the first four.
      *
      * @implNote
-     * This implementation matches WA Web bit-for-bit: the metric fires
-     * for the fifth retry attempt and beyond, never on the first four.
+     * This implementation matches the private module-level constant
+     * {@code WAWebPostMessageHighRetryCountMetric.MAX_RETRY = 5} bit-for-bit.
      */
     @WhatsAppWebExport(moduleName = "WAWebPostMessageHighRetryCountMetric",
             exports = "MAX_RETRY", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int MAX_MESSAGE_RETRY_COUNT = 5;
 
     /**
-     * Threshold (inclusive) on the parsed stanza {@code offline}
-     * attribute above which an {@code OfflineCountTooHigh} WAM metric is
-     * committed.
+     * Threshold (inclusive) on the parsed stanza {@code offline} attribute
+     * above which an {@code OfflineCountTooHigh} WAM metric is committed.
      *
-     * @apiNote
-     * Mirrors the private module-level constant
-     * {@code WAWebMaybePostOfflineCountTooHighMetric.OFFLINE_COUNT_TOO_HIGH_THRESHOLD = 11};
-     * the metric is committed when the integer-parsed {@code offline}
+     * <p>The metric is committed when the integer-parsed {@code offline}
      * value is greater than or equal to this threshold.
+     *
+     * @implNote
+     * This implementation matches the private module-level constant
+     * {@code WAWebMaybePostOfflineCountTooHighMetric.OFFLINE_COUNT_TOO_HIGH_THRESHOLD = 11}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMaybePostOfflineCountTooHighMetric",
             exports = "OFFLINE_COUNT_TOO_HIGH_THRESHOLD", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int OFFLINE_COUNT_TOO_HIGH_THRESHOLD = 11;
 
     /**
-     * Reference to the owning {@link WhatsAppClient} used to send
-     * acknowledgments and receipts, access the {@code Store}, dispatch
-     * listener callbacks, and ship peer messages from protocol-message
-     * key-request handling.
+     * Owning {@link WhatsAppClient} used to send acknowledgments and
+     * receipts, access the store, dispatch listener callbacks, and ship peer
+     * messages from protocol-message key-request handling.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The {@link MessageService} that parses and decrypts the inbound
-     * stanza into the typed {@link MessageInfo} consumed by Cobalt
-     * downstream.
+     * Parses and decrypts the inbound stanza into the typed
+     * {@link MessageInfo} consumed by Cobalt downstream.
      */
     private final MessageService messageService;
 
     /**
-     * Per-instance {@link MessageReceiptHandler} that ships delivery,
-     * retry, NACK, and bot-ack receipts back to the server based on the
-     * outcome of {@link MessageService#process(Node)}.
+     * Ships delivery, retry, NACK, and bot-ack receipts back to the server
+     * based on the outcome of {@link MessageService#process(Node)}.
      */
     private final MessageReceiptHandler receiptHandler;
 
     /**
-     * The {@link SnapshotRecoveryService} consulted from
-     * {@link #resolveSnapshotRecovery} when a peer-data-operation
-     * response carries a {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY}
-     * payload.
+     * Consulted from {@link #resolveSnapshotRecovery} when a
+     * peer-data-operation response carries a
+     * {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} payload.
      */
     private final SnapshotRecoveryService snapshotRecoveryService;
 
     /**
-     * The {@link SyncKeyRotationService} consulted from
-     * {@link #processAppStateSyncKeyShare} and
-     * {@link #processAppStateSyncKeyRequest} for app-state-sync key
-     * material exchange.
+     * Consulted from {@link #processAppStateSyncKeyShare} and
+     * {@link #processAppStateSyncKeyRequest} for app-state-sync key material
+     * exchange.
      */
     private final SyncKeyRotationService syncKeyRotationService;
 
     /**
-     * The {@link LidMigrationService} consulted from
-     * {@link #handleProtocolMessage(ChatMessageInfo)} for inbound LID
-     * migration mapping sync payloads.
+     * Consulted from {@link #handleProtocolMessage(ChatMessageInfo)} for
+     * inbound LID migration mapping sync payloads.
      */
     private final LidMigrationService lidMigrationService;
 
     /**
-     * The {@link WebHistorySyncService} consulted from
-     * {@link #handleProtocolMessage(ChatMessageInfo)} for inbound
-     * {@code HistorySyncNotification} payloads carried as protocol
-     * messages; downloads, decrypts, and decodes the announced history
-     * chunk and fans the decoded chunks out to the registered listeners
-     * on a dedicated virtual thread.
+     * Consulted from {@link #handleProtocolMessage(ChatMessageInfo)} for
+     * inbound {@code HistorySyncNotification} payloads carried as protocol
+     * messages.
+     *
+     * <p>Downloads, decrypts, and decodes the announced history chunk and
+     * fans the decoded chunks out to the registered listeners on a dedicated
+     * virtual thread.
      */
     private final WebHistorySyncService webHistorySyncService;
 
     /**
-     * The {@link WamService} telemetry sink used to commit every
-     * inbound-message WAM event (receive, drop, high-retry,
-     * offline-count-too-high, MD bad device-sent, structured-message
-     * receive, non-message peer-data response).
+     * Telemetry sink used to commit every inbound-message WAM event:
+     * receive, drop, high-retry, offline-count-too-high, MD bad
+     * device-sent, structured-message receive, and non-message peer-data
+     * response.
      */
     private final WamService wamService;
 
     /**
-     * The {@link AckSender} used to ship the {@code <ack class="message">}
-     * stanza for {@code medianotify} stanzas and the
-     * {@code <ack class="message" error=...>} NACK for parse and
-     * runtime failures.
+     * Ships the {@code <ack class="message">} stanza for {@code medianotify}
+     * stanzas and the {@code <ack class="message" error=...>} NACK for parse
+     * and runtime failures.
      */
     private final AckSender ackSender;
 
     /**
      * Constructs a handler bound to the given collaborators.
      *
-     * @apiNote
-     * Invoked by the socket-stream wiring at client construction; user
+     * <p>Invoked by the socket-stream wiring at client construction; user
      * code does not instantiate this handler directly.
      *
      * @implNote
      * This implementation derives the receipt handler from the supplied
-     * {@link WhatsAppClient} and constructs the history-sync service in
-     * place because both are owned solely by the message handler. The
+     * {@link WhatsAppClient} and constructs the history-sync service in place
+     * because both are owned solely by the message handler. The
      * {@link SyncKeyRotationService} is pulled off the supplied
      * {@link WebAppStateService} so that the two services share their
      * underlying state.
      *
      * @param whatsapp                the owning {@link WhatsAppClient}
-     * @param messageService          the {@link MessageService} that
-     *                                drives parsing and decryption
+     * @param messageService          the {@link MessageService} that drives
+     *                                parsing and decryption
      * @param snapshotRecoveryService the {@link SnapshotRecoveryService}
      *                                consulted for syncd snapshot fatal
      *                                recovery responses
-     * @param webAppStateService      the {@link WebAppStateService} from
-     *                                which the
-     *                                {@link SyncKeyRotationService} is
+     * @param webAppStateService      the {@link WebAppStateService} from which
+     *                                the {@link SyncKeyRotationService} is
      *                                obtained
-     * @param lidMigrationService     the {@link LidMigrationService}
-     *                                consulted for LID migration mapping
-     *                                sync protocol messages
-     * @param abPropsService          the {@link ABPropsService} threaded
-     *                                into the history-sync media
-     *                                download pipeline
-     * @param wamService              the {@link WamService} telemetry
-     *                                sink for inbound-message WAM
-     *                                events
-     * @param ackSender               the {@link AckSender} used for
-     *                                the {@code <ack class="message">}
-     *                                and NACK paths
+     * @param lidMigrationService     the {@link LidMigrationService} consulted
+     *                                for LID migration mapping sync protocol
+     *                                messages
+     * @param wamService              the {@link WamService} telemetry sink for
+     *                                inbound-message WAM events
+     * @param ackSender               the {@link AckSender} used for the
+     *                                {@code <ack class="message">} and NACK
+     *                                paths
+     * @param mediaConnectionService  the {@link MediaConnectionService} threaded
+     *                                into the history-sync media download
+     *                                pipeline
      */
     public MessageStreamHandler(
             WhatsAppClient whatsapp,
@@ -293,7 +268,6 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             SnapshotRecoveryService snapshotRecoveryService,
             WebAppStateService webAppStateService,
             LidMigrationService lidMigrationService,
-            ABPropsService abPropsService,
             WamService wamService,
             AckSender ackSender,
             MediaConnectionService mediaConnectionService
@@ -306,34 +280,32 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         this.lidMigrationService = Objects.requireNonNull(lidMigrationService, "lidMigrationService cannot be null");
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
         Objects.requireNonNull(mediaConnectionService, "mediaConnectionService cannot be null");
-        this.webHistorySyncService = new WebHistorySyncService(whatsapp, lidMigrationService, abPropsService, wamService, mediaConnectionService);
+        this.webHistorySyncService = new WebHistorySyncService(whatsapp, lidMigrationService, wamService, mediaConnectionService);
         this.ackSender = Objects.requireNonNull(ackSender, "ackSender cannot be null");
     }
 
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Routes the inbound {@code <message>} stanza through the
-     * media-notify, newsletter, or normal-E2E branch (see class-level
-     * javadoc for the full table) and sends the matching server-side
-     * receipt after processing completes. The receipt type is
-     * determined by the processing outcome: a parse failure yields a
-     * {@code 487} NACK; a successful decrypt yields a delivery receipt
-     * (or a bot-invoke ack for bot senders); a decrypt failure yields
-     * a retry, NACK, or delivery receipt depending on the exception
-     * subtype; an unhandled runtime exception yields a {@code 500}
-     * NACK.
+     * <p>Routes the inbound {@code <message>} stanza through the
+     * media-notify, newsletter, or normal-E2E branch (see the class-level
+     * documentation for the full table) and sends the matching server-side
+     * receipt after processing completes. The receipt type is determined by
+     * the processing outcome: a parse failure yields a {@code 487} NACK; a
+     * successful decrypt yields a delivery receipt (or a bot-invoke ack for
+     * bot senders); a decrypt failure yields a retry, NACK, or delivery
+     * receipt depending on the exception subtype; an unhandled runtime
+     * exception yields a {@code 500} NACK. The transport
+     * {@code <ack class="message">} is sent unconditionally up front; when
+     * the relay is muting non-essential pushes the embedder uses
+     * {@link WhatsAppClient#enablePassiveMode()} rather than gating the ack
+     * itself.
      *
      * @implNote
      * This implementation commits the
-     * {@link #maybePostOfflineCountTooHigh(MessageReceiveStanza)}
-     * metric immediately after a successful parse, mirroring WA Web's
-     * ordering so the metric fires before any decryption work begins.
-     * The transport {@code <ack class="message">} is sent unconditionally
-     * up front; if the relay is muting non-essential pushes the embedder
-     * should use {@link WhatsAppClient#enablePassiveMode()} rather than
-     * gating the ack itself.
+     * {@link #maybePostOfflineCountTooHigh(MessageReceiveStanza)} metric
+     * immediately after a successful parse, mirroring WA Web's ordering so
+     * the metric fires before any decryption work begins.
      */
     @Override
     public void handle(Node node) {
@@ -416,23 +388,23 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Processes inbound newsletter message stanzas that the main
-     * {@link #handle(Node)} branch routes here because their {@code from}
-     * JID lives on a newsletter server.
+     * Processes an inbound newsletter message stanza routed here by
+     * {@link #handle(Node)} because its {@code from} JID lives on a
+     * newsletter server.
      *
-     * @apiNote
-     * Used for {@code message} stanzas published on a channel the
-     * current account follows; the payload is plaintext and no
-     * end-to-end decryption runs.
+     * <p>The payload is plaintext and no end-to-end decryption runs. The
+     * decoded message is persisted, reconciled against any orphan payment,
+     * broadcast to the registered listeners, and surfaced as a WAM receive
+     * event; no delivery receipt is sent because newsletter messages are
+     * server-fanned-out plaintext content.
      *
      * @implNote
-     * This implementation does not send a delivery receipt because
-     * newsletter messages are server-fanned-out plaintext content. A
-     * runtime exception during processing is converted to an
+     * This implementation converts a runtime exception during processing
+     * into an
      * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}
      * with {@link MessageDropReasonType#INVALID_PROTOBUF} and
-     * {@link E2eDestination#CHANNEL} matching the WA Web emission for
-     * a {@code MessageValidationError} on the channel pipeline.
+     * {@link E2eDestination#CHANNEL}, matching the WA Web emission for a
+     * {@code MessageValidationError} on the channel pipeline.
      *
      * @param node the inbound newsletter {@code <message>} stanza
      */
@@ -465,23 +437,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * Selects and dispatches the server-side receipt for a stanza whose
      * decryption raised a {@link WhatsAppMessageException.Receive}.
      *
-     * @apiNote
-     * Picks among "no receipt"
-     * ({@link WhatsAppMessageException.Receive.HsmMismatch}, matching
-     * WA Web's silent drop), {@code NACK}
-     * ({@link WhatsAppMessageException.Receive#errorCode()} is
-     * non-empty), retry
-     * ({@link WhatsAppMessageException.Receive#shouldSendRetryReceipt()}
-     * is true; also fires the high-retry-count WAM metric), and a
-     * fall-back delivery receipt or bot-invoke ack.
+     * <p>Picks among four outcomes: no receipt for an
+     * {@link WhatsAppMessageException.Receive.HsmMismatch} (matching WA Web's
+     * silent drop); a NACK when
+     * {@link WhatsAppMessageException.Receive#errorCode()} is non-empty; a
+     * retry receipt when
+     * {@link WhatsAppMessageException.Receive#shouldSendRetryReceipt()} is
+     * {@code true} (which also fires the high-retry-count WAM metric); and a
+     * fall-back delivery receipt or bot-invoke ack otherwise.
      *
      * @implNote
-     * The retry-count increment runs locally because Cobalt's stanza
-     * model does not mutate the parsed {@link MessageReceiveStanza}
-     * itself.
+     * This implementation increments the retry count locally because
+     * Cobalt's stanza model does not mutate the parsed
+     * {@link MessageReceiveStanza} itself.
      *
-     * @param stanza    the parsed inbound stanza whose decryption
-     *                  failed
+     * @param stanza    the parsed inbound stanza whose decryption failed
      * @param exception the decryption failure
      */
     private void handleReceiveFailure(
@@ -524,23 +494,19 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * post-increment retry count reaches the
      * {@link #MAX_MESSAGE_RETRY_COUNT} threshold.
      *
-     * @apiNote
-     * Surfaces the message-retry-storm telemetry that
-     * {@code WAWebPostMessageHighRetryCountMetric} uses to flag chats
-     * where Signal session negotiation keeps failing. The metric is
-     * committed exactly once per retry attempt at or above the
-     * threshold.
+     * <p>Surfaces the message-retry-storm telemetry used to flag chats where
+     * Signal session negotiation keeps failing. The metric is committed
+     * exactly once per retry attempt at or above the threshold.
      *
      * @implNote
-     * This implementation populates the
-     * {@code retryCount}, {@code messageType},
-     * {@code e2eSenderType}, and {@code encryptionType} properties
-     * that are derivable from the parsed stanza alone. The
-     * {@code deviceSizeBucket} (groups only) property is left absent
-     * because Cobalt has no equivalent of
-     * {@code WAWebWamGroupMetricCache.getGroupMetrics}; WA Web also
-     * omits the property when the cached metric is unavailable, so
-     * the omission is parity-preserving.
+     * This implementation populates the {@code retryCount},
+     * {@code messageType}, {@code e2eSenderType}, and {@code encryptionType}
+     * properties that are derivable from the parsed stanza alone. The
+     * {@code deviceSizeBucket} (groups only) property is left absent because
+     * Cobalt has no equivalent of
+     * {@code WAWebWamGroupMetricCache.getGroupMetrics}; WA Web also omits the
+     * property when the cached metric is unavailable, so the omission is
+     * parity-preserving.
      *
      * @param stanza     the parsed inbound stanza
      * @param retryCount the post-increment retry attempt number
@@ -571,29 +537,27 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Commits an {@link com.github.auties00.cobalt.wam.event.OfflineCountTooHighEvent}
-     * when the parsed stanza carries an {@code offline} attribute at or
-     * above {@link #OFFLINE_COUNT_TOO_HIGH_THRESHOLD}.
+     * Commits an
+     * {@link com.github.auties00.cobalt.wam.event.OfflineCountTooHighEvent}
+     * when the parsed stanza carries an {@code offline} attribute at or above
+     * {@link #OFFLINE_COUNT_TOO_HIGH_THRESHOLD}.
      *
-     * @apiNote
-     * Surfaces the queue-depth alarm WA Web posts during offline
-     * delivery: every parsed stanza whose {@code offline} attribute
-     * parses to an integer at or above the threshold contributes one
-     * event so the server can detect clients that fell far enough
-     * behind to risk dropping events.
+     * <p>Surfaces the queue-depth alarm WA Web posts during offline delivery:
+     * every parsed stanza whose {@code offline} attribute parses to an
+     * integer at or above the threshold contributes one event so the server
+     * can detect clients that fell far enough behind to risk dropping events.
      *
      * @implNote
-     * This implementation populates {@code offlineCount},
-     * {@code stanzaType} (hard-coded to {@link StanzaType#MESSAGE}
-     * because the helper is reachable only from the message
-     * dispatcher), {@code mediaType} (via
+     * This implementation populates {@code offlineCount}, {@code stanzaType}
+     * (hard-coded to {@link StanzaType#MESSAGE} because the helper is
+     * reachable only from the message dispatcher), {@code mediaType} (via
      * {@link #mapEncMediaTypeToWamMediaType(String, String, String)}),
-     * {@code messageType}, {@code e2eSenderType}, and
-     * {@code encryptionType}. The four spec properties that apply only
-     * to call/notification/receipt stanzas
-     * ({@code callStanzaType}, {@code invisibleMessageCategory},
-     * {@code notificationStanzaType}, {@code receiptStanzaType}) are
-     * intentionally absent, matching WA Web's emission site.
+     * {@code messageType}, {@code e2eSenderType}, and {@code encryptionType}.
+     * The four spec properties that apply only to
+     * call/notification/receipt stanzas ({@code callStanzaType},
+     * {@code invisibleMessageCategory}, {@code notificationStanzaType},
+     * {@code receiptStanzaType}) are intentionally absent, matching WA Web's
+     * emission site.
      *
      * @param stanza the parsed inbound message stanza
      */
@@ -649,28 +613,27 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Maps the {@code (encMediaType, stanzaType, pollType)} triple
-     * extracted from an inbound stanza onto the WAM {@link MediaType}
-     * enum.
+     * Maps the {@code (encMediaType, stanzaType, pollType)} triple extracted
+     * from an inbound stanza onto the WAM {@link MediaType} enum.
      *
-     * @apiNote
-     * Drives the {@code mediaType} property of every WAM metric that
-     * needs to classify the inbound payload, including
+     * <p>Drives the {@code mediaType} property of every WAM metric that needs
+     * to classify the inbound payload, including
      * {@link com.github.auties00.cobalt.wam.event.OfflineCountTooHighEvent}.
+     * Reaction and medianotify stanza types win over poll types, poll
+     * creation and vote win over the enc media type, and the enc media type
+     * drives the remaining cases. Any unrecognised triple returns
+     * {@link MediaType#NONE}.
      *
      * @implNote
      * This implementation honours the same precedence as
-     * {@code WAWebBackendJobsCommon.getMetricMediaType}: reaction and
-     * medianotify stanza types win over poll types, poll creation and
-     * vote win over the enc media type, and the enc media type drives
-     * the remaining cases. Any unrecognised triple returns
-     * {@link MediaType#NONE}, matching WA Web's default branch.
+     * {@code WAWebBackendJobsCommon.getMetricMediaType}, including the
+     * {@link MediaType#NONE} default branch.
      *
      * @param encMediaType the first non-{@code null} {@code mediatype}
-     *                     attribute among the stanza's enc payloads,
-     *                     or {@code null} when none carry one
-     * @param stanzaType   the stanza's top-level {@code type}
-     *                     attribute, or {@code null}
+     *                     attribute among the stanza's enc payloads, or
+     *                     {@code null} when none carry one
+     * @param stanzaType   the stanza's top-level {@code type} attribute, or
+     *                     {@code null}
      * @param pollType     the {@code polltype} attribute from the
      *                     {@code <meta>} node, or {@code null}
      * @return the corresponding {@link MediaType} enum value
@@ -734,20 +697,19 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     /**
      * Commits an
      * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}
-     * for a drop that occurred before the stanza could even be parsed
-     * into a {@link MessageReceiveStanza}.
+     * for a drop that occurred before the stanza could even be parsed into a
+     * {@link MessageReceiveStanza}.
      *
-     * @apiNote
-     * Surfaces the pre-parse drop emission triggered when
+     * <p>Surfaces the pre-parse drop emission triggered when
      * {@link MessageReceiveStanzaParser#parse} throws.
      *
      * @implNote
-     * This implementation only populates the {@code offline} and
-     * {@code offlineCount} properties because Cobalt has no equivalent
-     * of WA Web's {@code incomingMsgParserForMetric} fall-back parser
-     * that extracts best-effort metadata from a stanza that could not
-     * be fully parsed; WA Web also leaves the remaining properties
-     * absent when its metric parser fails.
+     * This implementation populates only the {@code offline} and
+     * {@code offlineCount} properties because Cobalt has no equivalent of WA
+     * Web's {@code incomingMsgParserForMetric} fall-back parser that extracts
+     * best-effort metadata from a stanza that could not be fully parsed; WA
+     * Web also leaves the remaining properties absent when its metric parser
+     * fails.
      *
      * @param node              the raw inbound stanza node
      * @param messageDropReason the drop reason to record on the event
@@ -768,13 +730,11 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Commits an
-     * {@link com.github.auties00.cobalt.wam.event.UnknownStanzaEvent}
-     * for a stanza whose top-level shape did not parse.
+     * {@link com.github.auties00.cobalt.wam.event.UnknownStanzaEvent} for a
+     * stanza whose top-level shape did not parse.
      *
-     * @apiNote
-     * Surfaces the WA Web emission point where a stanza tag plus type
-     * are recorded so the server can detect bundles that send shapes
-     * the client cannot yet understand.
+     * <p>Records the stanza tag and type so the server can detect bundles
+     * that send shapes the client cannot yet understand.
      *
      * @implNote
      * This implementation leaves {@code unknownStanzaDropReason} unset,
@@ -796,32 +756,27 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     /**
      * Commits an
      * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}
-     * for a drop that occurred while processing an already-parsed
-     * stanza.
+     * for a drop that occurred while processing an already-parsed stanza.
      *
-     * @apiNote
-     * Surfaces the per-decrypt-slot drop telemetry WA Web emits from
-     * {@code WAWebMsgProcessingDecryptionHandler.k} when an inbound
-     * decrypt outcome is non-success and not a benign skip; the drop
-     * reason is mapped from the exception subtype, and the event
-     * carries the {@code offlineCount}, {@code retryCount},
-     * {@code e2eCiphertextType}, and {@code e2eDestination} properties
-     * derivable from the stanza alone.
+     * <p>Mirrors the per-decrypt-slot drop telemetry WA Web emits when an
+     * inbound decrypt outcome is non-success and not a benign skip. The drop
+     * reason is mapped from the exception subtype, and the event carries the
+     * {@code offlineCount}, {@code retryCount}, {@code e2eCiphertextType},
+     * and {@code e2eDestination} properties derivable from the stanza alone.
+     * When {@code exception} is {@code null} the drop reason is
+     * {@link MessageDropReasonType#INTERNAL_ERROR}.
      *
      * @implNote
-     * This implementation skips emission entirely for the exception
-     * subtypes WA Web ignores ({@link WhatsAppMessageException.Receive.HsmMismatch},
+     * This implementation skips emission entirely for the exception subtypes
+     * WA Web ignores ({@link WhatsAppMessageException.Receive.HsmMismatch},
      * {@link WhatsAppMessageException.Receive.BroadcastEphemeralSettings},
      * {@link WhatsAppMessageException.Receive.DuplicateMessage},
-     * {@link WhatsAppMessageException.Receive.UnknownDevice}, and the
-     * full set of Signal-level pre/key-related faults). When the
-     * {@code exception} argument is {@code null} the drop reason is
-     * {@link MessageDropReasonType#INTERNAL_ERROR}, matching
-     * {@code postIncomingMessageDropInternalError}.
+     * {@link WhatsAppMessageException.Receive.UnknownDevice}, and the full set
+     * of Signal-level pre/key-related faults).
      *
      * @param stanza    the parsed inbound stanza
-     * @param exception the receive exception that triggered the drop,
-     *                  or {@code null} for an internal unhandled error
+     * @param exception the receive exception that triggered the drop, or
+     *                  {@code null} for an internal unhandled error
      */
     private void emitIncomingMessageDropFromStanza(
             MessageReceiveStanza stanza,
@@ -884,26 +839,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     /**
      * Commits an
      * {@link com.github.auties00.cobalt.wam.event.MdBadDeviceSentMessageEvent}
-     * when the current receive failure is a device-sent-message
-     * validation error.
+     * when the current receive failure is a device-sent-message validation
+     * error.
      *
-     * @apiNote
-     * Surfaces the WAM event WA Web emits from the
-     * {@code WAWebHandleMsgError.DeviceSentMessageError} constructor;
-     * the event records the broken DSM ({@code peerType}, {@code dsmError})
-     * so the server can detect companion devices that ship malformed
-     * device-sent envelopes.
+     * <p>Records the broken device-sent message ({@code peerType} and
+     * {@code dsmError}) so the server can detect companion devices that ship
+     * malformed device-sent envelopes; non-DSM failures are ignored.
      *
      * @implNote
-     * This implementation derives {@code peerType} from
-     * {@link Jid#device()}: zero (the {@code DEFAULT_DEVICE_ID}) maps
-     * to {@link DeviceType#PRIMARY}, any other value to
-     * {@link DeviceType#COMPANION}. The remaining event-spec
-     * properties ({@code editType}, {@code encryptionType},
-     * {@code isLid}, {@code mediaType}, {@code messageType},
-     * {@code revokeType}) are left absent because the WA Web
-     * emission site populates only {@code peerType} and
-     * {@code dsmError}.
+     * This implementation derives {@code peerType} from {@link Jid#device()}:
+     * zero (the default device id) maps to {@link DeviceType#PRIMARY}, any
+     * other value to {@link DeviceType#COMPANION}. The remaining event-spec
+     * properties ({@code editType}, {@code encryptionType}, {@code isLid},
+     * {@code mediaType}, {@code messageType}, {@code revokeType}) are left
+     * absent because the WA Web emission site populates only {@code peerType}
+     * and {@code dsmError}.
      *
      * @param stanza    the parsed inbound stanza whose decrypt failed
      * @param exception the receive exception that triggered the drop
@@ -936,36 +886,31 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Commits a
-     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}
-     * for a successfully decrypted E2E chat message.
+     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent} for a
+     * successfully decrypted E2E chat message.
      *
-     * @apiNote
-     * Surfaces the per-message WAM emission that
-     * {@code WAWebLogReceivedMessages.logReceivedMessagesInWAM} runs
-     * once per decrypted message in an incoming batch. The event
-     * carries the typing, content, addressing, ephemerality, and
-     * timing metadata the server uses to debug delivery and adoption
-     * regressions.
+     * <p>Runs once per decrypted message in an incoming batch and carries the
+     * typing, content, addressing, ephemerality, and timing metadata the
+     * server uses to debug delivery and adoption regressions.
      *
      * @implNote
-     * This implementation populates the subset of properties Cobalt
-     * can derive directly from the parsed
-     * {@link MessageReceiveStanza}, the decoded {@link ChatMessageInfo},
-     * and the store. The WA-Web-specific properties Cobalt does not
-     * track ({@code deviceCount}, {@code deviceSizeBucket},
-     * {@code oppositeVisibleIdentification}, {@code hasUsername},
-     * {@code hasUsernamePin}, vcard {@code received*ContactSize},
-     * sticker {@code stickerIs*}/{@code stickerMakerSourceType},
+     * This implementation populates the subset of properties Cobalt can
+     * derive directly from the parsed {@link MessageReceiveStanza}, the
+     * decoded {@link ChatMessageInfo}, and the store. The WA-Web-specific
+     * properties Cobalt does not track ({@code deviceCount},
+     * {@code deviceSizeBucket}, {@code oppositeVisibleIdentification},
+     * {@code hasUsername}, {@code hasUsernamePin}, vcard
+     * {@code received*ContactSize}, sticker
+     * {@code stickerIs*}/{@code stickerMakerSourceType},
      * {@code invisibleMessageCategory}, {@code pairedMediaType},
-     * {@code privateAiFeatureName}, {@code traceIdInt},
-     * {@code appContext}, {@code stanzaProcessCount},
-     * {@code processingDeferred}, {@code isPq}) are intentionally
-     * absent, matching WA Web's behaviour when the upstream source is
-     * unavailable. The three {@code messageReceiveT*} timers are
-     * encoded as elapsed milliseconds via
-     * {@link Instant#ofEpochMilli}: {@code T0} is the server-to-client
-     * latency ({@code clientReceivedTs - serverTs}), {@code T1} and
-     * {@code T2} are zeroed exactly as WA Web does at this call site.
+     * {@code privateAiFeatureName}, {@code traceIdInt}, {@code appContext},
+     * {@code stanzaProcessCount}, {@code processingDeferred}, {@code isPq})
+     * are intentionally absent, matching WA Web's behaviour when the upstream
+     * source is unavailable. The three {@code messageReceiveT*} timers are
+     * encoded as elapsed milliseconds via {@link Instant#ofEpochMilli(long)}:
+     * {@code T0} is the server-to-client latency
+     * ({@code clientReceivedTs - serverTs}), {@code T1} and {@code T2} are
+     * zeroed exactly as WA Web does at this call site.
      *
      * @param info   the decoded chat message info
      * @param stanza the parsed inbound stanza carrying timestamps,
@@ -1064,32 +1009,28 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     /**
      * Commits a
      * {@link com.github.auties00.cobalt.wam.event.StructuredMessageReceiveEvent}
-     * when the inbound chat message is a galaxy-flow CTA or a payment-
-     * request native-flow interactive message.
+     * when the inbound chat message is a galaxy-flow CTA or a payment-request
+     * native-flow interactive message.
      *
-     * @apiNote
-     * Surfaces two WA Web sibling emissions that fire from
-     * {@code WAWebLogReceivedMessages.logReceivedMessagesInWAM}:
-     * {@code WAWebGalaxyFlowWamLoggerUtils.logStructuredMessageReceivedWAMEvent}
-     * (for {@code nativeFlowName == "galaxy_message"}) and
-     * {@code WAWebPaymentRequestWamLogger.logPaymentRequestReceivedWAMEvent}
-     * (for {@code nativeFlowName == "payment_request"}). Both emit the
+     * <p>Covers two WA Web sibling emissions that fire from the received-
+     * message WAM logger: the CTA-flow path (for
+     * {@code nativeFlowName == "galaxy_message"}) and the payment-request
+     * path (for {@code nativeFlowName == "payment_request"}). Both emit the
      * same event class with {@code messageClass=BUTTON_NFM},
-     * {@code bizPlatform=CLOUDAPI}, and the sender's business JID; they
-     * differ only in {@code messageMediaType} ({@link MediaType#NONE}
-     * for CTA-flow, {@link MediaType#INTERACTIVE_NFM} for payment
-     * request) and in the {@code messageClassAttributes} JSON payload.
+     * {@code bizPlatform=CLOUDAPI}, and the sender's business JID; they differ
+     * only in {@code messageMediaType} ({@link MediaType#NONE} for CTA-flow,
+     * {@link MediaType#INTERACTIVE_NFM} for payment request) and in the
+     * {@code messageClassAttributes} JSON payload.
      *
      * @implNote
      * This implementation leaves {@code messageClassAttributes} absent
      * because the upstream helpers
      * ({@code WAWebGetGalaxyFlowCtaButton.getGalaxyFlowCtaButton},
      * {@code WAWebBrPaymentRequest.parsePaymentRequestButton},
-     * {@code P2XFunnelIdGenerator.genFunnelInfo}) and the per-
-     * conversation CTWA entry-point state they consume are not modelled
-     * in Cobalt. WA Web also omits this field when its helpers yield
-     * {@code null}, so the omission is parity-preserving rather than a
-     * divergence.
+     * {@code P2XFunnelIdGenerator.genFunnelInfo}) and the per-conversation
+     * CTWA entry-point state they consume are not modelled in Cobalt. WA Web
+     * also omits this field when its helpers yield {@code null}, so the
+     * omission is parity-preserving rather than a divergence.
      *
      * @param stanza the parsed inbound stanza carrying the biz
      *               {@code nativeFlowName} attribute and the sender JID
@@ -1138,25 +1079,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Commits a
-     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}
-     * for a successfully processed newsletter message.
+     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent} for a
+     * successfully processed newsletter message.
      *
-     * @apiNote
-     * Surfaces the WAM emission WA Web triggers from
-     * {@code WAWebHandleNewsletterMsg.default} when it forwards the
-     * decoded channel entry through
-     * {@code logReceivedMessagesInWAM}; only the properties Cobalt can
-     * derive for a newsletter entry (typing, content, view-once,
-     * reply/forward, chat-origins, timer fields) are populated.
+     * <p>Populates only the properties Cobalt can derive for a newsletter
+     * entry: typing, content, view-once, reply/forward, chat-origins, and the
+     * timer fields.
      *
      * @implNote
      * This implementation skips the addressing, LID, ephemerality,
-     * hosted-encryption, and group-only branches because newsletter
-     * messages never carry those signals. The three
-     * {@code messageReceiveT*} timer fields are zeroed, matching the
-     * newsletter invocation of {@code logReceivedMessagesInWAM} which
-     * omits {@code clientReceivedTsMillis} and {@code tsMillis} for
-     * the channel pipeline.
+     * hosted-encryption, and group-only branches because newsletter messages
+     * never carry those signals. The three {@code messageReceiveT*} timer
+     * fields are zeroed, matching the newsletter invocation of
+     * {@code logReceivedMessagesInWAM} which omits
+     * {@code clientReceivedTsMillis} and {@code tsMillis} for the channel
+     * pipeline.
      *
      * @param info the decoded newsletter message info
      */
@@ -1194,28 +1131,24 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Tests whether the decoded {@link MessageContainer} carries any of
-     * the view-once wrappers WhatsApp ever shipped.
+     * Tests whether the decoded {@link MessageContainer} carries any of the
+     * view-once wrappers WhatsApp ever shipped.
      *
-     * @apiNote
-     * Drives the {@code isViewOnce} property on the WAM
+     * <p>Drives the {@code isViewOnce} property on the WAM
      * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}
-     * builder; downstream listeners do not call this helper directly.
+     * builder.
      *
      * @implNote
      * This implementation delegates to
      * {@link MessageContainer#futureProofContentType()} and checks for
      * {@link FutureProofMessageType#VIEW_ONCE}, which folds the three
-     * historical view-once message shapes
-     * ({@code viewOnceMessage}, {@code viewOnceMessageV2},
-     * {@code viewOnceMessageV2Extension}) into one branch on the
-     * Cobalt side.
+     * historical view-once message shapes ({@code viewOnceMessage},
+     * {@code viewOnceMessageV2}, {@code viewOnceMessageV2Extension}) into one
+     * branch on the Cobalt side.
      *
-     * @param container the decoded message container; may be
-     *                  {@code null}
-     * @return {@code true} when the container carries a view-once
-     *         payload; {@code false} otherwise (including
-     *         {@code null} inputs)
+     * @param container the decoded message container; may be {@code null}
+     * @return {@code true} when the container carries a view-once payload;
+     *         {@code false} otherwise, including for {@code null} inputs
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgGetters", exports = "getIsViewOnce",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1228,28 +1161,23 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Extracts the {@link ContextInfo} from a {@link MessageContainer}
-     * when its content is a {@link ContextualMessage}.
+     * Extracts the {@link ContextInfo} from a {@link MessageContainer} when
+     * its content is a {@link ContextualMessage}.
      *
-     * @apiNote
-     * Surfaces the per-content {@code contextInfo} accessor that powers
-     * the {@code isForwardedForward}, {@code isAReply}, and ephemerality
-     * fields on the WAM
+     * <p>Powers the {@code isForwardedForward}, {@code isAReply}, and
+     * ephemerality fields on the WAM
      * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}.
      *
      * @implNote
-     * This implementation returns {@link Optional#empty()} when the
-     * container is {@code null}, when the content is not a
-     * {@link ContextualMessage}, or when the contextual message itself
-     * has no embedded context info, mirroring the WA Web
-     * {@code getNumTimesForwarded} / {@code getIsReply} accessors that
-     * silently treat absent {@code contextInfo} as a no-op.
+     * This implementation returns {@link Optional#empty()} when the container
+     * is {@code null}, when the content is not a {@link ContextualMessage}, or
+     * when the contextual message itself has no embedded context info,
+     * mirroring the WA Web {@code getNumTimesForwarded} / {@code getIsReply}
+     * accessors that silently treat absent {@code contextInfo} as a no-op.
      *
-     * @param container the decoded message container; may be
-     *                  {@code null}
-     * @return the resolved {@link ContextInfo}, or
-     *         {@link Optional#empty()} when no context info is
-     *         attached
+     * @param container the decoded message container; may be {@code null}
+     * @return the resolved {@link ContextInfo}, or {@link Optional#empty()}
+     *         when no context info is attached
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgGetters", exports = "getNumTimesForwarded",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1267,30 +1195,24 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Copies the three WAM ephemerality fields off a
-     * {@link ChatDisappearingMode} onto a
-     * {@link MessageReceiveEventBuilder}.
+     * {@link ChatDisappearingMode} onto a {@link MessageReceiveEventBuilder}.
      *
-     * @apiNote
-     * Drives the {@code disappearingChatInitiator},
-     * {@code ephemeralityTriggerAction}, and
-     * {@code ephemeralityInitiator} properties on the WAM
-     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}
-     * by mirroring the three
-     * {@code WAWebEphemeralityWAMUtils.getWamDisappearingMode*}
-     * accessors.
+     * <p>Sets the {@code disappearingChatInitiator},
+     * {@code ephemeralityTriggerAction}, and {@code ephemeralityInitiator}
+     * properties on the WAM
+     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}.
      *
      * @implNote
-     * This implementation translates each enum constant on the Cobalt
-     * side ({@link ChatDisappearingMode.Initiator},
-     * {@link ChatDisappearingMode.Trigger}) into its WAM counterpart
-     * via an exhaustive {@code switch}. The {@code initiatedByMe}
-     * boolean is collapsed onto two
-     * {@link EphemeralityInitiatorType} values, matching the binary
-     * choice WA Web makes at this call site.
+     * This implementation translates each Cobalt-side enum constant
+     * ({@link ChatDisappearingMode.Initiator},
+     * {@link ChatDisappearingMode.Trigger}) into its WAM counterpart via an
+     * exhaustive {@code switch}. The {@code initiatedByMe} boolean is
+     * collapsed onto two {@link EphemeralityInitiatorType} values, matching
+     * the binary choice WA Web makes at this call site.
      *
      * @param builder the event builder to populate in place
-     * @param mode    the disappearing-mode descriptor carried by the
-     *                inbound message's context info
+     * @param mode    the disappearing-mode descriptor carried by the inbound
+     *                message's context info
      */
     @WhatsAppWebExport(moduleName = "WAWebEphemeralityWAMUtils", exports = "getWamDisappearingModeInitiator",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1327,27 +1249,24 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the {@link EditType} for a parsed inbound stanza,
-     * combining the stanza-level {@code edit} attribute with the
-     * embedded {@link ProtocolMessage.Type} subtype.
+     * Resolves the {@link EditType} for a parsed inbound stanza, combining
+     * the stanza-level {@code edit} attribute with the embedded
+     * {@link ProtocolMessage.Type} subtype.
      *
-     * @apiNote
-     * Drives the {@code editType} property on the
-     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent},
-     * mirroring {@code WAWebMsgGetters.getWamEditType}.
+     * <p>Drives the {@code editType} property on the
+     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}.
      *
      * @implNote
-     * This implementation checks the stanza's {@code edit} attribute
-     * first ({@code EDIT_MESSAGE}, {@code EDIT_PIN},
-     * {@code EDIT_SENDER_REVOKE}, {@code EDIT_ADMIN_REVOKE}) and falls
-     * back to the protocol-message type so revokes carried inside a
-     * protocol message (typical for sender revokes) still surface
-     * correctly.
+     * This implementation checks the stanza's {@code edit} attribute first
+     * ({@code EDIT_MESSAGE}, {@code EDIT_PIN}, {@code EDIT_SENDER_REVOKE},
+     * {@code EDIT_ADMIN_REVOKE}) and falls back to the protocol-message type
+     * so revokes carried inside a protocol message (typical for sender
+     * revokes) still surface correctly.
      *
      * @param stanza the parsed inbound stanza
      * @param info   the decoded chat message info
-     * @return the resolved {@link EditType}, or {@code null} when the
-     *         message is neither edited nor revoked
+     * @return the resolved {@link EditType}, or {@code null} when the message
+     *         is neither edited nor revoked
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgGetters", exports = "getWamEditType",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1378,26 +1297,23 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the {@link RevokeType} for a parsed inbound stanza when
-     * the message is a revoke.
+     * Resolves the {@link RevokeType} for a parsed inbound stanza when the
+     * message is a revoke.
      *
-     * @apiNote
-     * Drives the {@code revokeType} property on the
-     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}
-     * via the equivalent ternary inside
-     * {@code WAWebLogReceivedMessages.logReceivedMessagesInWAM}.
+     * <p>Drives the {@code revokeType} property on the
+     * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}.
      *
      * @implNote
-     * This implementation routes the stanza's {@code edit} attribute
-     * to {@link RevokeType#ADMIN} for {@code admin_revoke} and
-     * {@link RevokeType#SENDER} for {@code sender_revoke}, then falls
-     * back to {@link RevokeType#SENDER} when the embedded protocol
-     * message itself is a {@link ProtocolMessage.Type#REVOKE}.
+     * This implementation routes the stanza's {@code edit} attribute to
+     * {@link RevokeType#ADMIN} for {@code admin_revoke} and
+     * {@link RevokeType#SENDER} for {@code sender_revoke}, then falls back to
+     * {@link RevokeType#SENDER} when the embedded protocol message itself is a
+     * {@link ProtocolMessage.Type#REVOKE}.
      *
      * @param stanza the parsed inbound stanza
      * @param info   the decoded chat message info
-     * @return the matching {@link RevokeType}, or
-     *         {@link Optional#empty()} when the message is not a revoke
+     * @return the matching {@link RevokeType}, or {@link Optional#empty()}
+     *         when the message is not a revoke
      */
     @WhatsAppWebExport(moduleName = "WAWebLogReceivedMessages", exports = "logReceivedMessagesInWAM",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1417,24 +1333,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Converts the stanza-level {@code addressing_mode} attribute into
-     * its WAM {@link AddressingMode} counterpart.
+     * Converts the stanza-level {@code addressing_mode} attribute into its
+     * WAM {@link AddressingMode} counterpart.
      *
-     * @apiNote
-     * Drives the {@code serverAddressingMode} property on the
+     * <p>Drives the {@code serverAddressingMode} property on the
      * {@link com.github.auties00.cobalt.wam.event.MessageReceiveEvent}.
      *
      * @implNote
      * This implementation accepts only the two values WA Web emits
-     * ({@code "pn"} and {@code "lid"}) and returns
-     * {@link Optional#empty()} for everything else, including
-     * {@code null} inputs.
+     * ({@code "pn"} and {@code "lid"}) and returns {@link Optional#empty()}
+     * for everything else, including {@code null} inputs.
      *
-     * @param raw the raw attribute value ({@code "pn"} or
-     *            {@code "lid"}); may be {@code null}
-     * @return the matching enum constant, or
-     *         {@link Optional#empty()} for unrecognised or
-     *         {@code null} inputs
+     * @param raw the raw attribute value ({@code "pn"} or {@code "lid"}); may
+     *            be {@code null}
+     * @return the matching enum constant, or {@link Optional#empty()} for
+     *         unrecognised or {@code null} inputs
      */
     @WhatsAppWebExport(moduleName = "WAWebWamAddressingModeUtils", exports = "getWamAddressingModeFromString",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -1450,40 +1363,32 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the {@link MessageDropReasonType} for a given inbound
-     * stanza and receive exception.
+     * Resolves the {@link MessageDropReasonType} for a given inbound stanza
+     * and receive exception.
      *
-     * @apiNote
-     * Backs {@link #emitIncomingMessageDropFromStanza} by mirroring the
-     * {@code DecryptionErrorType} switch inside
-     * {@code WAWebMsgProcessingDecryptionHandler.createDecryptionHandler};
-     * the resolved reason becomes the {@code messageDropReason}
-     * property of the committed
+     * <p>Backs {@link #emitIncomingMessageDropFromStanza}; the resolved reason
+     * becomes the {@code messageDropReason} property of the committed
      * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}.
      *
      * @implNote
      * This implementation reproduces three special cases in order:
      * status-broadcast stanzas older than 24 hours always map to
-     * {@link MessageDropReasonType#EXPIRED}; a {@code null}
-     * {@code exception} maps to
-     * {@link MessageDropReasonType#INTERNAL_ERROR};
+     * {@link MessageDropReasonType#EXPIRED}; a {@code null} {@code exception}
+     * maps to {@link MessageDropReasonType#INTERNAL_ERROR};
      * {@link WhatsAppMessageException.Receive.InvalidProtobuf} and
-     * {@link WhatsAppMessageException.Receive.InvalidDeviceSentMessage}
-     * both map to {@link MessageDropReasonType#INVALID_PROTOBUF};
-     * everything else (including the
-     * {@link WhatsAppMessageException.Receive.InvalidMessage} branch
-     * that WA Web's
+     * {@link WhatsAppMessageException.Receive.InvalidDeviceSentMessage} both
+     * map to {@link MessageDropReasonType#INVALID_PROTOBUF}; everything else
+     * (including the {@link WhatsAppMessageException.Receive.InvalidMessage}
+     * branch that WA Web's
      * {@code WAWebPostIncomingMessageDropMetric.postIncomingMessageDropInvalidHostedCompanionStanza}
-     * special-cases) collapses to
-     * {@link MessageDropReasonType#INVALID_STANZA}. The
-     * hosted-companion sub-case is currently not differentiated; see
-     * the TODO below.
+     * special-cases) collapses to {@link MessageDropReasonType#INVALID_STANZA}.
+     * The hosted-companion sub-case is not yet differentiated; see the TODO
+     * below.
      *
      * @param stanza    the parsed inbound stanza
-     * @param exception the receive exception, or {@code null} for an
-     *                  internal unhandled error
-     * @return the resolved {@link MessageDropReasonType}; never
-     *         {@code null}
+     * @param exception the receive exception, or {@code null} for an internal
+     *                  unhandled error
+     * @return the resolved {@link MessageDropReasonType}; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1522,15 +1427,12 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * Maps a Cobalt {@link MessageEncryptionType} onto its WAM
      * {@link E2eCiphertextType} counterpart.
      *
-     * @apiNote
-     * Drives the {@code e2eCiphertextType} property on the
-     * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}
-     * by mirroring {@code WAWebBackendJobsCommon.getMetricE2eCiphertextType}.
+     * <p>Drives the {@code e2eCiphertextType} property on the
+     * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}.
      *
-     * @param type the Signal-level ciphertext type lifted from the
-     *             first {@code <enc>} child of the inbound stanza
-     * @return the matching WAM {@link E2eCiphertextType}; never
-     *         {@code null}
+     * @param type the Signal-level ciphertext type lifted from the first
+     *             {@code <enc>} child of the inbound stanza
+     * @return the matching WAM {@link E2eCiphertextType}; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricE2eCiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -1546,26 +1448,22 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Classifies the stanza's chat JID into its WAM
-     * {@link E2eDestination} bucket.
+     * Classifies the stanza's chat JID into its WAM {@link E2eDestination}
+     * bucket.
      *
-     * @apiNote
-     * Drives the {@code e2eDestination} property on the
-     * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}
-     * by mirroring
-     * {@code WAWebGetMetricE2eDestination.getMetricE2eDestination}.
+     * <p>Drives the {@code e2eDestination} property on the
+     * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent}.
      *
      * @implNote
-     * This implementation checks the chat-JID flavours in the same
-     * order as WA Web (status broadcast first, then group/community,
-     * then broadcast list, then newsletter, then user/LID) and
-     * returns {@code null} for JIDs that do not fall in any tracked
-     * bucket; the absent property mirrors WA Web's
-     * {@code undefined}-fallthrough behaviour.
+     * This implementation checks the chat-JID flavours in the same order as
+     * WA Web (status broadcast first, then group/community, then broadcast
+     * list, then newsletter, then user/LID) and returns {@code null} for JIDs
+     * that do not fall in any tracked bucket; the absent property mirrors WA
+     * Web's {@code undefined}-fallthrough behaviour.
      *
      * @param stanza the parsed inbound stanza
-     * @return the matching {@link E2eDestination}, or {@code null}
-     *         when the chat JID does not match any tracked bucket
+     * @return the matching {@link E2eDestination}, or {@code null} when the
+     *         chat JID does not match any tracked bucket
      */
     @WhatsAppWebExport(moduleName = "WAWebGetMetricE2eDestination", exports = "getMetricE2eDestination",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1590,50 +1488,41 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Sends a negative acknowledgment ({@code <ack error="...">}) for
-     * an inbound message stanza.
+     * Sends a negative acknowledgment ({@code <ack error="...">}) for an
+     * inbound message stanza.
      *
-     * @apiNote
-     * Emitted on parse failures ({@code "487"} matching
-     * {@code NackReason.ParsingError}) and on unhandled runtime
-     * failures ({@code "500"} matching
-     * {@code NackReason.UnhandledError}) to signal to the server that
-     * the client cannot process the stanza.
+     * <p>Emitted on parse failures ({@code "487"}) and on unhandled runtime
+     * failures ({@code "500"}) to signal to the server that the client cannot
+     * process the stanza.
      *
      * @implNote
-     * This implementation drops the NACK when either the {@code id}
-     * or the {@code from} attribute is missing, and delegates the
-     * string-to-int parsing of the {@code errorCode} to
-     * {@link #parseErrorCode(String)} so a malformed value falls back
-     * to {@code 500} rather than throwing.
+     * This implementation delegates the string-to-reason translation to
+     * {@link #parseErrorReason(String)} so a malformed value falls back to
+     * {@link NackReason#UNHANDLED_ERROR} rather than throwing.
      *
      * @param node      the inbound message stanza to nack
-     * @param errorCode the NACK error code, in string form (matches
-     *                  the integer constants on WA Web's
-     *                  {@code NackReason})
+     * @param errorCode the NACK error code, in string form (matches the
+     *                  integer constants on WA Web's {@code NackReason})
      */
     private void sendNack(Node node, String errorCode) {
         ackSender.sendNack(AckClass.MESSAGE, node, parseErrorReason(errorCode));
     }
 
     /**
-     * Parses a NACK error code from string into its integer form.
+     * Parses a NACK error code string into its typed {@link NackReason}.
      *
-     * @apiNote
-     * Used by {@link #sendNack(Node, String)} and
-     * {@link #handleReceiveFailure} when the receive exception's
-     * {@code errorCode()} is propagated.
+     * <p>Used by {@link #sendNack(Node, String)} for the outbound
+     * {@code <ack>} path.
      *
      * @implNote
-     * This implementation falls back to {@code 500}
-     * ({@code NackReason.UnhandledError}) on
-     * {@link NumberFormatException} rather than propagating it, so
-     * the calling code always gets a usable integer.
+     * This implementation falls back to {@link NackReason#UNHANDLED_ERROR}
+     * when the parsed integer code matches no known reason, so the calling
+     * code always gets a usable reason.
      *
-     * @param value the raw error code, as carried on the inbound
-     *              stanza or on a receive exception
-     * @return the parsed integer error code, or {@code 500} when
-     *         {@code value} is not a valid integer
+     * @param value the raw error code, as carried on the inbound stanza or on
+     *              a receive exception
+     * @return the parsed {@link NackReason}, or {@link NackReason#UNHANDLED_ERROR}
+     *         when {@code value} maps to no known reason
      */
     private static NackReason parseErrorReason(String value) {
         var reason = NackReason.fromCode(parseErrorCode(value));
@@ -1641,25 +1530,22 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses an error code carried on an inbound stanza or exception
-     * into its raw integer form.
+     * Parses an error code carried on an inbound stanza or exception into its
+     * raw integer form.
      *
-     * @apiNote
-     * Used by {@link #parseErrorReason(String)} for the outbound
-     * {@code <ack>} path and directly by the
-     * {@link MessageReceiptHandler}
-     * for the outbound {@code <receipt>} nack path, which carries the
-     * raw integer rather than a typed reason.
+     * <p>Used by {@link #parseErrorReason(String)} for the outbound
+     * {@code <ack>} path and directly by the {@link MessageReceiptHandler} for
+     * the outbound {@code <receipt>} nack path, which carries the raw integer
+     * rather than a typed reason.
      *
      * @implNote
-     * Falls back to {@code 500} ({@link NackReason#UNHANDLED_ERROR})
-     * on a malformed value rather than propagating the
-     * {@link NumberFormatException}, so the caller always gets a
-     * usable integer.
+     * This implementation falls back to {@code 500} on a malformed value
+     * rather than propagating the {@link NumberFormatException}, so the caller
+     * always gets a usable integer.
      *
      * @param value the raw error code string
-     * @return the parsed integer error code, or {@code 500} when
-     *         {@code value} is not a valid integer
+     * @return the parsed integer error code, or {@code 500} when {@code value}
+     *         is not a valid integer
      */
     private static int parseErrorCode(String value) {
         try {
@@ -1671,22 +1557,19 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Persists a freshly processed inbound {@link MessageInfo} into the
-     * appropriate {@code Store} collection.
+     * appropriate store collection.
      *
-     * @apiNote
-     * Routes the message to one of three buckets: newsletter messages
-     * land on the per-channel newsletter entry, status broadcast
-     * messages land on the {@code Store.status()} collection, and
-     * normal chat messages land on the per-chat history. Chat- and
-     * newsletter-level metadata ({@code unread},
-     * {@code conversationTimestamp}, {@code lastMsgTimestamp},
-     * {@code timestamp}) is updated in place.
+     * <p>Routes the message to one of three buckets: newsletter messages land
+     * on the per-channel newsletter entry, status broadcast messages land on
+     * the status collection, and normal chat messages land on the per-chat
+     * history. Chat- and newsletter-level metadata (unread count,
+     * conversation timestamp, last-message timestamp, timestamp) is updated
+     * in place; unread counters are bumped only for messages the current
+     * account did not send.
      *
      * @implNote
-     * This implementation lazily creates the parent chat or newsletter
-     * entry on first contact. Unread counters are only incremented for
-     * messages the current account did not send, matching WA Web's
-     * behaviour where outbound echoes do not bump the unread counter.
+     * This implementation lazily creates the parent chat or newsletter entry
+     * on first contact.
      *
      * @param info the typed inbound message to persist
      */
@@ -1734,25 +1617,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Fans the {@code onNewMessage}, {@code onNewStatus}, and
-     * {@code onMessageReply} callbacks out to every registered
-     * listener.
+     * {@code onMessageReply} callbacks out to every registered listener.
      *
-     * @apiNote
-     * The single broadcast point through which user code observes
-     * inbound messages. Status broadcasts additionally fire
-     * {@code onNewStatus}; replies additionally fire
-     * {@code onMessageReply} with the quoted message resolved by
-     * {@code Store.findQuotedMessage}.
+     * <p>The single broadcast point through which user code observes inbound
+     * messages. Status broadcasts additionally fire {@code onNewStatus};
+     * replies additionally fire {@code onMessageReply} with the resolved
+     * quoted message.
      *
      * @implNote
-     * This implementation runs each listener on its own virtual
-     * thread so that one slow or blocking listener cannot stall the
-     * socket-stream dispatch loop or starve other listeners.
+     * This implementation runs each listener on its own virtual thread so
+     * that one slow or blocking listener cannot stall the socket-stream
+     * dispatch loop or starve other listeners.
      *
      * @param info          the inbound message info
      * @param quotedMessage the message {@code info} quotes, or
-     *                      {@link Optional#empty()} when none was
-     *                      resolved
+     *                      {@link Optional#empty()} when none was resolved
      */
     private void notifyMessageReceived(MessageInfo info, Optional<? extends MessageInfo> quotedMessage) {
         var statusMessage = isStatusMessage(info);
@@ -1768,20 +1647,17 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Tests whether the inbound message targets the status broadcast
-     * account.
+     * Tests whether the inbound message targets the status broadcast account.
      *
-     * @apiNote
-     * Used by {@link #storeIncomingMessage} to route status broadcasts
-     * to the dedicated {@code Store.status()} collection rather than
-     * to a per-chat history, and by
-     * {@link #notifyMessageReceived(MessageInfo, Optional)} to decide
+     * <p>Used by {@link #storeIncomingMessage} to route status broadcasts to
+     * the dedicated status collection rather than to a per-chat history, and
+     * by {@link #notifyMessageReceived(MessageInfo, Optional)} to decide
      * whether to fire {@code onNewStatus}.
      *
      * @param info the inbound message info
-     * @return {@code true} when the {@link MessageInfo}'s parent JID
-     *         is the status broadcast account; {@code false}
-     *         otherwise, including when the parent JID is absent
+     * @return {@code true} when the {@link MessageInfo}'s parent JID is the
+     *         status broadcast account; {@code false} otherwise, including
+     *         when the parent JID is absent
      */
     private boolean isStatusMessage(MessageInfo info) {
         return info.key()
@@ -1791,25 +1667,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves a previously stored orphan payment notification when
-     * the message it referenced has finally arrived.
+     * Resolves a previously stored orphan payment notification when the
+     * message it referenced has finally arrived.
      *
-     * @apiNote
-     * Surfaces the back-half of the orphan-payment reconciliation
-     * that Cobalt runs for inbound payments: if a payment
-     * {@code <transaction>} stanza arrived before its referenced
-     * {@code <message>}, the notification handler buffered it; when
-     * the late message lands here it is matched and the buffered
-     * payment is replayed through
-     * {@link #handlePaymentTransaction(Node)}.
+     * <p>Implements the back-half of orphan-payment reconciliation: if a
+     * payment {@code <transaction>} stanza arrived before its referenced
+     * {@code <message>}, the notification handler buffered it; when the late
+     * message lands here it is matched and the buffered payment is replayed
+     * through {@link #handlePaymentTransaction(Node)}.
      *
      * @implNote
-     * This implementation looks up the orphan via
-     * {@code Store.removeOrphanPaymentNotification(messageId)} and
-     * rebuilds the original transaction {@link Node} so that
-     * {@link #handlePaymentTransaction(Node)} can run unchanged.
-     * Non-chat messages are ignored because only chat payments are
-     * buffered as orphans.
+     * This implementation looks up the orphan by message id and rebuilds the
+     * original transaction {@link Node} so that
+     * {@link #handlePaymentTransaction(Node)} can run unchanged. Non-chat
+     * messages are ignored because only chat payments are buffered as
+     * orphans.
      *
      * @param info the inbound message info
      */
@@ -1844,24 +1716,20 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * Processes a payment {@code <transaction>} stanza by updating the
      * payment info on its target {@link ChatMessageInfo}.
      *
-     * @apiNote
-     * Drives the payment-message status lifecycle by attaching a
-     * {@link PaymentInfo} to the message the transaction references
-     * and fan-broadcasting an {@code onMessageStatus} listener
+     * <p>Attaches a {@link PaymentInfo} to the message the transaction
+     * references and fan-broadcasts an {@code onMessageStatus} listener
      * callback. When the message cannot be located the transaction is
-     * buffered as an orphan via
-     * {@code Store.addOrphanPaymentNotification} so that
+     * buffered as an orphan so that
      * {@link #resolveOrphanPayment(MessageInfo)} can replay it later.
      *
      * @implNote
-     * This implementation derives {@code fromMe} from the sender JID
-     * compared against the current account, then computes the
-     * {@code remote} JID and the optional {@code participant} (set
-     * only for group conversations). Payment status and txn status
-     * are resolved via
+     * This implementation derives {@code fromMe} from the sender JID compared
+     * against the current account, then computes the {@code remote} JID and
+     * the optional {@code participant} (set only for group conversations).
+     * Payment status and txn status are resolved via
      * {@link #mapPaymentStatus(String, String, boolean)} and
-     * {@link #mapTxnStatus(String, String, boolean)} which mirror
-     * the matching helpers in {@code WAWebPaymentStatusUtils}.
+     * {@link #mapTxnStatus(String, String, boolean)}, which mirror the
+     * matching helpers in {@code WAWebPaymentStatusUtils}.
      *
      * @param transaction the {@code <transaction>} stanza node
      */
@@ -1914,30 +1782,26 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     /**
      * Locates the chat message a payment transaction stanza targets.
      *
-     * @apiNote
-     * Backs {@link #handlePaymentTransaction(Node)} when reconciling
-     * an inbound {@code <transaction>} against the store.
+     * <p>Backs {@link #handlePaymentTransaction(Node)} when reconciling an
+     * inbound {@code <transaction>} against the store.
      *
      * @implNote
-     * This implementation first tries an exact-key lookup via
-     * {@code Store.findMessageByKey} and falls back to a by-id lookup
-     * via {@code Store.findMessageById}; the two-stage search handles
-     * cases where the constructed
-     * {@link MessageKey}
-     * does not match the stored key bit-for-bit (different sender
-     * derivation, different remote JID flavour) but the id is still
+     * This implementation first tries an exact-key lookup and falls back to a
+     * by-id lookup; the two-stage search handles cases where the constructed
+     * {@link MessageKey} does not match the stored key bit-for-bit (different
+     * sender derivation, different remote JID flavour) but the id is still
      * unique within the chat.
      *
      * @param remote      the remote JID resolved by
      *                    {@link #handlePaymentTransaction(Node)}
-     * @param participant the participant JID for group messages,
-     *                    or {@code null} for direct chats
-     * @param messageId   the message id carried on the
-     *                    {@code <transaction>} stanza
-     * @param fromMe      {@code true} when the transaction was
-     *                    initiated by the current account
-     * @return the matching message info, or {@code null} when no
-     *         message is found
+     * @param participant the participant JID for group messages, or
+     *                    {@code null} for direct chats
+     * @param messageId   the message id carried on the {@code <transaction>}
+     *                    stanza
+     * @param fromMe      {@code true} when the transaction was initiated by
+     *                    the current account
+     * @return the matching message info, or {@code null} when no message is
+     *         found
      */
     private MessageInfo findPaymentMessage(Jid remote, Jid participant, String messageId, boolean fromMe) {
         var direct = whatsapp.store()
@@ -1959,12 +1823,12 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     /**
      * Constructs a fresh {@link PaymentInfo} initialised to
-     * {@code UNKNOWN_STATUS} / {@code UNKNOWN}.
+     * {@link PaymentInfo.Status#UNKNOWN_STATUS} and
+     * {@link PaymentInfo.TxnStatus#UNKNOWN}.
      *
-     * @apiNote
-     * Used by {@link #handlePaymentTransaction(Node)} when the target
-     * message does not already carry a {@link PaymentInfo}, so that
-     * the per-transaction setters always have an instance to mutate.
+     * <p>Used by {@link #handlePaymentTransaction(Node)} when the target
+     * message does not already carry a {@link PaymentInfo}, so that the
+     * per-transaction setters always have an instance to mutate.
      *
      * @return a freshly initialised {@link PaymentInfo}
      */
@@ -1979,26 +1843,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * Maps a transaction-type and server-status pair onto a
      * {@link PaymentInfo.Status} value.
      *
-     * @apiNote
-     * Mirrors {@code WAWebPaymentStatusUtils.getPaymentWebStatus} and
-     * drives the high-level
-     * {@code PaymentInfo.Status} field that surfaces in the WhatsApp
-     * payment UI (processing, sent, complete, refunded, expired,
-     * rejected, ...).
+     * <p>Drives the high-level {@link PaymentInfo.Status} field that surfaces
+     * in the WhatsApp payment UI (processing, sent, complete, refunded,
+     * expired, rejected, and so on).
      *
      * @implNote
      * This implementation routes through the intermediate
      * {@link PaymentMessageStatus} returned by
-     * {@link #paymentMessageStatus(String, String, boolean)} so the
-     * mapping stays a single source of truth.
+     * {@link #paymentMessageStatus(String, String, boolean)} so the mapping
+     * stays a single source of truth.
      *
-     * @param type   the {@code transaction-type} attribute, or
-     *               {@code null}
+     * @param type   the {@code transaction-type} attribute, or {@code null}
      * @param status the {@code status} attribute, or {@code null}
-     * @param fromMe {@code true} when the transaction originated from
-     *               the current account
-     * @return the mapped {@link PaymentInfo.Status}; never
-     *         {@code null}
+     * @param fromMe {@code true} when the transaction originated from the
+     *               current account
+     * @return the mapped {@link PaymentInfo.Status}; never {@code null}
      */
     private PaymentInfo.Status mapPaymentStatus(String type, String status, boolean fromMe) {
         return switch (paymentMessageStatus(type, status, fromMe)) {
@@ -2020,13 +1879,10 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * Maps a transaction-type and server-status pair onto a
      * {@link PaymentInfo.TxnStatus} value.
      *
-     * @apiNote
-     * Mirrors {@code WAWebPaymentStatusUtils.getPaymentTxnWebStatus}
-     * and drives the fine-grained
-     * {@code PaymentInfo.TxnStatus} field used by the WhatsApp
-     * payment UI to distinguish between the many failure and pending
-     * sub-states ({@code COLLECT_FAILED_RISK},
-     * {@code REFUND_FAILED_PROCESSING}, {@code FAILED_DA_FINAL}, ...).
+     * <p>Drives the fine-grained {@link PaymentInfo.TxnStatus} field used by
+     * the WhatsApp payment UI to distinguish between the many failure and
+     * pending sub-states ({@code COLLECT_FAILED_RISK},
+     * {@code REFUND_FAILED_PROCESSING}, {@code FAILED_DA_FINAL}, and so on).
      *
      * @implNote
      * This implementation routes through the intermediate
@@ -2034,13 +1890,11 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * {@link #paymentMessageStatus(String, String, boolean)} so the
      * type/status decode happens exactly once.
      *
-     * @param type   the {@code transaction-type} attribute, or
-     *               {@code null}
+     * @param type   the {@code transaction-type} attribute, or {@code null}
      * @param status the {@code status} attribute, or {@code null}
-     * @param fromMe {@code true} when the transaction originated from
-     *               the current account
-     * @return the mapped {@link PaymentInfo.TxnStatus}; never
-     *         {@code null}
+     * @param fromMe {@code true} when the transaction originated from the
+     *               current account
+     * @return the mapped {@link PaymentInfo.TxnStatus}; never {@code null}
      */
     private PaymentInfo.TxnStatus mapTxnStatus(String type, String status, boolean fromMe) {
         return switch (paymentMessageStatus(type, status, fromMe)) {
@@ -2076,35 +1930,29 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the internal {@link PaymentMessageStatus} for an
-     * inbound {@code <transaction>} stanza.
+     * Resolves the internal {@link PaymentMessageStatus} for an inbound
+     * {@code <transaction>} stanza.
      *
-     * @apiNote
-     * Mirrors {@code WAWebPaymentStatusUtils.getNotificationTransactionStatus}.
-     * Drives the two surface-side mappings
+     * <p>Drives the two surface-side mappings
      * ({@link #mapPaymentStatus(String, String, boolean)} and
-     * {@link #mapTxnStatus(String, String, boolean)}) so the
-     * decision lives in one place.
+     * {@link #mapTxnStatus(String, String, boolean)}) so the decision lives in
+     * one place.
      *
      * @implNote
      * This implementation builds the canonical
      * {@link PaymentMessageTransactionType} via
-     * {@link #paymentMessageTransactionType(String, boolean)} and
-     * then switches on the upper-cased server status to mirror the
-     * nested {@code switch} on
-     * {@code PaymentTransactionStatusServerString} inside
-     * {@code WAWebPaymentStatusUtils}. Any status that fails to
-     * match its transaction-type branch yields
+     * {@link #paymentMessageTransactionType(String, boolean)} and then
+     * switches on the upper-cased server status to mirror the nested
+     * {@code switch} inside {@code WAWebPaymentStatusUtils}. Any status that
+     * fails to match its transaction-type branch yields
      * {@link PaymentMessageStatus#STATUS_UNSET}, matching WA Web's
      * fall-through.
      *
-     * @param type   the {@code transaction-type} attribute, or
-     *               {@code null}
+     * @param type   the {@code transaction-type} attribute, or {@code null}
      * @param status the {@code status} attribute, or {@code null}
-     * @param fromMe {@code true} when the transaction originated from
-     *               the current account
-     * @return the resolved {@link PaymentMessageStatus}; never
-     *         {@code null}
+     * @param fromMe {@code true} when the transaction originated from the
+     *               current account
+     * @return the resolved {@link PaymentMessageStatus}; never {@code null}
      */
     private PaymentMessageStatus paymentMessageStatus(String type, String status, boolean fromMe) {
         var statusValue = status == null ? "" : status.toUpperCase();
@@ -2180,29 +2028,25 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the {@link PaymentMessageTransactionType} for an
-     * inbound {@code <transaction>} stanza.
+     * Resolves the {@link PaymentMessageTransactionType} for an inbound
+     * {@code <transaction>} stanza.
      *
-     * @apiNote
-     * Mirrors {@code WAWebPaymentStatusUtils.getPaymentTransactionType}
-     * and drives every subsequent payment-status decision in the
-     * stream handler.
+     * <p>Drives every subsequent payment-status decision in the stream
+     * handler.
      *
      * @implNote
-     * This implementation lower-cases the {@code transaction-type}
-     * attribute before matching, so casing inconsistencies on the
-     * wire do not change the resolved type. When the attribute is
-     * missing or unrecognised, the fall-back is
-     * {@link PaymentMessageTransactionType#TYPE_P2P_SENT} or
-     * {@link PaymentMessageTransactionType#TYPE_P2P_RCVD} depending
-     * on {@code fromMe}, matching WA Web's default branch.
+     * This implementation lower-cases the {@code transaction-type} attribute
+     * before matching, so casing inconsistencies on the wire do not change the
+     * resolved type. When the attribute is missing or unrecognised, the
+     * fall-back is {@link PaymentMessageTransactionType#TYPE_P2P_SENT} or
+     * {@link PaymentMessageTransactionType#TYPE_P2P_RCVD} depending on
+     * {@code fromMe}, matching WA Web's default branch.
      *
-     * @param type   the {@code transaction-type} attribute, or
-     *               {@code null}
-     * @param fromMe {@code true} when the transaction originated from
-     *               the current account
-     * @return the resolved {@link PaymentMessageTransactionType};
-     *         never {@code null}
+     * @param type   the {@code transaction-type} attribute, or {@code null}
+     * @param fromMe {@code true} when the transaction originated from the
+     *               current account
+     * @return the resolved {@link PaymentMessageTransactionType}; never
+     *         {@code null}
      */
     private PaymentMessageTransactionType paymentMessageTransactionType(String type, boolean fromMe) {
         if (type == null) {
@@ -2221,40 +2065,36 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Dispatches an embedded {@link ProtocolMessage} to the service
-     * that owns its payload kind.
+     * Dispatches an embedded {@link ProtocolMessage} to the service that owns
+     * its payload kind.
      *
-     * @apiNote
-     * Routes the six protocol-message slots Cobalt understands:
+     * <p>Routes the six protocol-message slots Cobalt understands:
      * <ul>
      *   <li>{@code lidMigrationMappingSyncMessage} forwards into
-     *       {@link LidMigrationService} after GZIP-decoding the
-     *       payload via
+     *       {@link LidMigrationService} after GZIP-decoding the payload via
      *       {@link #decodeLidMappingPayload(byte[])};</li>
-     *   <li>{@code peerDataOperationRequestResponseMessage} forwards
-     *       into {@link #resolveSnapshotRecovery} for syncd
+     *   <li>{@code peerDataOperationRequestResponseMessage} forwards into
+     *       {@link #resolveSnapshotRecovery} for syncd
      *       snapshot-fatal-recovery responses;</li>
      *   <li>{@code appStateSyncKeyShare} forwards into
      *       {@link #processAppStateSyncKeyShare};</li>
      *   <li>{@code appStateSyncKeyRequest} forwards into
      *       {@link #processAppStateSyncKeyRequest};</li>
      *   <li>{@code historySyncNotification} forwards into
-     *       {@link WebHistorySyncService} which downloads, decrypts,
-     *       and decodes the announced chunk on its own virtual
-     *       thread;</li>
+     *       {@link WebHistorySyncService}, which downloads, decrypts, and
+     *       decodes the announced chunk on its own virtual thread;</li>
      *   <li>{@code initialSecurityNotificationSettingSync} updates the
-     *       {@code Store.showSecurityNotifications} preference.</li>
+     *       store's show-security-notifications preference.</li>
      * </ul>
      *
      * @implNote
-     * This implementation handles the LID-migration decode locally so
-     * that {@link LidMigrationService} receives an already-decoded
-     * payload (or a {@code null} sentinel it can escalate as
-     * {@code WhatsAppLidMigrationException.FailedToParseMappings}).
-     * The {@code initialSecurityNotificationSettingSync} branch
-     * replaces WA Web's
-     * {@code WAWebUserPrefsNotifications.setGlobalSecurityNotifications}
-     * write into {@code WAWebUserPrefsKeys.SECURITY_NOTIFICATIONS}.
+     * This implementation handles the LID-migration decode locally so that
+     * {@link LidMigrationService} receives an already-decoded payload (or a
+     * {@code null} sentinel it can escalate as
+     * {@code WhatsAppLidMigrationException.FailedToParseMappings}). The
+     * {@code initialSecurityNotificationSettingSync} branch replaces WA Web's
+     * {@code WAWebUserPrefsNotifications.setGlobalSecurityNotifications} write
+     * into {@code WAWebUserPrefsKeys.SECURITY_NOTIFICATIONS}.
      *
      * @param info the chat message info whose content is a
      *             {@link ProtocolMessage}
@@ -2292,21 +2132,18 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     /**
      * Processes an inbound app-state-sync key share protocol message.
      *
-     * @apiNote
-     * Surfaces the syncd key-share handler that lets a companion
-     * device receive new app-state encryption keys from the primary
-     * device. Validates per-key id lengths, then forwards the
-     * accepted keys to {@link SyncKeyRotationService} which updates
-     * its tracking, reschedules timeouts, and resumes any
-     * collections that were blocked waiting for these keys.
+     * <p>Lets a companion device receive new app-state encryption keys from
+     * the primary device. Validates per-key id lengths, then forwards the
+     * accepted keys to {@link SyncKeyRotationService}, which updates its
+     * tracking, reschedules timeouts, and resumes any collections that were
+     * blocked waiting for these keys.
      *
      * @implNote
-     * This implementation logs and skips key ids whose byte-length is
-     * not exactly six bytes; WA Web treats the same condition as a
-     * fatal error and reports a metric, but Cobalt's error model
-     * delegates fatal escalation to
-     * {@code WhatsAppClientErrorHandler} via the sealed exception
-     * hierarchy rather than inline metric calls.
+     * This implementation logs and skips key ids whose byte-length is not
+     * exactly six bytes; WA Web treats the same condition as a fatal error and
+     * reports a metric, but Cobalt's error model delegates fatal escalation to
+     * {@code WhatsAppClientErrorHandler} via the sealed exception hierarchy
+     * rather than inline metric calls.
      *
      * @param info     the chat message info carrying the key share
      * @param keyShare the {@link AppStateSyncKeyShare} payload
@@ -2343,30 +2180,26 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Answers an inbound app-state-sync key request by shipping the
-     * requested keys back to the requester as a peer message.
+     * Answers an inbound app-state-sync key request by shipping the requested
+     * keys back to the requester as a peer message.
      *
-     * @apiNote
-     * Powers the reverse direction of the syncd key-share dance: when
-     * a companion device asks the primary for keys it is missing,
-     * this method assembles a peer protocol message containing the
-     * subset of requested keys that the local store knows about and
-     * dispatches it via
-     * {@link WhatsAppClient#sendPeerMessage(Jid,
-     * ChatMessageInfo)}.
+     * <p>Implements the reverse direction of the syncd key-share dance: when a
+     * companion device asks the primary for keys it is missing, this method
+     * assembles a peer protocol message containing the subset of requested
+     * keys that the local store knows about and dispatches it via
+     * {@link WhatsAppClient#sendPeerMessage(com.github.auties00.cobalt.model.jid.JidProvider, ChatMessageInfo)}.
      *
      * @implNote
-     * This implementation packs a placeholder entry with just the
-     * key id when the requested key is not locally known, mirroring
-     * WA Web's behaviour of responding with an
-     * {@code AppStateSyncKey} whose key data is empty so the
-     * requester can detect the miss. Failures shipping the peer
-     * message are demoted to a debug log because key requests are
-     * fire-and-forget on the WA Web side.
+     * This implementation packs a placeholder entry with just the key id when
+     * the requested key is not locally known, mirroring WA Web's behaviour of
+     * responding with an {@link AppStateSyncKey} whose key data is empty so
+     * the requester can detect the miss. Failures shipping the peer message
+     * are demoted to a debug log because key requests are fire-and-forget on
+     * the WA Web side.
      *
      * @param info    the chat message info carrying the key request
-     * @param request the {@link AppStateSyncKeyRequest} listing the
-     *                requested key ids
+     * @param request the {@link AppStateSyncKeyRequest} listing the requested
+     *                key ids
      */
     private void processAppStateSyncKeyRequest(
             ChatMessageInfo info,
@@ -2435,29 +2268,26 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} peer-
-     * data response that completes a previously issued snapshot
-     * recovery request.
+     * Handles a {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} peer-data
+     * response that completes a previously issued snapshot recovery request.
      *
-     * @apiNote
-     * Used by {@link #handleProtocolMessage(ChatMessageInfo)} when a
-     * primary device replies to the companion's snapshot-recovery
-     * request: the decoded recovery snapshot is handed off to
-     * {@link SnapshotRecoveryService#resolveRecovery} so the consumer
-     * blocked on the recovery promise in {@link WebAppStateService}
-     * receives the result. A
+     * <p>Used by {@link #handleProtocolMessage(ChatMessageInfo)} when a primary
+     * device replies to the companion's snapshot-recovery request: the decoded
+     * recovery snapshot is handed off to
+     * {@link SnapshotRecoveryService#resolveRecovery(SyncPatchType, SyncdSnapshotRecovery)}
+     * so the consumer blocked on the recovery promise in
+     * {@link WebAppStateService} receives the result. A
      * {@link com.github.auties00.cobalt.wam.event.NonMessagePeerDataOperationResponseEvent}
-     * is committed in both the success and decode-failure paths.
+     * is committed in both the success and decode-failure paths. Responses for
+     * other request types or responses received while recovery is disabled are
+     * silently dropped.
      *
      * @implNote
-     * This implementation decodes the recovery snapshot exactly once
-     * (the consumer is given the already-decoded
-     * {@link SyncdSnapshotRecovery} so it does not decode again).
-     * Responses for other request types or responses received while
-     * recovery is disabled are silently dropped. Decode failures
-     * commit the WAM event with
-     * {@code peerDataErrorCount=1} while successful resolutions
-     * commit it with {@code responseCount=successResponseCount=successProcessCount=1}.
+     * This implementation decodes the recovery snapshot exactly once (the
+     * consumer is given the already-decoded {@link SyncdSnapshotRecovery} so it
+     * does not decode again). Decode failures commit the WAM event with
+     * {@code peerDataErrorCount=1} while successful resolutions commit it with
+     * {@code responseCount=successResponseCount=successProcessCount=1}.
      *
      * @param response the peer-data-operation response message
      */
@@ -2518,27 +2348,24 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Decodes the GZIP-compressed protobuf payload that ships inside a
-     * LID migration mapping sync protocol message.
+     * Decodes the GZIP-compressed protobuf payload that ships inside a LID
+     * migration mapping sync protocol message.
      *
-     * @apiNote
-     * Backs the {@code lidMigrationMappingSyncMessage} branch of
+     * <p>Backs the {@code lidMigrationMappingSyncMessage} branch of
      * {@link #handleProtocolMessage(ChatMessageInfo)} so that
-     * {@link LidMigrationService#processProtocolMessage} receives a
-     * typed payload rather than raw GZIP bytes.
+     * {@link LidMigrationService#processProtocolMessage(LIDMigrationMappingSyncPayload)}
+     * receives a typed payload rather than raw GZIP bytes.
      *
      * @implNote
-     * This implementation returns {@link Optional#empty()} on every
-     * failure mode (null bytes, empty bytes, GZIP failure, protobuf
-     * failure) and demotes the failure to a warning log;
-     * {@link LidMigrationService} will then surface the empty payload
-     * as a {@code WhatsAppLidMigrationException.FailedToParseMappings}.
+     * This implementation returns {@link Optional#empty()} on every failure
+     * mode (null bytes, empty bytes, GZIP failure, protobuf failure) and
+     * demotes the failure to a warning log; {@link LidMigrationService} then
+     * surfaces the empty payload as a
+     * {@code WhatsAppLidMigrationException.FailedToParseMappings}.
      *
      * @param payload the GZIP-compressed protobuf payload bytes
-     * @return the decoded
-     *         {@link LIDMigrationMappingSyncPayload}, or
-     *         {@link Optional#empty()} when the payload could not be
-     *         decoded
+     * @return the decoded {@link LIDMigrationMappingSyncPayload}, or
+     *         {@link Optional#empty()} when the payload could not be decoded
      */
     private Optional<LIDMigrationMappingSyncPayload> decodeLidMappingPayload(byte[] payload) {
         if (payload == null || payload.length == 0) {

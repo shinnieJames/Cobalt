@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.call;
 import com.github.auties00.cobalt.wam.event.CallEventBuilder;
 import com.github.auties00.cobalt.wam.type.CallResultType;
 import com.github.auties00.cobalt.wam.type.CallSide;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -12,20 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.auties00.cobalt.call.internal.CallService;
 
 /**
- * Builder-level tests for the WAM Call event (id 462). Doesn't run a
- * full {@link CallService} (requires a live {@code WhatsAppClient} +
- * {@code WamService}); instead asserts the builder pattern is wired
- * up and round-trips every populated field through the
- * {@code Optional} accessors on the generated impl.
+ * Builder-level tests for the WAM Call event (id 462). Does not run a full
+ * {@link CallService}, which needs a live client and WAM service; instead it
+ * asserts that {@code CallEventBuilder} round-trips every populated field
+ * through the {@code Optional} accessors on the generated {@code CallEvent}
+ * impl.
  */
 public class CallEventTest {
 
-    /**
-     * The full populated set of fields the engine writes when a
-     * 1:1 outgoing audio call ends in HANGUP round-trips through
-     * the builder + interface accessors.
-     */
     @Test
+    @DisplayName("HANGUP of an outgoing 1:1 audio call round-trips every populated field; unset fields stay empty")
     public void hangupOutgoingAudioCallRoundTrips() {
         var startedAt = Instant.parse("2024-01-01T00:00:00Z");
         var event = new CallEventBuilder()
@@ -49,11 +46,8 @@ public class CallEventTest {
                 "isLinkJoin unset → Optional.empty()");
     }
 
-    /**
-     * Inbound video call accepted then ended by peer hangup: side
-     * becomes CALLEE, video flags propagate.
-     */
     @Test
+    @DisplayName("inbound video call accepted then peer-hung-up: side is CALLEE and video flags propagate")
     public void inboundVideoCalleeRoundTrips() {
         var event = new CallEventBuilder()
                 .callRandomId("FFEE")
@@ -68,10 +62,8 @@ public class CallEventTest {
         assertEquals(true, event.videoEnabledAtCallStart().orElseThrow());
     }
 
-    /**
-     * A timed-out call surfaces as {@link CallResultType#MISSED}.
-     */
     @Test
+    @DisplayName("a timed-out call surfaces as CallResultType.MISSED")
     public void timedOutCallReportedAsMissed() {
         var event = new CallEventBuilder()
                 .callRandomId("AABB")

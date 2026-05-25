@@ -10,16 +10,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the two state-source mixins identifying the
- * origin of an inbound {@code <chatstate>} event: a 1:1 peer
+ * Represents the sealed disjunction over the two state-source mixins
+ * identifying the origin of an inbound {@code <chatstate>} event: a 1:1 peer
  * ({@link FromUser}) or a group participant ({@link FromGroup}).
  *
- * @apiNote
- * The Cobalt analogue of {@code WACreateHandleChatState.createHandleChatState}
- * branches on {@link #of(Node)}: a {@link FromUser} result routes the
- * indicator to the {@code individualMessage.handleIndividualChatState}
- * handler, while a {@link FromGroup} result routes it to
- * {@code groupMessage.handleGroupChatState} with the participant attached.
+ * <p>A consumer branches on {@link #of(Node)}: a {@link FromUser} result
+ * routes the indicator to the 1:1 handler, while a {@link FromGroup} result
+ * routes it to the group handler with the participant attached.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInChatstateStateSource")
 public sealed interface SmaxServerNotificationStateSource permits SmaxServerNotificationStateSource.FromUser, SmaxServerNotificationStateSource.FromGroup {
@@ -27,10 +24,9 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
     /**
      * Parses an inbound stanza into the first matching variant.
      *
-     * @implNote
-     * This implementation mirrors {@code parseStateSource}: it tries
-     * {@link FromUser} first and falls back to {@link FromGroup}, returning
-     * the first successful parse.
+     * <p>Parsing tries {@link FromUser} first and falls back to
+     * {@link FromGroup}, returning the first successful parse and
+     * {@link Optional#empty()} when neither matches.
      *
      * @param node the inbound {@code <chatstate/>} stanza
      * @return an {@link Optional} carrying the parsed variant, or empty on no-match
@@ -47,20 +43,16 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
     }
 
     /**
-     * Reports whether the JID's server is one of the user-JID server
-     * domains admitted by {@code WAJids.validateUserJid}.
+     * Reports whether the given JID's server is one of the user-JID server
+     * domains.
      *
-     * @apiNote
-     * Centralises the {@code USERJID_USERJID_USERJID} and
-     * {@code USERJID_USERJID_USERJID_USERJID} enum admit set from
-     * {@code WASmaxInChatstateEnums}: each validator slot resolves to
-     * {@code WAJids.validateUserJid}, whose regular expressions accept the
-     * {@code @s.whatsapp.net}, {@code @interop}, {@code @msgr}, {@code @lid},
-     * and {@code @bot} server domains.
+     * <p>The admit set comprises the {@code s.whatsapp.net}, {@code interop},
+     * {@code msgr}, {@code lid}, and {@code bot} server domains, matching the
+     * domains accepted by the WhatsApp Web user-JID validator.
      *
      * @param jid the JID to test; never {@code null}
-     * @return {@code true} when {@code jid.server()} is one of the
-     *         user-JID server domains, {@code false} otherwise
+     * @return {@code true} when {@link Jid#server()} is one of the user-JID
+     *         server domains, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAJids",
             exports = "validateUserJid", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -74,16 +66,15 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
     }
 
     /**
-     * The variant raised by a 1:1 peer.
+     * Represents the variant raised by a 1:1 peer.
      *
-     * @apiNote
-     * Identifies the chat-state event as originating from a direct
-     * conversation; the {@link #from()} JID is the peer's user JID.
+     * <p>This variant identifies the chat-state event as originating from a
+     * direct conversation; the {@link #from()} JID is the peer's user JID.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInChatstateFromUserMixin")
     final class FromUser implements SmaxServerNotificationStateSource {
         /**
-         * The user JID raising the event.
+         * Holds the user JID raising the event.
          */
         private final Jid from;
 
@@ -109,11 +100,10 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         /**
          * Parses an inbound stanza into a {@link FromUser} variant.
          *
-         * @implNote
-         * This implementation mirrors {@code parseFromUserMixin}: it
-         * asserts the {@code <chatstate>} tag and requires the {@code from}
-         * attribute to resolve to a user-JID server domain admitted by
-         * {@link #isUserJidServer(Jid)}.
+         * <p>Parsing asserts the {@code <chatstate>} tag and requires the
+         * {@code from} attribute to resolve to a user-JID server domain
+         * admitted by {@link #isUserJidServer(Jid)}, yielding
+         * {@link Optional#empty()} on any mismatch.
          *
          * @param node the inbound chatstate stanza
          * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
@@ -134,6 +124,13 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
             return Optional.of(new FromUser(from));
         }
 
+        /**
+         * Returns whether the given object is a {@link FromUser} with an
+         * equal {@link #from()} JID.
+         *
+         * @param obj the candidate; may be {@code null}
+         * @return {@code true} when the JIDs match
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -146,11 +143,21 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
             return Objects.equals(this.from, that.from);
         }
 
+        /**
+         * Returns a hash code derived from the {@link #from()} JID.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(from);
         }
 
+        /**
+         * Returns a debug-friendly textual representation of this variant.
+         *
+         * @return the textual representation
+         */
         @Override
         public String toString() {
             return "SmaxServerNotificationStateSource.FromUser[from=" + from + ']';
@@ -158,33 +165,30 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
     }
 
     /**
-     * The variant raised by a participant inside a group chat.
+     * Represents the variant raised by a participant inside a group chat.
      *
-     * @apiNote
-     * Identifies the chat-state event as originating from a group
-     * conversation; the {@link #from()} JID is the group JID and
-     * {@link #participant()} identifies which group member raised the
-     * event.
+     * <p>This variant identifies the chat-state event as originating from a
+     * group conversation; the {@link #from()} JID is the group JID and
+     * {@link #participant()} identifies which group member raised the event.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInChatstateFromGroupMixin")
     final class FromGroup implements SmaxServerNotificationStateSource {
         /**
-         * The group JID hosting the chat.
+         * Holds the group JID hosting the chat.
          */
         private final Jid from;
 
         /**
-         * The participant raising the event.
+         * Holds the participant JID raising the event.
          */
         private final Jid participant;
 
         /**
-         * The optional phone-number-form participant JID.
+         * Holds the optional phone-number-form participant JID.
          *
-         * @apiNote
-         * Supplied when the relay can attach the PN-form identity for a
-         * participant whose primary identifier is a LID; absent for
-         * participants without an associated PN.
+         * <p>The relay supplies this when it can attach the PN-form identity
+         * for a participant whose primary identifier is a LID; it stays
+         * {@code null} for participants without an associated PN.
          */
         private final Jid participantPn;
 
@@ -232,16 +236,17 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         /**
          * Parses an inbound stanza into a {@link FromGroup} variant.
          *
+         * <p>Parsing asserts the {@code <chatstate>} tag, requires the
+         * {@code from} attribute to resolve to a {@code g.us} group JID, and
+         * requires the {@code participant} attribute to resolve to a user-JID
+         * server domain admitted by {@link #isUserJidServer(Jid)}. The
+         * optional {@code participant_pn} attribute is held against the same
+         * admit set when present. Any mismatch yields {@link Optional#empty()}.
+         *
          * @implNote
-         * This implementation mirrors {@code parseFromGroupMixin}: it
-         * asserts the {@code <chatstate>} tag, requires the {@code from}
-         * attribute to resolve to a {@code @g.us} group JID, the
-         * {@code participant} attribute to resolve to a user-JID server
-         * domain admitted by {@link #isUserJidServer(Jid)}, and applies the
-         * same admit-set to the optional {@code participant_pn} attribute
-         * when present. The WA Web {@code optional()} contract treats an
-         * absent attribute as success-with-null but rejects a present
-         * attribute that fails the inner validator.
+         * This implementation treats an absent {@code participant_pn} as
+         * success-with-{@code null} but rejects a present
+         * {@code participant_pn} that fails {@link #isUserJidServer(Jid)}.
          *
          * @param node the inbound chatstate stanza
          * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
@@ -273,6 +278,13 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
             return Optional.of(new FromGroup(from, participant, participantPn));
         }
 
+        /**
+         * Returns whether the given object is a {@link FromGroup} with an
+         * equal group JID, participant, and participant PN.
+         *
+         * @param obj the candidate; may be {@code null}
+         * @return {@code true} when all three fields match
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -287,11 +299,22 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
                     && Objects.equals(this.participantPn, that.participantPn);
         }
 
+        /**
+         * Returns a hash code derived from the group JID, participant, and
+         * participant PN.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(from, participant, participantPn);
         }
 
+        /**
+         * Returns a debug-friendly textual representation of this variant.
+         *
+         * @return the textual representation
+         */
         @Override
         public String toString() {
             return "SmaxServerNotificationStateSource.FromGroup[from=" + from

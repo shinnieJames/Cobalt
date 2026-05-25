@@ -14,36 +14,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
- * {@link SmaxWaffleRefreshAccessTokensRequest}.
- *
- * @apiNote
- * Mirrors WA Web's three documented {@code RefreshAccessTokens} reply
- * shapes: a {@link Success} carrying a fresh
- * {@link SmaxWaffleRsaEncryptionMetadata} subtree (the embedder
- * decrypts it to recover the rotated access tokens via the WA Web
- * counterpart of {@code WAWebAPIParser.parseRSAEncryptionMetadataMixin}
- * and {@code decryptRSAEncryptedPayload}), a {@link ClientError} for
- * malformed or unauthorised requests, and a {@link ServerError} for
- * transient relay failures.
+ * Models the sealed family of inbound replies to a {@link SmaxWaffleRefreshAccessTokensRequest}.
+ * <p>
+ * A reply is exactly one of three shapes: a {@link Success} carrying a fresh
+ * {@link SmaxWaffleRsaEncryptionMetadata} subtree that decrypts to the rotated access tokens, a
+ * {@link ClientError} for malformed or unauthorised requests (codes below {@code 500}), or a
+ * {@link ServerError} for transient relay failures (codes at or above {@code 500}).
  */
 public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperation.Response
         permits SmaxWaffleRefreshAccessTokensResponse.Success, SmaxWaffleRefreshAccessTokensResponse.ClientError, SmaxWaffleRefreshAccessTokensResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxWaffleRefreshAccessTokensResponse} variant
-     * in priority order and returns the first that parses cleanly.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code sendRefreshAccessTokensRPC} dispatch: the
-     * incoming stanza is offered to the {@link Success} parser first,
-     * then the {@link ClientError} parser, then the {@link ServerError}
-     * parser.
+     * Parses the inbound stanza into the first matching variant.
+     * <p>
+     * The stanza is offered to the {@link Success} parser first, then the {@link ClientError} parser, then
+     * the {@link ServerError} parser; the first that parses cleanly wins. An empty {@link Optional} means
+     * none of the three matched.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty
-     *         when none of the three parsers matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when none of the three parsers matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxWaffleRefreshAccessTokensRPC",
@@ -63,36 +53,24 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
     }
 
     /**
-     * The {@code Success} reply variant: the relay returned a fresh
-     * encryption-metadata subtree carrying the rotated access tokens.
-     *
-     * @apiNote
-     * Consumed by {@code WAWebAccountLinkingAPI.refreshAccessToken},
-     * which decrypts {@link #encryptionMetadata()} via
-     * {@code decryptRSAEncryptedPayload} to recover the rotated tokens
-     * before persisting them through the linking store.
+     * Models the success reply: the relay returned a fresh encryption-metadata subtree carrying the rotated
+     * access tokens.
+     * <p>
+     * Embedders decrypt {@link #encryptionMetadata()} to recover the rotated tokens before persisting them.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleRefreshAccessTokensResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleIQResultResponseMixin")
     final class Success implements SmaxWaffleRefreshAccessTokensResponse {
         /**
-         * The relay-returned encryption metadata carrying the rotated
-         * tokens.
+         * Holds the relay-returned encryption metadata carrying the rotated tokens.
          */
         private final SmaxWaffleRsaEncryptionMetadata encryptionMetadata;
 
         /**
-         * Constructs a new success projection.
+         * Constructs a success reply from the relay-returned metadata.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope and
-         * payload have been validated; embedders typically do not
-         * instantiate this directly.
-         *
-         * @param encryptionMetadata the relay-returned metadata; never
-         *                           {@code null}
-         * @throws NullPointerException if {@code encryptionMetadata} is
-         *                              {@code null}
+         * @param encryptionMetadata the relay-returned metadata; never {@code null}
+         * @throws NullPointerException if {@code encryptionMetadata} is {@code null}
          */
         public Success(SmaxWaffleRsaEncryptionMetadata encryptionMetadata) {
             this.encryptionMetadata = Objects.requireNonNull(encryptionMetadata, "encryptionMetadata cannot be null");
@@ -101,27 +79,22 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         /**
          * Returns the relay-returned encryption metadata.
          *
-         * @return the metadata as supplied by the relay; never
-         *         {@code null}
+         * @return the metadata as supplied by the relay; never {@code null}
          */
         public SmaxWaffleRsaEncryptionMetadata encryptionMetadata() {
             return encryptionMetadata;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the inbound
-         * stanza.
-         *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope check
-         * fails, when the {@code <encryption_metadata/>} child is
-         * missing, or when the inner metadata subtree is malformed (see
+         * Parses a success variant from the inbound stanza.
+         * <p>
+         * Returns an empty {@link Optional} when the envelope check fails, when the encryption-metadata
+         * child is missing, or when the inner metadata subtree is malformed (see
          * {@link SmaxWaffleRsaEncryptionMetadata#of(Node)}).
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleRefreshAccessTokensResponseSuccess",
                 exports = "parseRefreshAccessTokensResponseSuccess",
@@ -142,8 +115,7 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         }
 
         /**
-         * Returns whether the given object is a {@link Success} with
-         * equal encryption metadata.
+         * Returns whether the given object is a {@link Success} with equal encryption metadata.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both metadata subtrees match
@@ -163,8 +135,7 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         /**
          * Returns a hash code derived from the encryption metadata.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -184,40 +155,28 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
     }
 
     /**
-     * The {@code ClientError} reply variant: the relay rejected the
-     * refresh with a code below {@code 500}.
-     *
-     * @apiNote
-     * Surfaces malformed-request, unauthorised, and stale-nonce
-     * rejections from the Waffle backend.
-     * {@code WAWebAccountLinkingAPI.refreshAccessToken} routes the
-     * error name through {@code WAWebWaffleIQErrorHandler} and may
-     * trigger a {@code handleNonceRetry} pass when the handler returns
-     * {@code request_nonce}.
+     * Models the client-error reply: the relay rejected the refresh with a code below {@code 500}.
+     * <p>
+     * Surfaces malformed-request, unauthorised, and stale-nonce rejections from the Waffle backend. The
+     * carried {@link #errorCode()} and {@link #errorText()} are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleRefreshAccessTokensResponseError")
     final class ClientError implements SmaxWaffleRefreshAccessTokensResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * Constructs a client-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -236,26 +195,21 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * which only matches codes below {@code 500}.
+         * Parses a client-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which only matches codes below {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleRefreshAccessTokensResponseError",
                 exports = "parseRefreshAccessTokensResponseError",
@@ -269,8 +223,7 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         }
 
         /**
-         * Returns whether the given object is a {@link ClientError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ClientError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -290,8 +243,7 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -311,35 +263,28 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
     }
 
     /**
-     * The {@code ServerError} reply variant: the relay rejected the
-     * refresh with a code of {@code 500} or above.
-     *
-     * @apiNote
-     * Indicates a transient relay-side failure.
+     * Models the server-error reply: the relay rejected the refresh with a code of {@code 500} or above.
+     * <p>
+     * Indicates a transient relay-side failure. The carried {@link #errorCode()} and {@link #errorText()}
+     * are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleRefreshAccessTokensResponseError")
     final class ServerError implements SmaxWaffleRefreshAccessTokensResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * Constructs a server-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -358,26 +303,21 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which only matches codes at or above {@code 500}.
+         * Parses a server-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which only matches codes at or above {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleRefreshAccessTokensResponseError",
                 exports = "parseRefreshAccessTokensResponseError",
@@ -391,8 +331,7 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         }
 
         /**
-         * Returns whether the given object is a {@link ServerError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ServerError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -412,8 +351,7 @@ public sealed interface SmaxWaffleRefreshAccessTokensResponse extends SmaxOperat
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {

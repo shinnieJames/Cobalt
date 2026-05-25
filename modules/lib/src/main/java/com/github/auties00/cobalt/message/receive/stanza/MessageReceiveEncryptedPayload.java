@@ -9,20 +9,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One {@code <enc>} child of an incoming {@code <message>} stanza, parsed
- * into its decoded {@link MessageEncryptionType}, optional media-type tag,
- * raw ciphertext, retry counter, and {@code decrypt-fail} flag.
+ * One {@code <enc>} child of an incoming {@code <message>} stanza, parsed into
+ * its decoded {@link MessageEncryptionType}, optional media-type tag, raw
+ * ciphertext, retry counter, and {@code decrypt-fail} flag.
  *
- * @apiNote
- * A single stanza can carry several encrypted payloads at once: for example a
- * group message arrives with an {@code skmsg} (sender-key group ciphertext)
- * plus a {@code pkmsg} or {@code msg} (Signal per-device retry envelope). The
- * receive pipeline iterates over {@link MessageReceiveStanza#encs()} and
- * routes each one to the appropriate Signal cipher; {@link #e2eType()} picks
- * the cipher, {@link #ciphertext()} is the input, {@link #encMediaType()}
- * is forwarded to the protobuf decoder for media-specific framing, and
- * {@link #retryCount()} / {@link #hideFail()} drive the retry-receipt and
- * placeholder-suppression branches.
+ * <p>A single stanza can carry several encrypted payloads at once: a group
+ * message arrives with an {@code skmsg} (sender-key group ciphertext) plus a
+ * {@code pkmsg} or {@code msg} (Signal per-device retry envelope). The receive
+ * pipeline iterates over {@link MessageReceiveStanza#encs()} and routes each
+ * one to the appropriate Signal cipher; {@link #e2eType()} picks the cipher,
+ * {@link #ciphertext()} is the input, {@link #encMediaType()} is forwarded to
+ * the protobuf decoder for media-specific framing, and {@link #retryCount()} /
+ * {@link #hideFail()} drive the retry-receipt and placeholder-suppression
+ * branches.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveEncryptedPayload {
@@ -32,8 +31,8 @@ public final class MessageReceiveEncryptedPayload {
     private final MessageEncryptionType e2eType;
 
     /**
-     * The optional {@code mediatype} attribute, identifying the media class
-     * of the encrypted payload (for example {@code "image"}, {@code "video"},
+     * The optional {@code mediatype} attribute, identifying the media class of
+     * the encrypted payload (for example {@code "image"}, {@code "video"},
      * {@code "ptt"}, {@code "GroupHistory"}).
      */
     private final String encMediaType;
@@ -45,25 +44,21 @@ public final class MessageReceiveEncryptedPayload {
     private final byte[] ciphertext;
 
     /**
-     * The {@code count} attribute on the {@code <enc>} node, reporting how
-     * many times the sender has already retried delivery of this ciphertext.
+     * The {@code count} attribute on the {@code <enc>} node, reporting how many
+     * times the sender has already retried delivery of this ciphertext.
      */
     private final int retryCount;
 
     /**
-     * {@code true} when the stanza carried {@code decrypt-fail="hide"} on
-     * this {@code <enc>}, telling the receiver to drop the message silently
-     * if decryption fails.
+     * {@code true} when the stanza carried {@code decrypt-fail="hide"} on this
+     * {@code <enc>}, telling the receiver to drop the message silently if
+     * decryption fails.
      */
     private final boolean hideFail;
 
     /**
      * Constructs a populated record from the values extracted by
      * {@link MessageReceiveStanzaParser}.
-     *
-     * @apiNote
-     * Not intended for direct use outside the parser; callers consume
-     * existing instances via {@link MessageReceiveStanza#encs()}.
      *
      * @param e2eType      the decoded encryption type
      * @param encMediaType the optional media-type tag, or {@code null}
@@ -92,8 +87,7 @@ public final class MessageReceiveEncryptedPayload {
      * Returns the Signal encryption type that selects which cipher decrypts
      * {@link #ciphertext()}.
      *
-     * @apiNote
-     * Distinguishes per-device envelopes (PKMSG / MSG), sender-key group
+     * <p>Distinguishes per-device envelopes (PKMSG / MSG), sender-key group
      * envelopes (SKMSG), and bot multi-side envelopes (MSMSG); the receive
      * pipeline branches on this to choose the unwrapping path.
      *
@@ -106,10 +100,9 @@ public final class MessageReceiveEncryptedPayload {
     /**
      * Returns the {@code mediatype} attribute, when present.
      *
-     * @apiNote
-     * Forwarded to the protobuf decoder so it can pick the right inner
-     * framing for media payloads; the {@code "GroupHistory"} value also
-     * gates reporting-token capture for group-history shares.
+     * <p>Forwarded to the protobuf decoder so it can pick the right inner
+     * framing for media payloads; the {@code "GroupHistory"} value also gates
+     * reporting-token capture for group-history shares.
      *
      * @return an {@link Optional} wrapping the media type tag
      */
@@ -120,8 +113,7 @@ public final class MessageReceiveEncryptedPayload {
     /**
      * Returns the raw encrypted bytes of this payload.
      *
-     * @apiNote
-     * Fed directly to the Signal cipher selected by {@link #e2eType()}; the
+     * <p>Fed directly to the Signal cipher selected by {@link #e2eType()}; the
      * receive pipeline does not modify these bytes before decryption.
      *
      * @return the ciphertext
@@ -133,10 +125,9 @@ public final class MessageReceiveEncryptedPayload {
     /**
      * Returns the sender-reported retry count.
      *
-     * @apiNote
-     * Used to emit a {@code retry} receipt with the matching count when the
-     * receiver successfully decrypts a retried envelope; aggregated across
-     * all {@code <enc>} children of the stanza by
+     * <p>Used to emit a {@code retry} receipt with the matching count when the
+     * receiver successfully decrypts a retried envelope; aggregated across all
+     * {@code <enc>} children of the stanza by
      * {@link MessageReceiveStanza#retryCount()}.
      *
      * @return the retry count, or {@code 0} when the {@code count} attribute was absent
@@ -148,11 +139,10 @@ public final class MessageReceiveEncryptedPayload {
     /**
      * Returns whether this payload carried {@code decrypt-fail="hide"}.
      *
-     * @apiNote
-     * When {@code true} the receive pipeline must drop the message silently
-     * on decryption failure rather than surfacing the usual placeholder; WA
-     * Web sets this on outgoing sender-key distribution messages so peers
-     * that cannot decrypt them do not see error stubs in the chat.
+     * <p>When {@code true} the receive pipeline drops the message silently on
+     * decryption failure rather than surfacing the usual placeholder; this is
+     * set on outgoing sender-key distribution messages so peers that cannot
+     * decrypt them do not see error stubs in the chat.
      *
      * @return {@code true} if decrypt-fail is set to {@code "hide"}
      */

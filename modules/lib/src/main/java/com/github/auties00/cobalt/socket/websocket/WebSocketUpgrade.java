@@ -13,10 +13,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * Performs the RFC 6455 section 1.3 WebSocket upgrade handshake on an
  * already-connected {@link Socket}.
  *
- * @apiNote
- * Driven by
- * {@link com.github.auties00.cobalt.socket.WhatsAppSocketClient}'s
- * WebSocket transport after the TLS handshake completes, so the WA
+ * <p>The handshake runs after the TLS handshake completes, so the WA
  * Web bundle's {@code /ws/chat} endpoint can start delivering binary
  * frames. The leftover {@link ByteBuffer} returned by
  * {@link #upgrade(Socket, String, String, int, String)} captures any
@@ -25,20 +22,18 @@ import java.util.concurrent.ThreadLocalRandom;
  * {@link WebSocketFrameInputStream} before touching the underlying
  * stream again.
  *
- * @implNote
- * This implementation assembles the request into a single pre-sized
- * {@code byte[]} via {@link System#arraycopy} on pre-encoded static
- * fragments, so no {@link StringBuilder} or charset encoder runs on
- * the hot path. The response is parsed in place inside an 8 KiB
+ * @implNote This implementation assembles the request into a single
+ * pre-sized {@code byte[]} via {@link System#arraycopy} on pre-encoded
+ * static fragments, so no {@link StringBuilder} or charset encoder runs
+ * on the hot path. The response is parsed in place inside an 8 KiB
  * scratch buffer (grown on demand up to {@link #MAX_RESPONSE_SIZE})
  * using a sliding 32-bit window to locate the {@code CRLF CRLF}
- * terminator and inline byte-literal checks for the mandatory
- * headers.
+ * terminator and inline byte-literal checks for the mandatory headers.
  */
 public final class WebSocketUpgrade {
 
     /**
-     * The WebSocket protocol GUID used when computing the
+     * Holds the WebSocket protocol GUID used when computing the
      * {@code Sec-WebSocket-Accept} hash as defined by
      * <a href="https://datatracker.ietf.org/doc/html/rfc6455#section-1.3">RFC 6455 section 1.3</a>.
      */
@@ -46,69 +41,69 @@ public final class WebSocketUpgrade {
             .getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The length of the random {@code Sec-WebSocket-Key} in raw
+     * Holds the length of the random {@code Sec-WebSocket-Key} in raw
      * bytes before Base64 encoding.
      */
     private static final int WEBSOCKET_KEY_BYTES = 16;
 
     /**
-     * The expected HTTP status code for a successful upgrade.
+     * Holds the expected HTTP status code for a successful upgrade.
      */
     private static final int EXPECTED_STATUS_CODE = 101;
 
     /**
-     * The maximum total size of the response headers (including the
-     * status line and the terminating {@code CRLF CRLF}); sized well
-     * above any realistic upgrade response.
+     * Holds the maximum total size of the response headers (including
+     * the status line and the terminating {@code CRLF CRLF}); sized
+     * well above any realistic upgrade response.
      */
     private static final int MAX_RESPONSE_SIZE = 65536;
 
     /**
-     * The default size of the recyclable response read buffer.
+     * Holds the default size of the recyclable response read buffer.
      */
     private static final int INITIAL_RESPONSE_BUFFER = 8192;
 
     /**
-     * The packed bytes representing {@code "\r\n\r\n"}, used to
+     * Holds the packed bytes representing {@code "\r\n\r\n"}, used to
      * locate the end of the response headers with a single sliding
      * 32-bit comparison.
      */
     private static final int CRLF_CRLF = 0x0D0A0D0A;
 
     /**
-     * The ASCII carriage-return byte.
+     * Holds the ASCII carriage-return byte.
      */
     private static final byte CR = '\r';
 
     /**
-     * The ASCII line-feed byte.
+     * Holds the ASCII line-feed byte.
      */
     private static final byte LF = '\n';
 
     /**
-     * The ASCII space byte (HTTP optional whitespace).
+     * Holds the ASCII space byte (HTTP optional whitespace).
      */
     private static final byte SP = ' ';
 
     /**
-     * The ASCII comma byte (HTTP list separator).
+     * Holds the ASCII comma byte (HTTP list separator).
      */
     private static final byte COMMA = ',';
 
     /**
-     * The pre-encoded HTTP request line prefix: {@code "GET "}.
+     * Holds the pre-encoded HTTP request line prefix: {@code "GET "}.
      */
     private static final byte[] REQ_LINE_PREFIX = "GET ".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The pre-encoded HTTP version and Host header prefix:
+     * Holds the pre-encoded HTTP version and Host header prefix:
      * {@code " HTTP/1.1\r\nHost: "}.
      */
     private static final byte[] REQ_HOST_HEADER = " HTTP/1.1\r\nHost: ".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The pre-encoded static headers block from the CRLF after Host
-     * through the {@code Sec-WebSocket-Key} value prefix.
+     * Holds the pre-encoded static headers block from the CRLF after
+     * Host through the {@code Sec-WebSocket-Key} value prefix.
      */
     private static final byte[] REQ_STATIC_BLOCK = (
             "\r\nUpgrade: websocket\r\n" +
@@ -118,48 +113,48 @@ public final class WebSocketUpgrade {
     ).getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The pre-encoded Origin header prefix including leading CRLF:
-     * {@code "\r\nOrigin: https://"}.
+     * Holds the pre-encoded Origin header prefix including leading
+     * CRLF: {@code "\r\nOrigin: https://"}.
      */
     private static final byte[] REQ_ORIGIN = "\r\nOrigin: https://".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The pre-encoded User-Agent header prefix including leading
+     * Holds the pre-encoded User-Agent header prefix including leading
      * CRLF: {@code "\r\nUser-Agent: "}.
      */
     private static final byte[] REQ_USER_AGENT_PREFIX = "\r\nUser-Agent: ".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The pre-encoded request terminator: {@code "\r\n\r\n"}.
+     * Holds the pre-encoded request terminator: {@code "\r\n\r\n"}.
      */
     private static final byte[] REQ_END = "\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The lowercase ASCII bytes of the {@code Upgrade} header name,
-     * used for case-insensitive comparison.
+     * Holds the lowercase ASCII bytes of the {@code Upgrade} header
+     * name, used for case-insensitive comparison.
      */
     private static final byte[] HEADER_UPGRADE = "upgrade".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The lowercase ASCII bytes of the {@code Connection} header
+     * Holds the lowercase ASCII bytes of the {@code Connection} header
      * name.
      */
     private static final byte[] HEADER_CONNECTION = "connection".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The lowercase ASCII bytes of the
+     * Holds the lowercase ASCII bytes of the
      * {@code Sec-WebSocket-Accept} header name.
      */
     private static final byte[] HEADER_ACCEPT = "sec-websocket-accept".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The lowercase ASCII bytes of the expected {@code Upgrade}
+     * Holds the lowercase ASCII bytes of the expected {@code Upgrade}
      * header value ({@code "websocket"}).
      */
     private static final byte[] VALUE_WEBSOCKET = "websocket".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The lowercase ASCII bytes of the expected token in the
+     * Holds the lowercase ASCII bytes of the expected token in the
      * {@code Connection} header value ({@code "upgrade"}).
      */
     private static final byte[] VALUE_UPGRADE = "upgrade".getBytes(StandardCharsets.US_ASCII);
@@ -174,11 +169,12 @@ public final class WebSocketUpgrade {
     /**
      * Performs the WebSocket upgrade handshake on {@code socket}.
      *
-     * @apiNote
-     * Called once per WebSocket transport open, after the TLS
-     * handshake has completed; the returned leftover bytes (if any)
-     * must be fed into {@link WebSocketFrameInputStream} so the
-     * server's piggybacked first frame is not lost.
+     * <p>The handshake runs once per WebSocket transport open, after
+     * the TLS handshake has completed. It generates the random key,
+     * computes the expected accept value, writes the request and
+     * validates the response. The returned leftover bytes (if any) must
+     * be fed into {@link WebSocketFrameInputStream} so the server's
+     * piggybacked first frame is not lost.
      *
      * @param socket    the already-connected (and, for TLS endpoints,
      *                  already-TLS-handshaken) socket

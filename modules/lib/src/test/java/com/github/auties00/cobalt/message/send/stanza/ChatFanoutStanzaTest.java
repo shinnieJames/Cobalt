@@ -15,66 +15,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Structural tests for {@link ChatFanoutStanza}, mirroring
- * {@code WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza}.
- *
- * @apiNote
- * Pins the outer-stanza dimensions that {@link ChatFanoutStanza#build}
- * must round-trip without losing information: stanza type, edit marker,
- * addressing mode, peer-recipient attributes, device-count topology, and
- * the absent-when-null attribute discipline. The 479 regression guard
- * verifies that LID self-sends produce LID-form participant JIDs.
- *
- * @implNote
- * This implementation drives the 27-arg builder directly via the
- * {@link #build} helper that fills every non-essential argument with
- * {@code null} or {@code false}; the byte-equality oracle for the same
- * shape lives in {@link ChatFanoutLiveOracleTest}.
+ * Structural tests for {@link ChatFanoutStanza}, pinning the outer-stanza
+ * dimensions {@link ChatFanoutStanza#build} must round-trip without losing
+ * information: stanza type, edit marker, addressing mode, peer-recipient
+ * attributes, device-count topology, and the absent-when-null attribute
+ * discipline. The 479 regression guard verifies that LID self-sends produce
+ * LID-form participant JIDs. The tests drive the 27-arg builder directly via
+ * the {@link #build} helper that fills every non-essential argument with
+ * {@code null} or {@code false}; the byte-equality oracle for the same shape
+ * lives in {@link ChatFanoutLiveOracleTest}.
  */
 @DisplayName("ChatFanoutStanza")
 class ChatFanoutStanzaTest {
 
-    /**
-     * A PN-form recipient JID used to drive the addressing-mode null
-     * branch.
-     */
     private static final Jid CHAT_PN = Jid.of("12025550100@s.whatsapp.net");
 
-    /**
-     * A LID-form recipient JID used to drive the LID branch.
-     */
     private static final Jid CHAT_LID = Jid.of("258252122116273@lid");
 
-    /**
-     * A LID-form self JID used by the 479-regression self-send test.
-     */
     private static final Jid SELF_LID = Jid.of("258252122116273@lid");
 
-    /**
-     * A LID device JID for the primary device (device id 0).
-     */
     private static final Jid DEVICE_PRIMARY_LID = Jid.of("258252122116273:0@lid");
 
-    /**
-     * A LID device JID for a companion device (device id 77).
-     */
     private static final Jid DEVICE_77_LID = Jid.of("258252122116273:77@lid");
 
-    /**
-     * A LID device JID for a second companion device (device id 73).
-     */
     private static final Jid DEVICE_73_LID = Jid.of("258252122116273:73@lid");
 
-    /**
-     * Fixture ciphertext used wherever the actual bytes do not matter.
-     */
     private static final byte[] CIPHERTEXT = new byte[]{1, 2, 3, 4};
 
-    /**
-     * Single primary device must place the {@code <enc>} directly under
-     * the outer {@code <message>} (the bot-related-flag short-circuit
-     * path).
-     */
     @Test
     @DisplayName("single primary device -> <enc> as direct child of <message> (no <participants>)")
     void singlePrimaryFlatStructure() {
@@ -89,10 +56,6 @@ class ChatFanoutStanzaTest {
                 "single-primary fanout must NOT wrap in <participants>");
     }
 
-    /**
-     * Multi-device fanout wraps every {@code <enc>} under
-     * {@code <participants>} with one {@code <to jid=...>} per device.
-     */
     @Test
     @DisplayName("multi-device fanout -> <enc> wrapped in <participants>, one <to jid=...> per device")
     void multiDeviceParticipantsStructure() {
@@ -109,17 +72,9 @@ class ChatFanoutStanzaTest {
         assertEquals(3, toNodes.size(), "one <to jid=...> per encrypted device");
     }
 
-    /**
-     * Self-send via LID must label every participant with a LID-form
-     * device JID; pre-fix the server rejected the stanza with error 479.
-     *
-     * @implNote
-     * The pre-fix participant JIDs were PN-form even though the outer
-     * chat JID was LID. The fix is upstream in
-     * {@code DeviceService.getUserFanout}: every payload's
-     * {@code recipientJid} is already LID-projected by the time
-     * {@link ChatFanoutStanza} sees it. This test pins that invariant.
-     */
+    // 479 guard: pre-fix the server rejected PN-form participant JIDs on a LID outer chat.
+    // Every payload's recipientJid is LID-projected upstream in DeviceService.getUserFanout
+    // before ChatFanoutStanza sees it; this test pins that invariant.
     @Test
     @DisplayName("479 regression guard: self-send via LID -> every participant <to jid=...> is @lid")
     void selfSendUsesLidParticipants() {
@@ -144,10 +99,6 @@ class ChatFanoutStanzaTest {
         }
     }
 
-    /**
-     * The {@code addressing_mode} attribute propagates verbatim to the
-     * outer {@code <message>}.
-     */
     @Test
     @DisplayName("addressing_mode attribute propagates to the <message> attrs")
     void addressingModeAttribute() {
@@ -156,10 +107,6 @@ class ChatFanoutStanzaTest {
         assertEquals("lid", stanza.getAttributeAsString("addressing_mode").orElseThrow());
     }
 
-    /**
-     * The {@code edit} attribute propagates verbatim; {@code edit=7} is
-     * the status-revoke marker.
-     */
     @Test
     @DisplayName("edit attribute propagates to the <message> attrs")
     void editAttribute() {
@@ -169,10 +116,6 @@ class ChatFanoutStanzaTest {
                 "edit=7 is the status-revoke marker; must propagate verbatim");
     }
 
-    /**
-     * Every supported stanza {@code type} propagates verbatim to the
-     * outer {@code <message>}.
-     */
     @Test
     @DisplayName("stanza type propagates to the <message> type attribute")
     void typeAttribute() {
@@ -184,10 +127,6 @@ class ChatFanoutStanzaTest {
         }
     }
 
-    /**
-     * The message id propagates verbatim to the outer {@code <message>}
-     * id attribute.
-     */
     @Test
     @DisplayName("message id propagates to the <message> id attribute")
     void idAttribute() {
@@ -203,10 +142,6 @@ class ChatFanoutStanzaTest {
         assertEquals("3EB0CAFEBABE", stanza.getAttributeAsString("id").orElseThrow());
     }
 
-    /**
-     * Absent optional attributes must remain absent from the attribute
-     * map (not present with an empty string).
-     */
     @Test
     @DisplayName("absent optional attributes are absent on the wire (never empty strings)")
     void optionalAttributesAreNullOnWire() {
@@ -222,11 +157,6 @@ class ChatFanoutStanzaTest {
         assertTrue(stanza.getAttribute("peer_recipient_username").isEmpty(), "peer_recipient_username must be absent when null");
     }
 
-    /**
-     * Every {@code <enc>} child carries the
-     * {@link com.github.auties00.cobalt.message.send.crypto.MessageEncryption#CIPHERTEXT_VERSION}
-     * value as the {@code v} attribute.
-     */
     @Test
     @DisplayName("CIPHERTEXT_VERSION is set on every <enc> via attribute v=...")
     void encVersionAttribute() {
@@ -242,9 +172,6 @@ class ChatFanoutStanzaTest {
         }
     }
 
-    /**
-     * A null {@code payloads} list throws up front.
-     */
     @Test
     @DisplayName("null payloads list throws NullPointerException")
     void nullPayloadsThrows() {
@@ -258,9 +185,6 @@ class ChatFanoutStanzaTest {
                 ));
     }
 
-    /**
-     * A null {@code messageId} throws up front.
-     */
     @Test
     @DisplayName("null messageId throws NullPointerException")
     void nullMessageIdThrows() {
@@ -275,9 +199,6 @@ class ChatFanoutStanzaTest {
                 ));
     }
 
-    /**
-     * A null {@code chatJid} throws up front.
-     */
     @Test
     @DisplayName("null chatJid throws NullPointerException")
     void nullChatJidThrows() {
@@ -292,22 +213,7 @@ class ChatFanoutStanzaTest {
                 ));
     }
 
-    /**
-     * Invokes the 26-arg {@link ChatFanoutStanza#build} with
-     * everything-null defaults for the optional children and a fixed
-     * message id.
-     *
-     * @apiNote
-     * Centralises the boilerplate so the individual tests need only
-     * supply the attributes they exercise.
-     *
-     * @param chatJid        the recipient chat JID
-     * @param type           the stanza type attribute
-     * @param payloads       the per-device payloads
-     * @param editAttribute  the edit attribute, or null
-     * @param addressingMode the addressing mode attribute, or null
-     * @return the rebuilt outer {@code <message>} node
-     */
+    // Fills every optional argument with null/false so each test supplies only what it exercises.
     private static Node build(
             Jid chatJid,
             String type,

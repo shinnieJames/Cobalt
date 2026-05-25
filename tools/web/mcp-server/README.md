@@ -1,7 +1,7 @@
 # Cobalt MCP
 
 A graph-first MCP server for reverse engineering WhatsApp across all platforms.
-Extracts, indexes, and exposes JavaScript module bundles as a structured knowledge graph — then lets you attach a live debugger, inspect protocol traffic, and manipulate runtime state, all through MCP tools your AI agent can call.
+Extracts, indexes, and exposes JavaScript module bundles and native WebAssembly modules as a structured knowledge graph — then lets you reverse-engineer the WASM (call graph, C++ vtables, decompilation), attach a live debugger to JS or WASM, inspect protocol traffic, and manipulate runtime state, all through MCP tools your AI agent can call.
 
 ## Platforms
 
@@ -32,12 +32,20 @@ Every extracted JavaScript module is parsed with Babel into a rich AST index:
 
 ### Static analysis — WASM
 
-Native WebAssembly modules get their own analysis pipeline:
+Native WebAssembly modules get a full reverse-engineering pipeline, built on an in-process operator decoder (no external dependencies for the static core):
 
 - **Structural analysis** — imports, exports, function signatures, memory/table/global declarations, section sizes
+- **Element + data segments** — the table-slot to function-index map, and data-segment descriptors including passive segments placed via `memory.init` (Emscripten pthread/shared-memory builds)
+- **Data strings + symbol recovery** — extracts C string constants and maps each back to the functions that load its address (the path to names in a stripped binary)
+- **Call graph** — direct `call`/`ref.func` edges plus `call_indirect` sites resolved to type-compatible candidate callees
+- **C++ vtable recovery** — walks Itanium RTTI (`_ZTS`/`_ZTI`/`_ZTV`) to map a typeinfo name to its vtable and each virtual slot to a function index
+- **Constant search** — find every function whose body contains a specific `i32.const` value (e.g. a magic number)
 - **WAT disassembly** — full module or per-function WebAssembly Text output
-- **Binary access** — base64-encoded binary slices with byte-range support
+- **C pseudocode** — per-function decompilation via Ghidra headless + the ghidra-wasm-plugin (optional; see Installation)
+- **Binary access + patching** — base64 binary slices with byte-range support, plus length-preserving byte patches (no-op a function, overwrite bytes at a linear address or file offset, clear the shared-memory bit)
 - **Cross-references** — identifies which JS loader modules reference each WASM module
+
+Where the abstraction matches the JS graph, these are surfaced through the same tools: `find_references`, `search_code`, and `trace_dependencies` each accept a WASM target, alongside the dedicated `get_native_module_*` and `patch_native_module` tools.
 
 ### Revision snapshots
 
@@ -73,15 +81,17 @@ Full read/write access to the runtime's A/B testing flags:
 - **Schema discovery** — inspect flag definitions (name, code, type, defaults)
 - **Mutate** — set individual flags, reset one or all to defaults
 
-### JavaScript debugger
+### JavaScript & WASM debugger
 
-Full CDP debugger integration:
+Full CDP debugger integration for both JavaScript and WebAssembly:
 
-- **Script discovery** — list runtime scripts by URL pattern
+- **Script discovery** — list runtime scripts by URL pattern, including WASM modules (reported with their code offset)
 - **Expression evaluation** — execute arbitrary JavaScript with promise support
-- **Breakpoints** — set by URL+line or scriptId+line, with optional conditions
+- **Breakpoints** — set by URL+line or scriptId+line (JS), or by absolute module byte offset (WASM), with optional conditions
 - **Stepping** — pause, resume, step over, step into, step out
-- **Paused state inspection** — call stack, scope variables, and pause reason
+- **Paused state inspection** — call stack, scope variables (including WASM locals, globals, and the operand stack), and pause reason
+- **WASM linear memory** — read a slice of a paused WASM frame's memory as base64
+- **Patched-binary serving** — serve a patched WASM binary in place of the original via CDP request interception
 
 ## Installation
 
@@ -94,7 +104,19 @@ npx playwright install chromium
 npm run build
 ```
 
-For iOS analysis, install [Ghidra](https://ghidra-sre.org/) and optionally set `GHIDRA_INSTALL_DIR`.
+For iOS/macOS native analysis, install [Ghidra](https://ghidra-sre.org/) and optionally set `GHIDRA_INSTALL_DIR`.
+
+**WASM C-pseudocode decompilation** (`get_native_module_wat` with `format=ghidra`) additionally needs the [ghidra-wasm-plugin](https://github.com/nneonneo/ghidra-wasm-plugin), built against your exact Ghidra version and installed into `<GHIDRA_INSTALL_DIR>/Ghidra/Extensions/`:
+
+```bash
+git clone https://github.com/nneonneo/ghidra-wasm-plugin
+cd ghidra-wasm-plugin
+# Ghidra 12 builds with JDK 21 (not newer); point JAVA_HOME at a JDK 21.
+GHIDRA_INSTALL_DIR=/path/to/ghidra gradle buildExtension
+# then unzip dist/*.zip into <GHIDRA_INSTALL_DIR>/Ghidra/Extensions/
+```
+
+The plugin is optional: every other WASM tool (and `format=wat`) works without it; only `format=ghidra` requires it. When Ghidra or the plugin is missing, `format=ghidra` returns a clear error rather than failing.
 
 ### Claude Code
 
@@ -239,9 +261,9 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `resolve_export`      | Resolves a specific export to its implementing symbol with byte range and source       |
 | `get_module_source`   | Returns module source code with optional byte-range or line-range slicing              |
 | `get_symbol_source`   | Returns the exact source code for a named function, class, or variable                 |
-| `find_references`     | Finds all pre-indexed references to a symbol across modules                            |
-| `trace_dependencies`  | BFS traversal of the dependency graph (forward or reverse)                             |
-| `search_code`         | Regex or literal search across source code or pre-indexed string literals              |
+| `find_references`     | References to a symbol across JS modules, or (with `nativeModule`) functions referencing a WASM data string/address |
+| `trace_dependencies`  | BFS over the JS dependency graph, or (with `nativeModule` + `funcIndex`) a WASM function call graph                  |
+| `search_code`         | Regex/literal search over JS source or literals, or WASM data strings (`wasm_data`) / `i32.const` values (`wasm_const`) |
 | `manage_annotations`  | Create, read, list, or remove persistent module annotations                            |
 
 ### Native module tools (WASM)
@@ -249,9 +271,11 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | Tool                         | Description                                                                             |
 |------------------------------|-----------------------------------------------------------------------------------------|
 | `list_native_modules`        | Lists all WASM modules with name, URL, hash, and size                                   |
-| `get_native_module_metadata` | Structural analysis: function signatures, imports, exports, memory, globals, cross-refs |
-| `get_native_module_wat`      | WAT disassembly (full module or single function)                                        |
+| `get_native_module_metadata` | Structural analysis: signatures, imports, exports, memory/globals, element + data segments, cross-refs |
+| `get_native_module_wat`      | WAT disassembly (full module or single function), or C pseudocode via Ghidra (`format=ghidra`)         |
 | `get_native_module_binary`   | Base64-encoded binary slice with byte-range support                                     |
+| `get_native_module_vtables`  | Recovers C++ vtables for an Itanium typeinfo name; maps each virtual slot to a function index          |
+| `patch_native_module`        | Length-preserving byte patches (no-op a function, overwrite bytes, clear shared-memory bit); writes a patched `.wasm` |
 
 ### Snapshot tools
 
@@ -296,13 +320,16 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 
 | Tool                                   | Description                                           |
 |----------------------------------------|-------------------------------------------------------|
-| `web_live_debug_list_scripts`          | List runtime scripts by URL filter                    |
+| `web_live_debug_list_scripts`          | List runtime scripts (JS and WASM) by URL filter      |
 | `web_live_debug_eval`                  | Evaluate JavaScript in the live runtime               |
 | `web_live_debug_set_breakpoint_url`    | Set breakpoint by script URL + line/column            |
 | `web_live_debug_set_breakpoint_script` | Set breakpoint by scriptId + line/column              |
+| `web_live_debug_set_wasm_breakpoint`   | Set a breakpoint inside a WASM script at an absolute byte offset |
+| `web_live_debug_read_wasm_memory`      | Read a slice of a paused WASM frame's linear memory as base64    |
 | `web_live_debug_remove_breakpoint`     | Remove a breakpoint                                   |
 | `web_live_debug_command`               | Debugger stepping: pause, resume, step over/into/out  |
-| `web_live_debug_paused_state`          | Inspect call stack, scope variables, and pause reason |
+| `web_live_debug_paused_state`          | Inspect call stack, scope variables (JS or WASM locals/globals/stack), and pause reason |
+| `web_live_serve_wasm`                  | Serve a patched WASM binary in place of the original via CDP Fetch interception |
 
 ### Network tools
 

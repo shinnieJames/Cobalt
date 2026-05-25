@@ -10,33 +10,29 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="disappearing_mode" type="set">} stanza that updates the user's
- * default disappearing-mode duration.
+ * Builds the outbound {@code <iq xmlns="disappearing_mode" type="set">} stanza that updates the
+ * account's default disappearing-mode duration.
  *
- * @apiNote
- * Use this to back the "default message timer" setting in WA Web's privacy drawer; the
- * relay applies the duration as the per-chat default for newly-created chats while
- * leaving per-chat overrides untouched. Pass {@link Duration#ZERO} to disable the
- * feature. The reply is parsed by {@link IqSetDisappearingModeResponse}.
- *
- * @implNote
- * This implementation mirrors WA Web's {@code WAWebSetDisappearingModeJob.setDisappearingMode}
- * verbatim, emitting the {@code duration} attribute as the seconds-as-string.
+ * <p>The duration becomes the per-chat default applied to newly-created chats; per-chat overrides
+ * are left untouched. {@link Duration#ZERO} disables the feature. The stanza is addressed to
+ * {@link JidServer#user()} and the matching reply is parsed by
+ * {@link IqSetDisappearingModeResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebSetDisappearingModeJob")
 public final class IqSetDisappearingModeRequest implements IqOperation.Request {
     /**
-     * Holds the new default disappearing-mode duration to install; {@link Duration#ZERO}
-     * disables the feature.
+     * Holds the new default disappearing-mode duration to install.
+     *
+     * <p>{@link Duration#ZERO} encodes the off state; the value is never {@code null} and never
+     * negative because the constructor rejects both.
      */
     private final Duration duration;
 
     /**
-     * Constructs a new set-disappearing-mode request bound to the given duration.
+     * Constructs a set-disappearing-mode request bound to the given duration.
      *
-     * @apiNote
-     * The duration is rounded down to seconds before being emitted; sub-second
-     * precision is lost. Pass {@link Duration#ZERO} to disable the feature.
+     * <p>The duration is rounded down to whole seconds when emitted, so sub-second precision is
+     * lost. Pass {@link Duration#ZERO} to disable the feature.
      *
      * @param duration the new default duration; never {@code null}
      * @throws NullPointerException     if {@code duration} is {@code null}
@@ -63,12 +59,12 @@ public final class IqSetDisappearingModeRequest implements IqOperation.Request {
      * Builds the outbound {@code <iq>} stanza wrapping the
      * {@code <disappearing_mode duration=SECONDS/>} payload.
      *
-     * @apiNote
-     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
-     * attribute, which the dispatch layer assigns.
+     * <p>The returned {@link NodeBuilder} is wire-ready except for the IQ {@code id} attribute,
+     * which the dispatch layer assigns. The {@code duration} attribute carries the configured
+     * duration as a seconds-valued string via {@link Duration#toSeconds()}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <disappearing_mode>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <disappearing_mode>}
+     *         payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetDisappearingModeJob",
@@ -87,6 +83,15 @@ public final class IqSetDisappearingModeRequest implements IqOperation.Request {
                 .content(dmNode);
     }
 
+    /**
+     * Compares this request to another object for equality.
+     *
+     * <p>Two set-disappearing-mode requests are equal when they share the same runtime class and
+     * the same bound {@link #duration()}.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is an equal set-disappearing-mode request
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -99,11 +104,21 @@ public final class IqSetDisappearingModeRequest implements IqOperation.Request {
         return Objects.equals(this.duration, that.duration);
     }
 
+    /**
+     * Returns a hash code for this request derived from the bound {@link #duration()}.
+     *
+     * @return the duration-derived hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(duration);
     }
 
+    /**
+     * Returns a debug string carrying the bound {@link #duration()}.
+     *
+     * @return a string representation
+     */
     @Override
     public String toString() {
         return "IqSetDisappearingModeRequest[duration=" + duration + ']';

@@ -16,37 +16,33 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code marketingMessageBroadcast} app-state sync action that
  * tags an outgoing message as belonging to a premium message template.
  *
- * @apiNote
- * Drives the SMB premium-message tracking surface: when a marketing
- * template is broadcast, each recipient send is tagged with the
- * template's {@code premiumMessageId} and the resulting association
- * fans out across the {@link SyncPatchType#REGULAR} collection so
- * companion devices can attribute the send to the template. The
- * mutation index encodes both ids, formatted as
+ * <p>This handler backs the SMB premium-message tracking surface: when a
+ * marketing template is broadcast, each recipient send is tagged with the
+ * template's premium message id and the resulting association fans out across
+ * the {@link SyncPatchType#REGULAR} collection so companion devices can
+ * attribute the send to the template. The mutation index encodes both ids,
+ * formatted as
  * {@snippet :
  *     ["marketingMessageBroadcast", premiumMessageId, messageId]
  * }
  *
  * @implNote
  * This implementation persists each association eagerly through
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#putMarketingMessageBroadcast}
- * keyed by the sent message id, with the premium template id stored
- * as the record's status field. WA Web batches the pairs into an
- * {@code n} array and calls
- * {@code WAWebPremiumMessageAddSendAction(n)} once at the end of the
- * batch to mutate the {@code sentMessageIds} {@link java.util.Set} on
- * each premium template; Cobalt's
- * {@link MarketingMessageBroadcastAction} protobuf does not carry
- * {@code sentMessageIds}, so a side map is used instead. Per
- * Cobalt's pluggable error model, exceptions propagate to the
- * orchestrator instead of being mapped to
- * {@link MutationApplicationResult#failed()} inline.
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#putMarketingMessageBroadcast(com.github.auties00.cobalt.model.business.MarketingMessageBroadcast)}
+ * keyed by the sent message id, with the premium template id stored as the
+ * record's status field. WA Web batches the pairs and mutates the
+ * {@code sentMessageIds} set on each premium template once at the end of the
+ * batch; Cobalt's {@link MarketingMessageBroadcastAction} protobuf does not
+ * carry {@code sentMessageIds}, so a side map is used instead. Per Cobalt's
+ * pluggable error model, exceptions propagate to the orchestrator instead of
+ * being mapped to {@link MutationApplicationResult#failed()} inline.
  */
 @WhatsAppWebModule(moduleName = "WAWebPremiumMessageBroadcastSync")
 public final class MarketingMessageBroadcastHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs a new singleton {@link MarketingMessageBroadcastHandler}.
+     * Constructs a new {@link MarketingMessageBroadcastHandler} for
+     * registration in the sync handler registry.
      */
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageBroadcastSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MarketingMessageBroadcastHandler() {
@@ -83,18 +79,20 @@ public final class MarketingMessageBroadcastHandler implements WebAppStateAction
     /**
      * {@inheritDoc}
      *
+     * <p>The index must carry both the premium message id and the sent
+     * message id; only {@link SyncdOperation#SET} is accepted. When the
+     * referenced premium template is unknown locally the mutation is reported
+     * as {@link MutationApplicationResult#orphan()}; otherwise the
+     * association is persisted via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#putMarketingMessageBroadcast(com.github.auties00.cobalt.model.business.MarketingMessageBroadcast)}.
+     *
      * @implNote
      * This implementation classifies a missing index slot as
-     * {@link MutationApplicationResult#malformed()} explicitly so the
-     * orchestrator does not silently surface
-     * {@link MutationApplicationResult#failed()} from an
-     * out-of-bounds {@code JSON.parseArray}. When the referenced
-     * premium template is unknown locally the mutation is reported as
-     * {@link MutationApplicationResult#orphan()}, mirroring WA Web's
-     * {@code PremiumMessageCollection.find(i) == null} branch. The
-     * association is stored eagerly because Cobalt's underlying
-     * storage is a flat key/value map and there is no per-entity
-     * {@link java.util.Set} to mutate.
+     * {@link MutationApplicationResult#malformed()} explicitly so an
+     * out-of-bounds {@code JSON.parseArray} access does not surface as
+     * {@link MutationApplicationResult#failed()}. The association is stored
+     * eagerly because Cobalt's underlying storage is a flat key/value map and
+     * there is no per-entity set to mutate.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageBroadcastSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

@@ -8,41 +8,31 @@ import com.github.auties00.cobalt.node.smax.SmaxOperation;
 import java.util.Objects;
 
 /**
- * The outbound {@code <ib><offline_batch count/></ib>} stanza.
+ * Represents the outbound {@code <ib><offline_batch count/></ib>} stanza.
  *
- * @apiNote
- * Drives the offline-stanza pump: WA Web's {@code WAWebOfflineHandler}
- * sends this request through {@code WASmaxOfflineBatchRPC.sendBatchRPC}
- * after every backlog-processing tick, telling the relay how many
- * additional offline stanzas the client is ready to absorb in the next
- * batch. The cast-shape RPC has no reply variant; the relay simply
- * resumes flushing offline messages until the announced budget is
- * consumed.
+ * <p>This request drives the offline-stanza pump: it is dispatched after every
+ * backlog-processing tick to tell the relay how many additional offline stanzas
+ * the client is ready to absorb in the next batch. The cast-shape RPC has no
+ * reply variant; the relay simply resumes flushing offline messages until the
+ * announced budget is consumed. Cobalt issues it from
+ * {@link com.github.auties00.cobalt.client.WhatsAppClient#acknowledgeOfflineBatch(int)}
+ * to keep the pump flowing across the connection's post-login backlog drain.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutOfflineBatchRequest")
 public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
     /**
-     * The number of offline stanzas the client is ready to absorb in
-     * the upcoming batch.
+     * Holds the number of offline stanzas the client is ready to absorb in the
+     * upcoming batch.
      *
      * @implNote
-     * This implementation stores the raw {@code int} value; WA Web
-     * wraps it through {@code WAWap.INT} at serialisation time and the
-     * relay rejects negative counts, but Cobalt does not pre-validate
-     * the range here because the caller in
-     * {@code LinkedWhatsAppClient.acknowledgeOfflineBatch} sources the
-     * value from its own offline-pump counter.
+     * This implementation stores the raw {@code int} value and does not
+     * pre-validate its range; the count is sourced from the caller's own
+     * offline-pump counter, which never produces a negative budget.
      */
     private final int offlineBatchCount;
 
     /**
      * Constructs a request announcing the given offline-batch budget.
-     *
-     * @apiNote
-     * Used by
-     * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#acknowledgeOfflineBatch(int)}
-     * to keep the offline-stanza pump flowing across the connection's
-     * post-login backlog drain.
      *
      * @param offlineBatchCount the expected offline-batch size
      */
@@ -60,17 +50,14 @@ public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Builds the outbound stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces {@code <ib><offline_batch count="N"/></ib>}; the
-     * envelope carries no {@code id} attribute because the cast-shape
-     * RPC is fire-and-forget. WA Web's
-     * {@code WASmaxOutOfflineBatchRequest.makeBatchRequest} produces
-     * the same node tree.
+     * <p>Produces {@code <ib><offline_batch count="N"/></ib>}, where {@code N}
+     * is {@link #offlineBatchCount()}. The {@code <ib>} envelope carries no
+     * {@code id} attribute because the cast-shape RPC is fire-and-forget.
      *
-     * @return a {@link NodeBuilder} carrying the {@code <ib>} envelope
-     *         and the {@code <offline_batch/>} payload
+     * @return a {@link NodeBuilder} carrying the {@code <ib>} envelope and the
+     *         {@code <offline_batch/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutOfflineBatchRequest",
@@ -86,8 +73,8 @@ public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxOfflineBatchRequest} with an equal batch count.
+     * Returns whether the given object is a {@link SmaxOfflineBatchRequest} with
+     * an equal batch count.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when both batch counts match

@@ -20,33 +20,28 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Parses the MEX response of the fetch-newsletter-directory-search-results
- * query built by {@link FetchNewsletterDirectorySearchResultsMexRequest}.
+ * Parses the MEX response of the fetch-newsletter-directory-search-results query built by
+ * {@link FetchNewsletterDirectorySearchResultsMexRequest}.
  *
- * @apiNote
- * Exposes one page of directory search hits echoed under
- * {@code xwa2_newsletters_directory_search}: a Relay-style {@link PageInfo}
- * cursor pair and a list of {@link Result} tiles each carrying the
- * newsletter Jid and a thread-metadata projection sufficient to render
- * the directory tile.
+ * <p>Exposes one page of directory search hits echoed under
+ * {@code xwa2_newsletters_directory_search}: a Relay-style {@link PageInfo} cursor pair and a list
+ * of {@link Result} tiles each carrying the newsletter Jid and a thread-metadata projection
+ * sufficient to render the directory tile.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDirectorySearchResultsJob")
 public final class FetchNewsletterDirectorySearchResultsMexResponse implements MexOperation.Response.Json {
     /**
-     * The Relay-style pagination cursor pair.
+     * Holds the Relay-style pagination cursor pair.
      */
     private final PageInfo pageInfo;
 
     /**
-     * The directory tiles returned for this page.
+     * Holds the directory tiles returned for this page.
      */
     private final List<Result> result;
 
     /**
      * Constructs a response wrapping the parsed page-info and tiles.
-     *
-     * @apiNote
-     * Reserved for the static parser.
      *
      * @param pageInfo the Relay-style cursor pair
      * @param result   the directory tiles for this page
@@ -59,15 +54,13 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletters_directory_search} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletters_directory_search} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<FetchNewsletterDirectorySearchResultsMexResponse> of(Node node) {
         return node.getChild("result")
@@ -78,8 +71,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
     /**
      * Returns the Relay-style pagination cursor pair.
      *
-     * @return the parsed {@link PageInfo}, or empty when the relay omitted
-     *         the field
+     * @return the parsed {@link PageInfo}, or empty when the relay omitted the field
      */
     public Optional<PageInfo> pageInfo() {
         return Optional.ofNullable(pageInfo);
@@ -97,36 +89,32 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
     /**
      * Wraps the Relay-style {@code page_info} sub-object.
      *
-     * @apiNote
-     * Carries the standard Relay pagination markers used to drive the
-     * search-results infinite-scroll forward (and, in principle, backward).
+     * <p>Carries the standard Relay pagination markers used to drive the search-results
+     * infinite-scroll forward and, in principle, backward.
      */
     public static final class PageInfo {
         /**
-         * Whether a forward page is available.
+         * Holds whether a forward page is available.
          */
         private final Boolean hasNextPage;
 
         /**
-         * Whether a backward page is available.
+         * Holds whether a backward page is available.
          */
         private final Boolean hasPreviousPage;
 
         /**
-         * The start cursor of this page.
+         * Holds the start cursor of this page.
          */
         private final String startCursor;
 
         /**
-         * The end cursor of this page.
+         * Holds the end cursor of this page.
          */
         private final String endCursor;
 
         /**
          * Constructs a page-info wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param hasNextPage     whether a forward page is available
          * @param hasPreviousPage whether a backward page is available
@@ -143,8 +131,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Returns whether a forward page is available.
          *
-         * @return {@code true} when the relay reported a next page,
-         *         {@code false} when it did not or omitted the field
+         * @return {@code true} when the relay reported a next page, {@code false} when it did not or
+         *         omitted the field
          */
         public boolean hasNextPage() {
             return hasNextPage != null && hasNextPage;
@@ -153,8 +141,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Returns whether a backward page is available.
          *
-         * @return {@code true} when the relay reported a previous page,
-         *         {@code false} when it did not or omitted the field
+         * @return {@code true} when the relay reported a previous page, {@code false} when it did
+         *         not or omitted the field
          */
         public boolean hasPreviousPage() {
             return hasPreviousPage != null && hasPreviousPage;
@@ -163,8 +151,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Returns the start cursor of this page.
          *
-         * @return the start cursor, or empty when the relay omitted the
-         *         field
+         * @return the start cursor, or empty when the relay omitted the field
          */
         public Optional<String> startCursor() {
             return Optional.ofNullable(startCursor);
@@ -182,14 +169,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Parses a {@link PageInfo} from the given JSON object.
          *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterDirectorySearchResultsMexResponse#of(byte[])}
-         * to hydrate the nested {@code page_info} entry.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed {@link PageInfo}, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed {@link PageInfo}, or empty when {@code obj} is {@code null}
          */
         static Optional<PageInfo> of(JSONObject obj) {
             if (obj == null) {
@@ -204,12 +185,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         }
 
         /**
-         * Parses a list of {@link PageInfo} entries from the given JSON
-         * array.
-         *
-         * @apiNote
-         * Provided for symmetry; the search envelope does not carry a
-         * {@code page_info} array.
+         * Parses a list of {@link PageInfo} entries from the given JSON array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -228,30 +204,25 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
     }
 
     /**
-     * Wraps one {@code result} entry: a single search-result tile carrying
-     * the newsletter Jid and its thread-metadata projection.
+     * Wraps one {@code result} entry: a single search-result tile carrying the newsletter Jid and
+     * its thread-metadata projection.
      *
-     * @apiNote
-     * Same shape as the tile in
-     * {@link FetchNewsletterDirectoryListMexResponse.Result} but lives in
-     * the search-results response.
+     * <p>Shares the same tile shape as {@link FetchNewsletterDirectoryListMexResponse.Result} but
+     * lives in the search-results response.
      */
     public static final class Result {
         /**
-         * The newsletter Jid string.
+         * Holds the newsletter Jid string.
          */
         private final String id;
 
         /**
-         * The dehydrated thread metadata projection used for tile rendering.
+         * Holds the dehydrated thread metadata projection used for tile rendering.
          */
         private final ThreadMetadata threadMetadata;
 
         /**
          * Constructs a tile wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param id             the newsletter Jid string
          * @param threadMetadata the dehydrated thread metadata projection
@@ -264,8 +235,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Returns the newsletter Jid string.
          *
-         * @return the newsletter id, or empty when the relay omitted the
-         *         field
+         * @return the newsletter id, or empty when the relay omitted the field
          */
         public Optional<String> id() {
             return Optional.ofNullable(id);
@@ -274,69 +244,62 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Returns the dehydrated thread metadata projection.
          *
-         * @return the parsed {@link ThreadMetadata}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link ThreadMetadata}, or empty when the relay omitted the field
          */
         public Optional<ThreadMetadata> threadMetadata() {
             return Optional.ofNullable(threadMetadata);
         }
 
         /**
-         * Wraps the dehydrated {@code thread_metadata} sub-object used
-         * for search-result tiles.
+         * Wraps the dehydrated {@code thread_metadata} sub-object used for search-result tiles.
          *
-         * @apiNote
-         * Carries the subset of newsletter metadata needed to render the
-         * tile: creation time, invite token, public handle, subscriber
-         * count, name, description, picture, and verification tier label.
+         * <p>Carries the subset of newsletter metadata needed to render the tile: creation time,
+         * invite token, public handle, subscriber count, name, description, picture, and
+         * verification tier label.
          */
         public static final class ThreadMetadata {
             /**
-             * The newsletter creation epoch-second.
+             * Holds the newsletter creation epoch-second.
              */
             private final Long creationTime;
 
             /**
-             * The newsletter public invite token.
+             * Holds the newsletter public invite token.
              */
             private final String invite;
 
             /**
-             * The newsletter public handle.
+             * Holds the newsletter public handle.
              */
             private final String handle;
 
             /**
-             * The follower count.
+             * Holds the follower count.
              */
             private final Long subscribersCount;
 
             /**
-             * The localised name projection.
+             * Holds the localised name projection.
              */
             private final Name name;
 
             /**
-             * The localised description projection.
+             * Holds the localised description projection.
              */
             private final Description description;
 
             /**
-             * The picture reference projection.
+             * Holds the picture reference projection.
              */
             private final Picture picture;
 
             /**
-             * The verification tier label.
+             * Holds the verification tier label.
              */
             private final String verification;
 
             /**
-             * Constructs a thread-metadata wrapper from the parsed
-             * sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
+             * Constructs a thread-metadata wrapper from the parsed sub-fields.
              *
              * @param creationTime     the newsletter creation epoch-second
              * @param invite           the public invite token
@@ -361,8 +324,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the newsletter creation instant.
              *
-             * @return the creation instant, or empty when the relay omitted
-             *         the field
+             * @return the creation instant, or empty when the relay omitted the field
              */
             public Optional<Instant> creationTime() {
                 return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
@@ -371,8 +333,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the newsletter public invite token.
              *
-             * @return the invite token, or empty when the relay omitted the
-             *         field
+             * @return the invite token, or empty when the relay omitted the field
              */
             public Optional<String> invite() {
                 return Optional.ofNullable(invite);
@@ -381,8 +342,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the newsletter public handle.
              *
-             * @return the public handle, or empty when the relay omitted the
-             *         field
+             * @return the public handle, or empty when the relay omitted the field
              */
             public Optional<String> handle() {
                 return Optional.ofNullable(handle);
@@ -391,8 +351,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the follower count.
              *
-             * @return the follower count, or empty when the relay omitted
-             *         the field
+             * @return the follower count, or empty when the relay omitted the field
              */
             public OptionalLong subscribersCount() {
                 return subscribersCount != null ? OptionalLong.of(subscribersCount) : OptionalLong.empty();
@@ -401,8 +360,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the localised name projection.
              *
-             * @return the parsed {@link Name}, or empty when the relay
-             *         omitted the field
+             * @return the parsed {@link Name}, or empty when the relay omitted the field
              */
             public Optional<Name> name() {
                 return Optional.ofNullable(name);
@@ -411,8 +369,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the localised description projection.
              *
-             * @return the parsed {@link Description}, or empty when the
-             *         relay omitted the field
+             * @return the parsed {@link Description}, or empty when the relay omitted the field
              */
             public Optional<Description> description() {
                 return Optional.ofNullable(description);
@@ -421,8 +378,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the picture reference projection.
              *
-             * @return the parsed {@link Picture}, or empty when the relay
-             *         omitted the field
+             * @return the parsed {@link Picture}, or empty when the relay omitted the field
              */
             public Optional<Picture> picture() {
                 return Optional.ofNullable(picture);
@@ -431,8 +387,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Returns the verification tier label.
              *
-             * @return the verification label, or empty when the relay
-             *         omitted the field
+             * @return the verification label, or empty when the relay omitted the field
              */
             public Optional<String> verification() {
                 return Optional.ofNullable(verification);
@@ -441,31 +396,27 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Wraps the {@code name} versioned-text sub-object.
              *
-             * @apiNote
-             * Carries the server-assigned revision id, the current text,
-             * and the epoch-second the name was last updated.
+             * <p>Carries the server-assigned revision id, the current text, and the epoch-second the
+             * name was last updated.
              */
             public static final class Name {
                 /**
-                 * The revision identifier.
+                 * Holds the revision identifier.
                  */
                 private final String id;
 
                 /**
-                 * The current text.
+                 * Holds the current text.
                  */
                 private final String text;
 
                 /**
-                 * The epoch-second of the last update.
+                 * Holds the epoch-second of the last update.
                  */
                 private final Long updateTime;
 
                 /**
                  * Constructs a name wrapper from the parsed sub-fields.
-                 *
-                 * @apiNote
-                 * Reserved for the static parser.
                  *
                  * @param id         the revision identifier
                  * @param text       the current text
@@ -480,8 +431,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the revision identifier.
                  *
-                 * @return the revision id, or empty when the relay omitted
-                 *         the field
+                 * @return the revision id, or empty when the relay omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
@@ -490,8 +440,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the current text.
                  *
-                 * @return the text, or empty when the relay omitted the
-                 *         field
+                 * @return the text, or empty when the relay omitted the field
                  */
                 public Optional<String> text() {
                     return Optional.ofNullable(text);
@@ -500,8 +449,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the last-update instant.
                  *
-                 * @return the update instant, or empty when the relay
-                 *         omitted the field
+                 * @return the update instant, or empty when the relay omitted the field
                  */
                 public Optional<Instant> updateTime() {
                     return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
@@ -510,13 +458,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Parses a {@link Name} from the given JSON object.
                  *
-                 * @apiNote
-                 * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate
-                 * the nested {@code name} entry.
-                 *
                  * @param obj the JSON object to parse
-                 * @return the parsed {@link Name}, or empty when {@code obj}
-                 *         is {@code null}
+                 * @return the parsed {@link Name}, or empty when {@code obj} is {@code null}
                  */
                 static Optional<Name> of(JSONObject obj) {
                     if (obj == null) {
@@ -530,15 +473,10 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 }
 
                 /**
-                 * Parses a list of {@link Name} entries from the given JSON
-                 * array.
-                 *
-                 * @apiNote
-                 * Provided for symmetry.
+                 * Parses a list of {@link Name} entries from the given JSON array.
                  *
                  * @param arr the JSON array to parse
-                 * @return the parsed list, empty when {@code arr} is
-                 *         {@code null}
+                 * @return the parsed list, empty when {@code arr} is {@code null}
                  */
                 static List<Name> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -556,32 +494,27 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Wraps the {@code description} versioned-text sub-object.
              *
-             * @apiNote
-             * Same shape as {@link Name}: revision id, current text, and
-             * last-update epoch-second.
+             * <p>Shares the same shape as {@link Name}: revision id, current text, and last-update
+             * epoch-second.
              */
             public static final class Description {
                 /**
-                 * The revision identifier.
+                 * Holds the revision identifier.
                  */
                 private final String id;
 
                 /**
-                 * The current text.
+                 * Holds the current text.
                  */
                 private final String text;
 
                 /**
-                 * The epoch-second of the last update.
+                 * Holds the epoch-second of the last update.
                  */
                 private final Long updateTime;
 
                 /**
-                 * Constructs a description wrapper from the parsed
-                 * sub-fields.
-                 *
-                 * @apiNote
-                 * Reserved for the static parser.
+                 * Constructs a description wrapper from the parsed sub-fields.
                  *
                  * @param id         the revision identifier
                  * @param text       the current text
@@ -596,8 +529,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the revision identifier.
                  *
-                 * @return the revision id, or empty when the relay omitted
-                 *         the field
+                 * @return the revision id, or empty when the relay omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
@@ -606,8 +538,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the current text.
                  *
-                 * @return the text, or empty when the relay omitted the
-                 *         field
+                 * @return the text, or empty when the relay omitted the field
                  */
                 public Optional<String> text() {
                     return Optional.ofNullable(text);
@@ -616,8 +547,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the last-update instant.
                  *
-                 * @return the update instant, or empty when the relay
-                 *         omitted the field
+                 * @return the update instant, or empty when the relay omitted the field
                  */
                 public Optional<Instant> updateTime() {
                     return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
@@ -626,13 +556,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Parses a {@link Description} from the given JSON object.
                  *
-                 * @apiNote
-                 * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate
-                 * the nested {@code description} entry.
-                 *
                  * @param obj the JSON object to parse
-                 * @return the parsed {@link Description}, or empty when
-                 *         {@code obj} is {@code null}
+                 * @return the parsed {@link Description}, or empty when {@code obj} is {@code null}
                  */
                 static Optional<Description> of(JSONObject obj) {
                     if (obj == null) {
@@ -646,15 +571,10 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 }
 
                 /**
-                 * Parses a list of {@link Description} entries from the given
-                 * JSON array.
-                 *
-                 * @apiNote
-                 * Provided for symmetry.
+                 * Parses a list of {@link Description} entries from the given JSON array.
                  *
                  * @param arr the JSON array to parse
-                 * @return the parsed list, empty when {@code arr} is
-                 *         {@code null}
+                 * @return the parsed list, empty when {@code arr} is {@code null}
                  */
                 static List<Description> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -672,31 +592,27 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Wraps the {@code picture} reference sub-object.
              *
-             * @apiNote
-             * Carries the file id, the direct-path used to fetch the
-             * picture bytes, and the picture type discriminator.
+             * <p>Carries the file id, the direct-path used to fetch the picture bytes, and the
+             * picture type discriminator.
              */
             public static final class Picture {
                 /**
-                 * The file identifier.
+                 * Holds the file identifier.
                  */
                 private final String id;
 
                 /**
-                 * The relay direct-path for the picture bytes.
+                 * Holds the relay direct-path for the picture bytes.
                  */
                 private final String directPath;
 
                 /**
-                 * The picture type discriminator.
+                 * Holds the picture type discriminator.
                  */
                 private final String type;
 
                 /**
                  * Constructs a picture wrapper from the parsed sub-fields.
-                 *
-                 * @apiNote
-                 * Reserved for the static parser.
                  *
                  * @param id         the file identifier
                  * @param directPath the relay direct-path
@@ -711,8 +627,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the file identifier.
                  *
-                 * @return the file id, or empty when the relay omitted the
-                 *         field
+                 * @return the file id, or empty when the relay omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
@@ -721,8 +636,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the relay direct-path.
                  *
-                 * @return the direct path, or empty when the relay omitted
-                 *         the field
+                 * @return the direct path, or empty when the relay omitted the field
                  */
                 public Optional<String> directPath() {
                     return Optional.ofNullable(directPath);
@@ -731,8 +645,7 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Returns the picture type discriminator.
                  *
-                 * @return the picture type, or empty when the relay omitted
-                 *         the field
+                 * @return the picture type, or empty when the relay omitted the field
                  */
                 public Optional<String> type() {
                     return Optional.ofNullable(type);
@@ -741,13 +654,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 /**
                  * Parses a {@link Picture} from the given JSON object.
                  *
-                 * @apiNote
-                 * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate
-                 * the nested {@code picture} entry.
-                 *
                  * @param obj the JSON object to parse
-                 * @return the parsed {@link Picture}, or empty when
-                 *         {@code obj} is {@code null}
+                 * @return the parsed {@link Picture}, or empty when {@code obj} is {@code null}
                  */
                 static Optional<Picture> of(JSONObject obj) {
                     if (obj == null) {
@@ -761,15 +669,10 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
                 }
 
                 /**
-                 * Parses a list of {@link Picture} entries from the given
-                 * JSON array.
-                 *
-                 * @apiNote
-                 * Provided for symmetry.
+                 * Parses a list of {@link Picture} entries from the given JSON array.
                  *
                  * @param arr the JSON array to parse
-                 * @return the parsed list, empty when {@code arr} is
-                 *         {@code null}
+                 * @return the parsed list, empty when {@code arr} is {@code null}
                  */
                 static List<Picture> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -787,13 +690,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             /**
              * Parses a {@link ThreadMetadata} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link Result#of(JSONObject)} to hydrate the nested
-             * {@code thread_metadata} entry.
-             *
              * @param obj the JSON object to parse
-             * @return the parsed {@link ThreadMetadata}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link ThreadMetadata}, or empty when {@code obj} is {@code null}
              */
             static Optional<ThreadMetadata> of(JSONObject obj) {
                 if (obj == null) {
@@ -812,15 +710,10 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
             }
 
             /**
-             * Parses a list of {@link ThreadMetadata} entries from the given
-             * JSON array.
-             *
-             * @apiNote
-             * Provided for symmetry.
+             * Parses a list of {@link ThreadMetadata} entries from the given JSON array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<ThreadMetadata> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -838,14 +731,8 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
         /**
          * Parses a {@link Result} from the given JSON object.
          *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterDirectorySearchResultsMexResponse#of(byte[])}
-         * to hydrate one entry of the {@code result} array.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed {@link Result}, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed {@link Result}, or empty when {@code obj} is {@code null}
          */
         static Optional<Result> of(JSONObject obj) {
             if (obj == null) {
@@ -859,11 +746,6 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
 
         /**
          * Parses a list of {@link Result} entries from the given JSON array.
-         *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterDirectorySearchResultsMexResponse#of(byte[])}
-         * to hydrate the top-level {@code result} array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -882,20 +764,14 @@ public final class FetchNewsletterDirectorySearchResultsMexResponse implements M
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletters_directory_search} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletters_directory_search} root
      */
     private static Optional<FetchNewsletterDirectorySearchResultsMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

@@ -5,11 +5,13 @@ import java.util.Objects;
 /**
  * The typed service-area entry carried inside the {@code <service_areas/>} child of an {@link IqEditBusinessProfileRequest}.
  *
- * @apiNote
- * Use this entry to express one service area in the SMB profile editor: the free-text description names the region, the radius in meters defines the coverage circle, and the centre is the latitude and longitude of the circle's centre. The relay accepts multiple entries per profile so a merchant can express several disjoint coverage zones.
+ * <p>Each entry expresses one service area in the SMB profile editor: the free-text description names the region,
+ * the radius in meters defines the coverage circle, and the latitude and longitude give the circle centre. A profile
+ * may carry multiple entries so a merchant can express several disjoint coverage zones.
  *
  * @implNote
- * This implementation mirrors the wire shape produced by {@code WAWebBusinessProfileJob.editBusinessProfile}: the {@code <service_area/>} child stamps the description, the radius and a {@code <area_center>} pair carrying the latitude and longitude as decimal-string content.
+ * This implementation emits the {@code <service_area/>} child as the description, the radius and an {@code <area_center>}
+ * pair carrying the latitude and longitude as decimal-string content.
  */
 public final class IqEditBusinessProfileServiceArea {
     /**
@@ -33,10 +35,9 @@ public final class IqEditBusinessProfileServiceArea {
     private final double longitude;
 
     /**
-     * Constructs a typed area.
+     * Constructs a typed area from a description and a coverage geometry.
      *
-     * @apiNote
-     * Call this constructor with the description and the geometry; the description must be non-{@code null} because the relay rejects a {@code <service_area/>} child without a description.
+     * <p>The description must be non-{@code null} because the relay rejects a {@code <service_area/>} child without one.
      *
      * @param areaDescription the free-text description; never {@code null}
      * @param radius          the coverage radius in meters
@@ -52,10 +53,7 @@ public final class IqEditBusinessProfileServiceArea {
     }
 
     /**
-     * Returns the free-text area description.
-     *
-     * @apiNote
-     * Use this getter to render the per-area label in the SMB profile editor.
+     * Returns the free-text area description rendered as the per-area label in the SMB profile editor.
      *
      * @return the description; never {@code null}
      */
@@ -64,10 +62,7 @@ public final class IqEditBusinessProfileServiceArea {
     }
 
     /**
-     * Returns the coverage radius in meters.
-     *
-     * @apiNote
-     * Use this getter to render the per-area radius in the SMB profile editor; the value is the circle radius centred on the latitude and longitude pair.
+     * Returns the coverage radius in meters of the circle centred on the latitude and longitude pair.
      *
      * @return the radius in meters
      */
@@ -76,10 +71,7 @@ public final class IqEditBusinessProfileServiceArea {
     }
 
     /**
-     * Returns the centre latitude.
-     *
-     * @apiNote
-     * Use this getter to render the per-area centre on a map.
+     * Returns the centre latitude of the coverage circle.
      *
      * @return the latitude
      */
@@ -88,10 +80,7 @@ public final class IqEditBusinessProfileServiceArea {
     }
 
     /**
-     * Returns the centre longitude.
-     *
-     * @apiNote
-     * Use this getter to render the per-area centre on a map.
+     * Returns the centre longitude of the coverage circle.
      *
      * @return the longitude
      */

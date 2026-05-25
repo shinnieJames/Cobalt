@@ -30,25 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link SentinelHandler}'s parity with
- * {@code WAWebSentinelMutationSync.applyMutations} plus the outgoing
- * sentinel-mutation builder in {@code SentinelMutationFactory}.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that flips
- * the matched app-state-sync key's data timestamp to
- * {@link Instant#EPOCH}, the no-op branch when no stored key
- * matches the announced epoch, the malformed branch for missing or
- * wrong-typed values, the unsupported branch for non-{@code SET}
- * operations, the {@code applyMutationBatch} default per-item dispatch,
- * the default conflict-resolution tiebreaker, and the one-mutation-per-
- * collection emission shape of {@code SentinelMutationFactory}.
- *
- * @implNote
- * Tests seed sync keys via {@link SyncKeyUtils#buildKeyId(int, int)} so
- * the in-store key id layout matches what the production handler reads;
- * the matching predicate is exact so a single off-by-one epoch leaves
- * every stored key untouched.
+ * Verifies {@link SentinelHandler} and the outgoing builder in
+ * {@link SentinelMutationFactory}: applying an incoming sentinel mutation
+ * and asserting the app-state-sync key store side-effect. Tests seed sync
+ * keys via {@link SyncKeyUtils#buildKeyId(int, int)} so the in-store key id
+ * layout matches what the handler reads; the epoch match is exact, so an
+ * off-by-one epoch leaves every stored key untouched.
  */
 @DisplayName("SentinelHandler")
 class SentinelHandlerTest {
@@ -57,34 +44,13 @@ class SentinelHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so any
-     * seeded sync keys do not leak between cases.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Builds a trusted sentinel mutation carrying the given epoch and
-     * operation.
-     *
-     * @apiNote
-     * The boxed {@link Integer} epoch lets tests pass {@code null} to
-     * exercise the malformed-value branch where
-     * {@link KeyExpirationAction#expiredKeyEpoch()} is empty.
-     *
-     * @param epoch the {@code expiredKeyEpoch} carried by the action, or {@code null} to omit the field
-     * @param op    the mutation operation
-     * @param ts    the mutation timestamp (also used as the {@code SyncActionValue} timestamp)
-     * @return the trusted mutation
-     */
+    // A null epoch omits expiredKeyEpoch to drive the malformed-value branch.
     private static DecryptedMutation.Trusted sentinelMutation(Integer epoch, SyncdOperation op, Instant ts) {
         var action = new KeyExpirationActionBuilder().expiredKeyEpoch(epoch).build();
         var value = new SyncActionValueBuilder().timestamp(ts).keyExpirationAction(action).build();
@@ -92,40 +58,12 @@ class SentinelHandlerTest {
         return new DecryptedMutation.Trusted(index, value, op, ts, 3);
     }
 
-    /**
-     * Returns the WA-Web-compatible sync-key id byte string for the
-     * given device and epoch.
-     *
-     * @apiNote
-     * Centralizes the id layout so {@link #seedSyncKey(int, int)} and
-     * any future assertion agree on the bit-for-bit encoding.
-     *
-     * @param deviceId the registered device id
-     * @param epoch    the key epoch
-     * @return the sync-key id byte string
-     */
     private static byte[] syncKeyId(int deviceId, int epoch) {
         return SyncKeyUtils.buildKeyId(deviceId, epoch);
     }
 
-    /**
-     * Seeds a single app-state-sync key with the given device and
-     * epoch.
-     *
-     * @apiNote
-     * Used to set up the local key store before exercising the
-     * happy/no-match branches of
-     * {@link SentinelHandler#applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
-     *
-     * @implNote
-     * The seeded key carries a 32-byte zero buffer for {@code keyData}
-     * and the current instant as its data timestamp; the handler only
-     * mutates the timestamp on expiry, so any non-{@link Instant#EPOCH}
-     * value works as the "before" baseline.
-     *
-     * @param deviceId the registered device id
-     * @param epoch    the key epoch
-     */
+    // The seeded data timestamp is any non-EPOCH instant; the handler only
+    // flips it to EPOCH on expiry, so Instant.now() is a valid "before" baseline.
     private void seedSyncKey(int deviceId, int epoch) {
         var keyId = new AppStateSyncKeyIdBuilder().keyId(syncKeyId(deviceId, epoch)).build();
         var keyData = new AppStateSyncKeyDataBuilder()

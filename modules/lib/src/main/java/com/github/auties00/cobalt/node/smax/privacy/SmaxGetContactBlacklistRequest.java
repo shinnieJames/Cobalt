@@ -17,20 +17,17 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="privacy" type="get">} stanza that fetches a per-category contact-blacklist.
+ * Builds the outbound {@code <iq xmlns="privacy" type="get">} stanza that fetches a per-category contact-blacklist.
  *
- * @apiNote
- * Drives Settings > Account > Privacy for the Last Seen, About, Group-Add, and Profile-Picture surfaces; the
- * WA Web caller is {@code WAWebQueryPrivacyDisallowedListLidJob.queryPrivacyDisallowedListLid}, which maps a
- * {@code PrivacyDisallowedListType} to one of the four wire category names ({@code "last"}, {@code "status"},
- * {@code "groupadd"}, {@code "profile"}) and pairs it with
- * {@link SmaxGetContactBlacklistAddressingMode#LID} to drive the LID-migration sub-flow.
+ * <p>This stanza backs the Last-Seen, About, Group-Add, and Profile-Picture privacy surfaces. The caller maps a
+ * privacy-list type to one of the four wire category names ({@code "last"}, {@code "status"}, {@code "groupadd"},
+ * {@code "profile"}) and pairs it with an {@link SmaxGetContactBlacklistAddressingMode}; the
+ * {@link SmaxGetContactBlacklistAddressingMode#LID} mode drives the LID-migration sub-flow. The reply is parsed
+ * by {@link SmaxGetContactBlacklistResponse}.
  *
- * @implNote
- * This implementation collapses WA Web's {@code GetIQMixin} and the two
- * {@code GetContactBlacklistLID/PN} mixin arms into the single {@link #toNode()} below; the LID-versus-PN
- * disambiguation reduces to the single {@code addressing_mode} attribute on the inner {@code <privacy/>}
- * element.
+ * @implNote This implementation collapses the WA Web get-IQ mixin and the two LID and PN mixin arms into the
+ * single {@link #toNode()} below; the LID-versus-PN disambiguation reduces to the single {@code addressing_mode}
+ * attribute on the inner {@code <privacy/>} element.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPrivacyGetContactBlacklistRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPrivacyGetIQMixin")
@@ -43,9 +40,8 @@ public final class SmaxGetContactBlacklistRequest implements SmaxOperation.Reque
     /**
      * The wire-level privacy category name routed into the {@code <list name=...>} attribute.
      *
-     * @apiNote
-     * One of the four wire constants ({@code "last"}, {@code "status"}, {@code "groupadd"}, {@code "profile"})
-     * mapped from {@code WAWebSchemaPrivacyDisallowedList.PrivacyDisallowedListType} by the caller.
+     * <p>One of the four wire constants ({@code "last"}, {@code "status"}, {@code "groupadd"},
+     * {@code "profile"}).
      */
     private final String categoryName;
 
@@ -57,9 +53,9 @@ public final class SmaxGetContactBlacklistRequest implements SmaxOperation.Reque
     /**
      * Constructs a contact-blacklist request.
      *
-     * @apiNote
-     * The caller should pass {@link SmaxGetContactBlacklistAddressingMode#LID} to follow the WA Web LID
-     * migration path; the {@code PN} mode is the legacy fallback retained for pre-migration clients.
+     * <p>Pass {@link SmaxGetContactBlacklistAddressingMode#LID} to follow the LID migration path; the
+     * {@link SmaxGetContactBlacklistAddressingMode#PN} mode is the legacy fallback retained for pre-migration
+     * clients.
      *
      * @param categoryName   the wire category name; never {@code null}
      * @param addressingMode the addressing mode; never {@code null}
@@ -91,10 +87,9 @@ public final class SmaxGetContactBlacklistRequest implements SmaxOperation.Reque
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="privacy"} and
-     * {@code type="get"}; the {@code id} attribute is generated downstream by the central client dispatcher.
-     * The inner {@code <privacy><list value="contact_blacklist" name="..."/></privacy>} payload is fixed; the
+     * <p>The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="privacy"} and
+     * {@code type="get"}; the {@code id} attribute is generated downstream by the central client dispatcher. The
+     * inner {@code <privacy><list value="contact_blacklist" name="..."/></privacy>} payload is fixed; the
      * {@code addressing_mode="lid"} attribute is added only when the addressing mode is
      * {@link SmaxGetContactBlacklistAddressingMode#LID}.
      *
@@ -125,6 +120,12 @@ public final class SmaxGetContactBlacklistRequest implements SmaxOperation.Reque
                 .content(privacyNode);
     }
 
+    /**
+     * Compares this request with another for equality by category name and addressing mode.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxGetContactBlacklistRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -138,11 +139,21 @@ public final class SmaxGetContactBlacklistRequest implements SmaxOperation.Reque
                 && this.addressingMode == that.addressingMode;
     }
 
+    /**
+     * Returns a hash code derived from the category name and addressing mode.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(categoryName, addressingMode);
     }
 
+    /**
+     * Returns a debug representation carrying the category name and addressing mode.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxGetContactBlacklistRequest[categoryName=" + categoryName

@@ -26,63 +26,66 @@ import java.nio.channels.SeekableByteChannel;
 
 /**
  * Decodes a source audio stream and re-encodes it as a WhatsApp voice note
- * (16 kHz mono Opus inside an OGG container) plus the 64-byte amplitude
- * waveform that ships in the message protobuf.
+ * (mono Opus inside an OGG container) plus the amplitude waveform that ships
+ * in the message protobuf.
  *
- * @apiNote
- * Drives the voice-note branch of the upload transcoder. Mirrors the
- * encode profile WhatsApp's mobile recorders ship: Opus VOIP application,
- * {@value #PTT_BITRATE} bps, {@value #PTT_FRAME_MS} ms frames, mono,
- * 16 kHz sampling. The waveform is computed on the resampled PCM before
- * encoding.
+ * <p>This is the voice-note branch of the upload transcoder. The output mirrors
+ * the encode profile WhatsApp's mobile recorders ship: {@value #PTT_BITRATE} bps
+ * Opus, {@value #PTT_FRAME_MS} ms frames, mono, {@value #PTT_SAMPLE_RATE} Hz
+ * sampling. The waveform is computed by {@link WaveformGenerator} on the
+ * resampled PCM before encoding.
  *
  * @implNote
  * This implementation drives FFmpeg end-to-end: libavformat demux, libswresample
- * to {@code FLT} 16 kHz mono, libopus encode, libavformat OGG mux. The
- * resulting bytes are a complete OGG-Opus container with no embedded
- * timestamps or chapter markers. The waveform is built from a short[]
+ * to {@code FLT} {@value #PTT_SAMPLE_RATE} Hz mono, libopus encode, libavformat
+ * OGG mux. The resulting bytes are a complete OGG-Opus container with no embedded
+ * timestamps or chapter markers. The waveform is built from a {@code short[]}
  * quantisation of the same resampled buffer.
  *
  * @see WaveformGenerator
  */
 public final class PttPipeline {
     /**
-     * Target sample rate for the encoded voice note in Hz. Matches the
-     * mobile recorders' wire-format profile.
+     * Holds the target sample rate for the encoded voice note in Hz, matching
+     * the mobile recorders' wire-format profile.
      */
     private static final int PTT_SAMPLE_RATE = 16_000;
 
     /**
-     * Target channel count for the encoded voice note (mono).
+     * Holds the target channel count for the encoded voice note (mono).
      */
     private static final int PTT_CHANNELS = 1;
 
     /**
-     * Target bitrate for the encoded voice note in bits per second.
+     * Holds the target bitrate for the encoded voice note in bits per second.
      */
     private static final int PTT_BITRATE = 16_000;
 
     /**
-     * Frame duration in milliseconds; Opus accepts 5/10/20/40/60 ms and
-     * {@code 20} matches the mobile recorders' default.
+     * Holds the frame duration in milliseconds.
+     *
+     * @implNote
+     * This implementation uses {@code 20} because Opus accepts only 5, 10, 20,
+     * 40, or 60 ms frames and {@code 20} matches the mobile recorders' default.
      */
     private static final int PTT_FRAME_MS = 20;
 
     /**
-     * Frame size in samples at {@link #PTT_SAMPLE_RATE} for a
+     * Holds the frame size in samples at {@link #PTT_SAMPLE_RATE} for a
      * {@link #PTT_FRAME_MS}-millisecond frame.
      */
     private static final int PTT_FRAME_SAMPLES = PTT_SAMPLE_RATE * PTT_FRAME_MS / 1000;
 
     /**
-     * The {@code AV_CH_LAYOUT_MONO} constant value from
+     * Holds the {@code AV_CH_LAYOUT_MONO} constant value from
      * {@code <libavutil/channel_layout.h>}.
      */
     private static final long AV_CH_LAYOUT_MONO = 0x4L;
 
     /**
-     * Constructs the pipeline; the parent
-     * {@link MediaTranscoderService} owns the single instance.
+     * Constructs the pipeline.
+     *
+     * <p>The parent {@link MediaTranscoderService} owns the single instance.
      */
     public PttPipeline() {
     }
@@ -92,13 +95,18 @@ public final class PttPipeline {
      * applies codec-derived metadata to {@code provider}, and returns the
      * encoded payload stream.
      *
-     * @apiNote
-     * Mutates the provider in place: when {@code provider} is an
-     * {@link AudioMessage} the {@code mimetype}, {@code mediaSize},
-     * {@code seconds}, and {@code waveform} fields are populated and
-     * {@code ptt} is set to {@code true}; every other
-     * {@link MediaProvider} variant receives only the common
-     * {@code mediaSize} update.
+     * <p>Decodes and resamples the source to {@value #PTT_SAMPLE_RATE} Hz mono,
+     * generates the amplitude waveform from the resampled PCM, and encodes the
+     * PCM as OGG-Opus. The provider is mutated in place: when {@code provider}
+     * is an {@link AudioMessage} the
+     * {@link AudioMessage#setMimetype(String) mimetype},
+     * {@link MediaProvider#setMediaSize(long) mediaSize},
+     * {@link AudioMessage#setSeconds(Integer) seconds}, and
+     * {@link AudioMessage#setWaveform(byte[]) waveform} fields are populated and
+     * {@link AudioMessage#setPtt(Boolean) ptt} is set to {@code true}; every
+     * other {@link MediaProvider} variant receives only the common
+     * {@link MediaProvider#setMediaSize(long) mediaSize} update. The reported
+     * duration is clamped to a minimum of one second.
      *
      * @param provider the upload target; codec-derived fields are applied
      *                 to this instance
@@ -320,11 +328,16 @@ public final class PttPipeline {
      * Encodes the resampled PCM as an OGG-Opus container into a growing
      * heap buffer and returns the accumulated bytes.
      *
-     * @apiNote
-     * Voice notes are KB-scale (16 kbps Opus); the heap buffer never
-     * climbs above sub-MB so the buffer cost is invisible against
-     * concurrent uploads. OGG never backseeks during mux, so the
-     * heap-backed bridge is the optimal sink shape.
+     * <p>The PCM is split into {@link #PTT_FRAME_SAMPLES}-sample frames,
+     * zero-padded on the final partial frame, fed to libopus, and interleaved
+     * into the OGG muxer. A heap-backed output bridge is used because voice
+     * notes are KB-scale at {@value #PTT_BITRATE} bps Opus, so the buffer never
+     * climbs above sub-MB and its cost is negligible against concurrent uploads.
+     *
+     * @implNote
+     * This implementation backs the output bridge with a heap buffer rather
+     * than a temporary file because the OGG muxer writes strictly forward and
+     * never backseeks during muxing, so no seekable sink is required.
      *
      * @param arena the shared arena owning the output bridge
      * @param pcm   the float PCM samples at {@link #PTT_SAMPLE_RATE}
@@ -554,32 +567,33 @@ public final class PttPipeline {
     }
 
     /**
-     * Append-only growable float buffer used to accumulate resampled PCM.
+     * Accumulates resampled PCM in an append-only growable primitive float
+     * buffer.
      *
-     * @apiNote
-     * The voice-note pipeline does not know the source duration in advance
-     * so the resampled buffer needs to grow as the demuxer delivers
-     * frames. {@link java.util.ArrayList} of boxed floats would work but
-     * the autoboxing cost dominates for typical voice-note lengths; this
-     * helper trades the boxing for a small amortised resize cost.
+     * <p>The voice-note pipeline does not know the source duration in advance,
+     * so the resampled buffer must grow as the demuxer delivers frames. A
+     * {@link java.util.ArrayList} of boxed floats would work, but the
+     * autoboxing cost dominates for typical voice-note lengths; this helper
+     * trades the boxing for a small amortised resize cost.
      *
      * @implNote
-     * The capacity doubles each time the buffer fills up; final
-     * {@link #toArray()} compacts to the exact size.
+     * This implementation doubles the backing-array capacity each time the
+     * buffer fills, and {@link #toArray()} compacts to the exact size on
+     * extraction.
      */
     private static final class GrowingFloatBuffer {
         /**
-         * Initial capacity in floats.
+         * Holds the initial capacity in floats.
          */
         private static final int INITIAL_CAPACITY = 4096;
 
         /**
-         * Current backing array.
+         * Holds the current backing array.
          */
         private float[] data = new float[INITIAL_CAPACITY];
 
         /**
-         * Number of populated elements.
+         * Holds the number of populated elements.
          */
         private int size;
 

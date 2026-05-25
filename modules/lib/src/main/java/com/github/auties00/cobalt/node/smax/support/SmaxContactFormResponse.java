@@ -13,22 +13,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound replies to {@link SmaxContactFormRequest}, modelling the three
- * outcomes WA Web's {@code WASmaxSupportContactFormRPC.sendContactFormRPC} switches between:
- * accepted submission, retryable back-pressure, and final rejection.
+ * Models the three documented replies to a {@link SmaxContactFormRequest}.
  *
- * @apiNote
- * Drives the WhatsApp "Help" / "Contact us" submit-result UI; the user-facing acknowledgement
- * text, ticket id and routing group JID surface in {@link ContactFormResponseSuccess}, while a
- * non-zero error code surfaces in {@link ContactFormResponseRetryableError} or
- * {@link ContactFormResponseError} so the caller can re-render the form or banner an error.
+ * <p>The sealed family enumerates the accepted-submission outcome
+ * ({@link ContactFormResponseSuccess}), the retryable back-pressure outcome
+ * ({@link ContactFormResponseRetryableError}) and the final-rejection outcome
+ * ({@link ContactFormResponseError}). The accepted variant surfaces the acknowledgement text,
+ * ticket id and routing group JID; the two error variants surface a numeric error code so the
+ * caller can re-render the form or banner an error.
  *
  * @implNote
- * This implementation matches WA Web's parser order: {@link ContactFormResponseSuccess} first,
- * then {@link ContactFormResponseRetryableError}, then {@link ContactFormResponseError}. The
- * three parsers are mutually exclusive so the first match wins; an inbound stanza that fails
- * all three returns an empty {@link Optional} instead of WA Web's {@code SmaxParsingFailure}
- * (Cobalt callers surface the parse miss themselves).
+ * This implementation parses in the order {@link ContactFormResponseSuccess},
+ * {@link ContactFormResponseRetryableError}, {@link ContactFormResponseError}, the first match
+ * wins. An inbound stanza matching none of the three yields an empty {@link Optional} rather than
+ * raising a parse failure; the caller surfaces the miss.
  */
 public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         permits SmaxContactFormResponse.ContactFormResponseSuccess,
@@ -36,19 +34,16 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         SmaxContactFormResponse.ContactFormResponseError {
 
     /**
-     * Parses the inbound contact-form reply against each {@link SmaxContactFormResponse} variant
-     * and returns the first that matches.
+     * Parses the inbound contact-form reply against each variant and returns the first that
+     * matches.
      *
-     * @apiNote
-     * Use after the relay's IQ arrives in response to a {@link SmaxContactFormRequest}; an empty
-     * {@link Optional} means the inbound stanza did not fit any of the three documented shapes.
+     * <p>An empty result means the inbound stanza did not fit any of the three documented shapes.
      *
      * @implNote
-     * This implementation collapses WA Web's three sequential
-     * {@code parse*Success.success}/{@code parse*Error.success} checks into the
-     * {@code ContactFormResponseSuccess} / {@code ContactFormResponseRetryableError} /
-     * {@code ContactFormResponseError} short-circuit chain; no parse exception is raised on
-     * total miss.
+     * This implementation short-circuits across {@link ContactFormResponseSuccess#of(Node, Node)},
+     * {@link ContactFormResponseRetryableError#of(Node, Node)} and
+     * {@link ContactFormResponseError#of(Node, Node)}; no parse exception is raised on a total
+     * miss.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the originating outbound stanza; never {@code null}
@@ -73,63 +68,41 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
     }
 
     /**
-     * Accepted-submission variant carrying the acknowledgement text, ticket id and routing group
-     * JID surfaced to the user.
+     * Carries the acknowledgement text, ticket id and routing group JID of an accepted
+     * contact-form submission.
      *
-     * @apiNote
-     * Drives the "ticket created" banner: {@link #responseMessageElementValue()} is the body,
-     * {@link #responseTicketIdElementValue()} is the follow-up id, and
-     * {@link #responseGroupJidElementValue()} names the support routing group.
-     *
-     * @implNote
-     * This implementation mirrors the {@code WASmaxInSupportContactFormResponseSuccess} schema:
-     * the outer {@code <iq type="result"/>} envelope's id must equal the originating request id,
-     * and the {@code <response status="ok">} child must carry {@code <message/>},
-     * {@code <ticket_id/>} and {@code <group_jid/>} text children.
+     * <p>The {@code <iq type="result">} envelope's id equals the originating request id, and its
+     * {@code <response status="ok">} child supplies the {@code <message/>}, {@code <ticket_id/>}
+     * and {@code <group_jid/>} text children surfaced here.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSupportContactFormResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInSupportHackBaseIQResultResponseMixin")
     final class ContactFormResponseSuccess implements SmaxContactFormResponse {
         /**
-         * The literal {@code "ok"} status echoed by the relay's {@code <response/>} child.
-         *
-         * @apiNote
-         * Surfaces the response-envelope discriminator; carried as a constant for parity with
-         * WA Web's parser output.
+         * Holds the literal {@code "ok"} status echoed by the {@code <response/>} child.
          */
         private final String responseStatus;
 
         /**
-         * The acknowledgement message body shown to the user.
-         *
-         * @apiNote
-         * The text of the {@code <message/>} child under {@code <response/>}.
+         * Holds the acknowledgement message body shown to the user, the text of the
+         * {@code <message/>} child.
          */
         private final String responseMessageElementValue;
 
         /**
-         * The opaque ticket id assigned by the relay for follow-up correspondence.
-         *
-         * @apiNote
-         * The text of the {@code <ticket_id/>} child under {@code <response/>}.
+         * Holds the opaque ticket id assigned for follow-up correspondence, the text of the
+         * {@code <ticket_id/>} child.
          */
         private final String responseTicketIdElementValue;
 
         /**
-         * The routing group JID that the support backend assigned to the case.
-         *
-         * @apiNote
-         * The text of the {@code <group_jid/>} child under {@code <response/>}; surfaces the
-         * group thread the user can post follow-up messages to.
+         * Holds the routing group JID the support backend assigned, the text of the
+         * {@code <group_jid/>} child.
          */
         private final String responseGroupJidElementValue;
 
         /**
          * Constructs a successful-submission reply from the parsed fields.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code <response status="ok">} envelope
-         * validated; manual construction is rarely useful outside tests.
          *
          * @param responseStatus               the response status; never {@code null}
          * @param responseMessageElementValue  the acknowledgement text; never {@code null}
@@ -151,11 +124,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the response status.
-         *
-         * @apiNote
-         * Always {@code "ok"} for this variant; surfaced verbatim for parity with WA Web's
-         * payload shape.
+         * Returns the response status, always {@code "ok"} for this variant.
          *
          * @return the status; never {@code null}
          */
@@ -164,10 +133,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the acknowledgement text.
-         *
-         * @apiNote
-         * The user-visible message rendered into the submit-success banner.
+         * Returns the acknowledgement text rendered into the submit-success banner.
          *
          * @return the text; never {@code null}
          */
@@ -176,11 +142,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the ticket id.
-         *
-         * @apiNote
-         * The opaque handle the support backend assigns; used for any subsequent follow-up
-         * correspondence.
+         * Returns the ticket id used for subsequent follow-up correspondence.
          *
          * @return the id; never {@code null}
          */
@@ -189,10 +151,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the routing group JID.
-         *
-         * @apiNote
-         * Names the support group the user can post follow-up messages to.
+         * Returns the routing group JID the user can post follow-up messages to.
          *
          * @return the JID; never {@code null}
          */
@@ -203,9 +162,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         /**
          * Tries to parse an inbound stanza as a {@link ContactFormResponseSuccess}.
          *
-         * @apiNote
-         * Returns empty when any of the structural preconditions fail; use the parent
-         * {@link SmaxContactFormResponse#of(Node, Node)} to walk all three variants.
+         * <p>Returns empty when any structural precondition fails.
          *
          * @implNote
          * This implementation validates the IQ envelope ({@code description="iq"},
@@ -266,6 +223,12 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
                     ticketIdValue, groupJidValue));
         }
 
+        /**
+         * Compares this variant to another for value equality across all fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal {@link ContactFormResponseSuccess}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -281,12 +244,22 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
                     && Objects.equals(this.responseGroupJidElementValue, that.responseGroupJidElementValue);
         }
 
+        /**
+         * Returns a hash code derived from all fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(responseStatus, responseMessageElementValue,
                     responseTicketIdElementValue, responseGroupJidElementValue);
         }
 
+        /**
+         * Returns a debug string listing every field.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxContactFormResponse.ContactFormResponseSuccess[responseStatus="
@@ -298,43 +271,31 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
     }
 
     /**
-     * Retryable-back-pressure variant carrying a numeric error code and an optional retry-after
+     * Carries a transient relay refusal with a numeric error code and an optional retry-after
      * timestamp.
      *
-     * @apiNote
-     * Surfaces a transient relay refusal; the UI is expected to schedule a retry no earlier than
-     * {@link #responseNextRetryTs()} (in epoch seconds) when present.
+     * <p>The caller is expected to schedule a retry no earlier than {@link #responseNextRetryTs()}
+     * (epoch seconds) when that value is present.
      *
      * @implNote
      * This implementation accepts any numeric {@code error_code} attribute on the
-     * {@code <response>} child; WA Web does not validate the code value at parse time so neither
-     * does this code path.
+     * {@code <response>} child; the code value is not validated at parse time.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSupportContactFormResponseRetryableError")
     final class ContactFormResponseRetryableError implements SmaxContactFormResponse {
         /**
-         * The {@code error_code} attribute echoed by the {@code <response/>} child.
-         *
-         * @apiNote
-         * Surfaces the relay's classification of the transient refusal.
+         * Holds the {@code error_code} attribute echoed by the {@code <response/>} child.
          */
         private final int responseErrorCode;
 
         /**
-         * The optional {@code next_retry_ts} attribute (Unix epoch seconds, text-encoded).
-         *
-         * @apiNote
-         * Carries the earliest moment at which the caller is expected to retry; absent when the
-         * relay does not pin a retry floor.
+         * Holds the optional {@code next_retry_ts} attribute (Unix epoch seconds, text-encoded),
+         * or {@code null} when the relay does not pin a retry floor.
          */
         private final String responseNextRetryTs;
 
         /**
          * Constructs a retryable-error reply from the parsed fields.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code <response error_code=.../>}
-         * attribute validated; manual construction is rarely useful outside tests.
          *
          * @param responseErrorCode   the error code echoed by the relay
          * @param responseNextRetryTs the optional retry-after timestamp; may be {@code null}
@@ -347,9 +308,6 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         /**
          * Returns the error code echoed by the {@code <response/>} child.
          *
-         * @apiNote
-         * Surfaces the relay's transient-refusal classification.
-         *
          * @return the code
          */
         public int responseErrorCode() {
@@ -357,11 +315,9 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the optional retry-after timestamp (Unix epoch seconds).
+         * Returns the optional retry-after timestamp in Unix epoch seconds.
          *
-         * @apiNote
-         * Empty when the relay did not pin a retry floor; otherwise the earliest moment a retry
-         * should be attempted.
+         * <p>Empty when the relay did not pin a retry floor.
          *
          * @return an {@link Optional} carrying the timestamp text, or empty when omitted
          */
@@ -372,15 +328,14 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         /**
          * Tries to parse an inbound stanza as a {@link ContactFormResponseRetryableError}.
          *
-         * @apiNote
-         * Returns empty when the IQ envelope does not match or when the {@code <response/>}
+         * <p>Returns empty when the IQ envelope does not match or when the {@code <response/>}
          * child lacks an {@code error_code} attribute.
          *
          * @implNote
          * This implementation validates the IQ envelope identically to
-         * {@link ContactFormResponseSuccess#of(Node, Node)} and then reads
-         * {@code error_code}/{@code next_retry_ts} from the {@code <response/>} attributes
-         * (no {@code <message/>} text body is required).
+         * {@link ContactFormResponseSuccess#of(Node, Node)} then reads
+         * {@code error_code}/{@code next_retry_ts} from the {@code <response/>} attributes; no
+         * {@code <message/>} text body is required.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound request
@@ -412,6 +367,13 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
             return Optional.of(new ContactFormResponseRetryableError(errorCode.getAsInt(), nextRetryTs));
         }
 
+        /**
+         * Compares this variant to another for value equality across all fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal
+         *         {@link ContactFormResponseRetryableError}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -425,11 +387,21 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
                     && Objects.equals(this.responseNextRetryTs, that.responseNextRetryTs);
         }
 
+        /**
+         * Returns a hash code derived from all fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(responseErrorCode, responseNextRetryTs);
         }
 
+        /**
+         * Returns a debug string listing every field.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxContactFormResponse.ContactFormResponseRetryableError[responseErrorCode="
@@ -439,20 +411,17 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
     }
 
     /**
-     * Final-rejection variant carrying one of the three documented client/server error codes
-     * ({@code 400} bad-request, {@code 475} notice-required, {@code 500} internal-server-error).
+     * Carries a non-retryable rejection with one of three documented error codes:
+     * {@code 400} bad-request, {@code 475} notice-required, or {@code 500}
+     * internal-server-error.
      *
-     * @apiNote
-     * Surfaces a non-retryable rejection that the UI is expected to render as an error banner;
-     * for {@code 475} the carried {@link #tosVersion()} drives the "accept new ToS" prompt
-     * before resubmission becomes possible.
+     * <p>The caller renders an error banner. For {@code 475}, {@link #tosVersion()} drives the
+     * "accept new ToS" prompt that must complete before resubmission becomes possible.
      *
      * @implNote
-     * This implementation projects WA Web's mutually exclusive
-     * {@code IQErrorBadRequestMixin}/{@code IQErrorNoticeRequiredMixin}/{@code IQErrorInternalServerErrorMixin}
-     * into a single concrete class indexed by the {@code (code, text)} pair; the {@code 475}
-     * branch additionally reads {@code tos_version} from the {@code <error/>} child and clamps
-     * it to {@code [1, 65535]}.
+     * This implementation projects the three mutually exclusive WA Web error mixins into a single
+     * concrete class indexed by the {@code (code, text)} pair; the {@code 475} branch reads
+     * {@code tos_version} from the {@code <error/>} child and clamps it to {@code [1, 65535]}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSupportContactFormResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInSupportContactFormError")
@@ -461,41 +430,26 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
     @WhatsAppWebModule(moduleName = "WASmaxInSupportIQErrorInternalServerErrorMixin")
     final class ContactFormResponseError implements SmaxContactFormResponse {
         /**
-         * The numeric error code from the {@code <error/>} envelope ({@code 400}, {@code 475} or
-         * {@code 500}).
-         *
-         * @apiNote
-         * Surfaces the documented disjunction WA Web validates against.
+         * Holds the numeric error code from the {@code <error/>} envelope ({@code 400},
+         * {@code 475} or {@code 500}).
          */
         private final int errorCode;
 
         /**
-         * The error text paired with {@link #errorCode}
-         * ({@code "bad-request"} / {@code "notice-required"} /
-         * {@code "internal-server-error"}).
-         *
-         * @apiNote
-         * Surfaces the parity-checked text from the envelope; {@code null} only after manual
-         * construction with a {@code null} value.
+         * Holds the error text paired with {@link #errorCode}
+         * ({@code "bad-request"}, {@code "notice-required"} or {@code "internal-server-error"}),
+         * or {@code null} after manual construction with a {@code null} value.
          */
         private final String errorText;
 
         /**
-         * The {@code tos_version} attribute carried only by the {@code 475 notice-required}
-         * sub-variant.
-         *
-         * @apiNote
-         * Drives the "accept new ToS" prompt; {@code null} for the {@code 400} and {@code 500}
-         * cases.
+         * Holds the {@code tos_version} attribute carried only by the {@code 475 notice-required}
+         * sub-variant, or {@code null} for the {@code 400} and {@code 500} cases.
          */
         private final Integer tosVersion;
 
         /**
          * Constructs an error reply from the parsed fields.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code (code, text)} pair matched one of
-         * the three documented combinations; manual construction is rarely useful outside tests.
          *
          * @param errorCode  the numeric code
          * @param errorText  the optional error text; may be {@code null}
@@ -508,11 +462,8 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * One of {@code 400}, {@code 475} or {@code 500} when produced by
-         * {@link #of(Node, Node)}.
+         * Returns the numeric error code, one of {@code 400}, {@code 475} or {@code 500} when
+         * produced by {@link #of(Node, Node)}.
          *
          * @return the code
          */
@@ -523,8 +474,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         /**
          * Returns the optional error text.
          *
-         * @apiNote
-         * Empty only when a caller explicitly constructed the variant with a {@code null} text;
+         * <p>Empty only when a caller constructed the variant with a {@code null} text;
          * {@link #of(Node, Node)} always emits a non-{@code null} value.
          *
          * @return an {@link Optional} carrying the text, or empty when omitted
@@ -537,9 +487,7 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
          * Returns the optional {@code tos_version} carried by the {@code 475 notice-required}
          * variant.
          *
-         * @apiNote
-         * Surfaces the new ToS revision the user must accept before resubmitting; empty for the
-         * {@code 400} and {@code 500} cases.
+         * <p>Empty for the {@code 400} and {@code 500} cases.
          *
          * @return an {@link Optional} carrying the version, or empty when the error is not
          *         {@code notice-required}
@@ -551,14 +499,12 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
         /**
          * Tries to parse an inbound stanza as a {@link ContactFormResponseError}.
          *
-         * @apiNote
-         * Returns empty when the {@code (code, text)} pair does not match one of the three
-         * documented combinations; use {@link SmaxContactFormResponse#of(Node, Node)} to walk
-         * all three response variants.
+         * <p>Returns empty when the {@code (code, text)} pair does not match one of the three
+         * documented combinations.
          *
          * @implNote
-         * This implementation delegates IQ-envelope validation and {@code <error/>} extraction
-         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} (4xx) and
+         * This implementation delegates IQ-envelope validation and {@code <error/>} extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} (4xx) and
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} (5xx). The {@code 475}
          * branch reads {@code tos_version} from the {@code <error/>} child and discards it when
          * outside {@code [1, 65535]}.
@@ -600,6 +546,12 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
             return Optional.of(new ContactFormResponseError(code, text, tosVersion));
         }
 
+        /**
+         * Compares this variant to another for value equality across all fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal {@link ContactFormResponseError}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -614,11 +566,21 @@ public sealed interface SmaxContactFormResponse extends SmaxOperation.Response
                     && Objects.equals(this.tosVersion, that.tosVersion);
         }
 
+        /**
+         * Returns a hash code derived from all fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText, tosVersion);
         }
 
+        /**
+         * Returns a debug string listing every field.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxContactFormResponse.ContactFormResponseError[errorCode=" + errorCode

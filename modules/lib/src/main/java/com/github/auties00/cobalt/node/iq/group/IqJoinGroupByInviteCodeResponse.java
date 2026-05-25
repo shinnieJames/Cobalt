@@ -12,27 +12,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound reply variants the relay produces in
- * response to an {@link IqJoinGroupByInviteCodeRequest}.
+ * Models the sealed family of inbound reply variants the relay produces in response to an {@link IqJoinGroupByInviteCodeRequest}.
  *
- * @apiNote
- * After dispatching the join request, pattern-match the returned
- * variant: {@link Success} carries the group JID and a flag
- * indicating whether the caller was admitted immediately or queued
- * for moderator approval; {@link UnexpectedJoinShape} surfaces a
- * mismatch between the caller's expected gating mode and the relay's
- * actual reply shape; and {@link ClientError} / {@link ServerError}
- * surface envelope-level rejections (typically {@code 401} for an
- * expired/revoked code, {@code 403} for a banned caller, or
- * {@code 404} for a deleted group).
+ * <p>After dispatching the join request, callers pattern-match the returned variant.
+ * {@link Success} carries the group JID and a flag indicating whether the caller was admitted
+ * immediately or queued for moderator approval; {@link UnexpectedJoinShape} surfaces a mismatch
+ * between the caller's expected gating mode and the relay's actual reply shape; and
+ * {@link ClientError} / {@link ServerError} surface envelope-level rejections, typically
+ * {@code 401} for an expired or revoked code, {@code 403} for a banned caller, or {@code 404} for
+ * a deleted group.
  *
  * @implNote
- * This implementation collapses WA Web's
- * {@code joinGroupViaInviteParser} return shape plus the
- * {@code UnexpectedJoinGroupViaInviteResponse} exception thrown
- * inside the parser into a single sealed sum, so callers can
- * pattern-match a closed set of variants instead of catching a
- * sibling exception.
+ * This implementation collapses the join parser's return shape plus the unexpected-shape error it
+ * would otherwise throw into a single sealed sum, so callers pattern-match a closed set of variants
+ * instead of catching a sibling exception.
  */
 @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
 public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Response
@@ -40,25 +33,17 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
                 IqJoinGroupByInviteCodeResponse.ClientError, IqJoinGroupByInviteCodeResponse.ServerError {
 
     /**
-     * Tries each {@link IqJoinGroupByInviteCodeResponse} variant in
-     * priority order and returns the first that parses cleanly.
+     * Tries each {@link IqJoinGroupByInviteCodeResponse} variant in priority order and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Use this when dispatching through the typed {@link IqOperation}
-     * pipeline; the dispatcher hands the inbound {@link Node}
-     * together with the original outbound request so that the parser
-     * can correlate echoed identifiers and approval-mode expectations.
-     * Returns {@link Optional#empty()} when none of the documented
-     * shapes match, which the caller should treat as an unknown
-     * server reply and surface up.
+     * <p>The dispatcher hands the inbound {@link Node} together with the original outbound request
+     * so that the parser can correlate echoed identifiers and approval-mode expectations. Returns
+     * {@link Optional#empty()} when none of the documented shapes match, which the caller should
+     * treat as an unknown server reply and surface up.
      *
      * @implNote
-     * This implementation tries {@link Success} first, then
-     * {@link UnexpectedJoinShape}, then {@link ClientError}, then
-     * {@link ServerError}; the order matches WA Web's parser where
-     * the expected gating mode is asserted before the unexpected-shape
-     * branch is taken, and where the result branch is always
-     * inspected before the error envelope.
+     * This implementation tries {@link Success} first, then {@link UnexpectedJoinShape}, then
+     * {@link ClientError}, then {@link ServerError}, asserting the result branch before any error
+     * envelope is inspected.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza used to validate echoed identifiers; never {@code null}
@@ -87,44 +72,34 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant.
+     * Models the success reply variant carrying the joined group and its gating outcome.
      *
-     * @apiNote
-     * Carries the group {@link Jid} the caller joined (or whose
-     * approval was queued) and the
-     * {@link #isMembershipApprovalPending()} flag that discriminates
-     * the two paths: {@code true} means the request is queued for
-     * moderator approval and the caller is not yet a member,
-     * {@code false} means the caller is already in. WA Web's
-     * {@code WAWebGroupInviteAction.joinGroupViaInvite} immediately
-     * follows up with a {@code findOrCreateLatestChat} call on the
-     * returned JID, which Cobalt callers should mirror to surface
-     * the new chat in the user's chat list.
+     * <p>Carries the group {@link Jid} the caller joined (or whose approval was queued) and the
+     * {@link #isMembershipApprovalPending()} flag that discriminates the two paths: {@code true}
+     * means the request is queued for moderator approval and the caller is not yet a member,
+     * {@code false} means the caller is already in. Callers typically follow up by locating or
+     * creating the chat for the returned JID so the new chat surfaces in the user's chat list.
      *
      * @implNote
-     * This implementation projects WA Web's
-     * {@code joinGroupViaInviteParser} success shape ({@code {gid}})
-     * plus the explicit {@code membership_approval_request} vs
-     * {@code group} child discriminator into a typed pair of
-     * accessors.
+     * This implementation projects the join parser's success shape plus the explicit
+     * {@code membership_approval_request} versus {@code group} child discriminator into a typed
+     * pair of accessors.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class Success implements IqJoinGroupByInviteCodeResponse {
         /**
-         * The group JID the caller joined or whose membership
-         * approval was queued.
+         * Holds the group JID the caller joined or whose membership approval was queued.
          */
         private final Jid groupJid;
 
         /**
-         * {@code true} when the entry is queued for moderator
-         * approval, {@code false} when the caller is already
-         * admitted.
+         * Holds {@code true} when the entry is queued for moderator approval, {@code false} when
+         * the caller is already admitted.
          */
         private final boolean membershipApprovalPending;
 
         /**
-         * Constructs a {@link Success} reply.
+         * Constructs a success reply.
          *
          * @param groupJid                  the group {@link Jid}; never {@code null}
          * @param membershipApprovalPending {@code true} when the entry is queued for approval
@@ -154,27 +129,18 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqJoinGroupByInviteCodeResponse#of(Node, Node)};
-         * this factory is exposed so callers can short-circuit when
-         * they already know the wire shape is a success.
+         * <p>Callers normally reach this through
+         * {@link IqJoinGroupByInviteCodeResponse#of(Node, Node)}; this factory is exposed so
+         * callers can short-circuit when they already know the wire shape is a success.
          *
          * @implNote
-         * This implementation matches WA Web's
-         * {@code joinGroupViaInviteParser} assertions: it requires
-         * the IQ to be a {@code result} sent {@code from="g.us"}, then
-         * tries the {@code <group>} child first (open-join shape) and
-         * falls back to the {@code <membership_approval_request>}
-         * child (approval-gated shape). Either branch reads the JID
-         * from the child's {@code jid} attribute. The branch order
-         * here differs from WA Web's parser, which switches on the
-         * caller's expected mode; Cobalt instead tries the expected
-         * branch as part of dispatch and lets
-         * {@link UnexpectedJoinShape} surface mismatches.
+         * This implementation requires the IQ to be a {@code result} sent {@code from="g.us"}, then
+         * tries the {@code <group>} child first (open-join shape) and falls back to the
+         * {@code <membership_approval_request>} child (approval-gated shape); either branch reads
+         * the JID from the child's {@code jid} attribute. The branch order is independent of the
+         * caller's expected mode, leaving {@link UnexpectedJoinShape} to surface mismatches.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -210,6 +176,15 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
             return Optional.empty();
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #groupJid()} and the same
+         * {@link #isMembershipApprovalPending()} flag.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -223,11 +198,21 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
                     && Objects.equals(this.groupJid, that.groupJid);
         }
 
+        /**
+         * Returns a hash code derived from the group JID and approval flag.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(groupJid, membershipApprovalPending);
         }
 
+        /**
+         * Returns a debug string describing the group JID and approval flag.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqJoinGroupByInviteCodeResponse.Success[groupJid=" + groupJid
@@ -236,44 +221,33 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code UnexpectedJoinShape} reply variant.
+     * Models the reply variant for a gating mode that differs from the caller's expectation.
      *
-     * @apiNote
-     * Fires when the relay admits the caller through a different
-     * gating mode than the request signalled via
-     * {@link IqJoinGroupByInviteCodeRequest#expectsMembershipApproval()};
-     * the upstream UI typically treats this as a soft-fail and
-     * re-fetches the group metadata before re-rendering. Carries
-     * both the actual group {@link Jid} the relay returned and the
-     * actual gating mode the relay used, so callers can correct
-     * their cached view of the group without issuing a second
-     * round trip.
+     * <p>Fires when the relay admits the caller through a different gating mode than the request
+     * signalled via {@link IqJoinGroupByInviteCodeRequest#expectsMembershipApproval()}. Carries
+     * both the actual group {@link Jid} the relay returned and the actual gating mode the relay
+     * used, so callers can correct their cached view of the group without issuing a second round
+     * trip.
      *
      * @implNote
-     * This implementation models the WA Web
-     * {@code UnexpectedJoinGroupViaInviteResponse} custom error
-     * thrown by {@code joinGroupViaInviteParser} when the
-     * actually-present child differs from the caller's expected
-     * child. Unlike WA Web (which raises an exception out of the
-     * parser), Cobalt surfaces this as a sealed variant the caller
-     * pattern-matches on.
+     * This implementation surfaces as a sealed variant the case that would otherwise be raised as a
+     * parser exception when the present child differs from the caller's expected child.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class UnexpectedJoinShape implements IqJoinGroupByInviteCodeResponse {
         /**
-         * The group JID parsed from the alternate child.
+         * Holds the group JID parsed from the alternate child.
          */
         private final Jid groupJid;
 
         /**
-         * {@code true} when the relay actually returned a
-         * {@code <membership_approval_request>}, {@code false} when
-         * it returned a {@code <group>}.
+         * Holds {@code true} when the relay actually returned a
+         * {@code <membership_approval_request>}, {@code false} when it returned a {@code <group>}.
          */
         private final boolean actualMembershipApprovalPending;
 
         /**
-         * Constructs an {@link UnexpectedJoinShape} reply.
+         * Constructs an unexpected-shape reply.
          *
          * @param groupJid                        the group {@link Jid}; never {@code null}
          * @param actualMembershipApprovalPending the actual gating mode used by the relay
@@ -305,26 +279,17 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
         /**
          * Returns {@link Optional#empty()} unconditionally.
          *
-         * @apiNote
-         * Detecting the unexpected-shape case requires comparing the
-         * inbound reply against the caller's expected gating mode,
-         * which is not available from the wire {@link Node} alone.
-         * The dispatcher therefore constructs this variant directly
-         * by comparing {@link Success#isMembershipApprovalPending()}
-         * against
-         * {@link IqJoinGroupByInviteCodeRequest#expectsMembershipApproval()};
-         * this static factory exists so the parser fall-through chain
-         * stays symmetric with the other sibling variants.
+         * <p>Detecting the unexpected-shape case requires comparing the inbound reply against the
+         * caller's expected gating mode, which is not available from the wire {@link Node} alone.
+         * The dispatcher therefore constructs this variant directly by comparing
+         * {@link Success#isMembershipApprovalPending()} against
+         * {@link IqJoinGroupByInviteCodeRequest#expectsMembershipApproval()}; this static factory
+         * exists so the parser fall-through chain stays symmetric with the other sibling variants.
          *
          * @implNote
-         * This implementation deliberately never returns a present
-         * value. WA Web's parser detects the case by switching on the
-         * caller's expected mode and raising
-         * {@code UnexpectedJoinGroupViaInviteResponse} when the
-         * actual child differs; Cobalt routes the equivalent
-         * detection through the dispatcher rather than this factory
-         * because the {@code node}/{@code request} pair does not
-         * carry the caller's expectation flag.
+         * This implementation deliberately never returns a present value because the
+         * {@code node}/{@code request} pair does not carry the caller's expectation flag; the
+         * equivalent detection is routed through the dispatcher instead.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -339,6 +304,15 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
             return Optional.empty();
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #groupJid()} and the same
+         * {@link #actualMembershipApprovalPending()} flag.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -352,11 +326,21 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
                     && Objects.equals(this.groupJid, that.groupJid);
         }
 
+        /**
+         * Returns a hash code derived from the group JID and actual gating mode.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(groupJid, actualMembershipApprovalPending);
         }
 
+        /**
+         * Returns a debug string describing the group JID and actual gating mode.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqJoinGroupByInviteCodeResponse.UnexpectedJoinShape[groupJid=" + groupJid
@@ -365,37 +349,31 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * Models the client-error reply variant for envelope-level caller-side rejections.
      *
-     * @apiNote
-     * Surfaces caller-side rejections of the invite redemption:
-     * typically {@code 401} when the invite code is expired or
-     * revoked, {@code 403} when the caller is banned from the
-     * group, or {@code 404} when the group no longer exists. The
-     * upstream UI surfaces a per-code-error message; retries are
-     * not meaningful without first fetching a fresh invite link.
+     * <p>Surfaces caller-side rejections of the invite redemption: typically {@code 401} when the
+     * invite code is expired or revoked, {@code 403} when the caller is banned from the group, or
+     * {@code 404} when the group no longer exists. Retries are not meaningful without first
+     * fetching a fresh invite link.
      *
      * @implNote
-     * This implementation corresponds to the {@code 4xx} branch of
-     * WA Web's {@code ServerStatusCodeError} promise rejection inside
-     * {@code joinGroupViaInvite}; the {@code <error>} envelope's
-     * {@code code} and {@code text} attributes feed
-     * {@link #errorCode()} and {@link #errorText()}.
+     * This implementation reads the {@code <error>} envelope's {@code code} and {@code text}
+     * attributes into {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class ClientError implements IqJoinGroupByInviteCodeResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the optional human-readable error text.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ClientError} reply.
+         * Constructs a client-error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional text; may be {@code null}
@@ -424,21 +402,17 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqJoinGroupByInviteCodeResponse#of(Node, Node)};
-         * this factory is exposed so callers can short-circuit when
-         * they already know the wire shape is a client error.
+         * <p>Callers normally reach this through
+         * {@link IqJoinGroupByInviteCodeResponse#of(Node, Node)}; this factory is exposed so
+         * callers can short-circuit when they already know the wire shape is a client error.
          *
          * @implNote
          * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * to validate the {@code type="error"} envelope and the
-         * {@code <error>} child's {@code 4xx} {@code code} before
-         * extracting code/text.
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to validate the
+         * {@code type="error"} envelope and the {@code <error>} child's {@code 4xx} {@code code}
+         * before extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -455,6 +429,15 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #errorCode()} and the same
+         * {@link #errorText()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -468,11 +451,21 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string describing the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqJoinGroupByInviteCodeResponse.ClientError[errorCode=" + errorCode
@@ -481,31 +474,29 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * Models the server-error reply variant for transient relay failures.
      *
-     * @apiNote
-     * Surfaces transient {@code 5xx} relay failures while redeeming
-     * the invite code; the request may be retried after a backoff.
+     * <p>Surfaces transient {@code 5xx} relay failures while redeeming the invite code; the request
+     * may be retried after a backoff.
      *
      * @implNote
-     * This implementation corresponds to the {@code 5xx} branch of
-     * WA Web's {@code ServerStatusCodeError} promise rejection inside
-     * {@code joinGroupViaInvite}.
+     * This implementation reads the {@code <error>} envelope's {@code code} and {@code text}
+     * attributes into {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class ServerError implements IqJoinGroupByInviteCodeResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the optional human-readable error text.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ServerError} reply.
+         * Constructs a server-error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional text; may be {@code null}
@@ -534,21 +525,17 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqJoinGroupByInviteCodeResponse#of(Node, Node)};
-         * this factory is exposed so callers can short-circuit when
-         * they already know the wire shape is a server error.
+         * <p>Callers normally reach this through
+         * {@link IqJoinGroupByInviteCodeResponse#of(Node, Node)}; this factory is exposed so
+         * callers can short-circuit when they already know the wire shape is a server error.
          *
          * @implNote
          * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * to validate the {@code type="error"} envelope and the
-         * {@code <error>} child's {@code 5xx} {@code code} before
-         * extracting code/text.
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to validate the
+         * {@code type="error"} envelope and the {@code <error>} child's {@code 5xx} {@code code}
+         * before extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -565,6 +552,15 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #errorCode()} and the same
+         * {@link #errorText()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -578,11 +574,21 @@ public sealed interface IqJoinGroupByInviteCodeResponse extends IqOperation.Resp
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string describing the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqJoinGroupByInviteCodeResponse.ServerError[errorCode=" + errorCode

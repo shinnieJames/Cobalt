@@ -17,11 +17,11 @@ import java.util.Optional;
 /**
  * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that lists the pending membership-approval requests for a
  * group.
- *
- * @apiNote Drives the {@code WAWebGroupGetMembershipApprovalRequestsJob.queryAndUpdateGroupMembershipApprovalRequests}
- * flow that powers the "Pending requests" admin surface. The default constructor sends the bare query; the rich
- * constructor sets {@link #requestorFetch()} to ask the relay to populate the {@code requestor}, {@code requestor_pn},
- * and {@code requestor_username} attributes on each entry (used when admins triage community-link join requests).
+ * <p>
+ * The default constructor sends the bare query; the rich constructor sets {@link #requestorFetch()} so the relay
+ * populates the {@code requestor}, {@code requestor_pn}, and {@code requestor_username} attributes on each entry,
+ * which the admin surface needs when triaging community-link join requests issued under a different identity. Replies
+ * are parsed through {@link SmaxGroupsGetMembershipApprovalRequestsResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetMembershipApprovalRequestsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -41,9 +41,9 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
 
     /**
      * Constructs a request without the rich requestor projection.
-     *
-     * @apiNote Convenience overload for the common case where the admin UI only needs the requesting user JID and
-     * timestamp.
+     * <p>
+     * Delegates to {@link #SmaxGroupsGetMembershipApprovalRequestsRequest(Jid, boolean)} with
+     * {@code requestorFetch=false}, surfacing only each requesting user JID and timestamp.
      *
      * @param groupJid the group {@link Jid}; never {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
@@ -54,10 +54,10 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
 
     /**
      * Constructs a fully-parametrised request.
-     *
-     * @apiNote Pass {@code requestorFetch=true} to surface the {@code requestor}/{@code requestor_pn}/
-     * {@code requestor_username} attributes that are needed when sub-group admins triage community-link join requests
-     * issued under a different identity.
+     * <p>
+     * Pass {@code requestorFetch=true} to surface the {@code requestor}/{@code requestor_pn}/
+     * {@code requestor_username} attributes needed when sub-group admins triage community-link join requests issued
+     * under a different identity.
      *
      * @param groupJid       the group {@link Jid}; never {@code null}
      * @param requestorFetch whether the relay should populate the rich requestor projection
@@ -89,8 +89,8 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
 
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
-     *
-     * @apiNote The resulting envelope is
+     * <p>
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="get">
      *         <membership_approval_requests requestor_fetch="true"/>

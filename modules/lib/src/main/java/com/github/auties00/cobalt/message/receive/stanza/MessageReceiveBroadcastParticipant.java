@@ -13,27 +13,27 @@ import java.util.Optional;
  * inside the {@code <participants>} node of an inbound peer-broadcast or
  * status-broadcast message stanza.
  *
- * @apiNote
- * Populated for {@link MessageType#PEER_BROADCAST} and
- * {@link MessageType#DIRECT_PEER_STATUS} stanzas where the server attaches
- * the original recipient list so the local device can mirror what the
- * primary device sent. The LID/PN/username triple carries the per-recipient
- * mapping fixed up during the LID-for-PN migration: each entry can be
- * addressed by phone-number JID, by LID, by username, or by any combination,
- * and {@link #recipientLatestLid()} carries the freshest LID the server
- * knows for that recipient.
+ * <p>Populated for {@link MessageType#PEER_BROADCAST} and
+ * {@link MessageType#DIRECT_PEER_STATUS} stanzas where the server attaches the
+ * original recipient list so the local device can mirror what the primary
+ * device sent. The LID/PN/username triple carries the per-recipient mapping
+ * fixed up during the LID-for-PN migration: each entry can be addressed by
+ * phone-number JID, by LID, by username, or by any combination, and
+ * {@link #recipientLatestLid()} carries the freshest LID the server knows for
+ * that recipient. Instances are produced by {@link MessageReceiveStanzaParser}
+ * and consumed via {@link MessageReceiveStanza#bclParticipants()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveBroadcastParticipant {
     /**
-     * The recipient's primary JID parsed from the {@code jid} attribute of
-     * the {@code <to>} node.
+     * The recipient's primary JID parsed from the {@code jid} attribute of the
+     * {@code <to>} node.
      */
     private final Jid jid;
 
     /**
-     * The {@code eph_setting} attribute, encoding the ephemeral-message
-     * setting active for this recipient at send time.
+     * The {@code eph_setting} attribute, encoding the ephemeral-message setting
+     * active for this recipient at send time.
      */
     private final String ephSetting;
 
@@ -64,10 +64,6 @@ public final class MessageReceiveBroadcastParticipant {
      * Constructs a populated record from the values extracted by
      * {@link MessageReceiveStanzaParser}.
      *
-     * @apiNote
-     * Not intended for direct use outside the parser; callers consume
-     * existing instances via {@link MessageReceiveStanza#bclParticipants()}.
-     *
      * @param jid                   the primary recipient JID, never {@code null}
      * @param ephSetting            the ephemeral setting, or {@code null}
      * @param peerRecipientLid      the recipient LID, or {@code null}
@@ -97,10 +93,8 @@ public final class MessageReceiveBroadcastParticipant {
     /**
      * Returns the recipient's primary JID.
      *
-     * @apiNote
-     * Always populated; the consumer uses this as the canonical recipient
-     * identifier when persisting the broadcast-contact list alongside the
-     * message.
+     * <p>Always populated; serves as the canonical recipient identifier when
+     * persisting the broadcast-contact list alongside the message.
      *
      * @return the recipient JID
      */
@@ -111,9 +105,8 @@ public final class MessageReceiveBroadcastParticipant {
     /**
      * Returns the per-recipient ephemeral setting, when present.
      *
-     * @apiNote
-     * Captures the ephemeral-message setting active for that one recipient at
-     * the moment the primary device sent the broadcast; lets the local
+     * <p>Captures the ephemeral-message setting active for that one recipient
+     * at the moment the primary device sent the broadcast, letting the local
      * device mirror the disappearing-message duration without re-querying.
      *
      * @return an {@link Optional} wrapping the ephemeral setting
@@ -125,10 +118,9 @@ public final class MessageReceiveBroadcastParticipant {
     /**
      * Returns the recipient's LID, when present.
      *
-     * @apiNote
-     * Pairs with {@link #peerRecipientPn()} for the LID/PN mapping used
-     * during the LID-for-PN migration; either or both may be present
-     * depending on what the server knows.
+     * <p>Pairs with {@link #peerRecipientPn()} for the LID/PN mapping used
+     * during the LID-for-PN migration; either or both may be present depending
+     * on what the server knows.
      *
      * @return an {@link Optional} wrapping the recipient LID
      */
@@ -139,8 +131,7 @@ public final class MessageReceiveBroadcastParticipant {
     /**
      * Returns the recipient's phone-number JID, when present.
      *
-     * @apiNote
-     * Pairs with {@link #peerRecipientLid()} for the LID/PN mapping.
+     * <p>Pairs with {@link #peerRecipientLid()} for the LID/PN mapping.
      *
      * @return an {@link Optional} wrapping the recipient phone-number JID
      */
@@ -151,8 +142,7 @@ public final class MessageReceiveBroadcastParticipant {
     /**
      * Returns the recipient's username, when present.
      *
-     * @apiNote
-     * Populated only when WA Web's username-display gate is on; lets the UI
+     * <p>Populated only when the username-display gate is on, letting the UI
      * surface the contact by their public username.
      *
      * @return an {@link Optional} wrapping the recipient username
@@ -165,11 +155,9 @@ public final class MessageReceiveBroadcastParticipant {
      * Returns the freshest LID the server knows for this recipient, when
      * present.
      *
-     * @apiNote
-     * If this is present but both {@link #peerRecipientLid()} and
-     * {@link #peerRecipientPn()} are absent, WA Web logs an error: the server
-     * has shipped a fresh LID without the mapping context needed to associate
-     * it.
+     * <p>If this is present but both {@link #peerRecipientLid()} and
+     * {@link #peerRecipientPn()} are absent the server has shipped a fresh LID
+     * without the mapping context needed to associate it.
      *
      * @return an {@link Optional} wrapping the latest LID
      */

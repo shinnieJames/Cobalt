@@ -8,34 +8,28 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the create-newsletter-admin-invite mutation
- * built by {@link CreateNewsletterAdminInviteMexRequest}.
+ * Parses the MEX response of the create-newsletter-admin-invite mutation built by
+ * {@link CreateNewsletterAdminInviteMexRequest}.
  *
- * @apiNote
- * Exposes the invite expiration timestamp and the newsletter id echoed
- * under {@code xwa2_newsletter_admin_invite_create}. WA Web's
- * {@code WAWebNewsletterSendMsgAction} feeds the expiration timestamp into
- * the invite chat message sent to the invitee.
+ * <p>Exposes the invite expiration timestamp and the newsletter id echoed under
+ * {@code xwa2_newsletter_admin_invite_create}. The expiration timestamp is fed into the invite chat
+ * message sent to the invitee.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateNewsletterAdminInviteJob")
 public final class CreateNewsletterAdminInviteMexResponse implements MexOperation.Response.Json {
     /**
-     * The unix-second timestamp at which the created invite expires.
+     * Holds the unix-second timestamp at which the created invite expires.
      */
     private final Long inviteExpirationTime;
 
     /**
-     * The newsletter Jid string echoed under the
+     * Holds the newsletter Jid string echoed under the
      * {@code xwa2_newsletter_admin_invite_create.id} response field.
      */
     private final String id;
 
     /**
      * Constructs a response wrapping the parsed scalar fields.
-     *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
      *
      * @param inviteExpirationTime the unix-second invite expiration timestamp
      * @param id                   the newsletter Jid echoed by the relay
@@ -48,15 +42,13 @@ public final class CreateNewsletterAdminInviteMexResponse implements MexOperatio
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_admin_invite_create} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_admin_invite_create} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<CreateNewsletterAdminInviteMexResponse> of(Node node) {
         return node.getChild("result")
@@ -67,13 +59,10 @@ public final class CreateNewsletterAdminInviteMexResponse implements MexOperatio
     /**
      * Returns the invite expiration timestamp.
      *
-     * @apiNote
-     * WA Web's {@code createNewsletterAdminInvite} runs the same scalar
-     * through {@code WATimeUtils.castToUnixTime}; the value is consumed as
-     * seconds-since-epoch and ferried into the invite chat message.
+     * <p>Carried by the relay as a unix-second integer and surfaced as an {@link Instant} for the
+     * invite chat message.
      *
-     * @return the parsed {@link Instant}, or empty when the relay omitted
-     *         the field
+     * @return the parsed {@link Instant}, or empty when the relay omitted the field
      */
     public Optional<Instant> inviteExpirationTime() {
         return Optional.ofNullable(inviteExpirationTime).map(Instant::ofEpochSecond);
@@ -89,20 +78,14 @@ public final class CreateNewsletterAdminInviteMexResponse implements MexOperatio
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_admin_invite_create} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_admin_invite_create} root
      */
     private static Optional<CreateNewsletterAdminInviteMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

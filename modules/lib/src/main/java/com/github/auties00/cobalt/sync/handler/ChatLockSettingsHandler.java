@@ -18,12 +18,11 @@ import java.util.logging.Logger;
 /**
  * Maintains the global chat-lock settings (hide-locked-chats flag and PBKDF2 secret-code material) from {@code setting_chatLock} sync mutations.
  *
- * @apiNote
- * Drives the Chat Lock surface that hides locked chats from the
- * primary chat list and gates them behind a user secret code. When
- * the user toggles either field on another device, the server replays
- * the resulting {@link ChatLockSettings} here. Cobalt embedders read
- * the result through
+ * <p>This handler drives the Chat Lock surface that hides locked chats from
+ * the primary chat list and gates them behind a user secret code. When the
+ * user toggles either field on another device, the server replays the
+ * resulting {@link ChatLockSettings} here, and the result becomes readable
+ * through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#chatLockSettings()}.
  *
  * @implNote
@@ -43,21 +42,18 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebChatLockSettingsSync")
 public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     /**
-     * The handler-scoped {@link Logger} used to emit the "mutations parse failed" warning.
+     * The handler-scoped {@link Logger} used to emit the mutations-parse-failed warning.
      *
-     * @apiNote
-     * Records the same line WA Web emits when a batch of
-     * {@code setting_chatLock} mutations finishes without producing a
-     * writable settings record.
+     * <p>Records the line emitted when a batch of {@code setting_chatLock}
+     * mutations finishes without producing a writable settings record.
      */
     private static final Logger LOGGER = Logger.getLogger(ChatLockSettingsHandler.class.getName());
 
     /**
      * Constructs the singleton chat-lock-settings handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this once during client
+     * bootstrap.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public ChatLockSettingsHandler() {
@@ -84,12 +80,11 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the {@link ChatLockSettings} value (including the
-     * full secret-code payload) and persists it. Returns
+     * <p>Validates the {@link ChatLockSettings} value (including the full
+     * secret-code payload) and persists it. Returns
      * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     * operations and {@link SyncdIndexUtils#malformedActionValue(String)}
-     * when the value is missing or the secret code fails validation.
+     * operations and {@link SyncdIndexUtils#malformedActionValue(String)} when
+     * the value is missing or the secret code fails validation.
      *
      * @implNote
      * This implementation persists only on full success: a
@@ -121,13 +116,12 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Iterates the batch, building up a single pending
-     * {@link ChatLockSettings} record across all SET mutations, and
-     * persists it once via
+     * <p>Iterates the batch, building up a single pending
+     * {@link ChatLockSettings} record across all SET mutations, and persists it
+     * once via
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#setChatLockSettings(ChatLockSettings)}.
      * If no SET mutation ever populated the pending record, emits the
-     * "mutations parse failed" warning matching WA Web.
+     * mutations-parse-failed warning.
      *
      * @implNote
      * This implementation mirrors WA Web's partial-write behaviour:
@@ -180,10 +174,9 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     /**
      * Returns whether the {@link ChatLockSettings#secretCode()} payload (when present) is well-formed.
      *
-     * @apiNote
-     * Called by both {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * and {@link #applyMutationBatch(WhatsAppClient, List)} as the
-     * gate that admits a secret-code update. An absent secret code
+     * <p>Gates the secret-code update admitted by both
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)} and
+     * {@link #applyMutationBatch(WhatsAppClient, List)}. An absent secret code
      * is always valid (the user toggled chat-lock off).
      *
      * @implNote

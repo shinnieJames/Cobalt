@@ -9,23 +9,26 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that runs a {@code profile_typeahead} {@code catkit} business-category lookup.
+ * Models the typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that runs a {@code profile_typeahead} {@code catkit} business-category lookup.
  *
- * @apiNote
- * Use this request from the SMB profile-editor category picker to look up category suggestions as the merchant types; the matching {@link IqQueryBusinessCategoriesResponse} returns the typed category list plus a synthetic {@code not_a_biz} sentinel that the picker uses to model the "this is not a business" opt-out row. Pass an empty string to request the unfiltered category list.
+ * <p>The SMB profile-editor category picker uses this request to look up category suggestions as
+ * the merchant types. The matching {@link IqQueryBusinessCategoriesResponse} returns the typed
+ * category list plus a synthetic {@code not_a_biz} sentinel that the picker uses to model the "this
+ * is not a business" opt-out row. An empty query requests the unfiltered category list.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryBusinessCategoriesJob")
 public final class IqQueryBusinessCategoriesRequest implements IqOperation.Request {
     /**
-     * The free-text typeahead query routed verbatim into the {@code <query/>} child content; an empty string requests the unfiltered category list.
+     * Holds the free-text typeahead query routed verbatim into the {@code <query/>} child content.
+     *
+     * <p>An empty string requests the unfiltered category list.
      */
     private final String query;
 
     /**
-     * Constructs a typed request.
+     * Constructs a typed request over the given typeahead string.
      *
-     * @apiNote
-     * Call this constructor with the current typeahead string; pass an empty string when the picker should fetch the unfiltered category list.
+     * <p>An empty string requests the unfiltered category list.
      *
      * @param query the typeahead query; never {@code null}
      * @throws NullPointerException if {@code query} is {@code null}
@@ -35,10 +38,7 @@ public final class IqQueryBusinessCategoriesRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the typeahead query.
-     *
-     * @apiNote
-     * Use this getter to read back the typeahead string that the stanza will carry.
+     * Returns the typeahead query the stanza carries.
      *
      * @return the query; never {@code null}
      */
@@ -50,7 +50,9 @@ public final class IqQueryBusinessCategoriesRequest implements IqOperation.Reque
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by {@code WAWebQueryBusinessCategoriesJob.queryBusinessCategories}: a {@code <request op="profile_typeahead" type="catkit" v="1"/>} wrapper carrying a {@code <query/>} child with the verbatim typeahead string.
+     * This implementation materialises the WAP envelope produced by {@code WAWebQueryBusinessCategoriesJob.queryBusinessCategories}:
+     * a {@code <request op="profile_typeahead" type="catkit" v="1"/>} wrapper carrying a
+     * {@code <query/>} child with the verbatim typeahead string.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryBusinessCategoriesJob",

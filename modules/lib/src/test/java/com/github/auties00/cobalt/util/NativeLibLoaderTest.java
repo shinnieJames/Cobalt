@@ -20,43 +20,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke tests for {@link NativeLibLoader} and the FFM toolchain.
- *
- * @apiNote
- * Exercises {@link NativeLibLoader} via three Cobalt-internal
- * smoke paths: classifier resolution from {@code os.name} /
- * {@code os.arch}; an FFM linker round-trip via the platform's
- * standard C runtime ({@code abs(int)}) so the toolchain is
- * verified on the running platform; an offline-mode hard-failure
- * when the requested binary is neither on the classpath nor in
- * the cache. The success path (download then SHA-256 verify then
- * cache then load) is exercised end-to-end by the per-binding
- * smoke tests (for example {@code OpusCodecTest},
- * {@code SpeexDspTest}, {@code VP8Test}, {@code H264Test},
- * {@code SctpAssociationTest}).
- *
- * @implNote
- * This class is Cobalt-internal; there is no WA Web counterpart.
+ * Smoke tests for {@link NativeLibLoader} and the FFM toolchain: classifier resolution, an
+ * {@code abs(int)} linker round-trip against the running platform's C runtime, fail-fast on an
+ * unmanifested library, parallel-extraction recovery against an OS-locked target, and manifest
+ * conflict detection. The download-verify-cache-load success path is covered by the per-binding
+ * smoke tests instead.
  */
 public class NativeLibLoaderTest {
 
-    /**
-     * The set of classifiers Cobalt publishes natives for.
-     *
-     * @apiNote
-     * Mirrors {@code NativeLibLoader.KNOWN_CLASSIFIERS} sans the
-     * Windows-on-ARM64 entry, which the test asserts is not
-     * currently a published target for running tests.
-     */
+    // Mirrors NativeLibLoader.KNOWN_CLASSIFIERS minus the Windows-on-ARM64 entry, which is not a
+    // published natives target.
     private static final Set<String> SUPPORTED_CLASSIFIERS = Set.of(
             "linux-x86_64", "linux-aarch64",
             "darwin-x86_64", "darwin-aarch64",
             "windows-x86_64");
 
-    /**
-     * Resolves to one of the published classifiers so the
-     * natives bundle can be shipped.
-     */
     @Test
     public void classifierMatchesSupportedSet() {
         var classifier = NativeLibLoader.classifier();
@@ -65,17 +43,6 @@ public class NativeLibLoaderTest {
                 "classifier '" + classifier + "' is not in the supported set " + SUPPORTED_CLASSIFIERS);
     }
 
-    /**
-     * Binds {@code int abs(int)} from the C runtime via the
-     * linker's default lookup and validates the FFM toolchain.
-     *
-     * @apiNote
-     * Pins the toolchain end-to-end: linker availability,
-     * default lookup population, and downcall handle invocation.
-     *
-     * @throws Throwable if the bound method handle's invocation
-     *     fails
-     */
     @Test
     public void canBindAbsFromDefaultLookup() throws Throwable {
         var linker = Linker.nativeLinker();
@@ -90,18 +57,6 @@ public class NativeLibLoaderTest {
         assertEquals(123, (int) abs.invokeExact(123));
     }
 
-    /**
-     * Asking for a library with no manifest entry fails fast
-     * without an HTTP attempt.
-     *
-     * @apiNote
-     * Pins the fail-fast guarantee for download-disabled
-     * deployments: the loader skips the download leg entirely
-     * (no network attempt, no timeout wait) since there is
-     * nothing to verify the download against, and falls through
-     * to {@link System#loadLibrary(String)} which then fails for
-     * an unknown name.
-     */
     @Test
     public void unmanifestedLibraryFailsFastWithoutDownload() {
         try {
@@ -115,38 +70,11 @@ public class NativeLibLoaderTest {
         }
     }
 
-    /**
-     * Reproduces the parallel-JVM extraction failure on a
-     * Windows-locked target and pins the loader's fast-path
-     * recovery.
-     *
-     * @apiNote
-     * When two Cobalt processes start at once, the first one's
-     * {@link System#load(String)} call hands {@code opus.dll}
-     * to Windows {@code LoadLibrary}, which opens it without
-     * {@code FILE_SHARE_DELETE}. The second process's
-     * {@code extractFromClasspath} previously tried
-     * {@code Files.copy(REPLACE_EXISTING)} into the same cache
-     * slot and crashed with
-     * {@link java.nio.file.AccessDeniedException} because the
-     * delete-then-rewrite step could not unlink a loaded DLL.
-     * The fixed loader fast-paths on a size-matching cached
-     * file and never attempts to delete the locked target. On
-     * Linux and macOS the LoadLibrary-style file lock does not
-     * exist, but this test still exercises the fast path
-     * regression-wise.
-     *
-     * @implNote
-     * This implementation reproduces the bug inside one JVM by
-     * loading {@code opus} once (extracts the binary and calls
-     * {@link System#load(String)}, which locks the file on
-     * Windows), calling {@link NativeLibLoader#clearCache()}
-     * (drops the in-process {@code SymbolLookup} cache without
-     * unloading the native library so the OS lock persists),
-     * then calling {@link NativeLibLoader#load(String, Arena)}
-     * again, re-entering {@code extractFromClasspath} against
-     * the locked file just like a parallel JVM would do.
-     */
+    // Regression: a second JVM that finds opus.dll already locked by an earlier System.load (Windows
+    // LoadLibrary opens it without FILE_SHARE_DELETE) must reuse the cached binary rather than crash
+    // with AccessDeniedException trying to rewrite the locked file. Reproduced in one JVM: load opus,
+    // then clearCache() drops the SymbolLookup cache without unloading the library so the OS lock
+    // persists, then load again re-enters extraction against the locked target like a parallel JVM.
     @Test
     public void parallelExtractionDoesNotFailWhenTargetIsLocked() {
         try {
@@ -160,16 +88,6 @@ public class NativeLibLoaderTest {
         }
     }
 
-    /**
-     * Two synthetic manifests with disjoint keys merge into one
-     * lookup map without a conflict.
-     *
-     * @apiNote
-     * Pins the dual-manifest coexistence guarantee: the toolkit
-     * manifest declares {@code ffmpeg-*} entries, the lib
-     * manifest declares {@code opus} / {@code vpx} / etc., and
-     * both must coexist on the classpath at runtime.
-     */
     @Test
     public void disjointManifestsMergeWithoutConflict() {
         var libManifest = parseManifest(
@@ -181,17 +99,6 @@ public class NativeLibLoaderTest {
         NativeLibLoader.verifyNoConflicts(List.of(libManifest, toolkitManifest));
     }
 
-    /**
-     * Two manifests declaring the same {@code <lib>/<classifier>}
-     * key with different SHA-256 values throw and name both
-     * manifests.
-     *
-     * @apiNote
-     * Pins the tamper-detection guarantee: a conflicting SHA
-     * across modules indicates a tampered binary or a name
-     * collision, and the loader rejects rather than picking one
-     * arbitrarily.
-     */
     @Test
     public void conflictingManifestsThrow() {
         var first = parseManifest(
@@ -207,15 +114,6 @@ public class NativeLibLoaderTest {
                 "conflict message must name both manifests: " + thrown.getMessage());
     }
 
-    /**
-     * Two manifests declaring identical entries (same key, same
-     * SHA-256) merge silently.
-     *
-     * @apiNote
-     * Pins the duplicate-entry tolerance: a transitive dep + a
-     * direct dep could each pull the same module's natives, and
-     * the loader treats that as a no-op rather than an error.
-     */
     @Test
     public void identicalEntriesAcrossManifestsAreAllowed() {
         var manifestJson = readFixture("fixtures/native-lib/manifest-lib-opus-identical.json");
@@ -226,41 +124,11 @@ public class NativeLibLoaderTest {
         NativeLibLoader.verifyNoConflicts(List.of(first, second));
     }
 
-    /**
-     * Parses a manifest body straight from a JSON string by
-     * wrapping it in a {@link ByteArrayInputStream} and calling
-     * {@link NativeLibLoader#parseManifest(String, java.io.InputStream)}.
-     *
-     * @apiNote
-     * Used by the conflict-detection tests as a thin wrapper to
-     * avoid having to plumb every fixture through a file URL.
-     *
-     * @param source the manifest source URL string
-     * @param json   the manifest body
-     * @return the parsed {@link NativeLibLoader.ModuleManifest}
-     */
     private static NativeLibLoader.ModuleManifest parseManifest(String source, String json) {
         return NativeLibLoader.parseManifest(source,
                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
     }
 
-    /**
-     * Loads a manifest fixture from the test classpath as a
-     * UTF-8 string.
-     *
-     * @apiNote
-     * Used by the conflict-detection tests to feed the bundled
-     * synthetic-manifest JSON fixtures into
-     * {@link #parseManifest(String, String)}.
-     *
-     * @param resourcePath the path under
-     *                     {@code src/test/resources/} (for
-     *                     example
-     *                     {@code "fixtures/native-lib/manifest-lib-opus.json"})
-     * @return the file contents
-     * @throws UncheckedIOException if the resource is missing
-     *                              or cannot be read
-     */
     private static String readFixture(String resourcePath) {
         try (var in = NativeLibLoaderTest.class.getResourceAsStream("/" + resourcePath)) {
             if (in == null) {

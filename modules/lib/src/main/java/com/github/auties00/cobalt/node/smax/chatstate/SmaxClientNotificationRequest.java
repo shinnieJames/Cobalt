@@ -9,31 +9,29 @@ import com.github.auties00.cobalt.node.smax.SmaxOperation;
 import java.util.Objects;
 
 /**
- * The outbound {@code <chatstate to="..."><composing|paused/></chatstate>}
- * stanza that broadcasts the local user's typing or paused state to a peer
- * or group.
+ * Represents the outbound
+ * {@code <chatstate to="..."><composing|paused/></chatstate>} stanza that
+ * broadcasts the local user's typing or paused state to a peer or group.
  *
- * @apiNote
- * Surfaces {@code WAWebChatStateBridge}'s
- * {@code sendChatStateComposing} / {@code sendChatStateRecording} /
- * {@code sendChatStatePaused} indicators. The stanza is fire-and-forget on
- * the wire ({@code WAComms.castSmaxStanza}); the relay does not ack.
+ * <p>This stanza surfaces the typing, voice-note recording, and paused
+ * indicators. It is fire-and-forget on the wire; the relay does not
+ * acknowledge it.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstateClientNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstateStateTypes")
 public final class SmaxClientNotificationRequest implements SmaxOperation.Request {
     /**
-     * The chat JID receiving the indicator.
+     * Holds the chat JID receiving the indicator.
      *
-     * @apiNote
-     * For 1:1 chats this is the peer user JID; for group chats this is the
-     * group JID. The relay fans out to active participants.
+     * <p>For 1:1 chats this is the peer user JID; for group chats this is the
+     * group JID, and the relay fans the indicator out to active participants.
      */
     private final Jid chatstateTo;
 
     /**
-     * The state-type payload; either {@link SmaxClientNotificationComposing}
-     * or {@link SmaxClientNotificationPaused}.
+     * Holds the state-type payload, either a
+     * {@link SmaxClientNotificationComposing} or a
+     * {@link SmaxClientNotificationPaused}.
      */
     private final SmaxClientNotificationStateType stateType;
 
@@ -70,14 +68,13 @@ public final class SmaxClientNotificationRequest implements SmaxOperation.Reques
     /**
      * {@inheritDoc}
      *
+     * <p>Emits a {@code <chatstate to="...">} envelope and delegates the
+     * inner child to {@link SmaxClientNotificationStateType#toNode()}.
+     *
      * @implNote
-     * This implementation emits a {@code <chatstate to="...">} envelope and
-     * delegates the inner child to
-     * {@link SmaxClientNotificationStateType#toNode()}, mirroring the
-     * {@code makeClientNotificationRequest} +
-     * {@code mergeStateTypes} composition. The WA Web optional
-     * {@code internalTestMixin} child (a dev-only debug payload) is not
-     * emitted by Cobalt.
+     * This implementation does not emit the WA Web optional internal-test
+     * mixin child, which is a dev-only debug payload absent from production
+     * stanzas.
      *
      * @return a {@link NodeBuilder} carrying the
      *         {@code <chatstate><composing|paused/></chatstate>} stanza
@@ -93,6 +90,13 @@ public final class SmaxClientNotificationRequest implements SmaxOperation.Reques
                 .content(stateChild);
     }
 
+    /**
+     * Returns whether the given object is a {@link SmaxClientNotificationRequest}
+     * with an equal {@link #chatstateTo()} and {@link #stateType()}.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when both fields match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -106,11 +110,22 @@ public final class SmaxClientNotificationRequest implements SmaxOperation.Reques
                 && Objects.equals(this.stateType, that.stateType);
     }
 
+    /**
+     * Returns a hash code derived from the chat JID and the state-type
+     * payload.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(chatstateTo, stateType);
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this request.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxClientNotificationRequest[chatstateTo=" + chatstateTo

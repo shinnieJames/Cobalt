@@ -28,57 +28,25 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Exercises {@link WhatsAppSocketClient} end-to-end against the live
- * WhatsApp servers for every supported transport, platform shape and
- * proxy configuration.
+ * Integration coverage of {@link WhatsAppSocketClient} against the live WhatsApp servers across
+ * every supported transport (TCP, WebSocket), handshake shape (web, mobile) and proxy flavour
+ * (HTTP plain, HTTPS, SOCKS4, SOCKS5). Each scenario opens a real connection and asserts the
+ * Noise XX handshake derived both read and write keys; reconnect scenarios run two handshakes to
+ * confirm no state leaks across sessions.
  *
- * @apiNote
- * Each test opens a real connection to {@code g.whatsapp.net} or
- * {@code web.whatsapp.com} and asserts that the Noise XX handshake
- * derives both read and write keys; the goal is integration coverage
- * of transport selection (TCP vs WebSocket), handshake shape (web vs
- * mobile) and proxy tunnelling (HTTP plain, HTTPS, SOCKS4, SOCKS5)
- * rather than unit-level coverage of any one method. Reconnect tests
- * exercise the two-shot handshake to confirm key destruction and
- * re-derivation do not leak state across sessions.
- *
- * @implNote
- * This implementation spins up a local {@link ProxyServer} per
- * proxy-flavour test (its lifecycle is owned by
- * {@link #tearDown()}), a fresh {@link WhatsAppStore} per scenario
- * via {@link WhatsAppStoreFactory#temporary()}, and a
- * {@link CapturingListener} that latches on the first node or close
- * event so {@link #assertHandshakeSucceeds()} can verify the
- * handshake landed without blocking on the full connect/auth flow.
- * HTTPS-proxy tests use the {@link #trustAllSslContextFactory()}
- * since the local proxy presents a locally-signed certificate.
+ * <p>Harness design: each proxy-flavour test stands up a local {@link ProxyServer} torn down in
+ * {@link #tearDown()}; every scenario uses a fresh {@link WhatsAppStore} from
+ * {@link WhatsAppStoreFactory#temporary()}; the {@link CapturingListener} latches on the first
+ * node or close event so a scenario can verify the handshake landed without blocking on the full
+ * connect/auth flow. HTTPS-proxy tests use {@link #trustAllSslContextFactory()} because the local
+ * proxy presents a self-signed certificate.
  */
 @Timeout(60)
 class WhatsAppSocketTest {
-    /**
-     * The socket client under test; owned by each test method and
-     * torn down by {@link #tearDown()}.
-     */
     private WhatsAppSocketClient client;
 
-    /**
-     * The local proxy server (if any) backing the current
-     * proxy-flavour test; null when the scenario does not need a
-     * proxy.
-     */
     private ProxyServer proxyServer;
 
-    /**
-     * Tears down the per-test socket client and proxy server, if any
-     * were created.
-     *
-     * @apiNote
-     * Always invoked even when the test threw, so the next test
-     * starts from a clean baseline; both resources are nulled out so
-     * a teardown failure does not double-close.
-     *
-     * @throws IOException if the proxy server cannot be closed
-     */
     @AfterEach
     void tearDown() throws IOException {
         if (client != null) {
@@ -94,9 +62,6 @@ class WhatsAppSocketTest {
         }
     }
 
-    /**
-     * Web sessions can disconnect and reconnect with a fresh store.
-     */
     @Test
     void testWebReconnect() throws Exception {
         var store1 = createWebStore();
@@ -110,10 +75,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * Web stores produce the WebSocket transport and complete the
-     * Noise handshake with no proxy in front.
-     */
     @Test
     void testWebNoProxy() throws Exception {
         var store = createWebStore();
@@ -122,9 +83,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The WebSocket transport tunnels through a plain HTTP proxy.
-     */
     @Test
     void testWebHttpProxy() throws Exception {
         proxyServer = ProxyServer.http();
@@ -134,13 +92,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The WebSocket transport tunnels through an HTTPS proxy.
-     *
-     * @implNote
-     * Uses {@link #trustAllSslContextFactory()} because the local
-     * proxy presents a self-signed certificate.
-     */
     @Test
     void testWebHttpsProxy() throws Exception {
         proxyServer = ProxyServer.https();
@@ -150,10 +101,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * Mobile stores produce the TCP transport and complete the
-     * Noise handshake with no proxy in front.
-     */
     @Test
     void testMobileNoProxy() throws Exception {
         var store = createMobileStore();
@@ -162,10 +109,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The TCP transport tunnels through a plain HTTP proxy on the
-     * mobile path.
-     */
     @Test
     void testMobileHttpProxy() throws Exception {
         proxyServer = ProxyServer.http();
@@ -175,10 +118,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The TCP transport tunnels through an HTTPS proxy on the
-     * mobile path.
-     */
     @Test
     void testMobileHttpsProxy() throws Exception {
         proxyServer = ProxyServer.https();
@@ -188,9 +127,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The WebSocket transport tunnels through a SOCKS4 proxy.
-     */
     @Test
     void testWebSocks4Proxy() throws Exception {
         proxyServer = ProxyServer.socks4();
@@ -200,9 +136,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The WebSocket transport tunnels through a SOCKS5 proxy.
-     */
     @Test
     void testWebSocks5Proxy() throws Exception {
         proxyServer = ProxyServer.socks5();
@@ -212,10 +145,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The macOS native (Mac Catalyst) desktop path can disconnect and
-     * reconnect on the TCP transport with the web handshake shape.
-     */
     @Test
     void testDesktopReconnect() throws Exception {
         var store1 = createDesktopStore();
@@ -229,10 +158,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The macOS desktop platform routes to the TCP transport and
-     * completes the handshake with no proxy in front.
-     */
     @Test
     void testDesktopNoProxy() throws Exception {
         var store = createDesktopStore();
@@ -241,10 +166,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The macOS desktop TCP transport tunnels through a plain HTTP
-     * proxy.
-     */
     @Test
     void testDesktopHttpProxy() throws Exception {
         proxyServer = ProxyServer.http();
@@ -254,10 +175,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The macOS desktop TCP transport tunnels through an HTTPS
-     * proxy.
-     */
     @Test
     void testDesktopHttpsProxy() throws Exception {
         proxyServer = ProxyServer.https();
@@ -267,10 +184,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The macOS desktop TCP transport tunnels through a SOCKS4
-     * proxy.
-     */
     @Test
     void testDesktopSocks4Proxy() throws Exception {
         proxyServer = ProxyServer.socks4();
@@ -280,10 +193,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The macOS desktop TCP transport tunnels through a SOCKS5
-     * proxy.
-     */
     @Test
     void testDesktopSocks5Proxy() throws Exception {
         proxyServer = ProxyServer.socks5();
@@ -293,9 +202,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The mobile TCP transport tunnels through a SOCKS4 proxy.
-     */
     @Test
     void testMobileSocks4Proxy() throws Exception {
         proxyServer = ProxyServer.socks4();
@@ -305,9 +211,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * The mobile TCP transport tunnels through a SOCKS5 proxy.
-     */
     @Test
     void testMobileSocks5Proxy() throws Exception {
         proxyServer = ProxyServer.socks5();
@@ -317,10 +220,6 @@ class WhatsAppSocketTest {
         assertHandshakeSucceeds();
     }
 
-    /**
-     * Disconnecting transitions {@code isConnected} to {@code false}
-     * and releases the reader thread.
-     */
     @Test
     void testDisconnectCleansUp() throws Exception {
         var store = createMobileStore();
@@ -333,11 +232,6 @@ class WhatsAppSocketTest {
         listener.await();
     }
 
-    /**
-     * Passing {@code null} as the listener raises
-     * {@link NullPointerException} at the {@code connect} entry
-     * point rather than racing the reader thread.
-     */
     @Test
     void testConnectRejectsNullListener() {
         var store = createMobileStore();
@@ -345,18 +239,8 @@ class WhatsAppSocketTest {
         assertThrows(NullPointerException.class, () -> client.connect(null));
     }
 
-    /**
-     * Builds a {@link WhatsAppSslContextFactory} that accepts any
-     * server certificate, for use with the locally-signed HTTPS
-     * proxy.
-     *
-     * @apiNote
-     * Only safe in tests; the trust-all manager removes all
-     * certificate validation and would expose production traffic to
-     * MITM if used outside fixtures.
-     *
-     * @return a trust-all factory
-     */
+    // Trust-all factory for the locally-signed HTTPS proxy; test-only, removes all certificate
+    // validation and would expose production traffic to MITM if used outside fixtures.
     private static WhatsAppSslContextFactory trustAllSslContextFactory() {
         return new WhatsAppSslContextFactory() {
             @Override
@@ -391,18 +275,6 @@ class WhatsAppSocketTest {
         };
     }
 
-    /**
-     * Drives the {@code connect} flow against the current
-     * {@link #client} and asserts the handshake completed by
-     * checking both AES keys are present.
-     *
-     * @apiNote
-     * Used by every scenario test; the listener's {@code await}
-     * blocks until the first node, error or close event arrives so
-     * the test does not race the reader thread.
-     *
-     * @throws Exception if connect or await fails
-     */
     private void assertHandshakeSucceeds() throws Exception {
         var listener = new CapturingListener();
         client.connect(listener);
@@ -412,12 +284,6 @@ class WhatsAppSocketTest {
         listener.await();
     }
 
-    /**
-     * Builds a temporary mobile-platform store seeded with a fixed
-     * phone number.
-     *
-     * @return the store
-     */
     private static WhatsAppStore createMobileStore() {
         try {
             return WhatsAppStoreFactory.temporary()
@@ -427,13 +293,6 @@ class WhatsAppSocketTest {
         }
     }
 
-    /**
-     * Builds a temporary web-platform store with a Windows-style
-     * device, suitable for exercising the {@link WebSocket}
-     * transport.
-     *
-     * @return the store
-     */
     private static WhatsAppStore createWebStore() {
         try {
             var store = WhatsAppStoreFactory.temporary()
@@ -450,13 +309,6 @@ class WhatsAppSocketTest {
         }
     }
 
-    /**
-     * Builds a temporary desktop-platform store with a macOS device,
-     * suitable for exercising the macOS Mac Catalyst path (TCP
-     * transport, web handshake shape).
-     *
-     * @return the store
-     */
     private static WhatsAppStore createDesktopStore() {
         try {
             var store = WhatsAppStoreFactory.temporary()
@@ -474,75 +326,37 @@ class WhatsAppSocketTest {
         }
     }
 
-    /**
-     * A {@link WhatsAppSocketListener} that records every callback
-     * and exposes an {@link #await} primitive so a test can park
-     * until the first inbound event arrives.
-     *
-     * @apiNote
-     * The latch counts down on the first {@link #onNode(Node)} or
-     * {@link #onClose()} call so a scenario either sees a real
-     * inbound node or sees the connection close orderly; collected
-     * errors are surfaced through {@link #await()} as test failures.
-     */
+    // Records every callback; the latch counts down on the first inbound node or orderly close so
+    // await() can park until the first event, then surfaces any captured errors as test failures.
     private static class CapturingListener implements WhatsAppSocketListener {
-        /**
-         * The inbound nodes captured during the test.
-         */
         private final List<Node> nodes;
 
-        /**
-         * The errors captured during the test.
-         */
         private final List<WhatsAppException> errors;
 
-        /**
-         * The latch that releases on the first inbound node or
-         * close event.
-         */
         private final CountDownLatch latch;
 
-        /**
-         * Constructs an empty capturing listener.
-         */
         public CapturingListener() {
             this.nodes = new CopyOnWriteArrayList<>();
             this.errors = new CopyOnWriteArrayList<>();
             this.latch = new CountDownLatch(1);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public void onNode(Node node) {
             nodes.add(node);
             latch.countDown();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public void onError(WhatsAppException exception) {
             errors.add(exception);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public void onClose() {
             latch.countDown();
         }
 
-        /**
-         * Parks for up to 30 seconds for the first inbound event,
-         * failing the test if the timeout elapses or any errors
-         * were captured.
-         *
-         * @throws InterruptedException if the wait is interrupted
-         */
         public void await() throws InterruptedException {
             if(!latch.await(30, TimeUnit.SECONDS)) {
                 fail("Timed out");

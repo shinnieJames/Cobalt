@@ -14,42 +14,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
+ * Models the sealed family of inbound replies to a
  * {@link SmaxAbPropsGetGroupExperimentConfigRequest}.
  *
- * @apiNote
- * Mirrors the three-arm disjunction the WA Web RPC
- * {@code WASmaxAbPropsGetGroupExperimentConfigRPC.sendGetGroupExperimentConfigRPC}
- * returns: a {@link Success} carrying the materialised
- * group-scoped props bundle, a {@link ClientError} (do-not-retry), or
- * a {@link ServerError} (retry-eligible). {@code WAWebGroupAbPropsSyncJob}
- * pattern-matches on the variant to flush the bundle into the local
- * per-group store or signal a sync failure; Cobalt embedders mirror
- * that branching when wiring the same per-group sync loop.
+ * <p>A reply is exactly one of three variants: {@link Success} carrying the materialised
+ * group-scoped props bundle, {@link ClientError} for a do-not-retry rejection, or {@link ServerError}
+ * for a transient failure that is retry-eligible. Callers pattern-match on the variant to either
+ * flush the parsed bundle into the per-group store or signal a sync failure, and
+ * {@link #of(Node, Node)} disambiguates the three by trying each variant in turn.
  */
 public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends SmaxOperation.Response
         permits SmaxAbPropsGetGroupExperimentConfigResponse.Success, SmaxAbPropsGetGroupExperimentConfigResponse.ClientError, SmaxAbPropsGetGroupExperimentConfigResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxAbPropsGetGroupExperimentConfigResponse}
-     * variant in priority order.
+     * Parses the inbound stanza into the first matching response variant.
      *
-     * @apiNote
-     * Models {@code sendGetGroupExperimentConfigRPC}'s post-await
-     * disjunction: {@link Success} first, then {@link ClientError},
-     * then {@link ServerError}.
+     * <p>Variants are tried in priority order: {@link Success} first, then {@link ClientError},
+     * then {@link ServerError}. The original {@code request} is supplied so each variant can
+     * cross-check the {@code id} correlation against the reply. The result is empty when none of the
+     * three variants parse cleanly.
      *
      * @implNote
-     * This implementation returns {@link Optional#empty()} when no
-     * variant parses cleanly; WA Web throws a
-     * {@code SmaxParsingFailure} so the upstream
-     * {@code WAGetGroupAbPropsProtocol} promise rejects through its
-     * warn-and-error tail. Cobalt's dispatcher surfaces the empty
-     * Optional through the configurable error handler.
+     * This implementation returns {@link Optional#empty()} when no variant parses, leaving recovery
+     * to the configurable error handler; WhatsApp Web instead throws a parsing failure that rejects
+     * the upstream promise.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant
+     * @return an {@link Optional} carrying the parsed variant, or empty when none matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxAbPropsGetGroupExperimentConfigRPC",
@@ -69,78 +61,64 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
     }
 
     /**
-     * The success reply variant carrying the materialised
-     * group-scoped props bundle.
+     * Carries the materialised group-scoped props bundle returned on a successful fetch.
      *
-     * @apiNote
-     * Surfaced when the relay returns the {@code <props/>} subtree
-     * scoped to the requested group; {@code WAWebGroupAbPropsSyncJob}
-     * flushes the parsed {@code (hash, refresh, refreshId, props)}
-     * tuple into the per-group cache.
+     * <p>Surfaced when the relay returns the {@code <props/>} subtree scoped to the requested group.
+     * The parsed hash, refresh cooldown, refresh id, and A/B framework key let the caller flush the
+     * bundle into the per-group cache and schedule the next sync; the raw {@code <props/>} node is
+     * retained for the caller to re-parse the per-experiment overrides.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInAbPropsGetGroupExperimentConfigResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInAbPropsIQResultResponseMixin")
     final class Success implements SmaxAbPropsGetGroupExperimentConfigResponse {
         /**
-         * The relay-returned content hash.
+         * Holds the relay-returned content hash, or {@code null} when the relay omitted it.
          *
-         * @apiNote
-         * Echoed back on the next conditional fetch for the same
-         * group.
+         * <p>Echoed back on the next conditional fetch for the same group.
          */
         private final String propsHash;
 
         /**
-         * The relay-returned refresh-cooldown hint, in seconds.
+         * Holds the relay-returned refresh-cooldown hint in seconds, or {@code null} when omitted.
          *
-         * @apiNote
-         * Drives the next-sync timer for the per-group sync loop.
+         * <p>Drives the next-sync timer for the per-group sync loop.
          */
         private final Integer propsRefresh;
 
         /**
-         * The relay-returned refresh id.
+         * Holds the relay-returned refresh id, or {@code null} when the relay omitted it.
          */
         private final Integer propsRefreshId;
 
         /**
-         * The relay-returned A/B framework key.
+         * Holds the relay-returned A/B framework key, or {@code null} when the relay omitted it.
          *
-         * @apiNote
-         * Identifies the framework variant the relay assigned to this
-         * group; surfaced in downstream WAM tagging.
+         * <p>Identifies the framework variant the relay assigned to this group and is surfaced in
+         * downstream WAM tagging.
          */
         private final String propsAbKey;
 
         /**
-         * The raw {@code <props/>} subtree.
+         * Holds the raw {@code <props/>} subtree carrying the per-experiment overrides for this group.
          *
-         * @apiNote
-         * Carries the per-experiment overrides for this group;
-         * consumers re-parse it through
-         * {@code WAGetGroupAbPropsProtocol} to extract the
-         * {@code ExperimentConfig} entries.
+         * <p>Retained verbatim so the caller can re-parse it into the per-experiment overrides;
+         * never {@code null}.
          */
         private final Node propsNode;
 
         /**
-         * Constructs a new success projection.
+         * Constructs a success projection from the parsed {@code <props/>} attributes and subtree.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the IQ-result mixin
-         * validation passes and the {@code <props/>} child is found.
+         * <p>Invoked by {@link #of(Node, Node)} once the IQ-result envelope validates and the
+         * {@code <props/>} child is found. All scalar arguments are nullable; only {@code propsNode}
+         * is required.
          *
-         * @param propsHash      the content hash; may be
-         *                       {@code null}
-         * @param propsRefresh   the refresh-cooldown; may be
-         *                       {@code null}
-         * @param propsRefreshId the refresh id; may be {@code null}
-         * @param propsAbKey     the A/B framework key; may be
-         *                       {@code null}
-         * @param propsNode      the {@code <props/>} subtree; never
-         *                       {@code null}
-         * @throws NullPointerException if {@code propsNode} is
-         *                              {@code null}
+         * @param propsHash      the content hash, or {@code null} when omitted
+         * @param propsRefresh   the refresh cooldown in seconds, or {@code null} when omitted
+         * @param propsRefreshId the refresh id, or {@code null} when omitted
+         * @param propsAbKey     the A/B framework key, or {@code null} when omitted
+         * @param propsNode      the {@code <props/>} subtree; never {@code null}
+         * @throws NullPointerException if {@code propsNode} is {@code null}
          */
         public Success(String propsHash, Integer propsRefresh, Integer propsRefreshId,
                        String propsAbKey, Node propsNode) {
@@ -152,48 +130,36 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
         }
 
         /**
-         * Returns the content hash.
+         * Returns the content hash, when the relay supplied one.
          *
-         * @apiNote
-         * Empty when the relay omitted it.
-         *
-         * @return an {@link Optional} carrying the hash
+         * @return an {@link Optional} carrying the hash, or empty when omitted
          */
         public Optional<String> propsHash() {
             return Optional.ofNullable(propsHash);
         }
 
         /**
-         * Returns the refresh-cooldown hint.
+         * Returns the refresh-cooldown hint in seconds, when the relay supplied one.
          *
-         * @apiNote
-         * Empty when the relay omitted it.
-         *
-         * @return an {@link Optional} carrying the cooldown
+         * @return an {@link Optional} carrying the cooldown, or empty when omitted
          */
         public Optional<Integer> propsRefresh() {
             return Optional.ofNullable(propsRefresh);
         }
 
         /**
-         * Returns the refresh id.
+         * Returns the refresh id, when the relay supplied one.
          *
-         * @apiNote
-         * Empty when the relay omitted it.
-         *
-         * @return an {@link Optional} carrying the refresh id
+         * @return an {@link Optional} carrying the refresh id, or empty when omitted
          */
         public Optional<Integer> propsRefreshId() {
             return Optional.ofNullable(propsRefreshId);
         }
 
         /**
-         * Returns the A/B framework key.
+         * Returns the A/B framework key, when the relay supplied one.
          *
-         * @apiNote
-         * Empty when the relay omitted it.
-         *
-         * @return an {@link Optional} carrying the key
+         * @return an {@link Optional} carrying the key, or empty when omitted
          */
         public Optional<String> propsAbKey() {
             return Optional.ofNullable(propsAbKey);
@@ -202,9 +168,7 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
         /**
          * Returns the raw {@code <props/>} subtree.
          *
-         * @apiNote
-         * Embedders re-parse the subtree to extract the per-experiment
-         * overrides for this group.
+         * <p>The caller re-parses this subtree to extract the per-experiment overrides for this group.
          *
          * @return the {@code <props/>} node; never {@code null}
          */
@@ -213,17 +177,15 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse the inbound stanza as a {@link Success} variant.
          *
-         * @apiNote
-         * Mirrors
-         * {@code WASmaxInAbPropsGetGroupExperimentConfigResponseSuccess.parseGetGroupExperimentConfigResponseSuccess};
-         * empty when the IQ-result mixin fails or when the
-         * {@code <props/>} child is missing.
+         * <p>Returns empty when the IQ-result envelope fails to validate or when the {@code <props/>}
+         * child is missing. Otherwise it lifts the {@code hash}, {@code refresh}, {@code refresh_id},
+         * and {@code ab_key} attributes and retains the subtree.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when it does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAbPropsGetGroupExperimentConfigResponseSuccess",
                 exports = "parseGetGroupExperimentConfigResponseSuccess",
@@ -247,6 +209,13 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
             return Optional.of(new Success(hash, refresh, refreshId, abKey, props));
         }
 
+        /**
+         * Compares this projection with another for value equality over all parsed fields.
+         *
+         * @param obj the object to compare against, may be {@code null}
+         * @return {@code true} when {@code obj} is a {@code Success} with equal hash, refresh,
+         *         refresh id, A/B key, and {@code <props/>} subtree; {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -263,11 +232,23 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
                     && Objects.equals(this.propsNode, that.propsNode);
         }
 
+        /**
+         * Returns a hash code derived from all parsed fields.
+         *
+         * @return the combined hash of hash, refresh, refresh id, A/B key, and {@code <props/>} subtree
+         */
         @Override
         public int hashCode() {
             return Objects.hash(propsHash, propsRefresh, propsRefreshId, propsAbKey, propsNode);
         }
 
+        /**
+         * Returns a debug representation listing the scalar fields.
+         *
+         * <p>The {@code <props/>} subtree is omitted to keep the representation compact.
+         *
+         * @return a string of the form {@code SmaxAbPropsGetGroupExperimentConfigResponse.Success[propsHash=..., ...]}
+         */
         @Override
         public String toString() {
             return "SmaxAbPropsGetGroupExperimentConfigResponse.Success[propsHash=" + propsHash
@@ -278,34 +259,32 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
     }
 
     /**
-     * The client-error reply variant.
+     * Carries a do-not-retry rejection returned when the relay deems the request malformed or
+     * unauthorised.
      *
-     * @apiNote
-     * Surfaced when the relay rejects the request as malformed or
-     * unauthorised; the WA Web sync job treats this as a permanent
-     * per-group failure.
+     * <p>Surfaced for error codes below {@code 500}. The caller treats this as a permanent per-group
+     * failure and does not re-issue the request.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInAbPropsGetGroupExperimentConfigResponseErrorNoRetry")
     final class ClientError implements SmaxAbPropsGetGroupExperimentConfigResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code, always below {@code 500} for this variant.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error projection.
+         * Constructs a client-error projection from the lifted error envelope.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} once the client-error
-         * envelope has been lifted from the inbound stanza.
+         * <p>Invoked by {@link #of(Node, Node)} once the client-error envelope has been parsed from
+         * the inbound stanza.
          *
          * @param errorCode the error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorText the error text, or {@code null} when omitted
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -322,28 +301,24 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the error text, when the relay supplied one.
          *
-         * @apiNote
-         * Empty when the relay omitted it.
-         *
-         * @return an {@link Optional} carrying the text
+         * @return an {@link Optional} carrying the text, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse the inbound stanza as a {@link ClientError} variant.
          *
-         * @apiNote
-         * Mirrors
-         * {@code WASmaxInAbPropsGetGroupExperimentConfigResponseErrorNoRetry.parseGetGroupExperimentConfigResponseErrorNoRetry};
-         * empty when the inbound stanza is not a 4xx error envelope.
+         * <p>Delegates envelope validation and the {@code code < 500} gate to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} and returns empty when the
+         * stanza is not a client-error envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when it does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAbPropsGetGroupExperimentConfigResponseErrorNoRetry",
                 exports = "parseGetGroupExperimentConfigResponseErrorNoRetry",
@@ -356,6 +331,13 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this projection with another for value equality over the error code and text.
+         *
+         * @param obj the object to compare against, may be {@code null}
+         * @return {@code true} when {@code obj} is a {@code ClientError} with equal code and text;
+         *         {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -368,11 +350,21 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the combined hash of {@code errorCode} and {@code errorText}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation listing the error code and text.
+         *
+         * @return a string of the form {@code SmaxAbPropsGetGroupExperimentConfigResponse.ClientError[errorCode=..., errorText=...]}
+         */
         @Override
         public String toString() {
             return "SmaxAbPropsGetGroupExperimentConfigResponse.ClientError[errorCode=" + errorCode
@@ -381,33 +373,31 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
     }
 
     /**
-     * The server-error reply variant.
+     * Carries a retry-eligible failure returned when the relay hit a transient internal error.
      *
-     * @apiNote
-     * Surfaced when the relay encountered a transient internal
-     * failure; embedders re-issue the request after a backoff.
+     * <p>Surfaced for error codes at or above {@code 500}. The caller re-issues the request after a
+     * backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInAbPropsGetGroupExperimentConfigResponseErrorRetry")
     final class ServerError implements SmaxAbPropsGetGroupExperimentConfigResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code, always at or above {@code 500} for this variant.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error projection.
+         * Constructs a server-error projection from the lifted error envelope.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} once the server-error
-         * envelope has been lifted from the inbound stanza.
+         * <p>Invoked by {@link #of(Node, Node)} once the server-error envelope has been parsed from
+         * the inbound stanza.
          *
          * @param errorCode the error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorText the error text, or {@code null} when omitted
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -424,28 +414,24 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the error text, when the relay supplied one.
          *
-         * @apiNote
-         * Empty when the relay omitted it.
-         *
-         * @return an {@link Optional} carrying the text
+         * @return an {@link Optional} carrying the text, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse the inbound stanza as a {@link ServerError} variant.
          *
-         * @apiNote
-         * Mirrors
-         * {@code WASmaxInAbPropsGetGroupExperimentConfigResponseErrorRetry.parseGetGroupExperimentConfigResponseErrorRetry};
-         * empty when the inbound stanza is not a 5xx error envelope.
+         * <p>Delegates envelope validation and the {@code code >= 500} gate to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} and returns empty when the
+         * stanza is not a server-error envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when it does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInAbPropsGetGroupExperimentConfigResponseErrorRetry",
                 exports = "parseGetGroupExperimentConfigResponseErrorRetry",
@@ -458,6 +444,13 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this projection with another for value equality over the error code and text.
+         *
+         * @param obj the object to compare against, may be {@code null}
+         * @return {@code true} when {@code obj} is a {@code ServerError} with equal code and text;
+         *         {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -470,11 +463,21 @@ public sealed interface SmaxAbPropsGetGroupExperimentConfigResponse extends Smax
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the combined hash of {@code errorCode} and {@code errorText}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation listing the error code and text.
+         *
+         * @return a string of the form {@code SmaxAbPropsGetGroupExperimentConfigResponse.ServerError[errorCode=..., errorText=...]}
+         */
         @Override
         public String toString() {
             return "SmaxAbPropsGetGroupExperimentConfigResponse.ServerError[errorCode=" + errorCode

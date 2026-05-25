@@ -12,53 +12,43 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * {@link WhatsAppDevicePushClient} that receives WhatsApp's silent
- * verification push over Firebase Cloud Messaging while pretending to
- * be the {@code com.whatsapp} (or {@code com.whatsapp.w4b}) Android
- * app.
+ * {@link WhatsAppDevicePushClient} that receives WhatsApp's silent verification push over Firebase Cloud Messaging
+ * while pretending to be the {@code com.whatsapp} (or {@code com.whatsapp.w4b}) Android app.
  *
- * <p>Owns three single-responsibility collaborators and orchestrates
- * the lifecycle around them:
+ * <p>Owns three single-responsibility collaborators and orchestrates the lifecycle around them:
  * <ul>
- *   <li>{@link FcmRegistration} runs the three-step Android
- *       registration handshake on demand.</li>
- *   <li>{@link FcmMcsConnection} owns the long-lived MCS TLS stream
- *       and reconnect loop.</li>
- *   <li>{@link FcmPushCode} is the single-value sync primitive that
- *       hands the verification code back to {@link #getPushCode()}.</li>
+ *   <li>{@link FcmRegistration} runs the three-step Android registration handshake on demand.</li>
+ *   <li>{@link FcmMcsConnection} owns the long-lived MCS TLS stream and reconnect loop.</li>
+ *   <li>{@link FcmPushCode} is the single-value sync primitive that hands the verification code back to
+ *       {@link #getPushCode()}.</li>
  * </ul>
  *
- * <p>Persistent state lives entirely in the {@link FcmSession} the
- * caller owns via {@link #getSession()} and
- * {@link #loadSession(FcmSession)}. The client never touches the file
- * system. A typical first-time use:
+ * <p>Persistent state lives entirely in the {@link FcmSession} the caller owns via {@link #getSession()} and
+ * {@link #loadSession(FcmSession)}. The client never touches the file system. A typical first-time use:
  *
- * <pre>{@code
+ * {@snippet :
  *   try (var fcm = FcmClient.newSession()) {
  *       fcm.authenticate(device);                // device.platform() picks WA personal vs business
  *       String pushToken = fcm.getPushToken();   // hand to /v2/exist
  *       FcmSession saved = fcm.getSession();     // persist this somewhere
  *       String code = fcm.getPushCode();         // blocks for the push
  *   }
- * }</pre>
+ * }
  *
  * <p>Subsequent runs skip the registration:
  *
- * <pre>{@code
+ * {@snippet :
  *   try (var fcm = FcmClient.loadSession(saved)) {
  *       String code = fcm.getPushCode();
  *   }
- * }</pre>
+ * }
  */
 public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable {
     /**
      * Cached unmodifiable set of supported platforms.
      *
-     * @apiNote
-     * Returned by {@link #supportedPlatforms()}; covers the personal
-     * and business Android variants
-     * ({@link ClientPlatformType#ANDROID} and
-     * {@link ClientPlatformType#ANDROID_BUSINESS}).
+     * <p>Returned by {@link #supportedPlatforms()}; covers the personal and business Android variants
+     * ({@link ClientPlatformType#ANDROID} and {@link ClientPlatformType#ANDROID_BUSINESS}).
      */
     private static final Set<ClientPlatformType> SUPPORTED_PLATFORMS =
             Set.of(ClientPlatformType.ANDROID, ClientPlatformType.ANDROID_BUSINESS);
@@ -66,105 +56,87 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     /**
      * Lifecycle states of the client.
      *
-     * @apiNote
-     * Transitions:
-     * <pre>
-     *   UNAUTHENTICATED --authenticate()--&gt; AUTHENTICATING --ok--&gt;   AUTHENTICATED
-     *                                                       \--err--&gt;  UNAUTHENTICATED
-     *   any            --close()--&gt; CLOSED
-     * </pre>
+     * <p>The state machine transitions as follows:
+     * <ul>
+     *   <li>{@link #UNAUTHENTICATED} moves to {@link #AUTHENTICATING} when
+     *       {@link FcmClient#authenticate(WhatsAppDevice)} is invoked.</li>
+     *   <li>{@link #AUTHENTICATING} moves to {@link #AUTHENTICATED} on success or back to {@link #UNAUTHENTICATED} on
+     *       failure.</li>
+     *   <li>Any state moves to {@link #CLOSED} when {@link FcmClient#close()} is invoked.</li>
+     * </ul>
      */
     private enum State {
         /**
          * No session bound.
          *
-         * @apiNote
-         * Only {@link #authenticate(WhatsAppDevice)} and
-         * {@link #close()} are valid in this state; every read-only
-         * accessor throws {@link IllegalStateException}.
+         * <p>Only {@link FcmClient#authenticate(WhatsAppDevice)} and {@link FcmClient#close()} are valid in this
+         * state; every read-only accessor throws {@link IllegalStateException}.
          */
         UNAUTHENTICATED,
         /**
-         * {@link #authenticate(WhatsAppDevice)} is currently running.
+         * {@link FcmClient#authenticate(WhatsAppDevice)} is currently running.
          *
-         * @apiNote
-         * Concurrent callers see this state and throw rather than
-         * racing on the registration pipeline.
+         * <p>Concurrent callers see this state and throw rather than racing on the registration pipeline.
          */
         AUTHENTICATING,
         /**
          * Registration succeeded.
          *
-         * @apiNote
-         * The MCS listener is running and the read-only accessors are
-         * usable.
+         * <p>The MCS listener is running and the read-only accessors are usable.
          */
         AUTHENTICATED,
         /**
-         * {@link #close()} has been invoked.
+         * {@link FcmClient#close()} has been invoked.
          *
-         * @apiNote
-         * Every accessor throws and the listener thread is being torn
-         * down; further state transitions are not permitted.
+         * <p>Every accessor throws and the listener thread is being torn down; further state transitions are not
+         * permitted.
          */
         CLOSED
     }
 
     /**
-     * Pre-built three-step registration helper bound to the configured
-     * proxy.
+     * Pre-built three-step registration helper bound to the configured proxy.
      *
-     * @apiNote
-     * Stateless beyond its dependencies, so it can be reused across
-     * retries.
+     * <p>Stateless beyond its dependencies, so it can be reused across retries.
      */
     private final FcmRegistration registration;
 
     /**
-     * Single-value sync primitive that holds the verification code
-     * once it arrives over MCS.
+     * Single-value sync primitive that holds the verification code once it arrives over MCS.
      *
-     * @apiNote
-     * Shared with {@link #connection} so the MCS reader thread can
-     * hand the code straight to any {@link #getPushCode()} caller.
+     * <p>Shared with {@link #connection} so the MCS reader thread can hand the code straight to any
+     * {@link #getPushCode()} caller.
      */
     private final FcmPushCode pushCode;
 
     /**
      * Lifecycle state.
      *
-     * @apiNote
-     * Transitioned via {@link AtomicReference#compareAndSet(Object, Object)}
-     * so concurrent {@link #authenticate(WhatsAppDevice)} callers see
-     * a consistent view and only one wins the race.
+     * @implNote
+     * This implementation transitions the state via {@link AtomicReference#compareAndSet(Object, Object)} so
+     * concurrent {@link #authenticate(WhatsAppDevice)} callers see a consistent view and only one wins the race.
      */
     private final AtomicReference<State> state;
 
     /**
-     * Session bound during {@link #authenticate(WhatsAppDevice)} or
-     * {@link #loadSession(FcmSession, URI)}.
+     * Session bound during {@link #authenticate(WhatsAppDevice)} or {@link #loadSession(FcmSession, URI)}.
      *
-     * @apiNote
-     * {@code null} until authentication succeeds. Reset to
-     * {@code null} on auth failure so a retry sees a clean slate.
+     * <p>{@code null} until authentication succeeds. Reset to {@code null} on auth failure so a retry sees a clean
+     * slate.
      */
     private volatile FcmSession session;
 
     /**
      * MCS connection owning the long-lived TLS stream.
      *
-     * @apiNote
-     * {@code null} until authentication completes; closed and
-     * dereferenced by {@link #close()}.
+     * <p>{@code null} until authentication completes; closed and dereferenced by {@link #close()}.
      */
     private volatile FcmMcsConnection connection;
 
     /**
      * Builds the I/O collaborators only.
      *
-     * @apiNote
-     * Public callers go through the static factories; this constructor
-     * never touches the network.
+     * <p>Public callers go through the static factories; this constructor never touches the network.
      *
      * @param proxy proxy URI, or {@code null} for direct
      */
@@ -175,12 +147,10 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * Creates a fresh, unauthenticated client that dials Google
-     * directly.
+     * Creates a fresh, unauthenticated client that dials Google directly.
      *
-     * @apiNote
-     * The caller must call {@link #authenticate(WhatsAppDevice)}
-     * before any of the read-only accessors become usable.
+     * <p>The caller must call {@link #authenticate(WhatsAppDevice)} before any of the read-only accessors become
+     * usable.
      *
      * @return a new unauthenticated client
      */
@@ -189,16 +159,12 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * Creates a fresh, unauthenticated client routed through
-     * {@code proxy}.
+     * Creates a fresh, unauthenticated client routed through {@code proxy}.
      *
-     * @apiNote
-     * The proxy is forwarded to the underlying {@link java.net.http.HttpClient}
-     * the registration helper builds; the MCS TLS stream itself does
-     * not honour the proxy.
+     * <p>The proxy is forwarded to the underlying {@link java.net.http.HttpClient} the registration helper builds; the
+     * MCS TLS stream itself does not honour the proxy.
      *
-     * @param proxy proxy URI ({@code http(s)://...},
-     *              {@code socks://...}), or {@code null} for direct
+     * @param proxy proxy URI ({@code http(s)://...}, {@code socks://...}), or {@code null} for direct
      * @return a new unauthenticated client
      */
     public static FcmClient newSession(URI proxy) {
@@ -206,16 +172,12 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * Restores a client from a previously captured {@link FcmSession}
-     * and starts the background MCS listener.
+     * Restores a client from a previously captured {@link FcmSession} and starts the background MCS listener.
      *
-     * @apiNote
-     * Re-runs the FIS step if the cached auth token has expired. The
-     * returned client is already in {@link State#AUTHENTICATED}, so
-     * {@link #authenticate(WhatsAppDevice)} would throw.
+     * <p>Re-runs the FIS step if the cached auth token has expired. The returned client is already in
+     * {@link State#AUTHENTICATED}, so {@link #authenticate(WhatsAppDevice)} would throw.
      *
-     * @param session the session previously obtained from
-     *                {@link #getSession()}
+     * @param session the session previously obtained from {@link #getSession()}
      * @return a restored, listening client
      * @throws IOException          if re-registration fails
      * @throws NullPointerException if {@code session} is {@code null}
@@ -225,11 +187,12 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * Restores a client from a previously captured {@link FcmSession},
-     * routed through {@code proxy}.
+     * Restores a client from a previously captured {@link FcmSession}, routed through {@code proxy}.
      *
-     * @param session the session previously obtained from
-     *                {@link #getSession()}
+     * <p>Re-runs the FIS step if the cached auth token has expired and starts the background MCS listener. The
+     * returned client is already in {@link State#AUTHENTICATED}.
+     *
+     * @param session the session previously obtained from {@link #getSession()}
      * @param proxy   proxy URI, or {@code null} for direct
      * @return a restored, listening client
      * @throws IOException          if re-registration fails
@@ -250,9 +213,8 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the cached two-element set
-     * {@code {ANDROID, ANDROID_BUSINESS}} because the FCM/MCS pipeline
-     * is Android-specific.
+     * This implementation returns the cached two-element set {@code {ANDROID, ANDROID_BUSINESS}} because the FCM/MCS
+     * pipeline is Android-specific.
      */
     @Override
     public Set<ClientPlatformType> supportedPlatforms() {
@@ -260,35 +222,25 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * {@inheritDoc}
+     * Selects the {@link FcmConfig} matching {@code device.platform()}, runs the three-step Android registration, and
+     * starts the background MCS listener.
+     *
+     * <p>{@link FcmConfig#WHATSAPP_PERSONAL} is chosen for {@link ClientPlatformType#ANDROID} and
+     * {@link FcmConfig#WHATSAPP_BUSINESS} for {@link ClientPlatformType#ANDROID_BUSINESS}. Only the first concurrent
+     * caller actually runs the registration; any other caller observing {@link State#AUTHENTICATING} or
+     * {@link State#AUTHENTICATED} throws {@link IllegalStateException}. On failure the state reverts to
+     * {@link State#UNAUTHENTICATED} so the caller may retry.
      *
      * @implNote
-     * This implementation selects the {@link FcmConfig} matching
-     * {@code device.platform()}
-     * ({@link FcmConfig#WHATSAPP_PERSONAL} for
-     * {@link ClientPlatformType#ANDROID},
-     * {@link FcmConfig#WHATSAPP_BUSINESS} for
-     * {@link ClientPlatformType#ANDROID_BUSINESS}), runs the
-     * three-step Android registration via {@link FcmRegistration}, and
-     * starts the background MCS listener via
-     * {@link FcmMcsConnection#start()}. Thread-safety is provided by
-     * an {@link AtomicReference#compareAndSet(Object, Object)} on the
-     * lifecycle state: only the first concurrent caller actually runs
-     * the registration; any other caller observing
-     * {@link State#AUTHENTICATING} or {@link State#AUTHENTICATED}
-     * throws {@link IllegalStateException}. On failure the state
-     * reverts to {@link State#UNAUTHENTICATED} so the caller may
-     * retry.
+     * This implementation guards the lifecycle with an {@link AtomicReference#compareAndSet(Object, Object)} on the
+     * state, runs the registration via {@link FcmRegistration}, and starts the listener via
+     * {@link FcmMcsConnection#start()}.
      *
      * @param device the device whose platform selects the WA config
-     * @throws IllegalArgumentException if {@code device.platform()} is
-     *                                  neither {@code ANDROID} nor
+     * @throws IllegalArgumentException if {@code device.platform()} is neither {@code ANDROID} nor
      *                                  {@code ANDROID_BUSINESS}
-     * @throws IllegalStateException    if the client is already
-     *                                  authenticating, authenticated,
-     *                                  or closed
-     * @throws UncheckedIOException     wrapping any HTTP or protocol
-     *                                  failure
+     * @throws IllegalStateException    if the client is already authenticating, authenticated, or closed
+     * @throws UncheckedIOException     wrapping any HTTP or protocol failure
      */
     @Override
     public void authenticate(WhatsAppDevice device) {
@@ -319,14 +271,11 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * Wipes the partial state left by a failed
-     * {@link #authenticate(WhatsAppDevice)} attempt and reverts the
-     * lifecycle back to {@link State#UNAUTHENTICATED}.
+     * Wipes the partial state left by a failed {@link #authenticate(WhatsAppDevice)} attempt and reverts the lifecycle
+     * back to {@link State#UNAUTHENTICATED}.
      *
-     * @apiNote
-     * Lets the caller retry authentication after a transient HTTP
-     * failure without leaking a half-built {@link #session} or
-     * {@link #connection}.
+     * <p>Lets the caller retry authentication after a transient HTTP failure without leaking a half-built
+     * {@link #session} or {@link #connection}.
      */
     private void rollbackAuthentication() {
         this.session = null;
@@ -338,10 +287,8 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation reports {@code true} only when the
-     * {@link AtomicReference} lifecycle state is exactly
-     * {@link State#AUTHENTICATED}; both {@link State#AUTHENTICATING}
-     * and {@link State#CLOSED} return {@code false}.
+     * This implementation reports {@code true} only when the {@link AtomicReference} lifecycle state is exactly
+     * {@link State#AUTHENTICATED}; both {@link State#AUTHENTICATING} and {@link State#CLOSED} return {@code false}.
      */
     @Override
     public boolean isAuthenticated() {
@@ -351,13 +298,10 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     /**
      * Returns the live {@link FcmSession} backing this client.
      *
-     * @apiNote
-     * Callers may pass it back to {@link #loadSession(FcmSession)} on
-     * a future run, or hand it to {@code FcmSessionSpec.encode(...)}
-     * for byte-level persistence. The returned object is mutated by
-     * the MCS reader thread as persistent ids arrive; callers that
-     * serialise the session concurrently with an active MCS connection
-     * should snapshot {@link FcmSession#persistentIds()} first.
+     * <p>Callers may pass it back to {@link #loadSession(FcmSession)} on a future run, or hand it to the protobuf
+     * codec for byte-level persistence. The returned object is mutated by the MCS reader thread as persistent ids
+     * arrive; callers that serialise the session concurrently with an active MCS connection should snapshot
+     * {@link FcmSession#persistentIds()} first.
      *
      * @return the live session
      * @throws IllegalStateException if the client is not authenticated
@@ -371,10 +315,8 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation forwards to {@link FcmSession#fcmToken()}
-     * after asserting the client is in {@link State#AUTHENTICATED};
-     * the value is the FCM registration token established during the
-     * register3 step.
+     * This implementation forwards to {@link FcmSession#fcmToken()} after asserting the client is in
+     * {@link State#AUTHENTICATED}; the value is the FCM registration token established during the register3 step.
      *
      * @throws IllegalStateException if the client is not authenticated
      */
@@ -387,22 +329,18 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation blocks on {@link FcmPushCode#waitForCode()}
-     * until the silent FCM data push WhatsApp's server emits in
-     * response to {@code /v2/exist} arrives, or until {@link #close()}
-     * is invoked. Safe to call from multiple threads concurrently;
-     * every caller sees the same delivered code, since the WhatsApp
-     * registration flow only ever sends one per session.
+     * <p>Blocks until the silent FCM data push WhatsApp's server emits in response to {@code /v2/exist} arrives, or
+     * until {@link #close()} is invoked. Safe to call from multiple threads concurrently; every caller sees the same
+     * delivered code, since the WhatsApp registration flow only ever sends one per session. The returned value is the
+     * code carried in {@code app_data.registration_code}.
      *
-     * @return the verification code from
-     *         {@code app_data.registration_code}
-     * @throws UncheckedIOException  if the client has been closed
-     *                               before a code was delivered
-     * @throws RuntimeException      if the caller is interrupted while
-     *                               waiting (the interrupt flag is
-     *                               restored before the exception is
-     *                               thrown)
+     * @implNote
+     * This implementation blocks on {@link FcmPushCode#waitForCode()} and translates its checked exceptions into the
+     * unchecked failures documented below.
+     *
+     * @throws UncheckedIOException  if the client has been closed before a code was delivered
+     * @throws RuntimeException      if the caller is interrupted while waiting; the interrupt flag is restored before
+     *                               the exception is thrown
      * @throws IllegalStateException if the client is not authenticated
      */
     @Override
@@ -419,15 +357,11 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
     }
 
     /**
-     * Throws {@link IllegalStateException} unless the client is in
-     * {@link State#AUTHENTICATED}.
+     * Throws {@link IllegalStateException} unless the client is in {@link State#AUTHENTICATED}.
      *
-     * @apiNote
-     * Used to guard accessors that depend on a populated
-     * {@link #session} and a running MCS listener.
+     * <p>Guards the accessors that depend on a populated {@link #session} and a running MCS listener.
      *
-     * @throws IllegalStateException if the lifecycle state is anything
-     *                               other than {@link State#AUTHENTICATED}
+     * @throws IllegalStateException if the lifecycle state is anything other than {@link State#AUTHENTICATED}
      */
     private void requireAuthenticated() {
         var current = state.get();
@@ -441,13 +375,10 @@ public final class FcmClient implements WhatsAppDevicePushClient, AutoCloseable 
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation stops the background MCS reader and
-     * heartbeat threads via {@link FcmMcsConnection#close()}, tears
-     * down the TLS socket, transitions the lifecycle to
-     * {@link State#CLOSED}, and unblocks every pending
-     * {@link #getPushCode()} caller via {@link FcmPushCode#close()}.
-     * Idempotent; a second call after {@link State#CLOSED} returns
-     * immediately.
+     * This implementation stops the background MCS reader and heartbeat threads via {@link FcmMcsConnection#close()},
+     * tears down the TLS socket, transitions the lifecycle to {@link State#CLOSED}, and unblocks every pending
+     * {@link #getPushCode()} caller via {@link FcmPushCode#close()}. Idempotent; a second call after
+     * {@link State#CLOSED} returns immediately.
      */
     @Override
     public void close() {

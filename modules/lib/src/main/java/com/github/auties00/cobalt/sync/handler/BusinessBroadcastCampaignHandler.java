@@ -22,13 +22,11 @@ import java.util.logging.Logger;
 /**
  * Maintains the business-broadcast-campaign roster from {@code business_broadcast_campaign} sync mutations.
  *
- * @apiNote
- * Drives the Business Manager broadcast-campaign surface (a campaign
- * groups a marketing message, a target broadcast list, an ad
- * association, and a scheduled or pending status). When the user
- * creates, edits, or deletes a campaign on another device, the server
- * replays the change here as a SET (upsert) or REMOVE; Cobalt
- * embedders observe the result through
+ * <p>A campaign groups a marketing message, a target broadcast list, an ad
+ * association, and a scheduled or pending status. When a campaign is created,
+ * edited, or deleted on another device, the server replays the change here as a
+ * {@link SyncdOperation#SET} (upsert) or {@link SyncdOperation#REMOVE}; the
+ * result is read back through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findBusinessBroadcastCampaign(String)}.
  *
  * @implNote
@@ -46,19 +44,14 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     /**
      * The handler-scoped {@link Logger} used to emit the per-batch malformed-mutation summary.
      *
-     * @apiNote
-     * Records the line equivalent to WA Web's
-     * {@code broadcast campaign sync: <n> malformed mutations} after
-     * each batch.
+     * <p>Records the count of malformed mutations after each batch.
      */
     private static final Logger LOGGER = Logger.getLogger(BusinessBroadcastCampaignHandler.class.getName());
 
     /**
      * Constructs the singleton broadcast-campaign handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public BusinessBroadcastCampaignHandler() {
@@ -86,19 +79,16 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * For SET mutations, validates that the
+     * <p>For {@link SyncdOperation#SET} mutations, validates that the
      * {@link BusinessBroadcastCampaignAction} value carries a
-     * {@code broadcastJid}, {@code deviceId}, and {@code status}, then
-     * upserts the campaign keyed by {@code campaignId} from
-     * {@code indexParts[1]}. For REMOVE mutations, drops the campaign
-     * by id. Returns
-     * {@link SyncdIndexUtils#malformedActionIndex(String, String)} when
-     * the index slot is empty,
-     * {@link SyncdIndexUtils#malformedActionValue(String)} when the
-     * required fields are missing, and
-     * {@link MutationApplicationResult#failed()} for unknown operations
-     * or any thrown exception.
+     * {@code broadcastJid}, {@code deviceId}, and {@code status}, then upserts
+     * the campaign keyed by the {@code campaignId} in index slot 1. For
+     * {@link SyncdOperation#REMOVE} mutations, drops the campaign by id. Returns
+     * {@link SyncdIndexUtils#malformedActionIndex(String, String)} when the
+     * index slot is empty, {@link SyncdIndexUtils#malformedActionValue(String)}
+     * when the required fields are missing, and
+     * {@link MutationApplicationResult#failed()} for unknown operations or any
+     * thrown exception.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -151,10 +141,9 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Iterates the batch, applying each mutation via
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * and aggregating a malformed-mutation count for the warning log.
+     * <p>Iterates the batch, applying each mutation via
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)} and
+     * aggregating a malformed-mutation count for the warning log.
      *
      * @implNote
      * This implementation omits WA Web's

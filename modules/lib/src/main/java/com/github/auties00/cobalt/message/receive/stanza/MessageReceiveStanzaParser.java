@@ -16,10 +16,8 @@ import java.util.Objects;
  * Parses every incoming {@code <message>} stanza into the structured
  * {@link MessageReceiveStanza} the rest of the receive pipeline consumes.
  *
- * @apiNote
- * The single entry point ({@link #parse}) is a stateless adapter for WA
- * Web's {@code WAWebHandleMsgParser.incomingMsgParser}. The caller is the
- * inbound message-dispatch loop: it hands every {@code <message>} node to
+ * <p>The single entry point ({@link #parse}) is a stateless adapter. The caller
+ * is the inbound message-dispatch loop: it hands every {@code <message>} node to
  * this class before attempting decryption, so the dedup layer, the receipt
  * emitter, and the per-payload decryptor all operate on the same structured
  * snapshot rather than re-scanning the raw node.
@@ -30,8 +28,7 @@ public final class MessageReceiveStanzaParser {
     /**
      * Prevents instantiation of this utility class.
      *
-     * @apiNote
-     * All entry points are {@code static}; instances would carry no state.
+     * <p>All entry points are {@code static}, so instances would carry no state.
      *
      * @throws UnsupportedOperationException always
      */
@@ -43,19 +40,16 @@ public final class MessageReceiveStanzaParser {
      * Parses a raw {@code <message>} node into a structured
      * {@link MessageReceiveStanza}.
      *
-     * @apiNote
-     * Pass the local account's PN and LID so the message-type classifier can
-     * recognize self-originated broadcasts and status posts; either argument
-     * may be {@code null}, in which case the matching {@code isMeAccount}
-     * branch is skipped and ambiguous broadcasts are treated as non-self.
+     * <p>The local account's PN and LID let the message-type classifier
+     * recognize self-originated broadcasts and status posts; either argument may
+     * be {@code null}, in which case the matching is-me-account branch is skipped
+     * and ambiguous broadcasts are treated as non-self.
      *
      * @implNote
-     * This implementation aggregates every field the WA Web parser produces
-     * into a single allocation. Where WA Web throws on missing required
-     * attributes via its {@code WADeprecatedWapParser}, this implementation
-     * delegates to {@link Node#getRequiredAttributeAsString} and
-     * {@link Node#getRequiredAttributeAsLong}, which throw the same shape of
-     * {@code NoSuchElementException}.
+     * This implementation aggregates every parsed field into a single
+     * allocation, delegating missing-required-attribute handling to
+     * {@link Node#getRequiredAttributeAsString} and
+     * {@link Node#getRequiredAttributeAsLong}.
      *
      * @param node       the inbound {@code <message>} node
      * @param selfPnJid  the local account's PN JID, or {@code null}
@@ -250,8 +244,7 @@ public final class MessageReceiveStanzaParser {
      * Returns the actual sender's device JID derived from the stanza's
      * addressing.
      *
-     * @apiNote
-     * For 1:1 messages the sender equals the {@code from} JID; for group,
+     * <p>For 1:1 messages the sender equals the {@code from} JID; for group,
      * broadcast, and status messages it is the {@code participant} JID.
      *
      * @param fromJid     the {@code from} attribute JID
@@ -278,17 +271,16 @@ public final class MessageReceiveStanzaParser {
      * Classifies the addressing shape of an incoming stanza into a
      * {@link MessageType}.
      *
-     * @apiNote
-     * Output drives every later branching decision: which Signal cipher to
-     * use, which receipt to emit, whether to attach the broadcast contact
-     * list. See {@link MessageType} for the meaning of each value.
+     * <p>The result drives every later branching decision: which Signal cipher to
+     * use, which receipt to emit, whether to attach the broadcast contact list.
+     * See {@link MessageType} for the meaning of each value.
      *
      * @implNote
-     * This implementation collapses WA Web's two-axis check ({@code MESSAGE_TYPE.CHAT}
-     * combined with {@code MSG_CATEGORY.peer}) into the single
-     * {@link MessageType#PEER_CHAT} value, and collapses the {@code isDirect}
-     * sub-classification of {@code OTHER_STATUS} (which WA Web tags inline)
-     * into the boolean {@link MessageReceiveStanza#isDirect()} accessor.
+     * This implementation collapses the upstream two-axis check (a chat message
+     * combined with the peer message category) into the single
+     * {@link MessageType#PEER_CHAT} value, and collapses the direct
+     * sub-classification of {@link MessageType#OTHER_STATUS} into the boolean
+     * {@link MessageReceiveStanza#isDirect()} accessor.
      *
      * @param fromJid     the {@code from} attribute JID
      * @param participant the {@code participant} attribute JID, or {@code null}
@@ -341,11 +333,10 @@ public final class MessageReceiveStanzaParser {
      * Returns whether the given participant identifies the locally logged-in
      * account at user level.
      *
-     * @apiNote
-     * The user-level comparison strips the device suffix so any companion
-     * device is treated as the same account as the primary; both the PN and
-     * LID branches are checked so a LID-addressed status broadcast from the
-     * local account is still recognised as self.
+     * <p>The user-level comparison strips the device suffix so any companion
+     * device is treated as the same account as the primary; both the PN and LID
+     * branches are checked so a LID-addressed status broadcast from the local
+     * account is still recognised as self.
      *
      * @param participant the participant JID, or {@code null}
      * @param selfPnJid   the local account's PN JID, or {@code null}
@@ -366,17 +357,16 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses every {@code <enc>} child of the message node into a typed
-     * payload list.
+     * Parses every {@code <enc>} child of the message node into a typed payload
+     * list.
      *
-     * @apiNote
-     * The list iteration order matches the wire order; downstream code
-     * relies on this when picking the first payload's retry count or when
-     * preferring an {@code skmsg} envelope over the per-device retry one.
+     * <p>The list iteration order matches the wire order; downstream code relies
+     * on this when picking the first payload's retry count or when preferring an
+     * {@code skmsg} envelope over the per-device retry one.
      *
      * @implNote
-     * This implementation drops {@code <enc>} nodes whose content is empty
-     * to avoid producing payloads that no Signal cipher can act on.
+     * This implementation drops {@code <enc>} nodes whose content is empty to
+     * avoid producing payloads that no Signal cipher can act on.
      *
      * @param node the parent {@code <message>} node
      * @return the parsed encrypted payloads
@@ -405,13 +395,12 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the {@code <bot>} child into a {@link MessageReceiveBotInfo},
-     * or returns {@code null} when no bot child is present.
+     * Parses the {@code <bot>} child into a {@link MessageReceiveBotInfo}, or
+     * returns {@code null} when no bot child is present.
      *
-     * @apiNote
-     * Populated for Meta AI and 1P/3P business bot replies; the downstream
-     * AI-rich-response stitcher consumes the result to thread streaming
-     * chunks back together.
+     * <p>Populated for Meta AI and 1P/3P business bot replies; the downstream
+     * rich-response stitcher consumes the result to thread streaming chunks back
+     * together.
      *
      * @param node the parent {@code <message>} node
      * @return the parsed bot info, or {@code null}
@@ -443,18 +432,16 @@ public final class MessageReceiveStanzaParser {
      * combining stanza attributes with the {@code <biz>} child, or returns
      * {@code null} when no business attribute or child is present.
      *
-     * @apiNote
-     * The stanza-level {@code verified_name} attribute, the
-     * {@code verified_level} attribute, the {@code <verified_name>} child
-     * (cert bytes), and the {@code <biz>} child all flow into one record so
-     * the rendering pipeline has a single object to consult.
+     * <p>The stanza-level {@code verified_name} attribute, the
+     * {@code verified_level} attribute, the {@code <verified_name>} child (cert
+     * bytes), and the {@code <biz>} child all flow into one record so the
+     * rendering pipeline has a single object to consult.
      *
      * @implNote
-     * This implementation reads the verified-buttons and verified-list
-     * envelopes from the {@code <biz>} child directly, but reads the
-     * verified-HSM envelope from the parent {@code <message>} node because
-     * WA Web's {@code <hsm>} child sits at the message level rather than
-     * inside {@code <biz>}.
+     * This implementation reads the verified-buttons and verified-list envelopes
+     * from the {@code <biz>} child directly, but reads the verified-HSM envelope
+     * from the parent {@code <message>} node because the {@code <hsm>} child sits
+     * at the message level rather than inside {@code <biz>}.
      *
      * @param node the parent {@code <message>} node
      * @return the parsed biz info, or {@code null}
@@ -513,8 +500,7 @@ public final class MessageReceiveStanzaParser {
     /**
      * Returns the native-flow name from the {@code <biz>} node.
      *
-     * @apiNote
-     * Prefers the nested
+     * <p>Prefers the nested
      * {@code <interactive><native_flow name="..."/></interactive>} shape and
      * falls back to a direct {@code native_flow_name} attribute on the
      * {@code <biz>} node when the nested structure is absent.
@@ -544,18 +530,16 @@ public final class MessageReceiveStanzaParser {
      * {@link MessageReceiveReportingInfo}, or returns {@code null} when no
      * reporting child is present.
      *
-     * @apiNote
-     * Extracts the reporting-token bytes and version from the
+     * <p>Extracts the reporting-token bytes and version from the
      * {@code <reporting_token>} child and the reporting-tag bytes from the
      * {@code <reporting_tag>} child; the stanza's own {@code t} attribute is
      * captured so a later abuse report can prove the token was bound to this
      * delivery.
      *
      * @implNote
-     * This implementation does not check the reporting-token-receive feature
-     * gate (WA Web's {@code isReportingTokenReceivingEnabled}) before
-     * parsing; absent gating, the absence of a {@code <reporting>} child is
-     * the only short-circuit.
+     * This implementation does not check the reporting-token-receive feature gate
+     * before parsing; absent gating, the absence of a {@code <reporting>} child
+     * is the only short-circuit.
      *
      * @param node the parent {@code <message>} node
      * @return the parsed reporting info, or {@code null}
@@ -591,21 +575,19 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the {@code <pay>} and {@code <transaction>} sibling children
-     * into a {@link MessageReceivePaymentInfo}, or returns {@code null} when
-     * neither child is present.
+     * Parses the {@code <pay>} and {@code <transaction>} sibling children into a
+     * {@link MessageReceivePaymentInfo}, or returns {@code null} when neither
+     * child is present.
      *
-     * @apiNote
-     * When both children are present the {@code <transaction>} fields take
+     * <p>When both children are present the {@code <transaction>} fields take
      * precedence because {@code <transaction>} is the newer Novi/WhatsApp Pay
      * envelope.
      *
      * @implNote
-     * This implementation handles the legacy {@code <pay type="send">} shape
-     * by falling back to the message's own {@code recipient} attribute when
-     * the {@code <pay>} child lacks a {@code receiver} attribute, mirroring
-     * WA Web's {@code WAWebHandleMsgParser.E}. The {@code request} and
-     * {@code invite} pay types carry no usable payment data and yield
+     * This implementation handles the legacy {@code <pay type="send">} shape by
+     * falling back to the message's own {@code recipient} attribute when the
+     * {@code <pay>} child lacks a {@code receiver} attribute. The {@code request}
+     * and {@code invite} pay types carry no usable payment data and yield
      * {@code null}.
      *
      * @param node the parent {@code <message>} node
@@ -660,11 +642,9 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the {@code <participants>} child into the broadcast contact
-     * list.
+     * Parses the {@code <participants>} child into the broadcast contact list.
      *
-     * @apiNote
-     * Returns an empty list (not {@code null}) when no participants child is
+     * <p>Returns an empty list (not {@code null}) when no participants child is
      * present so the caller can iterate unconditionally.
      *
      * @param node the parent {@code <message>} node

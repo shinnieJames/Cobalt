@@ -26,7 +26,6 @@ class UdpDatagramTransportTest {
     @Test
     @DisplayName("send to a loopback DatagramSocket arrives unchanged")
     void sendArrivesAtPeer() throws Exception {
-        // Loopback peer socket — the transport will send to its bound port.
         try (var peer = new DatagramSocket(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))) {
             peer.setSoTimeout(2000);
             var remote = new InetSocketAddress(InetAddress.getLoopbackAddress(), peer.getLocalPort());
@@ -57,7 +56,6 @@ class UdpDatagramTransportTest {
                 var queue = new ArrayBlockingQueue<byte[]>(4);
                 transport.setInboundListener(queue::offer);
 
-                // Send loopback packet from peer back to transport's local port.
                 var local = transport.localAddress();
                 var msg = new byte[]{9, 8, 7, 6};
                 peer.send(new DatagramPacket(msg, msg.length,
@@ -77,7 +75,7 @@ class UdpDatagramTransportTest {
             var transport = new UdpDatagramTransport(
                     new InetSocketAddress(InetAddress.getLoopbackAddress(), peer.getLocalPort()));
             transport.close();
-            transport.close(); // idempotent
+            transport.close();
             assertThrows(WhatsAppCallException.Ice.class,
                     () -> transport.send(new byte[]{1}));
         }

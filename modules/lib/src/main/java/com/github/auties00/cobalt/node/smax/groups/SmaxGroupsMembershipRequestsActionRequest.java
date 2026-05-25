@@ -17,10 +17,9 @@ import java.util.Optional;
  * The outbound {@code <iq xmlns="w:g2" type="set">} stanza that approves or rejects pending membership-approval
  * requests on a group.
  *
- * @apiNote Drives the {@code WAWebGroupMembershipRequestsActionJob.membershipApprovalRequestAction} flow surfaced from
- * the admin "Pending requests" UI: WA Web issues this IQ with either the approve list or the reject list populated
- * (never both), but the wire schema permits both lists to be populated in a single request. At least one of
- * {@link #participantsToApprove()} / {@link #participantsToReject()} must be non-empty.
+ * <p>Backs the admin "Pending requests" UI. WA Web issues this IQ with either the approve list or the reject list
+ * populated (never both), but the wire schema permits both lists to be populated in a single request. At least one
+ * of {@link #participantsToApprove()} / {@link #participantsToReject()} must be non-empty.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsMembershipRequestsActionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -44,8 +43,8 @@ public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOper
     /**
      * Constructs a request.
      *
-     * @apiNote Passing both lists empty triggers an {@link IllegalArgumentException}; the relay rejects no-op
-     * requests as a client error.
+     * <p>Passing both lists empty triggers an {@link IllegalArgumentException}; the relay rejects no-op requests
+     * as a client error.
      *
      * @param groupJid              the group {@link Jid}; never {@code null}
      * @param participantsToApprove the JIDs to approve; never {@code null}, may be empty
@@ -96,7 +95,7 @@ public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOper
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <membership_requests_action>

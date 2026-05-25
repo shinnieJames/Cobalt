@@ -22,24 +22,15 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link LidMigrationService#resolveThread(com.github.auties00.cobalt.model.chat.Chat)}.
- *
- * @apiNote
- * Pins every path of the classifier cascade that decides whether
- * to migrate, keep, or delete a chat: already-LID branches
- * (including the ctwa-origin promotion), the server-keyed
- * {@code Keep} branches (group, newsletter, broadcast, bot,
- * duplicate-merge), the migrate branches (primary cache hit,
- * local LID fallback, original-LID cache fallback) with the
- * mismatch / split-thread / obsolete-mappings throws, and the
- * deletability branches.
- *
- * @implNote
- * This implementation uses isolated harnesses through
- * {@link MigrationFixtures#temporaryStore(Jid, Jid)} and feeds the
- * primary caches via
- * {@link LidMigrationService#changeLid(Jid, Jid, Jid)} so each
- * branch is exercised in isolation.
+ * Covers {@link LidMigrationService#resolveThread(com.github.auties00.cobalt.model.chat.Chat)} and
+ * its two-argument overload: every path of the classifier cascade that decides whether to migrate,
+ * keep, or delete a chat. The cases walk the already-LID branches (including ctwa-origin
+ * promotion), the server-keyed {@code Keep} branches (group, newsletter, broadcast, bot,
+ * duplicate-merge), the migrate branches (primary cache hit, local LID fallback, original-LID cache
+ * fallback) with their mismatch, split-thread, and obsolete-mappings throws, and the deletability
+ * branches. Each case feeds the primary caches via
+ * {@link LidMigrationService#changeLid(Jid, Jid, Jid)} on an isolated store so branches stay
+ * independent.
  */
 @DisplayName("LidMigrationService.resolveThread")
 class LidMigrationServiceResolveThreadTest {
@@ -55,22 +46,8 @@ class LidMigrationServiceResolveThreadTest {
     private static final Jid STATUS_BROADCAST = Jid.of("status@broadcast");
     private static final Jid BOT = Jid.of("867051314767696@bot");
 
-    /**
-     * Bundles the test client, the AB-props seed, and the service
-     * under test.
-     *
-     * @param client  the test client harness
-     * @param props   the AB-props seed
-     * @param service the service under test
-     */
     private record Harness(TestWhatsAppClient client, TestABPropsService props, LidMigrationService service) {}
 
-    /**
-     * Builds a fresh harness wired with the supplied AB props.
-     *
-     * @param props the AB-props seed
-     * @return a fresh {@link Harness}
-     */
     private static Harness build(TestABPropsService props) {
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
         var client = TestWhatsAppClient.create().withStore(store);
@@ -79,19 +56,10 @@ class LidMigrationServiceResolveThreadTest {
         return new Harness(client, props, service);
     }
 
-    /**
-     * Builds a fresh harness with a default
-     * {@link TestABPropsService}.
-     *
-     * @return a fresh {@link Harness}
-     */
     private static Harness build() {
         return build(TestABPropsService.builder().build());
     }
 
-    /**
-     * Verifies that LID chat, ctwa origin, primary latest cache matches -> ALREADY_LID, origin promoted to general.
-     */
     @Test
     @DisplayName("LID chat, ctwa origin, primary latest cache matches -> ALREADY_LID, origin promoted to general")
     void lidCtwaMatchesPrimary() {
@@ -111,9 +79,6 @@ class LidMigrationServiceResolveThreadTest {
                 "ctwa origin is promoted to general after primary-match");
     }
 
-    /**
-     * Verifies that LID chat, ctwa origin, primary latest cache empty -> ALREADY_LID, origin unchanged.
-     */
     @Test
     @DisplayName("LID chat, ctwa origin, primary latest cache empty -> ALREADY_LID, origin unchanged")
     void lidCtwaNoMatch() {
@@ -128,9 +93,6 @@ class LidMigrationServiceResolveThreadTest {
                 "origin stays ctwa when no primary cache entry matches");
     }
 
-    /**
-     * Verifies that LID chat, non-ctwa origin -> ALREADY_LID, origin unchanged.
-     */
     @Test
     @DisplayName("LID chat, non-ctwa origin -> ALREADY_LID, origin unchanged")
     void lidNonCtwa() {
@@ -144,9 +106,6 @@ class LidMigrationServiceResolveThreadTest {
         assertEquals("general", chat.lidOriginType().orElseThrow());
     }
 
-    /**
-     * Verifies that group server -> GROUP_OR_COMMUNITY.
-     */
     @Test
     @DisplayName("group server -> GROUP_OR_COMMUNITY")
     void groupKept() {
@@ -157,9 +116,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Keep) resolution).reason());
     }
 
-    /**
-     * Verifies that newsletter server -> NEWSLETTER.
-     */
     @Test
     @DisplayName("newsletter server -> NEWSLETTER")
     void newsletterKept() {
@@ -170,9 +126,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Keep) resolution).reason());
     }
 
-    /**
-     * Verifies that regular broadcast -> BROADCAST.
-     */
     @Test
     @DisplayName("regular broadcast -> BROADCAST")
     void broadcastKept() {
@@ -183,9 +136,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Keep) resolution).reason());
     }
 
-    /**
-     * Verifies that status broadcast account -> STATUS_BROADCAST.
-     */
     @Test
     @DisplayName("status broadcast account -> STATUS_BROADCAST")
     void statusBroadcastKept() {
@@ -196,9 +146,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Keep) resolution).reason());
     }
 
-    /**
-     * Verifies that bot server -> BOT.
-     */
     @Test
     @DisplayName("bot server -> BOT")
     void botKept() {
@@ -209,9 +156,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Keep) resolution).reason());
     }
 
-    /**
-     * Verifies that PN chat with phoneNumberhDuplicateLidThread=true -> DUPLICATE_WILL_MERGE.
-     */
     @Test
     @DisplayName("PN chat with phoneNumberhDuplicateLidThread=true -> DUPLICATE_WILL_MERGE")
     void duplicateMergeKept() {
@@ -223,19 +167,12 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Keep) resolution).reason());
     }
 
-    /**
-     * Verifies that PN chat, primary hit, localLid null -> Migrate(primaryLid).
-     */
     @Test
     @DisplayName("PN chat, primary hit, localLid null -> Migrate(primaryLid)")
     void migrateOnPrimaryNoLocal() {
         var h = build();
-        // changeLid populates primaryPnToAssignedLidCache + primaryPnToLatestLidCache and writes the store mapping.
-        // For "localLid null" we want store.findLidByPhone to miss; so use the assignedLid cache directly via processProtocolMessage.
-        // Easier: use changeLid then wipe the store mapping. But the store mapping is set unconditionally.
-        // Use a fresh peer with mappings only in primary cache, then clear store mapping.
         h.service.changeLid(PEER_PN, PEER_LID, null);
-        // chat created after changeLid; chat.lid() returns empty (only set by setLid).
+        // Chat is created without setLid, so chat.lid() is empty: the localLid-null branch.
         var chat = h.client.store().addNewChat(PEER_PN);
 
         var resolution = h.service.resolveThread(chat);
@@ -244,9 +181,6 @@ class LidMigrationServiceResolveThreadTest {
         assertEquals(PEER_LID, ((LidMigrationResolution.Migrate) resolution).targetLid());
     }
 
-    /**
-     * Verifies that PN chat, primary hit, localLid matches primary -> Migrate(primaryLid).
-     */
     @Test
     @DisplayName("PN chat, primary hit, localLid matches primary -> Migrate(primaryLid)")
     void migrateOnPrimaryLocalMatches() {
@@ -262,9 +196,6 @@ class LidMigrationServiceResolveThreadTest {
         assertEquals(PEER_LID, ((LidMigrationResolution.Migrate) resolution).targetLid());
     }
 
-    /**
-     * Verifies that PN chat, primary hit, localLid differs, log_out_on_mismatch=true, chat newer than sync -> PrimaryMappingsObsolete.
-     */
     @Test
     @DisplayName("PN chat, primary hit, localLid differs, log_out_on_mismatch=true, chat newer than sync -> PrimaryMappingsObsolete")
     void primaryMappingsObsoleteThrows() {
@@ -281,9 +212,6 @@ class LidMigrationServiceResolveThreadTest {
                 () -> h.service.resolveThread(chat));
     }
 
-    /**
-     * Verifies that PN chat, primary hit, localLid differs, log_out_on_mismatch=true, chat older than sync -> Migrate(primaryLid).
-     */
     @Test
     @DisplayName("PN chat, primary hit, localLid differs, log_out_on_mismatch=true, chat older than sync -> Migrate(primaryLid)")
     void migrateOnPrimaryChatOlderThanSync() {
@@ -307,9 +235,6 @@ class LidMigrationServiceResolveThreadTest {
                 "older chat is not 'fresher than the sync', so we accept the primary's mapping");
     }
 
-    /**
-     * Verifies that getEffectiveSyncTimestamp: chatDb ts present -> wins over receive ts and EPOCH.
-     */
     @Test
     @DisplayName("getEffectiveSyncTimestamp: chatDb ts present -> wins over receive ts and EPOCH")
     void effectiveSyncTimestampPrefersChatDb() {
@@ -329,9 +254,6 @@ class LidMigrationServiceResolveThreadTest {
                 "chatDb ts is the effective sync; chat ts == chatDb ts triggers the throw");
     }
 
-    /**
-     * Verifies that getEffectiveSyncTimestamp: only receive ts (no chatDb) -> receive ts is effective.
-     */
     @Test
     @DisplayName("getEffectiveSyncTimestamp: only receive ts (no chatDb) -> receive ts is effective")
     void effectiveSyncTimestampFallsBackToReceive() throws InterruptedException {
@@ -360,9 +282,6 @@ class LidMigrationServiceResolveThreadTest {
                 () -> h.service.resolveThread(chat));
     }
 
-    /**
-     * Verifies that getEffectiveSyncTimestamp: neither chatDb nor receive set -> EPOCH; any non-empty chat ts triggers throw.
-     */
     @Test
     @DisplayName("getEffectiveSyncTimestamp: neither chatDb nor receive set -> EPOCH; any non-empty chat ts triggers throw")
     void effectiveSyncTimestampDefaultsToEpoch() {
@@ -378,9 +297,6 @@ class LidMigrationServiceResolveThreadTest {
                 () -> h.service.resolveThread(chat));
     }
 
-    /**
-     * Verifies that PN chat, primary hit, localLid differs, log_out_on_mismatch=false -> Migrate(primaryLid).
-     */
     @Test
     @DisplayName("PN chat, primary hit, localLid differs, log_out_on_mismatch=false -> Migrate(primaryLid)")
     void migrateOnPrimaryLogOutDisabled() {
@@ -399,9 +315,6 @@ class LidMigrationServiceResolveThreadTest {
         assertEquals(PEER_LID, ((LidMigrationResolution.Migrate) resolution).targetLid());
     }
 
-    /**
-     * Verifies that PN chat, no primary, localLid present, no collision -> Migrate(localLid).
-     */
     @Test
     @DisplayName("PN chat, no primary, localLid present, no collision -> Migrate(localLid)")
     void migrateOnLocalNoCollision() {
@@ -416,9 +329,6 @@ class LidMigrationServiceResolveThreadTest {
         assertEquals(PEER_LID, ((LidMigrationResolution.Migrate) resolution).targetLid());
     }
 
-    /**
-     * Verifies that PN chat, no primary, localLid collides with existing LID thread -> SplitThreadMismatch.
-     */
     @Test
     @DisplayName("PN chat, no primary, localLid collides with existing LID thread -> SplitThreadMismatch")
     void splitThreadMismatchThrows() {
@@ -433,9 +343,6 @@ class LidMigrationServiceResolveThreadTest {
                 () -> h.service.resolveThread(chat));
     }
 
-    /**
-     * Verifies that PN chat, no primary, no localLid, originalLidCache hit -> Migrate(cachedOriginalLid).
-     */
     @Test
     @DisplayName("PN chat, no primary, no localLid, originalLidCache hit -> Migrate(cachedOriginalLid)")
     void migrateOnOriginalLidCache() {
@@ -450,9 +357,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Migrate) resolution).targetLid());
     }
 
-    /**
-     * Verifies that PN chat, no primary, no local, no cache, deletable (empty chat) -> Delete NO_LID_MAPPING.
-     */
     @Test
     @DisplayName("PN chat, no primary, no local, no cache, deletable (empty chat) -> Delete NO_LID_MAPPING")
     void deleteDeletable() {
@@ -466,9 +370,6 @@ class LidMigrationServiceResolveThreadTest {
                 ((LidMigrationResolution.Delete) resolution).reason());
     }
 
-    /**
-     * Verifies that PN chat, no primary, no local, no cache, non-deletable (locked) -> NoLidAvailable.
-     */
     @Test
     @DisplayName("PN chat, no primary, no local, no cache, non-deletable (locked) -> NoLidAvailable")
     void noLidAvailableThrows() {
@@ -480,9 +381,6 @@ class LidMigrationServiceResolveThreadTest {
                 () -> h.service.resolveThread(chat));
     }
 
-    /**
-     * Verifies that PN chat with real message + no LID -> NoLidAvailable (data-bearing chat must not be deleted).
-     */
     @Test
     @DisplayName("PN chat with real message + no LID -> NoLidAvailable (data-bearing chat must not be deleted)")
     void noLidAvailableForDataBearingChat() {
@@ -503,9 +401,6 @@ class LidMigrationServiceResolveThreadTest {
                 () -> h.service.resolveThread(chat));
     }
 
-    /**
-     * Verifies that 2-arg resolveThread: empty existingLidThreads + localLid -> Migrate (no collision check fires).
-     */
     @Test
     @DisplayName("2-arg resolveThread: empty existingLidThreads + localLid -> Migrate (no collision check fires)")
     void twoArgNoCollision() {
@@ -518,9 +413,6 @@ class LidMigrationServiceResolveThreadTest {
         assertInstanceOf(LidMigrationResolution.Migrate.class, resolution);
     }
 
-    /**
-     * Verifies that 2-arg resolveThread: caller-supplied existingLidThreads triggers SplitThreadMismatch.
-     */
     @Test
     @DisplayName("2-arg resolveThread: caller-supplied existingLidThreads triggers SplitThreadMismatch")
     void twoArgCollision() {

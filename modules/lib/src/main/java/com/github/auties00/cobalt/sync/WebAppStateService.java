@@ -121,14 +121,13 @@ import java.util.logging.Logger;
  * {@link #startPeriodicReportSyncdStatsJob()} and
  * {@link #startPeriodicReportSyncdKeyStatsJob()}.
  *
- * @apiNote
- * Most embedders interact with this service indirectly via
+ * <p>Most callers reach this service indirectly via
  * {@link WhatsAppClient#pushWebAppState} and
  * {@link WhatsAppClient#pullWebAppState}. Direct usage is reserved for
- * components that participate in the sync key share lifecycle (notably
- * the protocol-message receiver that dispatches incoming
+ * components that participate in the sync key share lifecycle, notably the
+ * protocol-message receiver that dispatches incoming
  * {@code AppStateSyncKeyShare} messages, which calls
- * {@link #syncKeyRotationService()}).
+ * {@link #syncKeyRotationService()}.
  *
  * @implNote
  * This implementation collapses WA Web's twelve-IndexedDB schema into the
@@ -276,9 +275,7 @@ public final class WebAppStateService {
      * client, props provider, LID migration service, recovery service,
      * and telemetry surface.
      *
-     * @apiNote
-     * Embedders rarely call this directly; the service is constructed by
-     * {@link WhatsAppClient} during connect.
+     * <p>The service is constructed by {@link WhatsAppClient} during connect.
      *
      * @implNote
      * This implementation constructs all collaborators eagerly
@@ -307,6 +304,9 @@ public final class WebAppStateService {
      *                                snapshot MAC fails fatally
      * @param wamService              the {@link WamService} that commits
      *                                app-state sync telemetry events
+     * @param mediaConnectionService  the {@link MediaConnectionService} used
+     *                                to upload external app-state patches and
+     *                                download external snapshot blobs
      */
     public WebAppStateService(WhatsAppClient whatsapp, ABPropsService abPropsService, LidMigrationService lidMigrationService, SnapshotRecoveryService snapshotRecoveryService, WamService wamService, MediaConnectionService mediaConnectionService) {
         this.whatsapp = whatsapp;
@@ -330,18 +330,16 @@ public final class WebAppStateService {
      * Enqueues local mutations for the given collection and synchronously
      * drives a sync round to push them to the server.
      *
-     * @apiNote
-     * Triggered whenever a local UI action produces an app-state change
-     * (archiving a chat, pinning a message, starring a contact, applying
-     * a label, toggling settings). Embedders normally reach this through
+     * <p>Triggered whenever a local action produces an app-state change
+     * (archiving a chat, pinning a message, starring a contact, applying a
+     * label, toggling settings). Callers normally reach this through
      * {@link WhatsAppClient#pushWebAppState}.
      *
      * @implNote
      * This implementation runs the sync inline on the calling virtual
-     * thread rather than via WA Web's
-     * {@code scheduleSyncCollections} debounce; mutations are visible to
-     * the server by the time the call returns, which Cobalt's
-     * fire-and-forget API surface relies on.
+     * thread rather than via a debounce, so mutations are visible to the
+     * server by the time the call returns; Cobalt's fire-and-forget API
+     * surface relies on that.
      *
      * @param patchType the collection these mutations belong to
      * @param patches   the pending mutations to enqueue
@@ -358,14 +356,10 @@ public final class WebAppStateService {
      * Drives a batched sync round for the given collections and reports
      * whether any response carried real state changes.
      *
-     * @apiNote
-     * Called whenever the server announces that one or more collections
-     * may have new data, typically through a dirty-bit notification
-     * forwarded by {@code InfoBulletinStreamHandler}. The return value
-     * mirrors WA Web's {@code onceAppStateSyncCompleted} callback
-     * argument, which downstream code inspects with
-     * {@code !results.some(r => r.patches?.length > 0 || r.snapshot != null)}
-     * to detect false-positive dirty bits.
+     * <p>Called whenever the server announces that one or more collections
+     * may have new data, typically through a dirty-bit notification. The
+     * return value lets the caller detect false-positive dirty bits when no
+     * collection response carried a patch or a snapshot.
      *
      * @param patchTypes the collection types to sync; empty causes a
      *                   no-op {@code false} return
@@ -385,12 +379,9 @@ public final class WebAppStateService {
     /**
      * Returns the {@link SyncKeyRotationService} owned by this service.
      *
-     * @apiNote
-     * Exposed so the protocol-message receiver that dispatches incoming
-     * {@code AppStateSyncKeyShare} payloads can hand them off to the
-     * rotation service without a separately injected reference. The
-     * rotation service is currently constructed inside this class rather
-     * than wired through dependency injection.
+     * <p>Exposed so the protocol-message receiver that dispatches incoming
+     * {@code AppStateSyncKeyShare} payloads can hand them off to the rotation
+     * service without a separately injected reference.
      *
      * @return the {@link SyncKeyRotationService} instance
      */
@@ -402,12 +393,10 @@ public final class WebAppStateService {
      * Unblocks every collection parked in {@link SyncCollectionState#BLOCKED}
      * and drives a fresh sync round for them.
      *
-     * @apiNote
-     * Invoked from
-     * {@link SyncKeyRotationService} after a successful
-     * {@code AppStateSyncKeyShare} delivery has replenished the missing
-     * key material, so collections that were stuck waiting for keys
-     * resume syncing immediately.
+     * <p>Invoked from {@link SyncKeyRotationService} after a successful
+     * {@code AppStateSyncKeyShare} delivery has replenished the missing key
+     * material, so collections that were stuck waiting for keys resume
+     * syncing immediately.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncd", exports = "syncBlockedCollections", adaptation = WhatsAppAdaptation.DIRECT)
     public void syncBlockedCollections() {
@@ -426,12 +415,10 @@ public final class WebAppStateService {
 
     /**
      * Returns an unmodifiable snapshot of the collections currently
-     * mid-flight (an IQ request has been dispatched and no response has
-     * been parsed yet).
+     * mid-flight (an IQ request has been dispatched and no response has been
+     * parsed yet).
      *
-     * @apiNote
-     * Surfaced for diagnostic logging that mirrors WA Web's "in flight:
-     * X, pending: Y" pre-sendIq trace.
+     * <p>Surfaced for diagnostic logging.
      *
      * @implNote
      * This implementation derives the set from the store's
@@ -455,11 +442,10 @@ public final class WebAppStateService {
 
     /**
      * Returns an unmodifiable snapshot of the collections that were
-     * re-marked dirty while already in flight and therefore require
-     * another sync round once the in-flight one completes.
+     * re-marked dirty while already in flight and therefore require another
+     * sync round once the in-flight one completes.
      *
-     * @apiNote
-     * Surfaced for diagnostic logging alongside
+     * <p>Surfaced for diagnostic logging alongside
      * {@link #getInFlightCollections()}.
      *
      * @implNote
@@ -485,21 +471,14 @@ public final class WebAppStateService {
      * Commits the current syncd telemetry counters by forwarding to the
      * underlying stats and key-stats reporting passes.
      *
-     * @apiNote
-     * Mirrors the WA Web debounced reporter that fires from
-     * {@code WAWebSyncdCoreApi} on application resume; exposed so
-     * embedders that mimic WA Web's telemetry surface can trigger an
-     * immediate flush.
+     * <p>Triggers an immediate flush of the syncd telemetry, equivalent to
+     * the reporter that fires on application resume.
      *
      * @implNote
-     * This implementation collapses WA Web's intermediate
-     * {@code WAWebSyncdWamAppState} aggregator (a long-lived map keyed
-     * by counter name that is filled here and drained from the
-     * recurring stats job) and emits one {@code MdAppStateSyncMutationStats}
-     * event per mutation name directly via {@link #reportSyncdStats()},
-     * plus one {@code SyncdKeyCount} via {@link #reportSyncdKeyStats()}.
-     * Cobalt's event pipeline does not require the aggregate-then-flush
-     * indirection.
+     * This implementation emits one {@code MdAppStateSyncMutationStats} event
+     * per mutation name directly via {@link #reportSyncdStats()} plus one
+     * {@code SyncdKeyCount} via {@link #reportSyncdKeyStats()}, with no
+     * intermediate aggregate-then-flush counter map.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncd", exports = "reportWam", adaptation = WhatsAppAdaptation.ADAPTED)
     public void reportWam() {
@@ -508,17 +487,13 @@ public final class WebAppStateService {
     }
 
     /**
-     * Performs the syncd key-info logging that the WhatsApp internal
-     * build channel exposes; a no-op in production.
-     *
-     * @apiNote
-     * Exposed only to keep the WA Web export surface symmetric.
+     * Performs the syncd key-info logging that the WhatsApp internal build
+     * channel exposes; a no-op in production.
      *
      * @implNote
-     * This implementation does nothing because the WA Web export itself
-     * is an empty async generator stub left in the bundle for the
-     * {@code intern}-build logging pipeline; Cobalt has no equivalent
-     * internal channel.
+     * This implementation does nothing because the corresponding WhatsApp
+     * Web export is an empty stub for an internal-build logging pipeline that
+     * Cobalt has no equivalent for.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncd", exports = "logKeysInfoInIntern", adaptation = WhatsAppAdaptation.DIRECT)
     public void logKeysInfoInIntern() {
@@ -530,25 +505,21 @@ public final class WebAppStateService {
      * per-collection error routing, snapshot/patch application, upload
      * acknowledgements, and refetch follow-ups.
      *
-     * @apiNote
-     * The single entry point for multi-collection pulls (called by
-     * {@link #pullPatches}). The batched IQ packs one
-     * {@code <sync>} node with one {@code <collection>} child per
-     * collection, halving round-trips on the common case of multiple
-     * dirty bits firing together. Collections that still need pagination
-     * after the batched round (the response has
-     * {@code has_more_patches}) fall back to {@link #syncCollection} per
-     * collection.
+     * <p>The single entry point for multi-collection pulls, called by
+     * {@link #pullPatches}. The batched IQ packs one {@code <sync>} node with
+     * one {@code <collection>} child per collection, halving round-trips when
+     * multiple dirty bits fire together. Collections that still need
+     * pagination after the batched round (the response has more patches) fall
+     * back to {@link #syncCollection} per collection.
      *
      * @implNote
-     * This implementation skips the local upload portion when a
-     * collection has not yet been bootstrapped (its pending mutations
-     * are deferred until after the first snapshot lands); the same
-     * collections are recorded in {@code skippedUploads} and remarked
-     * dirty post-apply so a follow-up round picks them up. Collection-
-     * level Conflict and ConflictHasMore responses bypass the generic
-     * error handler and route directly through the post-apply
-     * refetch/UP_TO_DATE decision, matching WA Web's branch ordering.
+     * This implementation skips the local upload portion when a collection
+     * has not yet been bootstrapped (its pending mutations are deferred until
+     * after the first snapshot lands); the same collections are recorded in
+     * {@code skippedUploads} and remarked dirty post-apply so a follow-up
+     * round picks them up. Collection-level conflict responses bypass the
+     * generic error handler and route directly through the post-apply
+     * refetch/UP_TO_DATE decision.
      *
      * @param patchTypes the collections to include in the batched IQ
      * @return {@code true} if any response carried at least one patch or
@@ -646,19 +617,16 @@ public final class WebAppStateService {
      * Replays every previously deferred orphan mutation across all
      * collections.
      *
-     * @apiNote
-     * Called as part of {@link #resumeAfterRestart()} so that mutations
-     * whose target entity was not yet present at the time the snapshot
-     * or patch was applied (the canonical orphan case) get a second
-     * chance once history sync and incoming messages have caught up.
+     * <p>Called as part of {@link #resumeAfterRestart()} so that mutations
+     * whose target entity was not yet present when the snapshot or patch was
+     * applied (the canonical orphan case) get a second chance once history
+     * sync and incoming messages have caught up.
      *
      * @implNote
-     * This implementation iterates the closed {@link SyncPatchType}
-     * enum and dispatches each collection's orphans separately, rather
-     * than issuing WA Web's single
-     * {@code getSyncActionsByActionStatesInTransaction([Orphan, Unsupported])}
-     * query against a unified table; the per-collection partitioning
-     * matches {@link WhatsAppStore}'s storage layout.
+     * This implementation iterates the closed {@link SyncPatchType} enum and
+     * dispatches each collection's orphans separately rather than querying a
+     * unified table, matching {@link WhatsAppStore}'s per-collection storage
+     * layout.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdOrphan", exports = "applyAllOrphansAndUnsupported", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebGetSyncAction", exports = "getSyncActionsByActionStatesInTransaction", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -672,18 +640,16 @@ public final class WebAppStateService {
      * Retries orphan mutations whose target entities now appear in the
      * supplied identifier sets.
      *
-     * @apiNote
-     * Called when fresh entities become known (history sync chunk
-     * landed, incoming message accepted, new thread surfaced). Each
-     * call narrows the per-orphan retry to exactly those orphans whose
-     * model id is now resolvable, avoiding the unconditional sweep
-     * performed by {@link #retryAllOrphanMutations()}.
+     * <p>Called when fresh entities become known (a history sync chunk
+     * landed, an incoming message was accepted, a new thread surfaced). Each
+     * call narrows the per-orphan retry to exactly those orphans whose model
+     * id is now resolvable, avoiding the unconditional sweep performed by
+     * {@link #retryAllOrphanMutations()}.
      *
      * @implNote
-     * This implementation invokes the per-model variants in sequence
-     * rather than via {@code Promise.all}: each call runs synchronously
-     * on the calling virtual thread and the orphan-store mutations are
-     * already serialized by the store.
+     * This implementation invokes the per-model variants in sequence on the
+     * calling virtual thread; the orphan-store mutations are already
+     * serialized by the store.
      *
      * @param msgIds    the message identifiers to match for
      *                  {@code Msg}-typed orphans
@@ -707,19 +673,15 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of model type {@code Msg} whose target
-     * message id is in {@code msgIds}.
+     * Retries orphan mutations of model type {@code Msg} whose target message
+     * id is in {@code msgIds}.
      *
-     * @apiNote
-     * Called whenever a previously unknown message becomes known, so
-     * action handlers that referenced it (star, pin, react) can run.
+     * <p>Called whenever a previously unknown message becomes known, so action
+     * handlers that referenced it (star, pin, react) can run.
      *
      * @implNote
-     * This implementation skips WA Web's
-     * {@code getAdditionalLidMsgKeys} and
-     * {@code getAdditionalHistoryChatIdMsgKeys} enrichment steps; LID
-     * resolution is performed inside {@link WhatsAppStore} during
-     * lookup, not as a separate enrichment pass.
+     * This implementation performs no separate LID enrichment pass; LID
+     * resolution happens inside {@link WhatsAppStore} during lookup.
      *
      * @param msgIds the message identifiers to retry against;
      *               {@code null} or empty is a no-op
@@ -733,17 +695,15 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of model type {@code Chat} whose target
-     * chat id is in {@code chatIds}.
+     * Retries orphan mutations of model type {@code Chat} whose target chat id
+     * is in {@code chatIds}.
      *
-     * @apiNote
-     * Called whenever a previously unknown chat becomes known, so
-     * orphan handlers (mute, archive, pin) can re-run against it.
+     * <p>Called whenever a previously unknown chat becomes known, so orphan
+     * handlers (mute, archive, pin) can re-run against it.
      *
      * @implNote
-     * This implementation skips WA Web's
-     * {@code getAdditionalHistoryChatIds} forced-history enrichment;
-     * LID resolution is owned by {@link WhatsAppStore}.
+     * This implementation performs no forced-history enrichment; LID
+     * resolution is owned by {@link WhatsAppStore}.
      *
      * @param chatIds the chat identifiers to retry against;
      *                {@code null} or empty is a no-op
@@ -757,12 +717,11 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of model type {@code Thread} whose
-     * target thread id is in {@code threadIds}.
+     * Retries orphan mutations of model type {@code Thread} whose target
+     * thread id is in {@code threadIds}.
      *
-     * @apiNote
-     * Called when message thread metadata (community subgroups,
-     * comment threads) becomes available.
+     * <p>Called when message thread metadata (community subgroups, comment
+     * threads) becomes available.
      *
      * @param threadIds the thread identifiers to retry against;
      *                  {@code null} or empty is a no-op
@@ -776,12 +735,11 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of model type {@code Agent} whose
-     * target agent id is in {@code agentIds}.
+     * Retries orphan mutations of model type {@code Agent} whose target agent
+     * id is in {@code agentIds}.
      *
-     * @apiNote
-     * Called when AI agent definitions are pushed; the agent settings
-     * sync handlers re-run against the freshly known agents.
+     * <p>Called when AI agent definitions are pushed; the agent settings sync
+     * handlers re-run against the freshly known agents.
      *
      * @param agentIds the agent identifiers to retry against;
      *                 {@code null} or empty is a no-op
@@ -792,11 +750,10 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of model type {@code ChatAssignment}
-     * whose target assignment id is in {@code assignmentIds}.
+     * Retries orphan mutations of model type {@code ChatAssignment} whose
+     * target assignment id is in {@code assignmentIds}.
      *
-     * @apiNote
-     * Called when business chat-assignment metadata catches up so
+     * <p>Called when business chat-assignment metadata catches up so
      * assignment-mutation handlers can finalize.
      *
      * @param assignmentIds the chat-assignment identifiers to retry
@@ -808,12 +765,11 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of model type {@code UserStatusMute}
-     * whose target contact id is in {@code contactIds}.
+     * Retries orphan mutations of model type {@code UserStatusMute} whose
+     * target contact id is in {@code contactIds}.
      *
-     * @apiNote
-     * Called when status-mute lists referencing previously unknown
-     * contacts can finally be applied.
+     * <p>Called when status-mute lists referencing previously unknown contacts
+     * can finally be applied.
      *
      * @param contactIds the contact identifiers to retry against;
      *                   {@code null} or empty is a no-op
@@ -824,22 +780,20 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries every orphan whose {@code (modelType, modelId)} pair
-     * matches one of the supplied identifiers, after first removing
-     * them from the orphan store.
+     * Retries every orphan whose {@code (modelType, modelId)} pair matches one
+     * of the supplied identifiers, after first removing them from the orphan
+     * store.
      *
-     * @apiNote
-     * The shared helper behind every {@code checkOrphan*} method;
-     * applies the matching orphans through the individual-mutation
-     * path so each runs through its registered action handler.
+     * <p>The shared helper behind every {@code checkOrphan*} method; applies
+     * the matching orphans through the individual-mutation path so each runs
+     * through its registered action handler.
      *
      * @implNote
-     * This implementation scans every {@link SyncPatchType} because the
-     * orphan store is partitioned per collection, whereas WA Web issues
-     * one transaction-scoped query against a unified index. Orphans
-     * are removed before the handler retry so that a handler exception
-     * does not leave them queued indefinitely; a failed retry can
-     * always re-park them as orphans on the next sync round.
+     * This implementation scans every {@link SyncPatchType} because the orphan
+     * store is partitioned per collection. Orphans are removed before the
+     * handler retry so a handler exception does not leave them queued
+     * indefinitely; a failed retry can always re-park them as orphans on the
+     * next sync round.
      *
      * @param modelIds  the entity identifiers to retry against;
      *                  {@code null} or empty is a no-op
@@ -872,16 +826,14 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations of type {@code FavoriteSticker}, gated
-     * by the {@code favorite_sticker} primary feature and the
-     * {@link ABProp#FAVORITE_STICKER_SYNC_AFTER_PAIRING_ENABLED_WEB}
-     * AB prop.
+     * Retries orphan mutations of type {@code FavoriteSticker}, gated by the
+     * {@code favorite_sticker} primary feature and the
+     * {@link ABProp#FAVORITE_STICKER_SYNC_AFTER_PAIRING_ENABLED_WEB} AB prop.
      *
-     * @apiNote
-     * Triggered after a fresh pairing once the sticker pack inventory
-     * has been fetched, so any favorite-sticker actions that referred
-     * to stickers not yet downloaded at the time of the original
-     * snapshot can finally be applied.
+     * <p>Triggered after a fresh pairing once the sticker pack inventory has
+     * been fetched, so any favorite-sticker actions that referred to stickers
+     * not yet downloaded at the time of the original snapshot can finally be
+     * applied.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdOrphan", exports = "checkOrphanFavoriteStickers", adaptation = WhatsAppAdaptation.DIRECT)
     public void checkOrphanFavoriteStickers() {
@@ -894,21 +846,17 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries every orphan of the given {@code modelType}, after
-     * confirming the optional gate passes.
+     * Retries every orphan of the given {@code modelType}, after confirming
+     * the optional gate passes.
      *
-     * @apiNote
-     * The shared helper behind {@link #checkOrphanFavoriteStickers()};
-     * the gate is evaluated only after orphan presence is confirmed,
-     * mirroring WA Web's "no orphans" early return.
+     * <p>The shared helper behind {@link #checkOrphanFavoriteStickers()}; the
+     * gate is evaluated only after orphan presence is confirmed.
      *
      * @implNote
      * This implementation collects all matching orphans across every
-     * {@link SyncPatchType} into a single list before applying them,
-     * so that the gate is evaluated exactly once per
-     * {@code retryOrphanMutationsByModelType} call (matching WA Web's
-     * single-call semantics) even though Cobalt fans out across
-     * collections.
+     * {@link SyncPatchType} into a single list before applying them, so the
+     * gate is evaluated exactly once per call even though Cobalt fans out
+     * across collections.
      *
      * @param modelType the model type to filter orphans by
      * @param condition the optional gate; if non-{@code null} and
@@ -948,24 +896,23 @@ public final class WebAppStateService {
      * Recovers interrupted sync state after a JVM restart and kicks off
      * follow-up sync, orphan, and unsupported-mutation passes.
      *
-     * @apiNote
-     * Called once on client startup to discharge state that was left in
-     * a non-terminal sync state when the previous process died, then
-     * sync everything that still has pending mutations or unfinished
-     * server-side work. Each non-terminal state is rewritten back to
+     * <p>Called once on client startup to discharge state that was left in a
+     * non-terminal sync state when the previous process died, then sync
+     * everything that still has pending mutations or unfinished server-side
+     * work. Each non-terminal state is rewritten back to
      * {@link SyncCollectionState#DIRTY} so the next pull picks it up:
      * <ul>
      *   <li>{@code IN_FLIGHT}: the in-flight IQ was lost on shutdown</li>
-     *   <li>{@code PENDING}: a subsequent round was scheduled but
-     *       never started</li>
-     *   <li>{@code ERROR_RETRY}: a retryable error was pending a
-     *       backoff retry</li>
-     *   <li>{@code BLOCKED}: a missing key request is still in flight,
-     *       so both the timeout check and the periodic re-request job
-     *       are rearmed before dirtying the collection</li>
+     *   <li>{@code PENDING}: a subsequent round was scheduled but never
+     *       started</li>
+     *   <li>{@code ERROR_RETRY}: a retryable error was pending a backoff
+     *       retry</li>
+     *   <li>{@code BLOCKED}: a missing key request is still in flight, so both
+     *       the timeout check and the periodic re-request job are rearmed
+     *       before dirtying the collection</li>
      * </ul>
-     * Collections in {@code UP_TO_DATE} with non-empty pending
-     * mutations are also dirtied so a fresh push round runs.
+     * Collections in {@code UP_TO_DATE} with non-empty pending mutations are
+     * also dirtied so a fresh push round runs.
      *
      * @implNote
      * This implementation does the work of WA Web's combined
@@ -1034,10 +981,9 @@ public final class WebAppStateService {
     /**
      * The result of a single-collection sync round.
      *
-     * @apiNote
-     * Carries the parsed response, the optional upload metadata, and a
-     * flag indicating whether pending mutations had to be deferred
-     * because the collection had not yet been bootstrapped.
+     * <p>Carries the parsed response, the optional upload metadata, and a flag
+     * indicating whether pending mutations had to be deferred because the
+     * collection had not yet been bootstrapped.
      *
      * @param response             the parsed sync response
      * @param uploadInfo           the upload metadata, or {@code null}
@@ -1055,14 +1001,13 @@ public final class WebAppStateService {
     }
 
     /**
-     * A pending sync action entry update produced during LT-Hash
-     * computation and applied only after the version guard passes.
+     * A pending sync action entry update produced during LT-Hash computation
+     * and applied only after the version guard passes.
      *
-     * @apiNote
-     * Holds either a {@link SyncActionEntry} to put under
-     * {@code indexMac}, or a remove marker; the choice is encoded by
-     * the {@code remove} flag rather than by {@code entry} being
-     * {@code null}, since put-with-null is semantically distinct.
+     * <p>Holds either a {@link SyncActionEntry} to put under {@code indexMac}
+     * or a remove marker; the choice is encoded by the {@code remove} flag
+     * rather than by {@code entry} being {@code null}, since put-with-null is
+     * semantically distinct.
      *
      * @param indexMac the index MAC identifying the entry
      * @param entry    the entry to persist, or {@code null} when this
@@ -1079,10 +1024,9 @@ public final class WebAppStateService {
     /**
      * The output of an incremental LT-Hash computation.
      *
-     * @apiNote
-     * Bundles the new LT-Hash with the deferred entry updates so the
-     * caller can pass the new hash through the version-guard check and
-     * apply the updates atomically only if the guard passes.
+     * <p>Bundles the new LT-Hash with the deferred entry updates so the caller
+     * can pass the new hash through the version-guard check and apply the
+     * updates atomically only if the guard passes.
      *
      * @param newHash the computed LT-Hash
      * @param updates the sync action entry updates to persist if the
@@ -1096,24 +1040,20 @@ public final class WebAppStateService {
 
     /**
      * Drives a single collection's sync loop until it lands in
-     * {@link SyncCollectionState#UP_TO_DATE} or hits an unrecoverable
-     * error.
+     * {@link SyncCollectionState#UP_TO_DATE} or hits an unrecoverable error.
      *
-     * @apiNote
-     * The per-collection fallback called from
-     * {@link #syncCollectionsBatched} once the batched IQ has been
-     * applied and one or more collections still have
-     * {@link SyncCollectionState#PENDING} or
-     * {@link SyncCollectionState#DIRTY} state (typically because they
+     * <p>The per-collection fallback called from
+     * {@link #syncCollectionsBatched} once the batched IQ has been applied and
+     * one or more collections still have {@link SyncCollectionState#PENDING}
+     * or {@link SyncCollectionState#DIRTY} state (typically because they
      * paginated). Each loop iteration is one IQ round-trip.
      *
      * @implNote
-     * This implementation caps the loop at
-     * {@link #MAX_SYNC_ITERATIONS} iterations and parks the collection
-     * in {@link SyncCollectionState#ERROR_RETRY} when the cap is hit;
-     * {@code ConflictHasMore} always re-loops, while plain
-     * {@code Conflict} short-circuits to UP_TO_DATE when there are no
-     * pending mutations.
+     * This implementation caps the loop at {@link #MAX_SYNC_ITERATIONS}
+     * iterations and parks the collection in
+     * {@link SyncCollectionState#ERROR_RETRY} when the cap is hit; a conflict
+     * carrying more patches always re-loops, while a plain conflict
+     * short-circuits to UP_TO_DATE when there are no pending mutations.
      *
      * @param patchType the collection to drive to completion
      */
@@ -1162,20 +1102,19 @@ public final class WebAppStateService {
      * Builds, dispatches, and parses one sync IQ round for a single
      * collection, marking the collection in-flight for the duration.
      *
-     * @apiNote
-     * The unit step of {@link #syncCollection}; runs synchronously on a
-     * virtual thread because {@link WhatsAppClient#sendNode} is a
-     * blocking call. Pending mutations are skipped (and signaled via
-     * {@link SyncRoundResult#skippedPendingUpload()}) when the
-     * collection has not yet been bootstrapped, so the snapshot lands
-     * first and the local mutations replay on the next round.
+     * <p>The unit step of {@link #syncCollection}; runs synchronously on a
+     * virtual thread because {@link WhatsAppClient#sendNode(com.github.auties00.cobalt.node.NodeBuilder)}
+     * is a blocking call. Pending mutations are skipped (and signalled via
+     * {@link SyncRoundResult#skippedPendingUpload()}) when the collection has
+     * not yet been bootstrapped, so the snapshot lands first and the local
+     * mutations replay on the next round.
      *
      * @implNote
-     * This implementation emits the WA Web bootstrap-stage telemetry
-     * markers ({@code REQUEST_BUILT}, {@code RESPONSE_RECEIVED},
-     * {@code RESPONSE_PARSED_VALID}) at the exact same points WA Web
-     * does so the critical-bootstrap stage tracker matches the WA Web
-     * timeline.
+     * This implementation emits the bootstrap-stage telemetry markers
+     * ({@link BootstrapAppStateDataStageCode#REQUEST_BUILT},
+     * {@link BootstrapAppStateDataStageCode#RESPONSE_RECEIVED},
+     * {@link BootstrapAppStateDataStageCode#RESPONSE_PARSED_VALID}) at the
+     * points the critical-bootstrap stage tracker expects them.
      *
      * @param patchType the collection to sync
      * @return the parsed response, upload metadata, and skipped-upload
@@ -1206,23 +1145,21 @@ public final class WebAppStateService {
     }
 
     /**
-     * Applies a single-collection sync response: snapshot (if any)
-     * then patches in version order, then state-machine transition.
+     * Applies a single-collection sync response: snapshot (if any) then
+     * patches in version order, then state-machine transition.
      *
-     * @apiNote
-     * The wrapper around {@link #handleSyncResponseInternal} that adds
+     * <p>The wrapper around {@link #handleSyncResponseInternal} that adds
      * bootstrap-download telemetry tracking. The inner method does the
      * snapshot decode, mutation decryption, MAC verification, LT-Hash
-     * recomputation, sync-action persistence, and handler dispatch;
-     * this wrapper measures total download size up front and emits the
-     * {@code MdBootstrapAppStateDataDownloaded} event on success or
-     * failure once the inner call returns.
+     * recomputation, sync-action persistence, and handler dispatch; this
+     * wrapper measures total download size up front and emits the
+     * data-downloaded event on success or failure once the inner call
+     * returns.
      *
      * @implNote
      * This implementation tracks the bootstrap download only on the
-     * first-time bootstrap path (matches WA Web's
-     * {@code isBootstrap(existingVersion)} gate), so steady-state
-     * sync rounds skip the telemetry tracker construction entirely.
+     * first-time bootstrap path, so steady-state sync rounds skip the
+     * telemetry tracker construction entirely.
      *
      * @param syncResponse the parsed response for a single collection
      */
@@ -1265,27 +1202,24 @@ public final class WebAppStateService {
     }
 
     /**
-     * Performs the snapshot decode, patch apply, integrity check, and
-     * state transition for a single-collection response.
+     * Performs the snapshot decode, patch apply, integrity check, and state
+     * transition for a single-collection response.
      *
-     * @apiNote
-     * Extracted from {@link #handleSyncResponse} so the bootstrap
-     * download metric wrap-around lives in one place; this method does
-     * everything else: clears stale sync action entries, decrypts
-     * mutations, verifies snapshot and patch MACs, drives the
-     * snapshot-recovery handshake if a snapshot MAC fails fatally,
-     * emits per-mutation telemetry, and finally transitions the
+     * <p>Extracted from {@link #handleSyncResponse} so the bootstrap download
+     * metric wrap-around lives in one place; this method does everything else:
+     * clears stale sync action entries, decrypts mutations, verifies snapshot
+     * and patch MACs, drives the snapshot-recovery handshake if a snapshot MAC
+     * fails fatally, emits per-mutation telemetry, and finally transitions the
      * collection to {@link SyncCollectionState#PENDING} or
      * {@link SyncCollectionState#UP_TO_DATE} based on
      * {@link MutationSyncResponse#hasMore()}.
      *
      * @implNote
-     * This implementation hoists the "collection is already in
-     * mac-mismatch fatal state" guard above the per-patch
-     * verifyPatchIntegrity call to avoid the per-patch valueMacs list
-     * allocation when the collection is already known bad; the inner
-     * guard in {@link MutationIntegrityVerifier} is kept as defense in
-     * depth.
+     * This implementation hoists the "collection is already in mac-mismatch
+     * fatal state" guard above the per-patch integrity call to avoid the
+     * per-patch value-MAC list allocation when the collection is already known
+     * bad; the inner guard in {@link MutationIntegrityVerifier} is kept as
+     * defense in depth.
      *
      * @param syncResponse           the parsed response
      * @param collectionName         the collection being processed
@@ -1513,28 +1447,22 @@ public final class WebAppStateService {
     }
 
     /**
-     * Emits the {@code MdBootstrapDataAppliedEvent} that marks the
-     * first-time bootstrap apply of a non-critical collection.
+     * Emits the data-applied event that marks the first-time bootstrap apply
+     * of a non-critical collection.
      *
-     * @apiNote
-     * Only fires when this round was the collection's bootstrap apply
-     * (the collection had no prior version), the server payload
-     * actually carried data (snapshot or patches), and the collection
-     * is non-critical. The event surfaces in the WAM bootstrap
-     * dashboard as the per-collection apply duration.
+     * <p>Only fires when this round was the collection's bootstrap apply (the
+     * collection had no prior version), the server payload actually carried
+     * data (snapshot or patches), and the collection is non-critical. The
+     * event surfaces in the WAM bootstrap dashboard as the per-collection
+     * apply duration.
      *
      * @implNote
-     * This implementation skips the WA Web {@code mdSessionId}
-     * population because Cobalt has no equivalent of
-     * {@code MdSyncFieldStatsMeta.getMdSessionId()}, which hashes
-     * primary and companion identity keys; the same omission is
-     * present in {@code MdBootstrapAppStateDataDownloadedEvent} and
-     * {@code MdBootstrapAppStateCriticalDataProcessingEvent} so the
-     * pipeline is consistent across the three bootstrap events.
-     * Critical collections fire a separate WA Web event through
-     * {@code WAWebSyncBootstrap.setSyncDCriticalDataSyncCompleted}
-     * which has no Cobalt counterpart because bootstrap tracking is
-     * already per-collection on {@link SyncCollectionMetadata}.
+     * This implementation omits the {@code mdSessionId} field (a hash of
+     * primary and companion identity keys) because Cobalt has no equivalent
+     * derivation; the same omission applies to the data-downloaded and
+     * critical-data-processing events. Critical collections have no separate
+     * Cobalt event because bootstrap tracking is already per-collection on
+     * {@link SyncCollectionMetadata}.
      *
      * @param collectionName            the collection being bootstrapped
      * @param wasBootstrapped           {@code true} if the collection
@@ -1590,19 +1518,14 @@ public final class WebAppStateService {
 
     /**
      * Maps a {@link SyncPatchType} to the matching
-     * {@link com.github.auties00.cobalt.wam.type.Collection} WAM enum
-     * constant.
+     * {@link com.github.auties00.cobalt.wam.type.Collection} WAM enum constant.
      *
-     * @apiNote
-     * Used by the bootstrap-data-applied event builder to translate the
-     * internal collection type into the value consumed by the WAM
-     * pipeline.
+     * <p>Used by the bootstrap-data-applied event builder to translate the
+     * internal collection type into the value consumed by the WAM pipeline.
      *
      * @implNote
-     * This implementation relies on {@link SyncPatchType}'s closed
-     * enum domain so the switch is exhaustive without a default;
-     * WA Web's equivalent throws on unknown collection names because
-     * its input is a free string.
+     * This implementation relies on {@link SyncPatchType}'s closed enum domain
+     * so the switch is exhaustive without a default.
      *
      * @param collectionName the non-{@code null} collection
      * @return the corresponding
@@ -1620,12 +1543,11 @@ public final class WebAppStateService {
     }
 
     /**
-     * Maps a {@link SyncPatchType} to the matching
-     * {@link SyncdCollectionType} WAM enum constant.
+     * Maps a {@link SyncPatchType} to the matching {@link SyncdCollectionType}
+     * WAM enum constant.
      *
-     * @apiNote
-     * Used by {@code MdSyncdMutationEvent} and the per-bucket stats
-     * events to identify which collection the mutation belongs to.
+     * <p>Used by the per-mutation and per-bucket stats events to identify
+     * which collection the mutation belongs to.
      *
      * @param collectionName the non-{@code null} collection
      * @return the corresponding {@link SyncdCollectionType}
@@ -1642,23 +1564,18 @@ public final class WebAppStateService {
     }
 
     /**
-     * Commits one {@code MdSyncdMutationEvent} per decrypted mutation
-     * for an incoming snapshot or patch.
+     * Commits one mutation event per decrypted mutation for an incoming
+     * snapshot or patch.
      *
-     * @apiNote
-     * Called from the snapshot and patch branches of
-     * {@link #handleSyncResponseInternal} after mutations are
-     * decrypted (matching WA Web's call ordering: post-verify,
-     * pre-apply), so the WAM record captures the mutation even if the
-     * handler dispatch later fails.
+     * <p>Called from the snapshot and patch branches of
+     * {@link #handleSyncResponseInternal} after mutations are decrypted
+     * (post-verify, pre-apply), so the WAM record captures the mutation even
+     * if the handler dispatch later fails.
      *
      * @implNote
-     * This implementation omits the WA Web
-     * {@code syncd_mutation_and_bundle_logging} AB allowlist gate;
-     * Cobalt's WAM pipeline filters upstream rather than per
-     * call-site, matching the project-wide WAM emission policy.
-     * {@code appSessionId} and {@code companionSessionIds} are
-     * omitted for the same identity-key-hashing reason as
+     * This implementation has no per-call-site AB allowlist gate; Cobalt's WAM
+     * pipeline filters upstream. The session-id fields are omitted for the
+     * same identity-key-hashing reason as
      * {@link #emitBootstrapDataAppliedIfNeeded}.
      *
      * @param collectionName the collection the mutations belong to
@@ -1720,24 +1637,20 @@ public final class WebAppStateService {
     }
 
     /**
-     * Commits one {@code MdSyncdMutationEvent} per acknowledged
-     * mutation after a successful outgoing patch upload.
+     * Commits one mutation event per acknowledged mutation after a successful
+     * outgoing patch upload.
      *
-     * @apiNote
-     * Called from {@link #processUploadSuccess} once the server
-     * acknowledges the push; the event surface lets WAM dashboards
-     * count outgoing-side mutations symmetrically with incoming
-     * snapshots and patches.
+     * <p>Called from {@link #processUploadSuccess} once the server
+     * acknowledges the push; the event lets WAM dashboards count
+     * outgoing-side mutations symmetrically with incoming snapshots and
+     * patches.
      *
      * @implNote
-     * This implementation always emits with
-     * {@code mutationBundle=PATCH} and
-     * {@code mutationDirection=OUTGOING} because uploads are by
-     * definition outgoing patches post-bootstrap; the per-mutation
-     * wire patch MAC is not preserved on
-     * {@link SyncRequest.UploadedMutationInfo}, so {@code patchMac} is
-     * left default ({@code ""}), matching WA Web's behaviour when the
-     * patch MAC is missing.
+     * This implementation always emits with {@code mutationBundle=PATCH} and
+     * {@code mutationDirection=OUTGOING} because uploads are by definition
+     * outgoing patches post-bootstrap; the per-mutation wire patch MAC is not
+     * preserved on {@link SyncRequest.UploadedMutationInfo}, so the patch MAC
+     * field is left at its default empty value.
      *
      * @param collectionName the collection that was uploaded
      * @param seqNumber      the new patch version acknowledged by the
@@ -1782,31 +1695,24 @@ public final class WebAppStateService {
     }
 
     /**
-     * Finalizes a successful outgoing patch upload by persisting sync
-     * action entries, advancing the collection version and LT-Hash,
-     * and dropping the pending mutations that the server acked.
+     * Finalizes a successful outgoing patch upload by persisting sync action
+     * entries, advancing the collection version and LT-Hash, and dropping the
+     * pending mutations that the server acknowledged.
      *
-     * @apiNote
-     * Called from {@link #syncCollection} and
-     * {@link #syncCollectionsBatched} after the server returns success
-     * for an upload IQ; the version check guards against the race
-     * where the server's reported version disagrees with the locally
-     * computed expected version (which would indicate that another
-     * device pushed a competing patch concurrently).
+     * <p>Called from {@link #syncCollection} and
+     * {@link #syncCollectionsBatched} after the server returns success for an
+     * upload IQ. The version check guards against the race where the server's
+     * reported version disagrees with the locally computed expected version
+     * (which would indicate that another device pushed a competing patch
+     * concurrently).
      *
      * @implNote
-     * This implementation diverges from WA Web in two places. First,
-     * REMOVE mutations are stored implicitly via
-     * {@link WhatsAppStore#removeSyncActionEntry} rather than via the
-     * converter's {@code .map(...)} write-back pattern; this mirrors
-     * the {@code _uploadSuccessful} branch that calls
-     * {@code removeSyncActionInTransaction} on each REMOVE rather than
-     * keeping a tombstone row. Second, the {@code SyncActionEntry}
-     * fields {@code collection}, {@code timestamp}, and {@code action}
-     * are omitted because they are derived on demand from the
-     * patchType map key, {@code actionValue.timestamp()}, and
-     * {@code actionValue} respectively, rather than stored
-     * separately.
+     * This implementation stores REMOVE mutations implicitly via
+     * {@link WhatsAppStore#removeSyncActionEntry} rather than keeping a
+     * tombstone row, and omits the {@code SyncActionEntry} collection,
+     * timestamp, and action fields because they are derived on demand from the
+     * patch-type key, the action value's timestamp, and the action value
+     * itself.
      *
      * @param uploadInfo the upload metadata captured during request
      *                   building
@@ -1865,16 +1771,15 @@ public final class WebAppStateService {
 
     /**
      * Reorders decrypted mutations from a single patch so that
-     * {@link SyncdOperation#REMOVE} entries come first and any
-     * {@code REMOVE} shadowed by a later {@link SyncdOperation#SET} on the
-     * same index is dropped.
+     * {@link SyncdOperation#REMOVE} entries come first and any {@code REMOVE}
+     * shadowed by a later {@link SyncdOperation#SET} on the same index is
+     * dropped.
      *
-     * @apiNote
-     * Called by {@link #pullPatches} on the in-patch mutation list just
-     * before {@link #computeNewLTHash} so the LT-Hash subtract-then-add
-     * sequence sees REMOVEs ahead of SETs and never tries to subtract a
-     * value MAC that the same patch is about to add fresh; preserves the
-     * net "SET wins" semantics WhatsApp Web bakes into its single-patch
+     * <p>Called on the in-patch mutation list just before
+     * {@link #computeNewLTHash(SyncPatchType, byte[], SequencedCollection)} so
+     * the LT-Hash subtract-then-add sequence sees REMOVEs ahead of SETs and
+     * never tries to subtract a value MAC that the same patch is about to add
+     * fresh; this preserves the net "SET wins" semantics of single-patch
      * ordering.
      *
      * @param mutations the decrypted mutations from a single patch
@@ -1905,25 +1810,20 @@ public final class WebAppStateService {
     }
 
     /**
-     * Rejects mutation batches in which the same index appears more than
-     * once under the same operation.
+     * Rejects mutation batches in which the same index appears more than once
+     * under the same operation.
      *
-     * @apiNote
-     * Called from the patch and snapshot ingest paths before
-     * {@link #computeNewLTHash}; a duplicate index within a single payload
-     * is the canary for a server-side or sender-side encoding bug since
-     * the LT-Hash math depends on each index appearing at most once per
-     * direction. The {@code fatal} flag matches WA Web's
-     * {@code SyncDataType} switch: patches are fatal, snapshots downgrade
-     * to a warning.
+     * <p>Called from the patch and snapshot ingest paths before
+     * {@link #computeNewLTHash(SyncPatchType, byte[], SequencedCollection)}; a
+     * duplicate index within a single payload is the canary for a server-side
+     * or sender-side encoding bug, since the LT-Hash math depends on each
+     * index appearing at most once per direction. The {@code fatal} flag
+     * distinguishes patches (fatal) from snapshots (downgraded to a warning).
      *
      * @implNote
-     * This implementation collapses WA Web's three-arm
-     * {@code Patch}/{@code Snapshot}/{@code Local} switch into a boolean
-     * because Cobalt only ever invokes this helper on server-delivered
-     * patches and snapshots; the {@code Local} branch (which WA Web logs
-     * but does not act on) has no Cobalt caller and would have nothing to
-     * do anyway.
+     * This implementation uses a boolean rather than a three-arm switch
+     * because Cobalt only ever invokes this helper on server-delivered patches
+     * and snapshots, never on locally generated mutations.
      *
      * @param collectionName the collection being processed
      * @param mutations      the decrypted mutations to validate
@@ -1962,12 +1862,10 @@ public final class WebAppStateService {
      * Rejects a server sync response in which two patches share the same
      * version within a single collection.
      *
-     * @apiNote
-     * Called from the patch ingest path before any patch is applied. A
+     * <p>Called from the patch ingest path before any patch is applied. A
      * duplicate version is a server corruption signal that would otherwise
      * collide LT-Hash computations and corrupt the local collection state;
-     * raising
-     * {@link WhatsAppWebAppStateSyncException.DuplicatePatchVersion}
+     * raising {@link WhatsAppWebAppStateSyncException.DuplicatePatchVersion}
      * aborts the round-trip and lets the pluggable error handler decide
      * whether to retry the collection.
      *
@@ -1993,22 +1891,16 @@ public final class WebAppStateService {
      * Returns the locally persisted version counter for the specified
      * collection.
      *
-     * @apiNote
-     * Used by the patch ingest path to enforce monotonic version order
-     * before each apply and by the upload path to compute the
-     * {@code expectedVersion} that the server must echo back; bootstrap
-     * collections return {@code 0} until the first snapshot lands.
+     * <p>Used by the patch ingest path to enforce monotonic version order
+     * before each apply and by the upload path to compute the expected
+     * version that the server must echo back; bootstrap collections return
+     * {@code 0} until the first snapshot lands.
      *
      * @implNote
-     * This implementation collapses WA Web's three per-collection
-     * {@code IndexedDB} accessors
-     * ({@code getCollectionVersionInTransaction},
-     * {@code bulkGetCollectionVersionsInTransaction},
-     * {@code getAllCollectionVersionsInTransaction}) into a single
-     * in-memory lookup on {@link WhatsAppStore#findWebAppState}; callers
-     * that need a bulk view (such as the resume path) iterate
-     * {@link SyncPatchType#values()} themselves rather than going through
-     * a dedicated bulk API.
+     * This implementation reads a single in-memory lookup via
+     * {@link WhatsAppStore#findWebAppState}; callers that need a bulk view
+     * (such as the resume path) iterate {@link SyncPatchType#values()}
+     * themselves rather than going through a dedicated bulk API.
      *
      * @param patchType the collection to query
      * @return the current version number, or {@code 0} if the collection
@@ -2023,15 +1915,14 @@ public final class WebAppStateService {
 
     /**
      * Returns the locally persisted LT-Hash for the specified collection,
-     * falling back to {@link MutationLTHash#EMPTY_HASH} when the
-     * collection has never been seeded.
+     * falling back to {@link MutationLTHash#EMPTY_HASH} when the collection
+     * has never been seeded.
      *
-     * @apiNote
-     * Used as the base value when {@link #computeNewLTHash} folds a fresh
-     * batch of mutations into a new hash; the empty-hash fallback matches
-     * WA Web's behaviour on a freshly initialised collection (or one that
-     * lost its persisted hash entry) and lets the first snapshot land
-     * without a spurious mismatch.
+     * <p>Used as the base value when
+     * {@link #computeNewLTHash(SyncPatchType, byte[], SequencedCollection)}
+     * folds a fresh batch of mutations into a new hash; the empty-hash
+     * fallback lets the first snapshot land on a freshly initialised
+     * collection without a spurious mismatch.
      *
      * @param patchType the collection to query
      * @return the current LT-Hash bytes, or {@link MutationLTHash#EMPTY_HASH}
@@ -2045,25 +1936,22 @@ public final class WebAppStateService {
     }
 
     /**
-     * Downloads, decodes, and validates a {@link SyncdSnapshot} from the
-     * CDN reference embedded in a server sync response.
+     * Downloads, decodes, and validates a {@link SyncdSnapshot} from the CDN
+     * reference embedded in a server sync response.
      *
-     * @apiNote
-     * Used during bootstrap and during snapshot recovery when the server
+     * <p>Used during bootstrap and during snapshot recovery when the server
      * returns an external snapshot pointer instead of inline records;
      * caller-side MAC and key validation runs separately in
      * {@link MutationIntegrityVerifier#verifySnapshotMac}.
      *
      * @implNote
-     * This implementation classifies the underlying download failure into
-     * one of two exception flavours: a CDN 404 / not-found surfaces as a
-     * fatal {@link WhatsAppWebAppStateSyncException.UnexpectedError} with
-     * message {@code "external patch expired"} so the pluggable error
-     * handler routes it the same way WA Web's
-     * {@code SyncdFatalError("external patch expired")} routes its
-     * caller; every other download failure surfaces as
-     * {@link WhatsAppWebAppStateSyncException.ExternalDownloadFailed} so
-     * the retry scheduler can re-queue the collection.
+     * This implementation classifies the download failure into one of two
+     * exception flavours: a CDN 404 / not-found surfaces as a fatal
+     * {@link WhatsAppWebAppStateSyncException.UnexpectedError} with message
+     * {@code "external patch expired"}, while every other download failure
+     * surfaces as
+     * {@link WhatsAppWebAppStateSyncException.ExternalDownloadFailed} so the
+     * retry scheduler can re-queue the collection.
      *
      * @param snapshotRef the external blob reference for the snapshot
      * @return the decoded snapshot
@@ -2102,15 +1990,14 @@ public final class WebAppStateService {
     }
 
     /**
-     * Wraps every record from a decoded {@link SyncdSnapshot} as a
-     * synthetic {@link SyncdOperation#SET} mutation.
+     * Wraps every record from a decoded {@link SyncdSnapshot} as a synthetic
+     * {@link SyncdOperation#SET} mutation.
      *
-     * @apiNote
-     * Called by the snapshot ingest path so the same downstream pipeline
-     * ({@link #decryptMutations}, {@link #computeNewLTHash},
+     * <p>Called by the snapshot ingest path so the same downstream pipeline
+     * ({@link #decryptMutations}, {@link #computeNewLTHash(SyncPatchType, byte[], SequencedCollection)},
      * {@link #applyMutations}) can process snapshots and patches without
-     * branching; a snapshot represents the full state at a given version,
-     * so every record is by definition a SET.
+     * branching; a snapshot represents the full state at a given version, so
+     * every record is by definition a SET.
      *
      * @param snapshot the decoded snapshot
      * @return the mutations derived from the snapshot records
@@ -2129,27 +2016,22 @@ public final class WebAppStateService {
 
     /**
      * Converts a recovery snapshot delivered by the primary device into
-     * trusted mutations and seeds the local sync action entry store with
-     * the recovered records.
+     * trusted mutations and seeds the local sync action entry store with the
+     * recovered records.
      *
-     * @apiNote
-     * Called by {@link SnapshotRecoveryService} when a snapshot MAC
-     * mismatch on the companion triggers the peer-recovery path; the
-     * primary ships its own decrypted view of the collection, the
-     * companion re-derives index MACs locally with the same sync key,
-     * trusts the primary's value MACs and LT-Hash, and replaces the local
-     * state in one shot.
+     * <p>Called when a snapshot MAC mismatch on the companion triggers the
+     * peer-recovery path: the primary ships its own decrypted view of the
+     * collection, the companion re-derives index MACs locally with the same
+     * sync key, trusts the primary's value MACs and LT-Hash, and replaces the
+     * local state in one shot.
      *
      * @implNote
      * This implementation also calls
-     * {@link #updateCollectionState(SyncPatchType, long, byte[])} with
-     * the recovery payload's version and LT-Hash so the caller can apply
-     * the returned mutations through the standard handler pipeline
-     * without an extra version bump; WA Web's
-     * {@code convertSyncdSnapshotRecoveryResponseToSnapshot} delegates
-     * that write-back to the caller, but the Cobalt call-site has no
-     * other use for the raw recovery fields so the update is folded in
-     * here.
+     * {@link #updateCollectionState(SyncPatchType, long, byte[])} with the
+     * recovery payload's version and LT-Hash so the caller can apply the
+     * returned mutations through the standard handler pipeline without an
+     * extra version bump; the call-site has no other use for the raw recovery
+     * fields, so the update is folded in here.
      *
      * @param collectionName    the collection being recovered
      * @param recoveredSnapshot the decoded recovery snapshot from the
@@ -2250,15 +2132,13 @@ public final class WebAppStateService {
 
     /**
      * Materialises the raw mutations carried by a {@link SyncdPatch},
-     * downloading the external blob when the patch is delivered by
-     * reference instead of inline.
+     * downloading the external blob when the patch is delivered by reference
+     * instead of inline.
      *
-     * @apiNote
-     * Called by the patch ingest path before
-     * {@link #decryptMutations}; a patch protobuf is permitted to carry
-     * either an inline {@code mutations} list or an {@code externalMutations}
-     * blob reference but never both, so the both-present case is treated
-     * as a server protocol violation.
+     * <p>Called by the patch ingest path before {@link #decryptMutations}; a
+     * patch is permitted to carry either an inline mutation list or an
+     * external blob reference but never both, so the both-present case is
+     * treated as a server protocol violation.
      *
      * @param patch the decoded patch
      * @return the mutations from this patch, inline or downloaded from
@@ -2292,21 +2172,20 @@ public final class WebAppStateService {
     }
 
     /**
-     * Downloads the encrypted blob backing an externally referenced patch
-     * via the live media connection.
+     * Downloads the encrypted blob backing an externally referenced patch via
+     * the live media connection.
      *
-     * @apiNote
-     * Used by {@link #getMutationsFromPatch} when the server delivers a
-     * patch's mutation set by CDN reference rather than inline; the
-     * caller passes the returned stream to {@link #decodeExternalMutation}
-     * before decryption.
+     * <p>Used by {@link #getMutationsFromPatch} when the server delivers a
+     * patch's mutation set by CDN reference rather than inline; the caller
+     * passes the returned stream to {@link #decodeExternalMutation} before
+     * decryption.
      *
      * @implNote
-     * This implementation mirrors {@link #downloadAndDecodeSnapshot} in
-     * its error classification: a 404 / not-found surfaces as a fatal
-     * {@link WhatsAppWebAppStateSyncException.UnexpectedError} with
-     * message {@code "external patch expired"}, every other failure
-     * becomes the retryable
+     * This implementation mirrors {@link #downloadAndDecodeSnapshot} in its
+     * error classification: a 404 / not-found surfaces as a fatal
+     * {@link WhatsAppWebAppStateSyncException.UnexpectedError} with message
+     * {@code "external patch expired"}, while every other failure becomes the
+     * retryable
      * {@link WhatsAppWebAppStateSyncException.ExternalDownloadFailed}.
      *
      * @param externalRef the external blob reference
@@ -2337,25 +2216,20 @@ public final class WebAppStateService {
 
     /**
      * Commits a successful
-     * {@link MediaDownload2EventBuilder MediaDownload2Event} for an
-     * app-state CDN blob download.
+     * {@link MediaDownload2EventBuilder MediaDownload2Event} for an app-state
+     * CDN blob download.
      *
-     * @apiNote
-     * Called from {@link #downloadAndDecodeSnapshot} and
-     * {@link #downloadExternalMutation} after the CDN bytes have been
-     * read; the event keeps the WAM dashboards' app-state download
-     * metrics in line with WA Web's
-     * {@code WAWebCreateMediaDownloadMetrics.handleDownloadAndDecryptSuccess}
-     * callback.
+     * <p>Called from {@link #downloadAndDecodeSnapshot} and
+     * {@link #downloadExternalMutation} after the CDN bytes have been read;
+     * the event keeps the WAM dashboards' app-state download metrics current.
      *
      * @implNote
-     * This implementation hard-codes the WAM dimensions WA Web sets up
-     * once via {@code createMediaDownloadMetrics}: media type
+     * This implementation hard-codes the WAM dimensions: media type
      * {@link MediaType#MD_APP_STATE}, MMS v4,
      * {@link DownloadOriginType#MESSAGE_HISTORY_SYNC} origin,
-     * {@link MediaDownloadModeType#FULL} mode, HTTP 200, single attempt,
-     * zero retries; Cobalt does not run the WAM accumulator object so
-     * each download commits a self-contained event instead.
+     * {@link MediaDownloadModeType#FULL} mode, HTTP 200, single attempt, zero
+     * retries; each download commits a self-contained event rather than going
+     * through a shared accumulator object.
      *
      * @param downloadStart the instant at which the download attempt
      *                      began
@@ -2381,24 +2255,21 @@ public final class WebAppStateService {
 
     /**
      * Commits a failing
-     * {@link MediaDownload2EventBuilder MediaDownload2Event} for an
-     * app-state CDN blob download.
+     * {@link MediaDownload2EventBuilder MediaDownload2Event} for an app-state
+     * CDN blob download.
      *
-     * @apiNote
-     * Called from {@link #downloadAndDecodeSnapshot} and
-     * {@link #downloadExternalMutation} on every failed download attempt;
-     * the event lets WAM dashboards distinguish network errors, 404s,
-     * throttling, and unknown failures via the
-     * {@link #classifyMediaDownloadError(Throwable)} mapping that mirrors
-     * WA Web's {@code getMetricDownloadErrorResultType}.
+     * <p>Called from {@link #downloadAndDecodeSnapshot} and
+     * {@link #downloadExternalMutation} on every failed download attempt; the
+     * event lets WAM dashboards distinguish network errors, 404s, throttling,
+     * and unknown failures via the
+     * {@link #classifyMediaDownloadError(Throwable)} mapping.
      *
      * @implNote
      * This implementation populates the same fixed WAM dimensions as
-     * {@link #commitMediaDownload2Success(Instant)} and additionally
-     * attaches {@code downloadHttpCode} when
-     * {@link #extractHttpStatusCode(Throwable)} surfaces one; the
-     * downstream status code lookup walks the cause chain because the
-     * download path wraps the HTTP status inside
+     * {@link #commitMediaDownload2Success(Instant)} and additionally attaches
+     * the HTTP status code when {@link #extractHttpStatusCode(Throwable)}
+     * surfaces one; the status-code lookup walks the cause chain because the
+     * download path wraps the status inside
      * {@link WhatsAppMediaException.Download}.
      *
      * @param downloadStart the instant at which the download attempt
@@ -2434,24 +2305,19 @@ public final class WebAppStateService {
      * Maps a download failure to the corresponding
      * {@link MediaDownloadResultType} value.
      *
-     * @apiNote
-     * Called by {@link #commitMediaDownload2Failure(Instant, Throwable)}
-     * to produce the {@code overallDownloadResult} dimension on the
-     * emitted WAM event; the mapping matches WA Web's
-     * {@code WAWebWamMediaMetricUtils.getMetricDownloadErrorResultType}
-     * one-for-one (404/410 to
-     * {@link MediaDownloadResultType#ERROR_TOO_OLD}, 416 to
+     * <p>Called by {@link #commitMediaDownload2Failure(Instant, Throwable)} to
+     * produce the download-result dimension on the emitted WAM event: HTTP
+     * 404/410 map to {@link MediaDownloadResultType#ERROR_TOO_OLD}, 416 to
      * {@link MediaDownloadResultType#ERROR_CANNOT_RESUME}, 401 to
      * {@link MediaDownloadResultType#ERROR_INVALID_URL}, 429/507 to
-     * {@link MediaDownloadResultType#ERROR_THROTTLE}, missing status to
-     * {@link MediaDownloadResultType#ERROR_NETWORK}, anything else to
-     * {@link MediaDownloadResultType#ERROR_UNKNOWN}).
+     * {@link MediaDownloadResultType#ERROR_THROTTLE}, a missing status to
+     * {@link MediaDownloadResultType#ERROR_NETWORK}, and anything else to
+     * {@link MediaDownloadResultType#ERROR_UNKNOWN}.
      *
      * @implNote
-     * This implementation walks the cause chain because the download
-     * stack wraps the originating
-     * {@link WhatsAppMediaException.Download} inside transport-level
-     * exceptions before it surfaces here.
+     * This implementation walks the cause chain because the download stack
+     * wraps the originating {@link WhatsAppMediaException.Download} inside
+     * transport-level exceptions before it surfaces here.
      *
      * @param throwable the error raised by the download path
      * @return the mapped result type, never {@code null}
@@ -2480,15 +2346,12 @@ public final class WebAppStateService {
     }
 
     /**
-     * Returns the HTTP status code embedded in a download failure, if
-     * one is available.
+     * Returns the HTTP status code embedded in a download failure, if one is
+     * available.
      *
-     * @apiNote
-     * Called by {@link #commitMediaDownload2Failure(Instant, Throwable)}
-     * to populate the {@code downloadHttpCode} dimension on the WAM
-     * event so dashboards can break failures down by HTTP code; matches
-     * WA Web's {@code WAWebWamMediaMetricUtils.getStatusCode} which is
-     * the symmetric helper to
+     * <p>Called by {@link #commitMediaDownload2Failure(Instant, Throwable)} to
+     * populate the HTTP-code dimension on the WAM event so dashboards can
+     * break failures down by status code; the symmetric helper to
      * {@link #classifyMediaDownloadError(Throwable)}.
      *
      * @param throwable the error raised by the download path
@@ -2510,26 +2373,23 @@ public final class WebAppStateService {
     }
 
     /**
-     * Returns whether the given download failure represents a CDN
-     * not-found / expired blob.
+     * Returns whether the given download failure represents a CDN not-found /
+     * expired blob.
      *
-     * @apiNote
-     * Used by {@link #downloadAndDecodeSnapshot} and
+     * <p>Used by {@link #downloadAndDecodeSnapshot} and
      * {@link #downloadExternalMutation} to decide whether to re-throw a
      * download error as the fatal
-     * {@link WhatsAppWebAppStateSyncException.UnexpectedError} with
-     * message {@code "external patch expired"} (matching WA Web's
-     * {@code SyncdFatalError} branch on {@code MediaNotFoundError}) or
-     * to surface it as the retryable
+     * {@link WhatsAppWebAppStateSyncException.UnexpectedError} with message
+     * {@code "external patch expired"} or to surface it as the retryable
      * {@link WhatsAppWebAppStateSyncException.ExternalDownloadFailed}.
      *
      * @implNote
      * This implementation walks the cause chain and inspects exception
-     * messages because the Cobalt media download stack does not expose
-     * a typed {@code NotFound} subclass; messages like
-     * {@code "status code 404"} or {@code "not found"} drive the
-     * classification. A self-referencing cause is treated as a
-     * termination condition to guard against pathological chains.
+     * messages because the media download stack does not expose a typed
+     * not-found subclass; messages such as {@code "status code 404"} or
+     * {@code "not found"} drive the classification. A self-referencing cause
+     * is treated as a termination condition to guard against pathological
+     * chains.
      *
      * @param throwable the exception thrown by the media download path
      * @return {@code true} if the throwable indicates a 404 / not-found
@@ -2561,12 +2421,11 @@ public final class WebAppStateService {
      * Asserts that every field required to download an
      * {@link ExternalBlobReference} from the CDN is populated.
      *
-     * @apiNote
-     * Called by {@link #downloadAndDecodeSnapshot} and
-     * {@link #downloadExternalMutation} before issuing the actual media
-     * download; the ordered field checks (mediaKey, directPath,
-     * fileSha256, fileEncSha256) preserve WA Web's first-missing-field
-     * error reporting which downstream WAM dashboards group by.
+     * <p>Called by {@link #downloadAndDecodeSnapshot} and
+     * {@link #downloadExternalMutation} before issuing the media download; the
+     * ordered field checks (mediaKey, directPath, fileSha256, fileEncSha256)
+     * report the first missing field, which downstream WAM dashboards group
+     * by.
      *
      * @param ref the external blob reference to validate
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError if any
@@ -2604,11 +2463,10 @@ public final class WebAppStateService {
      * Decodes a downloaded external mutation blob into a
      * {@link SyncdMutations} container.
      *
-     * @apiNote
-     * Used by {@link #getMutationsFromPatch} after
-     * {@link #downloadExternalMutation} has fetched the bytes; the
-     * resulting mutations are handed to {@link #decryptMutations} like
-     * any other patch payload.
+     * <p>Used by {@link #getMutationsFromPatch} after
+     * {@link #downloadExternalMutation} has fetched the bytes; the resulting
+     * mutations are handed to {@link #decryptMutations} like any other patch
+     * payload.
      *
      * @param downloadedData the downloaded data stream
      * @return the decoded mutations container
@@ -2629,30 +2487,25 @@ public final class WebAppStateService {
      * {@link DecryptedMutation.Untrusted} values after batching all
      * missing-key requests upfront.
      *
-     * @apiNote
-     * Called by the snapshot and patch ingest paths after
-     * {@link #getMutationsFromSnapshot} or
-     * {@link #getMutationsFromPatch} produce the raw mutation list; the
-     * first observed missing key surfaces as
-     * {@link WhatsAppWebAppStateSyncException.MissingKey} which transitions
-     * the collection to {@link SyncCollectionState#BLOCKED} while the
-     * batched request for every missing key has already been queued via
+     * <p>Called by the snapshot and patch ingest paths after
+     * {@link #getMutationsFromSnapshot} or {@link #getMutationsFromPatch}
+     * produce the raw mutation list. The first observed missing key surfaces
+     * as {@link WhatsAppWebAppStateSyncException.MissingKey}, which transitions
+     * the collection to {@link SyncCollectionState#BLOCKED} once the batched
+     * request for every missing key has been queued via
      * {@link MissingSyncKeyRequestService#requestMissingKeys(java.util.Collection)}.
      *
      * @implNote
      * This implementation walks the mutation list twice. The first pass
-     * collects every missing key id into a hex-keyed
-     * {@link LinkedHashMap} so duplicates are dropped (the WAM-side
-     * effect is one key-share request per distinct id, matching WA Web's
-     * {@code handleMissingKeysInPatches}). The second pass decrypts each
-     * mutation. The REMOVE-with-missing-key branch obeys the
-     * {@link ABProp#WEB_REQUEST_MISSING_KEYS_FOR_REMOVES} AB prop:
-     * {@code true} routes the same way as SET, {@code false} raises a
-     * fatal {@link WhatsAppWebAppStateSyncException.UnexpectedError}
-     * with message {@code "no key data for remove mutations"} to mirror
-     * WA Web's {@code SyncdFatalError}. The inner catch preserves the
-     * original {@link WhatsAppWebAppStateSyncException} subtype so the
-     * caller can distinguish MAC mismatches from generic decryption
+     * collects every missing key id into a hex-keyed {@link LinkedHashMap} so
+     * duplicates are dropped, yielding one key-share request per distinct id.
+     * The second pass decrypts each mutation. The REMOVE-with-missing-key
+     * branch obeys the {@link ABProp#WEB_REQUEST_MISSING_KEYS_FOR_REMOVES} AB
+     * prop: {@code true} routes the same way as SET, {@code false} raises a
+     * fatal {@link WhatsAppWebAppStateSyncException.UnexpectedError} with
+     * message {@code "no key data for remove mutations"}. The inner catch
+     * preserves the original {@link WhatsAppWebAppStateSyncException} subtype
+     * so the caller can distinguish MAC mismatches from generic decryption
      * failures.
      *
      * @param mutations the raw mutations to decrypt
@@ -2749,24 +2602,21 @@ public final class WebAppStateService {
 
     /**
      * Commits one
-     * {@link MdAppStateMessageRangeEventBuilder MdAppStateMessageRange}
-     * event per chat-action mutation that carries a non-empty
-     * per-chat message range, and emits the
-     * {@link BootstrapAppStateDataStageCode#MUTATIONS_DECRYPTED}
-     * bootstrap stage marker.
+     * {@link MdAppStateMessageRangeEventBuilder MdAppStateMessageRange} event
+     * per chat-action mutation that carries a non-empty per-chat message
+     * range, and emits the
+     * {@link BootstrapAppStateDataStageCode#MUTATIONS_DECRYPTED} bootstrap
+     * stage marker.
      *
-     * @apiNote
-     * Called by the snapshot and patch ingest paths immediately after
-     * {@link #decryptMutations} returns; mirrors the call-site in
-     * WA Web's {@code _applySnapshotAndPatches} and {@code _applyPatch}
-     * so WAM dashboards can correlate per-mutation message-range sizes
-     * against the bootstrap stage timeline.
+     * <p>Called by the snapshot and patch ingest paths immediately after
+     * {@link #decryptMutations} returns, so WAM dashboards can correlate
+     * per-mutation message-range sizes against the bootstrap stage timeline.
      *
      * @implNote
      * This implementation handles the four chat-action variants
      * ({@link ArchiveChatAction}, {@link MarkChatAsReadAction},
-     * {@link ClearChatAction}, {@link DeleteChatAction}) via a sealed
-     * pattern-switch; other action types contribute no event.
+     * {@link ClearChatAction}, {@link DeleteChatAction}) via a pattern-switch;
+     * other action types contribute no event.
      *
      * @param untrusted the decrypted mutations to inspect for chat
      *                  action message ranges
@@ -2797,25 +2647,21 @@ public final class WebAppStateService {
     /**
      * Commits a
      * {@link MdBootstrapAppStateCriticalDataProcessingEventBuilder MdBootstrapAppStateCriticalDataProcessing}
-     * event when a bootstrap stage is reached while the first-run
-     * critical data sync is still in progress.
+     * event when a bootstrap stage is reached while the first-run critical
+     * data sync is still in progress.
      *
-     * @apiNote
-     * Called at every observable stage transition during the initial
-     * app-state sync (mutations decrypted, about-to-apply mutations,
-     * applied mutations, entered retry mode, etc.) so the WAM dashboards
-     * can chart how long each stage takes; once the
-     * {@link SyncPatchType#CRITICAL_BLOCK} collection has been
-     * bootstrapped the helper becomes a no-op.
+     * <p>Called at every observable stage transition during the initial
+     * app-state sync (mutations decrypted, about-to-apply, applied, entered
+     * retry mode, and so on) so the WAM dashboards can chart how long each
+     * stage takes; once the {@link SyncPatchType#CRITICAL_BLOCK} collection
+     * has been bootstrapped the helper becomes a no-op.
      *
      * @implNote
-     * This implementation approximates WA Web's global
-     * {@code isSyncDCriticalDataSyncInProcess} state machine by checking
-     * the bootstrapped flag on {@link SyncPatchType#CRITICAL_BLOCK}
-     * because Cobalt does not maintain a separate first-run state. WA
-     * Web's {@code mdSessionId} field is omitted because Cobalt has no
-     * equivalent of {@code MdSyncFieldStatsMeta.getMdSessionId} (which
-     * hashes the primary's and companion's identity keys).
+     * This implementation approximates a global first-run state machine by
+     * checking the bootstrapped flag on {@link SyncPatchType#CRITICAL_BLOCK},
+     * since Cobalt maintains no separate first-run state. The
+     * {@code mdSessionId} field is omitted because Cobalt has no equivalent
+     * identity-key-hash derivation.
      *
      * @param stage the bootstrap stage reached; never {@code null}
      */
@@ -2836,27 +2682,21 @@ public final class WebAppStateService {
      * WAM event summarising a first-time collection's snapshot and
      * external-patch download phase.
      *
-     * @apiNote
-     * Called from the snapshot ingest path only when the collection was
-     * not previously bootstrapped, immediately after every CDN download
-     * for the collection has either completed or failed; lets WAM
-     * dashboards chart per-collection bootstrap latency, payload size,
-     * and success rate against the
-     * {@link MdBootstrapPayloadType#CRITICAL CRITICAL} versus
-     * {@link MdBootstrapPayloadType#NON_CRITICAL NON_CRITICAL}
-     * dimension.
+     * <p>Called from the snapshot ingest path only when the collection was not
+     * previously bootstrapped, immediately after every CDN download for the
+     * collection has either completed or failed; lets WAM dashboards chart
+     * per-collection bootstrap latency, payload size, and success rate against
+     * the {@link MdBootstrapPayloadType#CRITICAL CRITICAL} versus
+     * {@link MdBootstrapPayloadType#NON_CRITICAL NON_CRITICAL} dimension.
      *
      * @implNote
-     * This implementation omits WA Web's {@code mdStorageQuotaBytes} and
-     * {@code mdStorageQuotaUsedBytes} fields because there is no JVM
-     * equivalent of {@code navigator.storage.estimate()}; it omits
+     * This implementation omits the storage-quota fields because there is no
+     * JVM equivalent of the browser storage estimate, and omits
      * {@code mdSessionId} for the same reason as
      * {@link #logCriticalBootstrapStageIfNecessary(BootstrapAppStateDataStageCode)}.
-     * The {@code failure} parameter is accepted for symmetry with WA
-     * Web's failure branch but is not folded into
-     * {@code mdSyncFailureReason} (index 17) because neither the
-     * upstream emitter nor the KmpWamLogger variant ever writes to that
-     * field.
+     * The {@code failure} parameter is accepted for symmetry with the failure
+     * branch but is not folded into a failure-reason field because the WAM
+     * event never writes that field.
      *
      * @param tracker the download tracker carrying start timestamp and
      *                accumulated payload size
@@ -2890,23 +2730,20 @@ public final class WebAppStateService {
     }
 
     /**
-     * Mutable accumulator that pairs a collection name, a start
-     * timestamp, and a running payload-size tally for the bootstrap
-     * download metric.
+     * Mutable accumulator that pairs a collection name, a start timestamp, and
+     * a running payload-size tally for the bootstrap download metric.
      *
-     * @apiNote
-     * Held by the snapshot ingest path across the snapshot and
-     * external-patch download phase of a single sync response so the
-     * eventual call to
+     * <p>Held by the snapshot ingest path across the snapshot and
+     * external-patch download phase of a single sync response so the eventual
+     * call to
      * {@link #emitBootstrapAppStateDataDownloaded(BootstrapDownloadTracker, MdBootstrapStepResult, Throwable)}
-     * can fill {@code mdBootstrapStepDuration} and
-     * {@code mdBootstrapPayloadSize} with consistent inputs.
+     * can fill the step-duration and payload-size dimensions with consistent
+     * inputs.
      *
      * @implNote
      * This implementation captures the start timestamp eagerly in the
-     * constructor so it lines up with WA Web's
-     * {@code u = unixTimeMs()} at the top of its download function;
-     * per-blob sizes accrue via {@link #addBytes(long)}.
+     * constructor so it bounds the full download window; per-blob sizes accrue
+     * via {@link #addBytes(long)}.
      */
     private static final class BootstrapDownloadTracker {
         /**
@@ -2930,14 +2767,13 @@ public final class WebAppStateService {
         private long totalBytes;
 
         /**
-         * Constructs a tracker pinned to {@code collectionName} with a
-         * start timestamp of {@link System#currentTimeMillis()} and a
-         * zero byte accumulator.
+         * Constructs a tracker pinned to {@code collectionName} with a start
+         * timestamp of {@link System#currentTimeMillis()} and a zero byte
+         * accumulator.
          *
-         * @apiNote
-         * Built once per collection bootstrap round; the start
-         * timestamp must be captured before the first CDN download to
-         * stay aligned with WA Web's measurement window.
+         * <p>Built once per collection bootstrap round; the start timestamp is
+         * captured before the first CDN download so the measured window covers
+         * the whole download phase.
          *
          * @param collectionName the collection being downloaded
          */
@@ -2978,10 +2814,9 @@ public final class WebAppStateService {
         /**
          * Adds a single blob's plaintext size to the running total.
          *
-         * @apiNote
-         * Called once per downloaded external blob; non-positive sizes
-         * are ignored so a missing {@code fileSizeBytes} field on a
-         * blob reference cannot corrupt the running total.
+         * <p>Called once per downloaded external blob; non-positive sizes are
+         * ignored so a missing {@code fileSizeBytes} field on a blob reference
+         * cannot corrupt the running total.
          *
          * @param bytes the {@code fileSizeBytes} value from an external
          *              blob reference
@@ -2994,35 +2829,29 @@ public final class WebAppStateService {
     }
 
     /**
-     * Applies a batch of trusted mutations to the store, grouped by
-     * action name and dispatched through the corresponding handler in
+     * Applies a batch of trusted mutations to the store, grouped by action
+     * name and dispatched through the corresponding handler in
      * {@link WebAppStateHandlerRegistry}.
      *
-     * @apiNote
-     * Called from the snapshot, patch, and recovery ingest paths after
-     * mutations have been decrypted, integrity-checked, and conflict-
-     * resolved; emits the
-     * {@link BootstrapAppStateDataStageCode#ABOUT_TO_APPLY_MUTATIONS}
-     * and
-     * {@link BootstrapAppStateDataStageCode#APPLIED_MUTATIONS} bootstrap
-     * stage markers, persists each mutation's
-     * {@link MutationApplicationResult}, queues orphan results into the
-     * per-collection orphan list, and triggers a single
-     * {@link #retryOrphanMutations(SyncPatchType)} round at the end so
-     * orphans whose target now exists can land.
+     * <p>Called from the snapshot, patch, and recovery ingest paths after
+     * mutations have been decrypted, integrity-checked, and
+     * conflict-resolved. It emits the
+     * {@link BootstrapAppStateDataStageCode#ABOUT_TO_APPLY_MUTATIONS} and
+     * {@link BootstrapAppStateDataStageCode#APPLIED_MUTATIONS} bootstrap stage
+     * markers, persists each mutation's {@link MutationApplicationResult},
+     * queues orphan results into the per-collection orphan list, and triggers
+     * a single {@link #retryOrphanMutations(SyncPatchType)} round at the end
+     * so orphans whose target now exists can land.
      *
      * @implNote
-     * This implementation matches WA Web's
-     * {@code _applySetMutations} (function {@code Xe}) error policy
-     * almost exactly: a {@link WhatsAppWebAppStateSyncException} that
-     * reports {@code isFatal()} or any throwable arising in
-     * {@link SyncPatchType#CRITICAL_BLOCK} aborts the entire collection;
-     * any other handler failure marks the affected batch
-     * {@link MutationApplicationResult#failed()} and continues so a
-     * single broken handler cannot poison the whole collection. Mutations
-     * whose {@code actionVersion} exceeds the registered handler's
-     * version cap are recorded as
-     * {@link MutationApplicationResult#unsupported()}.
+     * This implementation aborts the entire collection on a
+     * {@link WhatsAppWebAppStateSyncException} that reports {@code isFatal()}
+     * or any throwable arising in {@link SyncPatchType#CRITICAL_BLOCK}; any
+     * other handler failure marks the affected batch
+     * {@link MutationApplicationResult#failed()} and continues, so a single
+     * broken handler cannot poison the whole collection. Mutations whose
+     * action version exceeds the registered handler's version cap are recorded
+     * as {@link MutationApplicationResult#unsupported()}.
      *
      * @param collectionName  the collection these mutations belong to
      * @param remoteMutations the trusted mutations to apply
@@ -3115,12 +2944,11 @@ public final class WebAppStateService {
      * Re-applies every orphan mutation previously parked for the given
      * collection.
      *
-     * @apiNote
-     * Called at the tail of {@link #applyMutations} so any mutation
-     * whose target entity was just introduced by the same sync round has
-     * a chance to land; mutations that still cannot apply are re-added
-     * by {@link #retryOrphanEntries(SyncPatchType, List)} and remain
-     * eligible for the next retry round.
+     * <p>Called at the tail of {@link #applyMutations} so any mutation whose
+     * target entity was just introduced by the same sync round has a chance to
+     * land; mutations that still cannot apply are re-added by
+     * {@link #retryOrphanEntries(SyncPatchType, List)} and remain eligible for
+     * the next retry round.
      *
      * @param collectionName the collection whose orphan list to retry
      */
@@ -3135,25 +2963,19 @@ public final class WebAppStateService {
     }
 
     /**
-     * Re-applies the given orphan entries oldest-first, requeueing any
-     * that still cannot land.
+     * Re-applies the given orphan entries oldest-first, requeueing any that
+     * still cannot land.
      *
-     * @apiNote
-     * Called by {@link #retryOrphanMutations(SyncPatchType)} and by
-     * {@link #retryUnsupportedMutations(SyncPatchType)} to drive
-     * individual orphan retries; mirrors WA Web's
-     * {@code applyIndividualMutations} which itself is invoked on
-     * resume and after every {@code applyAllOrphansAndUnsupported}
-     * round.
+     * <p>Called by {@link #retryOrphanMutations(SyncPatchType)} and by
+     * {@link #retryUnsupportedMutations(SyncPatchType)} to drive individual
+     * orphan retries.
      *
      * @implNote
      * This implementation sorts by {@link OrphanMutationEntry#timestamp()}
-     * before applying so that later orphans targeting the same index
-     * overwrite earlier ones, matching the
-     * {@code e.sort((a,b) -> a.timestamp - b.timestamp)} preamble of
-     * the WA Web counterpart. {@link #resolveActionNameSafe} is used
-     * (not the throwing variant) because a partially decoded orphan
-     * should be re-parked rather than escalate.
+     * before applying so that later orphans targeting the same index overwrite
+     * earlier ones. {@link #resolveActionNameSafe(DecryptedMutation.Trusted)}
+     * is used rather than the throwing variant because a partially decoded
+     * orphan should be re-parked rather than escalate.
      *
      * @param collectionName the collection these orphans belong to
      * @param orphans        the orphan entries to retry
@@ -3195,25 +3017,23 @@ public final class WebAppStateService {
     }
 
     /**
-     * Builds an {@link OrphanMutationEntry} for the given trusted
-     * mutation, deriving its model id from the mutation index when no
-     * explicit override is provided.
+     * Builds an {@link OrphanMutationEntry} for the given trusted mutation,
+     * deriving its model id from the mutation index when no explicit override
+     * is provided.
      *
-     * @apiNote
-     * Used by {@link #applyMutations} when a handler reports
-     * {@link MutationApplicationResult#isOrphan()}; the resulting entry
-     * is keyed on {@code modelType}/{@code modelId} so the targeted
-     * orphan-resolution helpers
-     * ({@code checkOrphanMessages}/{@code checkOrphanChats}/etc.) can
-     * find it once the missing entity arrives.
+     * <p>Used by {@link #applyMutations} when a handler reports
+     * {@link MutationApplicationResult#isOrphan()}; the resulting entry is
+     * keyed on model type and model id so the targeted orphan-resolution
+     * helpers ({@link #checkOrphanMessages(java.util.Collection)},
+     * {@link #checkOrphanChats(java.util.Collection)}, and the rest) can find
+     * it once the missing entity arrives.
      *
      * @implNote
-     * This implementation extracts the model id from index element
-     * {@code [1]} only when {@code modelIdOverride} is {@code null}; an
-     * unparseable index simply leaves {@code modelId} {@code null}
-     * because the orphan can still be retried via
-     * {@link #retryOrphanEntries(SyncPatchType, List)} which works
-     * without a model id.
+     * This implementation extracts the model id from index element 1 only when
+     * {@code modelIdOverride} is {@code null}; an unparseable index leaves the
+     * model id {@code null}, since the orphan can still be retried via
+     * {@link #retryOrphanEntries(SyncPatchType, List)} which works without a
+     * model id.
      *
      * @param mutation        the trusted mutation to persist as an
      *                        orphan
@@ -3248,14 +3068,12 @@ public final class WebAppStateService {
     }
 
     /**
-     * Builds an {@link OrphanMutationEntry} without an explicit model
-     * id override, always extracting the model id from the mutation
-     * index.
+     * Builds an {@link OrphanMutationEntry} without an explicit model id
+     * override, always extracting the model id from the mutation index.
      *
-     * @apiNote
-     * Convenience overload for call-sites that have no
-     * {@link MutationApplicationResult#modelId()} hint and simply want
-     * the index-derived value; delegates to
+     * <p>Convenience overload for call-sites that have no
+     * {@link MutationApplicationResult#modelId()} hint and simply want the
+     * index-derived value; delegates to
      * {@link #buildOrphanEntry(DecryptedMutation.Trusted, String, String)}.
      *
      * @param mutation  the trusted mutation to persist as an orphan
@@ -3268,17 +3086,15 @@ public final class WebAppStateService {
     }
 
     /**
-     * Parses the action index of a trusted mutation and returns the
-     * action name from element 0, throwing on unparseable or empty
-     * indices.
+     * Parses the action index of a trusted mutation and returns the action
+     * name from element 0, throwing on unparseable or empty indices.
      *
-     * @apiNote
-     * Used by {@link #applyMutations} during the main fatal-on-invalid
-     * categorization path; an unparseable index there is a server
-     * protocol violation that must abort the round so the caller can
-     * react. A successfully parsed index whose action name is unknown
-     * (or blank) returns {@code null}, which the caller treats as
-     * {@link MutationApplicationResult#unsupported()} rather than fatal.
+     * <p>Used by {@link #applyMutations} during the fatal-on-invalid
+     * categorization path; an unparseable index there is a server protocol
+     * violation that must abort the round. A successfully parsed index whose
+     * action name is unknown or blank returns {@code null}, which the caller
+     * treats as {@link MutationApplicationResult#unsupported()} rather than
+     * fatal.
      *
      * @param mutation the trusted mutation whose index to parse
      * @return the action name, or {@code null} if the action name at
@@ -3307,22 +3123,19 @@ public final class WebAppStateService {
     }
 
     /**
-     * Resolves the action name for a trusted mutation without raising
-     * on parse errors.
+     * Resolves the action name for a trusted mutation without raising on parse
+     * errors.
      *
-     * @apiNote
-     * Used on the non-fatal paths where an unparseable index should
-     * simply skip the mutation rather than abort the round: orphan
-     * retry ({@link #retryOrphanEntries(SyncPatchType, List)}), conflict
-     * resolution ({@link #resolveConflicts}), unsupported retry
-     * ({@link #retryUnsupportedMutations(SyncPatchType)}), and the
-     * upload-success bookkeeping path.
+     * <p>Used on the non-fatal paths where an unparseable index should simply
+     * skip the mutation rather than abort the round: orphan retry
+     * ({@link #retryOrphanEntries(SyncPatchType, List)}), conflict resolution
+     * ({@link #resolveConflicts(SequencedCollection, SyncPatchType)}),
+     * unsupported retry ({@link #retryUnsupportedMutations(SyncPatchType)}),
+     * and the upload-success bookkeeping path.
      *
      * @implNote
      * This implementation additionally treats a blank action name as
-     * {@code null}; the equivalent JS check would never see a blank
-     * element 0 because the array would have been rejected at parse
-     * time, but Cobalt keeps the guard as a defensive measure.
+     * {@code null} as a defensive guard.
      *
      * @param mutation the trusted mutation whose index to parse
      * @return the action name, or {@code null} if the index is invalid
@@ -3339,15 +3152,17 @@ public final class WebAppStateService {
     }
 
     /**
-     * Returns the primary-entity identifier (element 1) carried by a
-     * mutation index string.
+     * Returns the primary-entity identifier (element 1) carried by a mutation
+     * index string.
      *
-     * @apiNote
-     * Used by {@link #processUploadSuccess} when seeding sync action
-     * entries on upload, and by {@link #recordMutationState} as the
-     * fallback model id when the handler did not surface one of its
-     * own; the index is a JSON array of the form
-     * {@code ["actionName", "modelId", ...]} for most actions.
+     * <p>Used by {@link #processUploadSuccess} when seeding sync action
+     * entries on upload, and by
+     * {@link #recordMutationState(SyncPatchType, DecryptedMutation.Trusted, String, MutationApplicationResult)}
+     * as the fallback model id when the handler did not surface one of its
+     * own. The index is a JSON array of the form
+     * {@snippet :
+     *     ["actionName", "modelId", ...]
+     * }
      *
      * @param mutationIndex the raw index string
      * @return the model id, or {@code null} if the index is invalid or
@@ -3364,20 +3179,21 @@ public final class WebAppStateService {
     }
 
     /**
-     * Stamps the {@code actionState}, model type, and model id columns of the
+     * Stamps the action-state, model-type, and model-id columns of the
      * {@link SyncActionEntry} that corresponds to a freshly-applied trusted
      * mutation.
      *
-     * @apiNote
-     * Persists per-mutation telemetry used by the daily syncd stats reporter
-     * ({@link #reportSyncdStats()}); only {@link SyncdOperation#SET} mutations
-     * keep an entry to update, REMOVE mutations have already been deleted.
+     * <p>Persists per-mutation telemetry used by the daily syncd stats
+     * reporter ({@link #reportSyncdStats()}); only {@link SyncdOperation#SET}
+     * mutations keep an entry to update, REMOVE mutations have already been
+     * deleted.
      *
      * @implNote
      * This implementation walks all entries for the collection and matches by
-     * {@link SyncActionEntry#actionIndex()} plus {@link SyncActionEntry#actionVersion()};
-     * the model id falls back to {@link #extractModelId(String)} when the handler
-     * result does not name one, and the model type falls back to {@code actionName}.
+     * {@link SyncActionEntry#actionIndex()} plus
+     * {@link SyncActionEntry#actionVersion()}; the model id falls back to
+     * {@link #extractModelId(String)} when the handler result does not name
+     * one, and the model type falls back to {@code actionName}.
      *
      * @param collectionName the collection the mutation belongs to
      * @param mutation       the trusted mutation that was just applied
@@ -3415,16 +3231,15 @@ public final class WebAppStateService {
      * Replays every stored {@link SyncActionState#UNSUPPORTED} mutation across
      * all {@link SyncPatchType} collections.
      *
-     * @apiNote
-     * Mirrors the unsupported-half of WA Web's startup orphan sweep; entries
-     * previously parked because no handler was registered for their action are
-     * given another chance now that the handler registry may have grown.
+     * <p>The unsupported half of the startup orphan sweep; entries previously
+     * parked because no handler was registered for their action are given
+     * another chance now that the handler registry may have grown.
      *
      * @implNote
-     * This implementation iterates {@link SyncPatchType#values()} and delegates
-     * to {@link #retryUnsupportedMutations(SyncPatchType)} per collection,
-     * which performs the per-collection scan that the JS module fuses into a
-     * single bulk index query.
+     * This implementation iterates {@link SyncPatchType#values()} and
+     * delegates to {@link #retryUnsupportedMutations(SyncPatchType)} per
+     * collection, performing a per-collection scan rather than a single bulk
+     * index query.
      */
     private void retryUnsupportedMutations() {
         for (var patchType : SyncPatchType.values()) {
@@ -3436,18 +3251,18 @@ public final class WebAppStateService {
      * Replays the {@link SyncActionState#UNSUPPORTED} entries of a single
      * collection through the current {@link WebAppStateHandlerRegistry}.
      *
-     * @apiNote
-     * Invoked from {@link #retryUnsupportedMutations()} as part of the
+     * <p>Invoked from {@link #retryUnsupportedMutations()} as part of the
      * startup orphan sweep; entries whose handler version exceeds the
      * mutation's recorded {@link DecryptedMutation.Trusted#actionVersion()}
-     * are also skipped, matching WA Web's per-mutation version guard.
+     * are skipped.
      *
      * @implNote
      * This implementation reconstructs a {@link DecryptedMutation.Trusted}
      * from the stored {@link SyncActionEntry} fields and forwards it through
-     * the regular {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#applyMutation}
-     * path; any throwable from the handler is logged and swallowed so a
-     * single failing entry never aborts the sweep.
+     * the regular
+     * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * path; any throwable from the handler is logged and swallowed so a single
+     * failing entry never aborts the sweep.
      *
      * @param collectionName the collection whose unsupported entries are
      *                       replayed
@@ -3499,25 +3314,26 @@ public final class WebAppStateService {
      * Reconciles incoming server mutations against the local pending-mutation
      * queue and returns the subset that should still be applied.
      *
-     * @apiNote
-     * Called on the inbound side of every patch processing pass; the per-handler
-     * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#resolveConflicts}
-     * verdict picks between {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
+     * <p>Called on the inbound side of every patch processing pass. The
+     * per-handler
+     * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#resolveConflicts(DecryptedMutation.Trusted, DecryptedMutation.Trusted)}
+     * verdict picks between
+     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
      * {@link ConflictResolutionState#SKIP_REMOTE}, and
      * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. After the
      * per-index pass, a cross-index sweep delegates to
-     * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#dropMutationDueToCrossIndexConflict}
+     * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#dropMutationDueToCrossIndexConflict(DecryptedMutation.Trusted, java.util.Map)}
      * so handlers can drop remote mutations that conflict at a different index
-     * (for example, a remote pin at index A obsoleted by a local unpin at index B).
+     * (for example, a remote pin at index A obsoleted by a local unpin at
+     * index B).
      *
      * @implNote
      * This implementation resolves the action handler via the local
-     * {@link WebAppStateHandlerRegistry} rather than reading
-     * {@code e.actionHandler} off the mutation as WA Web does (Cobalt's
-     * mutation record does not carry a handler reference). The drop-and-merge
-     * store cleanup is performed inline rather than returned to the caller;
-     * the net effect on the pending-mutation table is identical. Mutations
-     * without a resolvable handler default to
+     * {@link WebAppStateHandlerRegistry} rather than reading a handler
+     * reference off the mutation record. The drop-and-merge store cleanup is
+     * performed inline rather than returned to the caller; the net effect on
+     * the pending-mutation table is identical. Mutations without a resolvable
+     * handler default to
      * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} so the server
      * view wins.
      *
@@ -3600,21 +3416,18 @@ public final class WebAppStateService {
      * Folds a sequence of decrypted mutations into the supplied base LT-Hash
      * and collects the corresponding {@link SyncActionEntryUpdate} list.
      *
-     * @apiNote
-     * Drives the per-patch LT-Hash recomputation used to validate the
+     * <p>Drives the per-patch LT-Hash recomputation used to validate the
      * server-supplied snapshot MAC; SET mutations remove the prior value-MAC
-     * (when one was stored) and add the new one, REMOVE mutations remove the
-     * stored value-MAC.
+     * (when one was stored) and add the new one, while REMOVE mutations remove
+     * the stored value-MAC.
      *
      * @implNote
-     * This implementation tolerates a REMOVE for an indexMac that has no
-     * local entry by logging and skipping it (matching WA Web's
-     * {@code hasMissingRemove=true} non-fatal branch), which is legitimate
-     * during split-brain recovery or out-of-order patch delivery. The actual
-     * LT-Hash math is delegated to
-     * {@link MutationLTHash#subtractThenAdd(byte[], List, List)}, and the
-     * returned {@link SyncActionEntryUpdate} list is only persisted once
-     * {@link #updateCollectionState(SyncPatchType, long, byte[])} confirms
+     * This implementation tolerates a REMOVE for an index MAC that has no
+     * local entry by logging and skipping it, which is legitimate during
+     * split-brain recovery or out-of-order patch delivery. The LT-Hash math is
+     * delegated to {@link MutationLTHash#subtractThenAdd(byte[], List, List)},
+     * and the returned {@link SyncActionEntryUpdate} list is only persisted
+     * once {@link #updateCollectionState(SyncPatchType, long, byte[])} confirms
      * the version guard passed.
      *
      * @param patchType the collection these mutations belong to
@@ -3670,11 +3483,10 @@ public final class WebAppStateService {
 
     /**
      * Commits the {@link SyncActionEntryUpdate} list computed by
-     * {@link #computeNewLTHash(SyncPatchType, byte[], SequencedCollection)} into
-     * the per-collection sync-action store.
+     * {@link #computeNewLTHash(SyncPatchType, byte[], SequencedCollection)}
+     * into the per-collection sync-action store.
      *
-     * @apiNote
-     * Called only after the version guard inside
+     * <p>Called only after the version guard inside
      * {@link #updateCollectionState(SyncPatchType, long, byte[])} accepts the
      * new collection version, so an entry write never lands ahead of a
      * collection metadata write that the server later supersedes.
@@ -3682,10 +3494,10 @@ public final class WebAppStateService {
      * @implNote
      * This implementation routes each update through either
      * {@link WhatsAppStore#removeSyncActionEntry(SyncPatchType, byte[])} or
-     * {@link WhatsAppStore#putSyncActionEntry(SyncPatchType, byte[],
-     * SyncActionEntry)} based on the {@link SyncActionEntryUpdate#remove()}
-     * flag; no batching is performed because the in-memory store maps are
-     * unsynchronised per-collection.
+     * {@link WhatsAppStore#putSyncActionEntry(SyncPatchType, byte[], SyncActionEntry)}
+     * based on the {@link SyncActionEntryUpdate#remove()} flag; no batching is
+     * performed because the in-memory store maps are unsynchronised
+     * per-collection.
      *
      * @param patchType the collection whose entries are being updated
      * @param updates   the entry updates to persist
@@ -3702,22 +3514,20 @@ public final class WebAppStateService {
 
     /**
      * Writes a new collection version and LT-Hash atomically, skipping the
-     * write when the supplied version is not strictly newer than the
-     * currently persisted version.
+     * write when the supplied version is not strictly newer than the currently
+     * persisted version.
      *
-     * @apiNote
-     * Returns the gate value the caller uses to decide whether to commit the
-     * dependent {@link SyncActionEntryUpdate} list; on a {@code false} return
-     * the caller must drop the updates as well, so the version, hash, and
-     * action-entry rows stay consistent.
+     * <p>Returns the gate value the caller uses to decide whether to commit
+     * the dependent {@link SyncActionEntryUpdate} list; on a {@code false}
+     * return the caller must drop the updates as well, so the version, hash,
+     * and action-entry rows stay consistent.
      *
      * @implNote
-     * This implementation uses {@link WhatsAppStore#updateWebAppStateVersion}
+     * This implementation uses
+     * {@link WhatsAppStore#updateWebAppStateVersion(SyncPatchType, long, byte[])}
      * which updates the version map and the LT-Hash map in a single call;
-     * Cobalt does not expose a bulk variant because the per-collection state
-     * machine commits one collection at a time via {@code store.mark*}
-     * helpers, so {@code bulkUpdateCollectionVersionInTransaction} is
-     * inlined as repeated per-item calls.
+     * there is no bulk variant because the per-collection state machine
+     * commits one collection at a time.
      *
      * @param collectionName the collection being updated
      * @param version        the new collection version
@@ -3743,29 +3553,28 @@ public final class WebAppStateService {
      * that matches the supplied throwable and schedules the appropriate
      * follow-up (missing-key request, fatal notification, or retry).
      *
-     * @apiNote
-     * Dispatches based on the throwable type. A
-     * {@link WhatsAppWebAppStateSyncException.MissingKey} parks the
-     * collection in {@link SyncCollectionState#BLOCKED} and asks
-     * {@link MissingSyncKeyRequestService} to fetch the missing key. A
-     * fatal {@link WhatsAppWebAppStateSyncException} parks it in
-     * {@link SyncCollectionState#ERROR_FATAL}, waits five seconds, notifies
-     * the primary device via {@link #sendAppStateFatalExceptionNotification(List)},
-     * and forwards the exception to
-     * {@link WhatsAppClient#handleFailure}.
-     * Anything else is treated as retryable: the collection is scheduled
-     * with the backoff returned by the server (when present) and parked in
+     * <p>Dispatches based on the throwable type. A
+     * {@link WhatsAppWebAppStateSyncException.MissingKey} parks the collection
+     * in {@link SyncCollectionState#BLOCKED} and asks
+     * {@link MissingSyncKeyRequestService} to fetch the missing key. A fatal
+     * {@link WhatsAppWebAppStateSyncException} parks it in
+     * {@link SyncCollectionState#ERROR_FATAL}, waits five seconds, notifies the
+     * primary device via
+     * {@link #sendAppStateFatalExceptionNotification(List)}, and forwards the
+     * exception to
+     * {@link WhatsAppClient#handleFailure(com.github.auties00.cobalt.exception.WhatsAppException)}.
+     * Anything else is treated as retryable: the collection is scheduled with
+     * the backoff returned by the server (when present) and parked in
      * {@link SyncCollectionState#ERROR_RETRY}; if the backoff window has
      * expired the collection escalates to
      * {@link SyncCollectionState#ERROR_FATAL}.
      *
      * @implNote
-     * This implementation routes the fatal-path through Cobalt's pluggable
+     * This implementation routes the fatal path through Cobalt's pluggable
      * {@link com.github.auties00.cobalt.client.WhatsAppClientErrorHandler}
-     * instead of WA Web's hardcoded {@code socketLogout(SyncdFailure)}, in
-     * keeping with Cobalt's user-configurable recovery model. The
-     * server-backoff reset on the retry attempt counter mirrors WA Web's
-     * {@code W = 0} side effect on ErrorRetry replies.
+     * instead of a hardcoded logout, in keeping with the user-configurable
+     * recovery model. The server-backoff reset on the retry attempt counter
+     * matches the side effect of an {@code ErrorRetry} server reply.
      *
      * @param error          the throwable raised by the sync round
      * @param collectionName the collection that failed; {@code null} is
@@ -3827,11 +3636,10 @@ public final class WebAppStateService {
     }
 
     /**
-     * Builds and dispatches an {@code AppStateFatalExceptionNotification} peer
+     * Builds and dispatches an app-state fatal-exception notification peer
      * message to the primary device (device id 0) for the listed collections.
      *
-     * @apiNote
-     * Wakes the primary device whenever the companion encounters an
+     * <p>Wakes the primary device whenever the companion encounters an
      * unrecoverable syncd error, so it can surface a diagnostic and re-pair
      * the companion if necessary; called from
      * {@link #handleSyncError(Throwable, SyncPatchType)} after the five-second
@@ -3840,14 +3648,10 @@ public final class WebAppStateService {
      *
      * @implNote
      * This implementation constructs the primary device JID with the
-     * four-argument {@link Jid#of(String, String, int, int)} form so the
-     * agent slot is explicitly zero, matching WA Web's
-     * {@code createDeviceWidFromUserAndDevice(user, server, 0)} which does
-     * not preserve the caller's agent. The store-and-send pair WA Web
-     * performs via {@code storePeerMessages} plus {@code encryptAndSendKeyMsg}
-     * is fused into Cobalt's single
-     * {@link WhatsAppClient#sendPeerMessage}
-     * entry point.
+     * four-argument {@link Jid#of(String, com.github.auties00.cobalt.model.jid.JidServer, int, int)}
+     * form so the agent slot is explicitly zero and the caller's agent is not
+     * preserved. The peer message is sent through the single
+     * {@link WhatsAppClient#sendPeerMessage} entry point.
      *
      * @param collectionNames the affected collection names; written into the
      *                        protobuf payload verbatim
@@ -3893,16 +3697,12 @@ public final class WebAppStateService {
      * Schedules the all-peers-negative check inside the
      * {@link MissingSyncKeyTimeoutScheduler}.
      *
-     * @apiNote
-     * Should be invoked from the key-share receiver whenever a companion
-     * device replies to a {@code requestSyncKey} peer message without
-     * supplying the requested key; after the grace period elapses with every
-     * companion having responded negatively, the missing key is escalated to
-     * a fatal sync failure.
-     *
-     * @implNote
-     * This implementation only forwards the trigger; the timer bookkeeping,
-     * cancellation, and fatal escalation live on the scheduler.
+     * <p>Invoked from the key-share receiver whenever a companion device
+     * replies to a sync-key request peer message without supplying the
+     * requested key; after the grace period elapses with every companion
+     * having responded negatively, the missing key is escalated to a fatal
+     * sync failure. The timer bookkeeping, cancellation, and fatal escalation
+     * all live on the scheduler.
      */
     public void scheduleAllDevicesRespondedCheck() {
         missingSyncKeyTimeoutScheduler.scheduleAllDevicesRespondedCheck();
@@ -3912,17 +3712,15 @@ public final class WebAppStateService {
      * Forces the missing-sync-key timeout deadline to be recomputed against
      * the current contents of the missing-key store.
      *
-     * @apiNote
-     * Must be called whenever a missing key has been resolved (typically by
-     * the {@code AppStateSyncKeyShare} receiver removing it from the store)
-     * so the deadline tracks the new earliest-pending key, or clears entirely
+     * <p>Must be called whenever a missing key has been resolved (typically by
+     * the {@code AppStateSyncKeyShare} receiver removing it from the store) so
+     * the deadline tracks the new earliest-pending key, or clears entirely
      * when no missing keys remain.
      *
      * @implNote
      * This implementation delegates to
      * {@link MissingSyncKeyTimeoutScheduler#scheduleTimeoutCheck()} which
-     * idempotently replaces the in-flight {@code setTimeout} handle, matching
-     * WA Web's {@code clearTimeout(S); S = setTimeout(...)} pattern.
+     * idempotently replaces the in-flight timeout handle.
      */
     public void rescheduleMissingSyncKeyTimeout() {
         missingSyncKeyTimeoutScheduler.scheduleTimeoutCheck();
@@ -3932,17 +3730,15 @@ public final class WebAppStateService {
      * Drives an outbound sync round for every collection currently parked in
      * {@link SyncCollectionState#DIRTY}.
      *
-     * @apiNote
-     * Called immediately before a graceful logout so the {@code Sentinel}
-     * mutation that carries key-rotation state reaches every companion
-     * device; without this flush, the rotated key would only land on the
-     * next reconnect.
+     * <p>Called immediately before a graceful logout so the sentinel mutation
+     * that carries key-rotation state reaches every companion device; without
+     * this flush the rotated key would only land on the next reconnect.
      *
      * @implNote
      * This implementation iterates {@link SyncPatchType#values()} and skips
-     * any collection whose {@link SyncCollectionState}
-     * is not {@code DIRTY}; per-collection failures are swallowed and logged
-     * because the caller is about to disconnect and cannot react.
+     * any collection whose {@link SyncCollectionState} is not
+     * {@link SyncCollectionState#DIRTY}; per-collection failures are swallowed
+     * and logged because the caller is about to disconnect and cannot react.
      */
     public void flushDirtyCollections() {
         for (var patchType : SyncPatchType.values()) {
@@ -3961,20 +3757,16 @@ public final class WebAppStateService {
      * Starts the four recurring background jobs that keep app-state sync
      * eventually consistent and instrumented.
      *
-     * @apiNote
-     * Mirrors the {@code SYNCD_SYNC_ALL_COLLECTIONS},
-     * {@code REPORT_SYNCD_ACTION_STAT}, {@code REPORT_SYNCD_KEY_STATS}, and
-     * the syncd key-rotation entries of WA Web's
-     * {@code WAWebTasksDefinitions} registry; together they catch missed
-     * dirty-bit notifications, ship the daily action and key telemetry, and
-     * rotate the active app state sync key. Safe to call after a previous
-     * {@link #stopPeriodicSyncJob()}; idempotent if already started.
+     * <p>The four jobs catch missed dirty-bit notifications, ship the daily
+     * action and key telemetry, and rotate the active app state sync key.
+     * Safe to call after a previous {@link #stopPeriodicSyncJob()}; idempotent
+     * if already started.
      *
      * @implNote
      * This implementation cancels any in-flight periodic sync handle before
      * scheduling, then dispatches the rotation job to
-     * {@link SyncKeyRotationService#startPeriodicRotationJob()} and the
-     * stats jobs to {@link #startPeriodicReportSyncdStatsJob()} and
+     * {@link SyncKeyRotationService#startPeriodicRotationJob()} and the stats
+     * jobs to {@link #startPeriodicReportSyncdStatsJob()} and
      * {@link #startPeriodicReportSyncdKeyStatsJob()}; the four jobs run on
      * independent {@link SchedulerUtils} handles.
      */
@@ -3990,23 +3782,18 @@ public final class WebAppStateService {
     }
 
     /**
-     * Schedules the next firing of the recurring
-     * {@code syncdSyncAllCollections} catch-up sweep against
+     * Schedules the next firing of the recurring catch-up sweep against
      * {@link ABProp#SYNCD_PERIODIC_SYNC_DAYS}.
      *
-     * @apiNote
-     * Reads the day count from the A/B prop on each tick so a server-side
-     * cadence change takes effect on the next reschedule without requiring a
-     * full restart of the periodic job. A zero-or-negative value disables
-     * the sweep entirely (mirroring WA Web's "skip when 0" log line) and
-     * leaves {@code periodicSyncJob} {@code null}.
+     * <p>Reads the day count from the AB prop on each tick so a server-side
+     * cadence change takes effect on the next reschedule without restarting
+     * the periodic job. A zero-or-negative value disables the sweep entirely
+     * and leaves {@link #periodicSyncJob} {@code null}.
      *
      * @implNote
-     * This implementation self-reschedules from the {@code finally} branch
-     * of the task lambda, mimicking WA Web's
-     * {@code WAWebTasksDefinitions} pattern of having each task body return
-     * its own next delay; per-tick failures are logged and the reschedule
-     * still happens so a single bad sweep does not stop the recurrence.
+     * This implementation self-reschedules from the {@code finally} branch of
+     * the task lambda; per-tick failures are logged and the reschedule still
+     * happens so a single bad sweep does not stop the recurrence.
      */
     private void scheduleNextPeriodicSync() {
         var days = abPropsService.getInt(ABProp.SYNCD_PERIODIC_SYNC_DAYS);
@@ -4029,18 +3816,16 @@ public final class WebAppStateService {
     }
 
     /**
-     * Cancels the in-flight {@code syncdSyncAllCollections} catch-up sweep
-     * handle if one is scheduled.
+     * Cancels the in-flight catch-up sweep handle if one is scheduled.
      *
-     * @apiNote
-     * Pairs with {@link #startPeriodicSyncJob()}; safe to call when no job
+     * <p>Pairs with {@link #startPeriodicSyncJob()}; safe to call when no job
      * is scheduled (no-op) and called from {@link #reset()} during graceful
      * disconnect.
      *
      * @implNote
      * This implementation cancels the {@link CompletableFuture} handle
-     * non-interruptibly so an in-flight tick is allowed to complete; the
-     * field is then nulled to permit re-arming via
+     * non-interruptibly so an in-flight tick is allowed to complete; the field
+     * is then nulled to permit re-arming via
      * {@link #scheduleNextPeriodicSync()}.
      */
     public void stopPeriodicSyncJob() {
@@ -4052,14 +3837,11 @@ public final class WebAppStateService {
     }
 
     /**
-     * Arms the recurring {@code REPORT_SYNCD_ACTION_STAT} job that ships the
-     * daily mutation-state histogram.
+     * Arms the recurring action-stats job that ships the daily mutation-state
+     * histogram.
      *
-     * @apiNote
-     * Mirrors the {@code REPORT_SYNCD_ACTION_STAT} task in WA Web's
-     * {@code WAWebTasksDefinitions} registry; each tick walks every stored
-     * sync-action entry, buckets its state, and emits one
-     * {@code MdAppStateSyncMutationStats} WAM event per mutation name.
+     * <p>Each tick walks every stored sync-action entry, buckets its state,
+     * and emits one mutation-stats WAM event per mutation name.
      *
      * @implNote
      * This implementation cancels any prior handle via
@@ -4074,19 +3856,16 @@ public final class WebAppStateService {
     }
 
     /**
-     * Schedules the next firing of the recurring
-     * {@code REPORT_SYNCD_ACTION_STAT} job one day from now.
+     * Schedules the next firing of the recurring action-stats job one day from
+     * now.
      *
-     * @apiNote
-     * The one-day cadence is fixed; WA Web's task body returns
-     * {@code DAY_SECONDS} unconditionally and there is no A/B prop to widen
-     * or narrow the interval.
+     * <p>The one-day cadence is fixed; there is no AB prop to widen or narrow
+     * the interval.
      *
      * @implNote
-     * This implementation self-reschedules from the {@code finally} branch
-     * of the task lambda so a {@link #reportSyncdStats()} failure still
-     * arms the next tick, matching WA Web's per-task-orchestrator log-and-continue
-     * pattern.
+     * This implementation self-reschedules from the {@code finally} branch of
+     * the task lambda so a {@link #reportSyncdStats()} failure still arms the
+     * next tick.
      */
     private void scheduleNextPeriodicReportSyncdStats() {
         periodicReportSyncdStatsJob = SchedulerUtils.scheduleDelayed(
@@ -4105,24 +3884,22 @@ public final class WebAppStateService {
 
     /**
      * Walks every stored {@link SyncActionEntry} across all collections,
-     * buckets per-state counts by mutation name, and commits one
-     * {@code MdAppStateSyncMutationStats} WAM event per distinct mutation.
+     * buckets per-state counts by mutation name, and commits one mutation
+     * stats WAM event per distinct mutation.
      *
-     * @apiNote
-     * The body of the recurring {@code REPORT_SYNCD_ACTION_STAT} task. Per-state
-     * counting follows WA Web exactly: {@code Success}/{@code Skipped} both
-     * increment {@code applied}; {@code Malformed} feeds {@code invalid};
-     * {@code Orphan}, {@code Unsupported}, and {@code Failed} each feed their
-     * own bucket. Mutation names that cannot be parsed back from the index
-     * are reported under the literal sentinel {@code "no-mutation-name"}.
+     * <p>The body of the recurring action-stats task.
+     * {@link SyncActionState#SUCCESS} and {@link SyncActionState#SKIPPED} both
+     * increment the applied bucket; {@link SyncActionState#MALFORMED} feeds the
+     * invalid bucket; {@link SyncActionState#ORPHAN},
+     * {@link SyncActionState#UNSUPPORTED}, and {@link SyncActionState#FAILED}
+     * each feed their own bucket. Mutation names that cannot be parsed back
+     * from the index are reported under the literal sentinel
+     * {@code "no-mutation-name"}.
      *
      * @implNote
-     * This implementation iterates the per-collection sync-action views
-     * because Cobalt does not expose WA Web's flat {@code SyncActions} IDB
-     * table, and tolerates a {@code null} {@code actionState} by skipping
-     * the entry instead of throwing WA Web's
-     * {@code "Match: No case..."} exhaustiveness error; that keeps the
-     * reporting job from aborting partway through.
+     * This implementation iterates the per-collection sync-action views rather
+     * than a flat table, and tolerates a {@code null} action state by skipping
+     * the entry so the reporting job does not abort partway through.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdReportSyncdStatJob", exports = "reportSyncdStatsJob", adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WAWebSyncdWamUtils", exports = "generateActionStatCounts", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -4167,14 +3944,12 @@ public final class WebAppStateService {
      * Maps a non-negative mutation count to the matching
      * {@link MutationCountBucket} bucket constant.
      *
-     * @apiNote
-     * Implements the privacy-preserving bucketing the WAM pipeline requires
-     * for {@code MdAppStateSyncMutationStats} and {@code SyncdKeyCount}
-     * fields: {@code 0} maps to {@link MutationCountBucket#ZERO}, {@code 1}
-     * to {@link MutationCountBucket#ONE}, then strict less-than thresholds
-     * at 10, 100, 500, 1000, 5000 map to {@link MutationCountBucket#LT10},
+     * <p>Implements the privacy-preserving bucketing the WAM pipeline requires:
+     * {@code 0} maps to {@link MutationCountBucket#ZERO}, {@code 1} to
+     * {@link MutationCountBucket#ONE}, then strict less-than thresholds at 10,
+     * 100, 500, 1000, and 5000 map to {@link MutationCountBucket#LT10},
      * {@link MutationCountBucket#LT100}, {@link MutationCountBucket#LT500},
-     * {@link MutationCountBucket#LT1K}, {@link MutationCountBucket#LT5K},
+     * {@link MutationCountBucket#LT1K}, and {@link MutationCountBucket#LT5K},
      * with anything else landing in {@link MutationCountBucket#GTE5K}.
      *
      * @param count the mutation count to bucket
@@ -4197,13 +3972,11 @@ public final class WebAppStateService {
     }
 
     /**
-     * Arms the recurring {@code REPORT_SYNCD_KEY_STATS} job that ships the
-     * daily per-app-state-sync-key usage histogram.
+     * Arms the recurring key-stats job that ships the daily
+     * per-app-state-sync-key usage histogram.
      *
-     * @apiNote
-     * Mirrors the {@code REPORT_SYNCD_KEY_STATS} task in WA Web's
-     * {@code WAWebTasksDefinitions} registry; each tick computes the
-     * {@code SyncdKeyCount} WAM event via {@link #reportSyncdKeyStats()}.
+     * <p>Each tick computes the key-count WAM event via
+     * {@link #reportSyncdKeyStats()}.
      *
      * @implNote
      * This implementation cancels any prior handle via
@@ -4218,19 +3991,16 @@ public final class WebAppStateService {
     }
 
     /**
-     * Schedules the next firing of the recurring
-     * {@code REPORT_SYNCD_KEY_STATS} job one day from now.
+     * Schedules the next firing of the recurring key-stats job one day from
+     * now.
      *
-     * @apiNote
-     * Always uses a one-day cadence; WA Web stretches the interval to three
-     * days when the {@code gkx 26258} gatekeeper is on, but Cobalt does not
-     * consult the gatekeeper and runs the un-gated daily schedule.
+     * <p>Always uses a one-day cadence with no gatekeeper-driven stretch to a
+     * longer interval.
      *
      * @implNote
-     * This implementation self-reschedules from the {@code finally} branch
-     * of the task lambda so a {@link #reportSyncdKeyStats()} failure still
-     * arms the next tick, matching WA Web's per-task-orchestrator log-and-continue
-     * pattern.
+     * This implementation self-reschedules from the {@code finally} branch of
+     * the task lambda so a {@link #reportSyncdKeyStats()} failure still arms
+     * the next tick.
      */
     private void scheduleNextPeriodicReportSyncdKeyStats() {
         periodicReportSyncdKeyStatsJob = SchedulerUtils.scheduleDelayed(
@@ -4248,12 +4018,10 @@ public final class WebAppStateService {
     }
 
     /**
-     * Cancels the in-flight {@code REPORT_SYNCD_KEY_STATS} task handle if
-     * one is scheduled.
+     * Cancels the in-flight key-stats task handle if one is scheduled.
      *
-     * @apiNote
-     * Pairs with {@link #startPeriodicReportSyncdKeyStatsJob()}; safe to call
-     * when no job is scheduled (no-op) and invoked from {@link #reset()}
+     * <p>Pairs with {@link #startPeriodicReportSyncdKeyStatsJob()}; safe to
+     * call when no job is scheduled (no-op) and invoked from {@link #reset()}
      * during disconnect.
      *
      * @implNote
@@ -4271,22 +4039,19 @@ public final class WebAppStateService {
     }
 
     /**
-     * Computes and commits one {@code SyncdKeyCount} WAM event with the
-     * bucketed per-app-state-sync-key usage percentiles.
+     * Computes and commits one key-count WAM event with the bucketed
+     * per-app-state-sync-key usage percentiles.
      *
-     * @apiNote
-     * The body of the recurring {@code REPORT_SYNCD_KEY_STATS} task; the
-     * event lets the server-side telemetry track how many syncd keys are
-     * actually in use across the population versus how many sit unused, and
-     * how concentrated mutation volume is per key (the p80/p95 fields).
+     * <p>The body of the recurring key-stats task; the event lets server-side
+     * telemetry track how many syncd keys are in use across the population
+     * versus how many sit unused, and how concentrated mutation volume is per
+     * key (the p80/p95 fields).
      *
      * @implNote
-     * This implementation runs unconditionally; WA Web gates the job behind
-     * the {@code gkx 26258} kill switch, but Cobalt does not consult the
-     * gatekeeper and always reports. The {@code syncdSessionLengthDays}
-     * field is only attached when the {@code session_start} timestamp has
-     * actually been recorded ({@link KeyStats#syncdSessionLengthDays()}
-     * returns non-null), matching WA Web's conditional copy.
+     * This implementation runs unconditionally with no gatekeeper kill switch.
+     * The session-length field is attached only when the session-start
+     * timestamp has been recorded ({@link KeyStats#syncdSessionLengthDays()}
+     * returns non-null).
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdReportKeyStatsJob", exports = "reportSyncdKeyStatsJob", adaptation = WhatsAppAdaptation.ADAPTED)
     void reportSyncdKeyStats() {
@@ -4304,22 +4069,19 @@ public final class WebAppStateService {
     }
 
     /**
-     * Gathers the inputs to the {@code SyncdKeyCount} bucket math and hands
-     * them to {@link #getKeyStatsInternal(Collection, Collection, Integer)}.
+     * Gathers the inputs to the key-count bucket math and hands them to
+     * {@link #getKeyStatsInternal(Collection, Collection, Integer)}.
      *
-     * @apiNote
-     * Called from {@link #reportSyncdKeyStats()} on every daily stats tick;
-     * combines the known {@link AppStateSyncKey} set, the union of all
-     * stored {@link SyncActionEntry} rows across every collection, and the
-     * {@code session_start} timestamp read by
-     * {@link #getSyncdSessionStartTimestamp()}.
+     * <p>Called from {@link #reportSyncdKeyStats()} on every daily stats tick;
+     * combines the known {@link AppStateSyncKey} set, the union of all stored
+     * {@link SyncActionEntry} rows across every collection, and the
+     * session-start timestamp read by {@link #getSyncdSessionStartTimestamp()}.
      *
      * @implNote
-     * This implementation iterates {@link SyncPatchType#values()} to read
-     * the per-collection sync-action views in turn, because Cobalt does not
-     * keep WA Web's flat {@code SyncActions} table. The session-length math
-     * uses {@link Math#round(double)} on the raw millisecond delta divided
-     * by {@code 1000 * 3600 * 24}, matching WA Web bit-for-bit.
+     * This implementation iterates {@link SyncPatchType#values()} to read the
+     * per-collection sync-action views in turn. The session-length math uses
+     * {@link Math#round(double)} on the raw millisecond delta divided by
+     * {@code 1000 * 3600 * 24}.
      *
      * @return the populated {@link KeyStats} record
      */
@@ -4343,22 +4105,22 @@ public final class WebAppStateService {
      * Resolves the {@code session_start} mutation's timestamp from the
      * {@link SyncPatchType#REGULAR_LOW} sync-action store.
      *
-     * @apiNote
-     * Surfaces the moment the current syncd session began for
+     * <p>Surfaces the moment the current syncd session began for
      * {@link #getKeyStats()}; returns {@code null} when no
      * {@code session_start} mutation has been recorded yet (typically right
      * after a fresh pairing), in which case the WAM event omits the
-     * {@code syncdSessionLengthDays} field. The canonical index payload is
-     * the JSON array {@snippet :
+     * session-length field. The canonical index payload is the JSON array
+     * {@snippet :
      *     ["primary_version","session_start"]
      * }
      *
      * @implNote
-     * This implementation scans the {@code REGULAR_LOW} sync-action entries
-     * looking for an {@link SyncActionEntry#actionIndex()} that contains
-     * both literal tokens; WA Web can do a primary-key lookup because its
-     * table is keyed on the JSON-encoded plaintext index, while Cobalt keys
-     * on the HMAC-derived index and therefore has to walk the collection.
+     * This implementation scans the {@link SyncPatchType#REGULAR_LOW}
+     * sync-action entries looking for an
+     * {@link SyncActionEntry#actionIndex()} that contains both literal tokens;
+     * because Cobalt keys on the HMAC-derived index rather than the plaintext
+     * index, it has to walk the collection rather than do a primary-key
+     * lookup.
      *
      * @return the recorded session start timestamp, or {@code null} when no
      *         such entry exists
@@ -4383,26 +4145,23 @@ public final class WebAppStateService {
 
     /**
      * Builds the per-app-state-sync-key usage histogram and derives the
-     * {@code SyncdKeyCount} percentiles from the supplied keys, entries,
-     * and optional session length.
+     * key-count percentiles from the supplied keys, entries, and optional
+     * session length.
      *
-     * @apiNote
-     * The pure side of the {@code SyncdKeyCount} math, separated from
+     * <p>The pure side of the key-count math, separated from
      * {@link #getKeyStats()} so tests can exercise it without touching the
-     * store. The {@code totalKeyCount} is the size of {@code keys} (the
-     * total app state sync key population), the {@code keysUsedInSnapshotCount}
-     * is the number of distinct key ids that actually back at least one
-     * entry, and the two percentile fields are
-     * {@code sortedCounts[floor(N * 0.8) - 1]} and
+     * store. The total key count is the size of {@code keys} (the total app
+     * state sync key population), the keys-used count is the number of
+     * distinct key ids that back at least one entry, and the two percentile
+     * fields are {@code sortedCounts[floor(N * 0.8) - 1]} and
      * {@code sortedCounts[floor(N * 0.95) - 1]}; an out-of-range percentile
      * index leaves the corresponding field {@code null}.
      *
      * @implNote
-     * This implementation tolerates a {@code null} {@link SyncActionEntry#keyId()}
-     * (WA Web assumes every row has one); the null entry is skipped from
-     * the histogram. Per-key counts are sorted numerically rather than
-     * lexicographically: WA Web's bare {@code .sort()} call would coerce
-     * counts to strings, but the values are mutation counts and a numeric
+     * This implementation tolerates a {@code null}
+     * {@link SyncActionEntry#keyId()} by skipping that entry from the
+     * histogram. Per-key counts are sorted numerically rather than
+     * lexicographically, since the values are mutation counts and a numeric
      * sort is the intent of the percentile lookup.
      *
      * @param keys                   the full app state sync key population
@@ -4448,11 +4207,9 @@ public final class WebAppStateService {
      * The aggregated per-app-state-sync-key snapshot consumed by
      * {@link #reportSyncdKeyStats()}.
      *
-     * @apiNote
-     * Carries the four populated {@code SyncdKeyCount} WAM event fields
-     * plus the optional session length; populated by
-     * {@link #getKeyStats()} and {@link #getKeyStatsInternal(Collection,
-     * Collection, Integer)}.
+     * <p>Carries the four populated key-count WAM event fields plus the
+     * optional session length; populated by {@link #getKeyStats()} and
+     * {@link #getKeyStatsInternal(Collection, Collection, Integer)}.
      *
      * @param totalKeyCount           number of app state sync keys present
      *                                in the local store
@@ -4483,11 +4240,9 @@ public final class WebAppStateService {
     }
 
     /**
-     * Cancels the in-flight {@code REPORT_SYNCD_ACTION_STAT} task handle if
-     * one is scheduled.
+     * Cancels the in-flight action-stats task handle if one is scheduled.
      *
-     * @apiNote
-     * Pairs with {@link #startPeriodicReportSyncdStatsJob()}; safe to call
+     * <p>Pairs with {@link #startPeriodicReportSyncdStatsJob()}; safe to call
      * when no job is scheduled (no-op) and invoked from {@link #reset()}
      * during disconnect.
      *
@@ -4510,16 +4265,14 @@ public final class WebAppStateService {
      * {@link #reportSyncdStats()} while bucketing
      * {@link SyncActionEntry#actionState()} counts.
      *
-     * @apiNote
-     * One instance is created per distinct mutation name encountered during
-     * the daily walk, and the five counters land directly in the
-     * {@code MdAppStateSyncMutationStats} WAM event after going through
-     * {@link #convertToBucket(int)}.
+     * <p>One instance is created per distinct mutation name encountered during
+     * the daily walk, and the five counters land directly in the mutation
+     * stats WAM event after going through {@link #convertToBucket(int)}.
      *
      * @implNote
-     * This implementation uses package-private mutable {@code int} fields
-     * for the fastest possible increment loop; the type is never exposed
-     * outside the enclosing class so the encapsulation cost is nil.
+     * This implementation uses package-private mutable {@code int} fields for
+     * the fastest possible increment loop; the type is never exposed outside
+     * the enclosing class.
      */
     private static final class ActionStatCounts {
         /**
@@ -4550,19 +4303,18 @@ public final class WebAppStateService {
     }
 
     /**
-     * Tears down every background scheduler owned by this service so the
-     * JVM can quiesce.
+     * Tears down every background scheduler owned by this service so the JVM
+     * can quiesce.
      *
-     * @apiNote
-     * Called from the connection-shutdown path during graceful disconnect or
-     * logout; pairs with {@link #startPeriodicSyncJob()} as the inverse
-     * lifecycle hook. Stops the periodic catch-up sweep, the key-rotation
-     * job, both daily WAM stats jobs, the retry backoff scheduler, and the
+     * <p>Called from the connection-shutdown path during graceful disconnect
+     * or logout; pairs with {@link #startPeriodicSyncJob()} as the inverse
+     * lifecycle hook. Stops the periodic catch-up sweep, the key-rotation job,
+     * both daily WAM stats jobs, the retry backoff scheduler, and the
      * missing-key timeout scheduler. Idempotent.
      *
      * @implNote
-     * This implementation forwards to each scheduler's own shutdown method
-     * in sequence; no order matters because each is independent.
+     * This implementation forwards to each scheduler's own shutdown method in
+     * sequence; no order matters because each is independent.
      */
     public void reset() {
         stopPeriodicSyncJob();

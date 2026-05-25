@@ -12,81 +12,69 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:biz:merchant_info" type="set">} stanza
- * that updates the regulatory-compliance bundle of the current merchant.
+ * Builds the {@code <iq xmlns="w:biz:merchant_info" type="set">} stanza that updates the
+ * regulatory-compliance bundle of the current merchant.
  *
- * @apiNote
- * Use this request from the merchant-compliance edit surface to set or
- * update the legal-entity registration flag, entity name, entity type,
- * customer-care triple and grievance-officer block in a single
- * round-trip; the relay accepts a partial mutation, so any field left
- * {@code null} is dropped from the wire stanza rather than zeroed out.
+ * <p>The stanza is sent from the merchant-compliance edit surface to set or update the legal-entity
+ * registration flag, entity name, entity type, customer-care triple and grievance-officer block in a
+ * single round-trip. The relay accepts a partial mutation, so any field left {@code null} is dropped
+ * from the wire stanza rather than zeroed out.
  *
  * @implNote
- * This implementation models the legacy WAP-IQ path only; WA Web routes
- * the same call through the Relay GraphQL endpoint when the
- * {@code graphQLForSetComplianceInfo} gating flag is on, falling back
- * to the WAP-IQ payload on graphql-error / not-enabled paths, but
- * Cobalt keeps the WAP-IQ payload as the single transport.
+ * This implementation models the legacy WAP-IQ path only; WA Web routes the same call through the
+ * Relay GraphQL endpoint when the {@code graphQLForSetComplianceInfo} gating flag is on, falling
+ * back to the WAP-IQ payload on graphql-error and not-enabled paths, but Cobalt keeps the WAP-IQ
+ * payload as the single transport.
  */
 @WhatsAppWebModule(moduleName = "WAWebMerchantComplianceJob")
 public final class IqSetMerchantComplianceRequest implements IqOperation.Request {
     /**
-     * The registered flag stamped into the {@code is_registered}
-     * attribute of the {@code <merchant_info/>} child.
+     * Holds the registered flag stamped into the {@code is_registered} attribute of the
+     * {@code <merchant_info/>} child.
      */
     private final boolean registered;
 
     /**
-     * The optional legal entity name stamped into the
-     * {@code <entity_name/>} grandchild.
+     * Holds the optional legal entity name stamped into the {@code <entity_name/>} grandchild.
      */
     private final String entityName;
 
     /**
-     * The optional entity-type marker stamped into the
-     * {@code <entity_type/>} grandchild.
+     * Holds the optional entity-type marker stamped into the {@code <entity_type/>} grandchild.
      */
     private final String entityType;
 
     /**
-     * The optional custom entity-type label stamped into the
-     * {@code <entity_type_custom/>} grandchild when the entity type is
-     * {@code "OTHER"}.
+     * Holds the optional custom entity-type label stamped into the {@code <entity_type_custom/>}
+     * grandchild when the entity type is {@code "OTHER"}.
      */
     private final String entityTypeCustom;
 
     /**
-     * The optional customer-care contact triple flattened into the
+     * Holds the optional customer-care contact triple flattened into the
      * {@code <customer_care_details/>} grandchild.
      */
     private final IqSetMerchantComplianceContactDetails customerCareDetails;
 
     /**
-     * The optional grievance-officer block flattened into the
+     * Holds the optional grievance-officer block flattened into the
      * {@code <grievance_officer_details/>} grandchild.
      */
     private final IqSetMerchantComplianceGrievanceOfficerDetails grievanceOfficerDetails;
 
     /**
-     * Constructs a request.
+     * Constructs a request from the full field set.
      *
-     * @apiNote
-     * Prefer {@link #builder()} when only a subset of fields needs to
-     * be set; this all-args constructor is exposed for callers that
-     * keep their own pre-validated bundle.
+     * <p>Any field left {@code null} is dropped from the wire stanza rather than zeroed out. Prefer
+     * {@link #builder()} when only a subset of fields needs to be set; this all-args constructor is
+     * exposed for callers that keep their own pre-validated bundle.
      *
      * @param registered              the registered flag
-     * @param entityName              the entity name; may be
-     *                                {@code null}
-     * @param entityType              the entity type; may be
-     *                                {@code null}
-     * @param entityTypeCustom        the custom-type label; may be
-     *                                {@code null}
-     * @param customerCareDetails     the customer-care triple; may be
-     *                                {@code null}
-     * @param grievanceOfficerDetails the grievance-officer block; may
-     *                                be {@code null}
+     * @param entityName              the entity name; may be {@code null}
+     * @param entityType              the entity type; may be {@code null}
+     * @param entityTypeCustom        the custom-type label; may be {@code null}
+     * @param customerCareDetails     the customer-care triple; may be {@code null}
+     * @param grievanceOfficerDetails the grievance-officer block; may be {@code null}
      */
     public IqSetMerchantComplianceRequest(boolean registered,
                    String entityName,
@@ -103,12 +91,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Returns the registered flag.
+     * Returns the registered flag the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the registered flag the mutation
-     * will stamp; the value is routed verbatim into the
-     * {@code is_registered} attribute of the
+     * <p>The value is routed verbatim into the {@code is_registered} attribute of the
      * {@code <merchant_info/>} child.
      *
      * @return the flag
@@ -118,12 +103,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Returns the entity name.
+     * Returns the entity name the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the entity name the mutation will
-     * stamp; an empty optional means the field is dropped from the
-     * wire stanza.
+     * <p>An empty optional means the field is dropped from the wire stanza.
      *
      * @return an {@link Optional} carrying the name
      */
@@ -132,12 +114,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Returns the entity type.
+     * Returns the entity-type marker the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the entity-type marker the
-     * mutation will stamp; an empty optional means the field is
-     * dropped from the wire stanza.
+     * <p>An empty optional means the field is dropped from the wire stanza.
      *
      * @return an {@link Optional} carrying the type
      */
@@ -146,12 +125,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Returns the custom entity-type label.
+     * Returns the custom entity-type label the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the custom entity-type label the
-     * mutation will stamp; this is only set when {@link #entityType()}
-     * resolves to {@code "OTHER"}.
+     * <p>The label is set only when {@link #entityType()} resolves to {@code "OTHER"}.
      *
      * @return an {@link Optional} carrying the label
      */
@@ -160,12 +136,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Returns the customer-care contact triple.
+     * Returns the customer-care contact triple the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the customer-care triple the
-     * mutation will stamp; an empty optional means the
-     * {@code <customer_care_details/>} grandchild is dropped from the
+     * <p>An empty optional means the {@code <customer_care_details/>} grandchild is dropped from the
      * wire stanza.
      *
      * @return an {@link Optional} carrying the triple
@@ -175,12 +148,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Returns the grievance-officer block.
+     * Returns the grievance-officer block the mutation stamps.
      *
-     * @apiNote
-     * Use this getter to read back the grievance-officer block the
-     * mutation will stamp; an empty optional means the
-     * {@code <grievance_officer_details/>} grandchild is dropped from
+     * <p>An empty optional means the {@code <grievance_officer_details/>} grandchild is dropped from
      * the wire stanza.
      *
      * @return an {@link Optional} carrying the block
@@ -192,10 +162,8 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     /**
      * Returns a fresh builder.
      *
-     * @apiNote
-     * Use the builder to assemble a request when only a subset of
-     * fields needs to be set; the returned builder defaults every
-     * field to {@code null} and the registered flag to {@code false}.
+     * <p>The returned builder defaults every field to {@code null} and the registered flag to
+     * {@code false}; use it to assemble a request when only a subset of fields needs to be set.
      *
      * @return a new {@link Builder}; never {@code null}
      */
@@ -207,12 +175,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope produced by
-     * the {@code WAWebMerchantComplianceJob.setMerchantCompliance}
-     * export: a {@code <merchant_info is_registered/>} child carrying
-     * one grandchild per non-{@code null} field, wrapped in the
-     * {@code w:biz:merchant_info set} IQ frame routed to the WhatsApp
-     * service.
+     * This implementation materialises a {@code <merchant_info is_registered/>} child carrying one
+     * grandchild per non-{@code null} field, wrapped in the {@code w:biz:merchant_info set} IQ frame
+     * routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMerchantComplianceJob",
@@ -249,15 +214,12 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Builds a contact-triple child carrying the supplied tag.
+     * Builds a contact-triple child carrying the supplied tag for {@link #toNode()}.
      *
-     * @apiNote
-     * Helper for {@link #toNode()}; flattens the {@code email},
-     * {@code landline_number} and {@code mobile_number} fields of the
-     * supplied triple into grandchildren of the requested element.
+     * <p>The {@code email}, {@code landline_number} and {@code mobile_number} fields of the supplied
+     * triple are flattened into grandchildren of the requested element; an absent field is dropped.
      *
-     * @param description the wrapper element tag (e.g.
-     *                    {@code "customer_care_details"})
+     * @param description the wrapper element tag (e.g. {@code "customer_care_details"})
      * @param contact     the contact triple
      * @return the built node; never {@code null}
      */
@@ -288,11 +250,10 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Builds the {@code <grievance_officer_details/>} child.
+     * Builds the {@code <grievance_officer_details/>} child for {@link #toNode()}.
      *
-     * @apiNote
-     * Helper for {@link #toNode()}; flattens the officer name and
-     * contact triple into grandchildren of the wrapper element.
+     * <p>The officer name and contact triple are flattened into grandchildren of the wrapper
+     * element; an absent field is dropped.
      *
      * @param block the block; never {@code null}
      * @return the built node; never {@code null}
@@ -331,50 +292,44 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Fluent builder for {@link IqSetMerchantComplianceRequest}.
+     * Assembles an {@link IqSetMerchantComplianceRequest} field by field.
      *
-     * @apiNote
-     * Use the builder when only a subset of fields needs to be set;
-     * each setter is chainable and {@link #build()} assembles the
-     * immutable request.
+     * <p>Each setter is chainable and {@link #build()} snapshots the current state into an immutable
+     * request; use the builder when only a subset of fields needs to be set.
      */
     public static final class Builder {
         /**
-         * The registered flag; defaults to {@code false}.
+         * Holds the registered flag; defaults to {@code false}.
          */
         private boolean registered;
 
         /**
-         * The optional entity name.
+         * Holds the optional entity name.
          */
         private String entityName;
 
         /**
-         * The optional entity type.
+         * Holds the optional entity type.
          */
         private String entityType;
 
         /**
-         * The optional custom-type label.
+         * Holds the optional custom-type label.
          */
         private String entityTypeCustom;
 
         /**
-         * The optional customer-care triple.
+         * Holds the optional customer-care triple.
          */
         private IqSetMerchantComplianceContactDetails customerCareDetails;
 
         /**
-         * The optional grievance-officer block.
+         * Holds the optional grievance-officer block.
          */
         private IqSetMerchantComplianceGrievanceOfficerDetails grievanceOfficerDetails;
 
         /**
-         * Constructs a builder.
-         *
-         * @apiNote
-         * Package-private; call {@link IqSetMerchantComplianceRequest#builder()}
-         * to obtain a fresh instance.
+         * Constructs a builder; obtain an instance via {@link IqSetMerchantComplianceRequest#builder()}.
          */
         Builder() {
         }
@@ -382,10 +337,8 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         /**
          * Sets the registered flag.
          *
-         * @apiNote
-         * Pass {@code true} when the legal entity has registered with
-         * the local commerce authority; the relay surfaces the flag
-         * back inside the next compliance-info fetch.
+         * <p>Pass {@code true} when the legal entity has registered with the local commerce
+         * authority; the relay surfaces the flag back inside the next compliance-info fetch.
          *
          * @param registered the flag
          * @return this builder; never {@code null}
@@ -398,9 +351,7 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         /**
          * Sets the entity name.
          *
-         * @apiNote
-         * Pass the legal entity name to update; pass {@code null} to
-         * leave the field unchanged on the merchant's bundle.
+         * <p>Pass {@code null} to leave the field unchanged on the merchant's bundle.
          *
          * @param entityName the name; may be {@code null}
          * @return this builder; never {@code null}
@@ -413,11 +364,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         /**
          * Sets the entity type.
          *
-         * @apiNote
-         * Pass one of the type markers documented by the relay (e.g.
-         * {@code "PROPRIETORSHIP"}, {@code "PARTNERSHIP"},
-         * {@code "OTHER"}); pass {@code null} to leave the field
-         * unchanged on the merchant's bundle.
+         * <p>Pass one of the type markers documented by the relay (e.g. {@code "PROPRIETORSHIP"},
+         * {@code "PARTNERSHIP"}, {@code "OTHER"}); pass {@code null} to leave the field unchanged on
+         * the merchant's bundle.
          *
          * @param entityType the type; may be {@code null}
          * @return this builder; never {@code null}
@@ -430,9 +379,8 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         /**
          * Sets the custom entity-type label.
          *
-         * @apiNote
-         * Pass the custom label when {@link #entityType(String)} is
-         * set to {@code "OTHER"}; pass {@code null} otherwise.
+         * <p>Pass the custom label when {@link #entityType(String)} is set to {@code "OTHER"}; pass
+         * {@code null} otherwise.
          *
          * @param entityTypeCustom the label; may be {@code null}
          * @return this builder; never {@code null}
@@ -445,11 +393,8 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         /**
          * Sets the customer-care contact triple.
          *
-         * @apiNote
-         * Pass the triple to update the customer-care surface; pass
-         * {@code null} to leave the
-         * {@code <customer_care_details/>} grandchild dropped from the
-         * mutation.
+         * <p>Pass {@code null} to leave the {@code <customer_care_details/>} grandchild dropped from
+         * the mutation.
          *
          * @param customerCareDetails the triple; may be {@code null}
          * @return this builder; never {@code null}
@@ -462,10 +407,7 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         /**
          * Sets the grievance-officer block.
          *
-         * @apiNote
-         * Pass the block to update the grievance-officer surface;
-         * pass {@code null} to leave the
-         * {@code <grievance_officer_details/>} grandchild dropped
+         * <p>Pass {@code null} to leave the {@code <grievance_officer_details/>} grandchild dropped
          * from the mutation.
          *
          * @param grievanceOfficerDetails the block; may be {@code null}
@@ -477,11 +419,7 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
         }
 
         /**
-         * Builds a new {@link IqSetMerchantComplianceRequest}.
-         *
-         * @apiNote
-         * Call this once every setter has been applied; the returned
-         * request is immutable and snapshots the current builder
+         * Builds an immutable {@link IqSetMerchantComplianceRequest} snapshotting the current builder
          * state.
          *
          * @return the built request; never {@code null}
@@ -493,7 +431,10 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request with another for value equality across every wire-bearing field.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal request
      */
     @Override
     public boolean equals(Object obj) {
@@ -513,7 +454,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -522,7 +465,9 @@ public final class IqSetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string naming the registered flag, entity name and entity type.
+     *
+     * @return the string form
      */
     @Override
     public String toString() {

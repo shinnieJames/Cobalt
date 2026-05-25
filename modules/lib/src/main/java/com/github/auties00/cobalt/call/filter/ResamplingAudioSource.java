@@ -6,47 +6,49 @@ import com.github.auties00.cobalt.call.frame.audio.AudioSource;
 import java.util.Objects;
 
 /**
- * Resamples a wrapped {@link AudioSource} from one PCM rate to
- * another — typically 48 kHz mic input → 16 kHz call profile —
- * using a pure-Java linear-interpolation fallback. The pure-Java
- * path is correct for the integer-ratio cases Cobalt actually hits
- * in practice (48000/16000 = 3, 44100/22050 = 2,
- * 48000/8000 = 6).
+ * Resamples a wrapped {@link AudioSource} from one PCM rate to another and emits fixed-size frames.
  *
- * <p>Frame size on the output side is constant
- * ({@link #outFrameSize}); the wrapper buffers across input
- * frames as needed so the output cadence matches the call's
- * encoder.
+ * <p>A typical use is converting 48 kHz microphone input to the 16 kHz call profile. The wrapper
+ * pulls frames from the delegate at the input rate, buffers them across calls, and emits frames of a
+ * constant sample count ({@link #outFrameSize}) at the output rate, so the output cadence matches
+ * the call encoder regardless of the delegate's frame sizes. Output frames carry a monotonic
+ * presentation timestamp advanced by the per-frame duration. When the delegate signals end-of-stream
+ * by returning {@code null}, the wrapper emits any remaining buffered samples as one final frame and
+ * then returns {@code null} itself.
+ *
+ * @implNote This implementation resamples by per-sample linear interpolation, the pure-Java
+ * fallback. The interpolation is exact for the integer downsampling ratios Cobalt hits in practice
+ * (48000/16000 = 3, 44100/22050 = 2, 48000/8000 = 6).
  */
 public final class ResamplingAudioSource implements AudioSource {
     /**
-     * Wrapped source emitting at {@link #inSampleRate}.
+     * Wrapped source emitting frames at {@link #inSampleRate}.
      */
     private final AudioSource delegate;
 
     /**
-     * Source-side sample rate.
+     * Sample rate, in hertz, of the frames pulled from the delegate.
      */
     private final int inSampleRate;
 
     /**
-     * Target sample rate emitted by this wrapper.
+     * Sample rate, in hertz, of the frames emitted by this wrapper.
      */
     private final int outSampleRate;
 
     /**
-     * Samples per emitted frame.
+     * Number of samples in each frame emitted by this wrapper.
      */
     private final int outFrameSize;
 
     /**
-     * Frame duration emitted by this wrapper, ms.
+     * Duration, in milliseconds, of each emitted frame, derived from {@link #outFrameSize} and
+     * {@link #outSampleRate}.
      */
     private final long outFrameDurationMs;
 
     /**
-     * Buffered samples from the delegate that haven't been
-     * resampled yet.
+     * Samples pulled from the delegate that have not yet been resampled.
      */
     private short[] inBuffer = new short[0];
 
@@ -56,27 +58,26 @@ public final class ResamplingAudioSource implements AudioSource {
     private int inBufferPos;
 
     /**
-     * Monotonic output-side pts in milliseconds.
+     * Presentation timestamp, in milliseconds, stamped on the next emitted frame.
      */
     private long ptsMs;
 
     /**
-     * Flag set when the delegate returns null — propagated on
-     * the next call so the wrapper exhausts after one final
-     * partial frame.
+     * Whether the delegate has returned {@code null}, so that this wrapper exhausts after emitting
+     * one final partial frame.
      */
     private boolean delegateExhausted;
 
     /**
-     * Constructs a resampling wrapper.
+     * Constructs a resampling source wrapping {@code delegate}.
      *
-     * @param delegate      source to resample
-     * @param inSampleRate  source-side sample rate
-     * @param outSampleRate target-side sample rate
-     * @param outFrameSize  samples per emitted frame
-     * @throws NullPointerException     if {@code delegate} is null
-     * @throws IllegalArgumentException if any rate or frame size
-     *                                  is not positive
+     * @param delegate      the source to resample
+     * @param inSampleRate  the sample rate, in hertz, of the delegate's frames
+     * @param outSampleRate the sample rate, in hertz, of the emitted frames
+     * @param outFrameSize  the number of samples per emitted frame
+     * @throws NullPointerException     if {@code delegate} is {@code null}
+     * @throws IllegalArgumentException if {@code inSampleRate}, {@code outSampleRate}, or
+     *                                  {@code outFrameSize} is not positive
      */
     public ResamplingAudioSource(AudioSource delegate, int inSampleRate, int outSampleRate, int outFrameSize) {
         this.delegate = Objects.requireNonNull(delegate, "delegate cannot be null");
@@ -95,6 +96,17 @@ public final class ResamplingAudioSource implements AudioSource {
         this.outFrameDurationMs = 1000L * outFrameSize / outSampleRate;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation pulls frames from the delegate until enough input samples are
+     * buffered to produce one {@link #outFrameSize}-sample output frame, then fills the output by
+     * per-sample linear interpolation between the two nearest input samples, clamping to the signed
+     * 16-bit range. It advances {@link #inBufferPos} by the consumed input span, compacts the buffer
+     * via {@link #compactInputBuffer()}, and stamps the frame with the running {@link #ptsMs}
+     * advanced by {@link #outFrameDurationMs}. Once the delegate has returned {@code null}, it emits
+     * the remaining buffered samples once and then returns {@code null}.
+     */
     @Override
     public AudioFrame next() throws InterruptedException {
         if (delegateExhausted && inBufferPos >= inBuffer.length) {
@@ -136,10 +148,12 @@ public final class ResamplingAudioSource implements AudioSource {
     }
 
     /**
-     * Appends new input samples to the buffer, reusing the
-     * trailing unread region if any.
+     * Appends new delegate samples to the input buffer, preserving any trailing unread samples.
      *
-     * @param more the new samples
+     * <p>The unread tail of {@link #inBuffer} is copied to the head of a new array, {@code more} is
+     * appended after it, and {@link #inBufferPos} is reset to {@code 0}.
+     *
+     * @param more the newly pulled samples to append
      */
     private void appendInput(short[] more) {
         var unread = inBuffer.length - inBufferPos;
@@ -151,8 +165,11 @@ public final class ResamplingAudioSource implements AudioSource {
     }
 
     /**
-     * Drops consumed samples from the head of the buffer when
-     * more than half of it is consumed.
+     * Drops consumed samples from the head of the input buffer once more than half of it is
+     * consumed.
+     *
+     * <p>Compaction is deferred until {@link #inBufferPos} exceeds half the buffer length so that
+     * reallocation is amortised rather than performed on every frame.
      */
     private void compactInputBuffer() {
         if (inBufferPos > inBuffer.length / 2) {

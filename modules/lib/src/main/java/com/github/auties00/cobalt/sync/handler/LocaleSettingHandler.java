@@ -14,27 +14,20 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code setting_locale} app-state sync action that propagates the
  * user's preferred display locale across linked devices.
  *
- * @apiNote
- * Drives the cross-device locale switch: when the primary device picks
- * a new UI language the resulting BCP-47 string fans out across the
- * {@link SyncPatchType#CRITICAL_BLOCK} collection so every companion
- * surface re-renders in the same locale. The mutation index has no
- * variable parts and is always
+ * <p>The action carries a BCP-47 string fanned out across the
+ * {@link SyncPatchType#CRITICAL_BLOCK} collection so every companion surface
+ * re-renders in the same locale. The mutation index has no variable parts and
+ * is always
  * {@snippet :
  *     ["setting_locale"]
  * }
  *
  * @implNote
- * This implementation persists the new locale into
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#setLocale(String)}
- * and notifies every registered
- * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onLocaleChanged}
- * on a virtual thread, replacing WA Web's
- * {@code frontendSendAndReceive("setLocale", {locale, priority: PHONE,
- * reload: false})} RPC because Cobalt has no UI layer to delegate to.
- * The Windows-Electron short-circuit that returns
- * {@link MutationApplicationResult#skipped()} on the WA Web side is
- * intentionally absent because Cobalt is not an Electron host.
+ * This implementation persists the locale into
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setLocale(String)} and
+ * notifies every registered
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onLocaleChanged(WhatsAppClient, String, String)}
+ * on its own virtual thread, since Cobalt has no UI layer to delegate to.
  */
 @WhatsAppWebModule(moduleName = "WAWebLocaleSettingSync")
 public final class LocaleSettingHandler implements WebAppStateActionHandler {
@@ -77,17 +70,15 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()}, an absent action payload
+     * as {@link MutationApplicationResult#malformed()}, and a {@code null}
+     * locale as {@link MutationApplicationResult#skipped()}. Otherwise the new
+     * locale is committed to the store and fanned out to listeners.
+     *
      * @implNote
-     * This implementation orders the checks the same way as WA Web's
-     * per-mutation closure: filter by operation, validate the action
-     * payload, return
-     * {@link MutationApplicationResult#skipped()} on a {@code null}
-     * locale, then commit the new locale to the store and fan it out
-     * to listeners. Each listener notification runs on its own virtual
-     * thread so a slow listener never blocks the sync pipeline. WA
-     * Web's batch tally counters and the
-     * {@code WALogger.WARN}/{@code WALogger.LOG} emissions are not
-     * modelled because they have no behavioural impact.
+     * This implementation dispatches each listener notification on its own
+     * virtual thread so a slow listener never blocks the sync pipeline.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLocaleSettingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

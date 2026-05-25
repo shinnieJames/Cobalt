@@ -75,23 +75,22 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * and deciding whether the hash-based download fallback is still
      * permitted.
      *
-     * @apiNote
-     * Injected through the constructor so that {@link #download(MediaProvider)},
-     * {@link #checkExistence}, and {@link #getEncryptedMediaSize} do not
-     * have to thread it through every call.
+     * <p>Injected through the constructor so that
+     * {@link #download(MediaProvider)}, {@link #checkExistence}, and
+     * {@link #getEncryptedMediaSize} do not have to thread it through every
+     * call.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Signals when the first {@link #update(Node)} has landed.
      *
-     * @apiNote
-     * {@link #upload(MediaProvider, MediaPayload)},
+     * <p>{@link #upload(MediaProvider, MediaPayload)},
      * {@link #download(MediaProvider)}, and the history-sync delete path
      * block on this latch so callers that fire before the first
      * {@code media_conn} refresh do not race ahead with an unpublished
-     * field set. Subsequent updates release the latch a second time,
-     * which is a no-op.
+     * field set. Subsequent updates release the latch a second time, which
+     * is a no-op.
      */
     private final CountDownLatch initialized = new CountDownLatch(1);
 
@@ -99,12 +98,13 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * The authentication token presented to the CDN on every upload and
      * download request.
      *
-     * @apiNote
-     * Without a valid token the CDN refuses the request with HTTP 401;
-     * the upload/download retry loop classifies that as a retryable
-     * error. Declared {@code volatile} so a concurrent
-     * {@link #update(Node)} publishes the new token to every reader
-     * without locking.
+     * <p>Without a valid token the CDN refuses the request with HTTP 401;
+     * the upload and download retry loop classifies that as a retryable
+     * error.
+     *
+     * @implNote
+     * This field is {@code volatile} so a concurrent {@link #update(Node)}
+     * publishes the new token to every reader without locking.
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -113,11 +113,9 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * The routes time-to-live in seconds.
      *
-     * @apiNote
-     * After this interval the CDN host list may no longer be current and
+     * <p>After this interval the CDN host list may no longer be current and
      * the caller should re-query a fresh media connection;
-     * {@link #needsRefresh()} reports {@code true} once the TTL has
-     * elapsed.
+     * {@link #needsRefresh()} reports {@code true} once the TTL has elapsed.
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -128,8 +126,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * The authentication token time-to-live in seconds.
      *
-     * @apiNote
-     * Once the auth TTL elapses the CDN refuses requests made with the
+     * <p>Once the auth TTL elapses the CDN refuses requests made with the
      * stored token; {@link #isExpired()} reports {@code true} past the
      * deadline.
      */
@@ -169,8 +166,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * The epoch-second timestamp at which the current credentials were
      * parsed.
      *
-     * @apiNote
-     * Combined with {@link #ttl} and {@link #authTtl} to compute the
+     * <p>Combined with {@link #ttl} and {@link #authTtl} to compute the
      * absolute expiry deadlines used by {@link #isExpired()} and
      * {@link #needsRefresh()}.
      */
@@ -181,8 +177,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * The ordered list of CDN host candidates for uploads and downloads.
      *
-     * @apiNote
-     * Each entry advertises a hostname, a set of supported media types,
+     * <p>Each entry advertises a hostname, a set of supported media types,
      * and (for {@link MediaHost.Primary}) a nested fallback hostname.
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -195,35 +190,31 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Constructs a fresh media-connection singleton bound to
      * {@code abPropsService}.
      *
-     * @apiNote
-     * Constructed once per session by {@code DefaultWhatsAppClient}; the
-     * resulting instance is dependency-injected into every component that
-     * needs CDN access (transcoder text pipeline, sync exchange,
-     * stream-control success handler) plus the client itself. The
-     * connection is unusable for uploads or downloads until the first
-     * {@link #update(Node)} lands, at which point any waiting calls
+     * <p>One instance is constructed per session and dependency-injected
+     * into every component that needs CDN access (transcoder text pipeline,
+     * sync exchange, stream-control success handler) plus the client
+     * itself. The connection is unusable for uploads or downloads until the
+     * first {@link #update(Node)} lands, at which point any waiting calls
      * unblock.
      *
-     * @param abPropsService the AB-props service threaded into the
-     *                       download URL formatter
-     * @throws NullPointerException if {@code abPropsService} is
-     *         {@code null}
+     * @param abPropsService the AB-props service threaded into the download
+     *                       URL formatter
+     * @throws NullPointerException if {@code abPropsService} is {@code null}
      */
     public DefaultMediaConnectionService(ABPropsService abPropsService) {
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
     }
 
     /**
-     * Atomically replaces this service's snapshot with the credentials
-     * and host list parsed from {@code response} and releases any
-     * upload/download callers blocked on the first-refresh latch.
+     * Atomically replaces this service's snapshot with the credentials and
+     * host list parsed from {@code response} and releases any upload or
+     * download callers blocked on the first-refresh latch.
      *
-     * @apiNote
-     * Called by {@code SuccessStreamHandler.refreshMediaConnection} each
-     * time the periodic {@code media_conn} IQ reply lands. Safe to call
-     * from any thread; the volatile write publishes the new snapshot to
-     * every concurrent reader. A subsequent {@link #upload(MediaProvider, MediaPayload)}
-     * or {@link #download(MediaProvider)} call that captured the previous
+     * <p>Called by the success-stream handler each time the periodic
+     * {@code media_conn} IQ reply lands. Safe to call from any thread; the
+     * volatile write publishes the new snapshot to every concurrent reader.
+     * A subsequent {@link #upload(MediaProvider, MediaPayload)} or
+     * {@link #download(MediaProvider)} call that captured the previous
      * snapshot before the swap keeps using that snapshot for the duration
      * of the operation; new callers see the fresh snapshot.
      *
@@ -284,13 +275,11 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     }
 
     /**
-     * Blocks the calling thread until the first {@link #update(Node)}
-     * has landed.
+     * Blocks the calling thread until the first {@link #update(Node)} has
+     * landed.
      *
-     * @apiNote
-     * Called by {@link #upload(MediaProvider, MediaPayload)},
-     * {@link #download(MediaProvider)}, and
-     * {@link #deleteHistorySyncBlob(String, byte[], String, String)} on
+     * <p>Called by {@link #upload(MediaProvider, MediaPayload)},
+     * {@link #download(MediaProvider)} on
      * entry so callers do not race ahead with an unpublished field set.
      *
      * @throws InterruptedException if the calling thread is interrupted
@@ -317,13 +306,12 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Parses a single {@code host} child node into a {@link MediaHost}
      * record.
      *
-     * @apiNote
-     * Classifies the host as {@link MediaHost.Fallback} when its
+     * <p>Classifies the host as {@link MediaHost.Fallback} when its
      * {@code type} attribute equals {@code "fallback"}, otherwise as
      * {@link MediaHost.Primary}. Primary hosts may carry the optional
      * {@code fallback_hostname}, {@code fallback_class},
-     * {@code fallback_ip4}, and {@code fallback_ip6} attributes
-     * describing a nested fallback endpoint.
+     * {@code fallback_ip4}, and {@code fallback_ip6} attributes describing a
+     * nested fallback endpoint.
      *
      * @param hostNode the host child node
      * @return the parsed media host
@@ -395,13 +383,11 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Parses the media-type whitelist declared under a host's
      * {@code download} or {@code upload} child node.
      *
-     * @apiNote
-     * Each child tag is mapped to a {@link MediaPath} constant. When the
+     * <p>Each child tag is mapped to a {@link MediaPath} constant. When the
      * child node is absent the whitelist defaults to every known server
      * media type, then a small set of types that never appear in CDN
-     * routing ({@code kyc-id}, the novi placeholders,
-     * {@code thumbnail-gif}, and {@code xma-image}) is filtered out,
-     * matching the JS source's {@code castToServerMediaType} guards.
+     * routing ({@code kyc-id}, the novi placeholders, {@code thumbnail-gif},
+     * and {@code xma-image}) is filtered out.
      *
      * @param hostNode    the host node
      * @param description the child node description, either
@@ -446,11 +432,10 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Clamps an optional integer to the given inclusive range, returning a
      * default when the input is {@code null} or out of range.
      *
-     * @apiNote
-     * Helper for {@link #update(Node)} that decodes the server's
+     * <p>Helper for {@link #update(Node)} that decodes the server's
      * {@code max_manual_retry} and {@code max_auto_download_retry}
-     * attributes, both of which are bounded to {@code [0, 4]} with a
-     * default of {@code 3}.
+     * attributes, both of which are bounded to {@code [0, 4]} with a default
+     * of {@code 3}.
      *
      * @param value        the parsed integer value, or {@code null}
      * @param min          the minimum allowed value
@@ -472,12 +457,10 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * The maximum number of retry attempts for upload and download
      * operations.
      *
-     * @apiNote
-     * Combines WA Web's module-level {@code 4} constant from
-     * {@code WAWebMmsClientSelectHost} with the {@code retries: 3} entry
-     * of {@code WAWebMmsClientMmsBackoffOptions}: 3 retries plus the
-     * initial attempt give 4 total attempts indexed
-     * {@code 0..MAX_ATTEMPT_COUNT-1}.
+     * @implNote
+     * This implementation combines WA Web's module-level {@code 4} constant
+     * with the {@code retries: 3} backoff option: 3 retries plus the initial
+     * attempt give 4 total attempts indexed {@code 0..MAX_ATTEMPT_COUNT-1}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientSelectHost", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -489,8 +472,8 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * The minimum backoff timeout in milliseconds applied between
      * consecutive retry attempts of a media upload or download.
      *
-     * @apiNote
-     * With {@code factor = 2} and jitter disabled the schedule is
+     * @implNote
+     * With a factor of {@code 2} and jitter disabled the schedule is
      * deterministic: attempts {@code 1, 2, 3} are preceded by sleeps of
      * {@code 1000ms, 2000ms, 4000ms}.
      */
@@ -499,11 +482,10 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     private static final long MIN_BACKOFF_TIMEOUT_MILLIS = 1000L;
 
     /**
-     * Sleeps the caller's virtual thread for the exponential-backoff
-     * delay associated with the given retry attempt number.
+     * Sleeps the caller's virtual thread for the exponential-backoff delay
+     * associated with the given retry attempt number.
      *
-     * @apiNote
-     * Helper for the upload and download retry loops; the delay for
+     * <p>Helper for the upload and download retry loops; the delay for
      * attempt {@code n} (zero-based) is
      * {@code MIN_BACKOFF_TIMEOUT_MILLIS * 2^n}, producing the sequence
      * {@code 1000ms, 2000ms, 4000ms} before attempts {@code 1, 2, 3}. No
@@ -536,8 +518,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Picks the CDN hostname to use for the current retry attempt of an
      * upload or download.
      *
-     * @apiNote
-     * The rotation strategy, applied in priority order:
+     * <p>The rotation strategy, applied in priority order:
      * <ul>
      *   <li>If the previous attempt made progress, reuse the same
      *       host.</li>
@@ -601,19 +582,17 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Uploads a media payload to WhatsApp's CDN on behalf of the given
      * provider.
      *
-     * @apiNote
-     * High-level entry point for any code that ships a media-bearing
+     * <p>High-level entry point for any code that ships a media-bearing
      * message: choose the appropriate {@link MediaProvider} subtype, then
      * call this method with a transcoded {@link MediaPayload}. On success
      * the provider's media metadata (plaintext and encrypted SHA-256
-     * hashes, media key, direct path, URL, byte size, and key timestamp)
-     * is written back through the provider setters so the caller can
-     * build the outgoing message protobuf; when the provider is an
+     * hashes, media key, direct path, URL, byte size, and key timestamp) is
+     * written back through the provider setters so the caller can build the
+     * outgoing message protobuf; when the provider is an
      * {@link ExternalBlobReference} the server-returned handle is stored
      * too. The {@code payload} is not closed by this method; the caller
-     * (typically {@code LinkedWhatsAppClient.uploadMedia}) wraps the call
-     * in a try-with-resources so any temp file owned by the payload is
-     * released.
+     * wraps the call in a try-with-resources so any temp file owned by the
+     * payload is released.
      *
      * @implNote
      * This implementation runs a two-pass streaming-encrypt pipeline that
@@ -747,13 +726,12 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
 
     /**
      * Opens an upload stream over the payload's plaintext, using
-     * {@code mediaKey} for AES-CBC encryption when the provider requests
-     * it.
+     * {@code mediaKey} for AES-CBC encryption when the provider requests it.
      *
-     * @apiNote
-     * Called twice per upload: once for the hash pass and once per HTTP
+     * <p>Called twice per upload: once for the hash pass and once per HTTP
      * attempt for the streaming POST. The returned stream owns the
-     * plaintext stream and closes it on {@link MediaUploadInputStream#close()}.
+     * plaintext stream and closes it on
+     * {@link MediaUploadInputStream#close()}.
      *
      * @param provider the media provider
      * @param payload  the transcoded payload
@@ -776,17 +754,16 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     }
 
     /**
-     * Builds a known-length {@link HttpRequest.BodyPublisher} that
-     * streams the encrypted payload directly to the HTTP socket.
+     * Builds a known-length {@link HttpRequest.BodyPublisher} that streams
+     * the encrypted payload directly to the HTTP socket.
      *
-     * @apiNote
-     * Wraps {@link HttpRequest.BodyPublishers#ofInputStream(Supplier)}
+     * <p>Wraps {@link HttpRequest.BodyPublishers#ofInputStream(Supplier)}
      * with the deterministic encrypted content length so the JVM's
-     * {@code HttpClient} can set a real {@code Content-Length} header
-     * (the CDN refuses chunked encoding). Each subscription opens a
-     * fresh upload stream over the payload's plaintext; the same
-     * {@code mediaKey} is reused so the emitted ciphertext matches the
-     * {@code fileEncSha256} captured during the hash pass.
+     * {@link HttpClient} can set a real {@code Content-Length} header (the
+     * CDN refuses chunked encoding). Each subscription opens a fresh upload
+     * stream over the payload's plaintext; the same {@code mediaKey} is
+     * reused so the emitted ciphertext matches the {@code fileEncSha256}
+     * captured during the hash pass.
      *
      * @param provider        the media provider
      * @param payload         the transcoded payload
@@ -812,20 +789,19 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     }
 
     /**
-     * Performs one HTTP POST upload of an encrypted media payload against
-     * a single CDN host.
+     * Performs one HTTP POST upload of an encrypted media payload against a
+     * single CDN host.
      *
-     * @apiNote
-     * Helper for the {@link #upload(MediaProvider, MediaPayload)} retry
+     * <p>Helper for the {@link #upload(MediaProvider, MediaPayload)} retry
      * loop. The target URL is assembled by
-     * {@link #formatUploadUrl(String, String, String, long)}; the
-     * URL-safe base64 of the encrypted file hash is appended as the
-     * trailing path segment, and the {@code auth}, {@code token}, and
+     * {@link #formatUploadUrl(String, String, String, long, String)}; the
+     * URL-safe base64 of the encrypted file hash is appended as the trailing
+     * path segment, and the {@code auth}, {@code token}, and
      * {@code media_id} query parameters follow. On a non-{@code 200}
      * response a {@link WhatsAppMediaException.Upload} is raised with the
      * HTTP status code preserved; the response JSON must contain
-     * non-{@code null}, non-empty {@code direct_path} and {@code url}
-     * fields or the upload is rejected.
+     * non-{@code null}, non-empty {@code direct_path} and {@code url} fields
+     * or the upload is rejected.
      *
      * @implNote
      * This implementation issues a single fire-and-forget POST; WA Web's
@@ -898,12 +874,11 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Produces a random media event identifier for telemetry and request
      * correlation.
      *
-     * @apiNote
-     * Appended as the {@code media_id} query parameter on every CDN POST
+     * <p>Appended as the {@code media_id} query parameter on every CDN POST
      * so server-side analytics can de-duplicate events across retries. The
-     * value is a positive long in the range
-     * {@code [1, Number.MAX_SAFE_INTEGER]} to match WA Web's
-     * {@code generateMediaEventId} contract.
+     * value is a positive long in the range {@code [1, 2^53 - 1]}, the
+     * range that survives round-tripping through the server's JSON
+     * double-precision representation.
      *
      * @return a random positive long suitable for use as a media id
      */
@@ -917,18 +892,18 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Builds the upload URL for an authenticated media POST against the
      * WhatsApp CDN.
      *
-     * @apiNote
-     * The URL is assembled as
+     * <p>The URL is assembled as
      * {@snippet :
      * https://{hostname}/{path}/{token}?auth=...&token=...&media_id=...
      * }
-     * where {@code token} is the URL-safe base64 of the encrypted file
-     * hash and is reused as both a path segment and a query parameter.
+     * where {@code token} is the URL-safe base64 of the encrypted file hash
+     * and is reused as both a path segment and a query parameter.
      *
      * @param hostname the CDN hostname
      * @param path     the CDN path segment for the media type
      * @param token    the URL-safe base64 of the encrypted file hash
      * @param mediaId  the random media-event id
+     * @param auth     the authentication token presented to the CDN
      * @return the assembled upload URL
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientFormatUploadUrl", exports = "default",
@@ -949,11 +924,9 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * Serialises a map of query parameters into a URL query string.
      *
-     * @apiNote
-     * Helper for {@link #formatUploadUrl} and {@link #buildDirectPathUrl};
-     * {@code null} values are skipped and every remaining key/value pair
-     * is percent-encoded under {@code application/x-www-form-urlencoded}
-     * rules, matching WA Web's {@code URLSearchParams.toString()} idiom.
+     * <p>Helper for {@link #formatUploadUrl} and {@link #buildDirectPathUrl};
+     * {@code null} values are skipped and every remaining key/value pair is
+     * percent-encoded under {@code application/x-www-form-urlencoded} rules.
      *
      * @param params the query parameter map
      * @return the encoded query string with leading {@code "?"}, or an
@@ -981,16 +954,14 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Tests whether a media upload error is worth retrying against a
      * different host.
      *
-     * @apiNote
-     * Mirrors {@code WAWebMmsClientIsErrorRetryable.isErrorRetryable}
-     * mapped onto Cobalt's exception subtypes:
+     * <p>The classification, mapped onto Cobalt's exception subtypes:
      * <ul>
      *   <li>Missing status code (network error): retryable</li>
      *   <li>{@code 401} (unauthorized): retryable</li>
      *   <li>{@code 507} (throttled): not retryable</li>
      *   <li>Other {@code 5xx}: retryable</li>
      *   <li>Every other status ({@code 404}, {@code 408}, {@code 410},
-     *       {@code 413}, {@code 415}, {@code 403}, etc.): not
+     *       {@code 413}, {@code 415}, {@code 403}, and so on): not
      *       retryable</li>
      * </ul>
      *
@@ -1019,19 +990,17 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     }
 
     /**
-     * Downloads a media payload from WhatsApp's CDN for the given
-     * provider.
+     * Downloads a media payload from WhatsApp's CDN for the given provider.
      *
-     * @apiNote
-     * High-level entry point for any code that materialises an inbound
+     * <p>High-level entry point for any code that materialises an inbound
      * attachment. First tries the provider's cached static media URL, if
      * any; if that fails with a retryable error, resolves a fresh host
-     * through {@link MediaHost#routeSelection} and rotates across
-     * candidate hosts on each retry. Non-retryable errors ({@code 404},
-     * {@code 408}, {@code 410}, {@code 507}, and the rest of {@code 4xx})
-     * propagate immediately. The injected {@link ABPropsService} feeds
-     * the download URL formatter (cache-affinity hints and the hash-URL
-     * deprecation flag).
+     * through {@link MediaHost#routeSelection} and rotates across candidate
+     * hosts on each retry. Non-retryable errors ({@code 404}, {@code 408},
+     * {@code 410}, {@code 507}, and the rest of {@code 4xx}) propagate
+     * immediately. The injected {@link ABPropsService} feeds the download
+     * URL formatter (cache-affinity hints and the hash-URL deprecation
+     * flag).
      *
      * @implNote
      * This implementation does not consult an in-memory media-conn cache
@@ -1136,13 +1105,12 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Chooses between the direct-path and hash-based URL formats and
      * returns the final CDN download URL.
      *
-     * @apiNote
-     * Helper for {@link #download(MediaProvider)} and the
-     * HEAD-request helpers. When a direct path is available the URL is
-     * built via {@link #buildDirectPathUrl}; when only the encrypted file
-     * hash is available the URL is built via {@link #formatHashUrl},
-     * unless the {@code web_deprecate_mms4_hash_based_download} AB prop
-     * is enabled, in which case this method throws unconditionally.
+     * <p>Helper for {@link #download(MediaProvider)} and the HEAD-request
+     * helpers. When a direct path is available the URL is built via
+     * {@link #buildDirectPathUrl}; when only the encrypted file hash is
+     * available the URL is built via {@link #formatHashUrl}, unless the
+     * {@code web_deprecate_mms4_hash_based_download} AB prop is enabled, in
+     * which case this method throws unconditionally.
      *
      * @param hostname       the CDN hostname
      * @param directPath     the direct path, or {@code null}
@@ -1192,14 +1160,13 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * Builds a direct-path download URL.
      *
-     * @apiNote
-     * Helper for {@link #formatDownloadUrl}. Appends the URL-safe base64
+     * <p>Helper for {@link #formatDownloadUrl}. Appends the URL-safe base64
      * of the encrypted file hash as {@code hash}, the download bucket as
-     * {@code _nc_cat}, and the {@code _nc_map=whatsapp-nofna}
-     * cache-affinity hint when the media type is listed in the
+     * {@code _nc_cat}, and the {@code _nc_map=whatsapp-nofna} cache-affinity
+     * hint when the media type is listed in the
      * {@code low_cache_hit_rate_media_types} AB prop. A hostname security
-     * check rejects direct paths whose embedded URL resolves to a
-     * different host.
+     * check rejects direct paths whose embedded URL resolves to a different
+     * host.
      *
      * @param hostname       the expected CDN hostname
      * @param directPath     the direct path segment
@@ -1274,8 +1241,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * Builds a hash-based download URL.
      *
-     * @apiNote
-     * Helper for {@link #formatDownloadUrl}; produces a URL of the form
+     * <p>Helper for {@link #formatDownloadUrl}; produces a URL of the form
      * {@snippet :
      * https://{hostname}/{path}/{urlSafeBase64(encFileHash)}?{query}
      * }
@@ -1317,8 +1283,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Converts a standard base64 string to the URL-safe variant used by
      * WhatsApp CDN URLs.
      *
-     * @apiNote
-     * Replaces {@code '/'} with {@code '_'} and {@code '+'} with
+     * <p>Replaces {@code '/'} with {@code '_'} and {@code '+'} with
      * {@code '-'} while keeping the {@code '='} padding characters.
      *
      * @param base64 the standard base64 string to convert
@@ -1333,16 +1298,14 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * Performs one HTTP GET download against a fully-formed CDN URL.
      *
-     * @apiNote
-     * Helper for the {@link #download(MediaProvider)}
-     * retry loop and for direct re-downloads against a known URL. Wraps
-     * the response body in a {@link MediaDownloadInputStream} so the
-     * caller sees decrypted, integrity-checked bytes; the returned stream
-     * owns the underlying {@link HttpClient} and closes it when consumed
-     * or closed by the caller.
+     * <p>Helper for the {@link #download(MediaProvider)} retry loop and for
+     * direct re-downloads against a known URL. Wraps the response body in a
+     * {@code MediaDownloadInputStream} so the caller sees decrypted,
+     * integrity-checked bytes; the returned stream owns the underlying
+     * {@link HttpClient} and closes it when consumed or closed by the
+     * caller.
      *
-     * @param provider    the media provider holding the decryption
-     *                    metadata
+     * @param provider    the media provider holding the decryption metadata
      * @param downloadUrl the full URL to download from
      * @return an {@link InputStream} delivering the decrypted media
      *         content
@@ -1393,9 +1356,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Translates a non-OK HTTP status code from a media download into the
      * appropriate {@link WhatsAppMediaException.Download}.
      *
-     * @apiNote
-     * The mapping mirrors WA Web's
-     * {@code WAWebMmsClientMmsDownload.validateMmsResponse}:
+     * <p>The mapping:
      * <ul>
      *   <li>{@code 401}: {@link WhatsAppMediaException#HTTP_UNAUTHORIZED}</li>
      *   <li>{@code 403}: {@link WhatsAppMediaException#HTTP_NOT_FOUND}
@@ -1478,12 +1439,11 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Tests whether a media download error is worth retrying against a
      * different host.
      *
-     * @apiNote
-     * Applies the same rule set as
-     * {@link #isRetryable(WhatsAppMediaException.Upload)} to
-     * download-class exceptions: missing status code retryable,
-     * {@code 401} retryable, {@code 507} fatal, other {@code 5xx}
-     * retryable, every other status fatal.
+     * <p>Applies the same rule set as
+     * {@link #isRetryable(WhatsAppMediaException.Upload)} to download-class
+     * exceptions: missing status code retryable, {@code 401} retryable,
+     * {@code 507} fatal, other {@code 5xx} retryable, every other status
+     * fatal.
      *
      * @param exception the download exception to test
      * @return {@code true} if the error is retryable
@@ -1513,21 +1473,17 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Tests whether a raw HTTP status code is retryable in isolation,
      * ignoring the wrapping exception subtype.
      *
-     * @apiNote
-     * The rules: {@code 408} retryable, {@code 507} fatal, every other
-     * status retryable iff it is {@code 5xx}. More permissive than
-     * {@link #isRetryable(WhatsAppMediaException.Upload)} because it
-     * does not consult the exception subtype taxonomy. Preserved for
-     * parity with WA Web's
-     * {@code WAWebMmsClientIsErrorRetryable.isRetriableStatusCode}
-     * surface.
+     * <p>The rules: {@code 408} retryable, {@code 507} fatal, every other
+     * status retryable if and only if it is {@code 5xx}. More permissive
+     * than {@link #isRetryable(WhatsAppMediaException.Upload)} because it
+     * does not consult the exception subtype taxonomy.
      *
      * @implNote
-     * This implementation is unused by Cobalt's own pipeline; the upload
-     * and download retry loops consult
+     * This implementation is unused by Cobalt's own pipeline and exists for
+     * parity with the WA Web status-only retry classifier; the upload and
+     * download retry loops consult
      * {@link #isRetryable(WhatsAppMediaException.Upload)} and
-     * {@link #isDownloadRetryable(WhatsAppMediaException.Download)}
-     * instead.
+     * {@link #isDownloadRetryable(WhatsAppMediaException.Download)} instead.
      *
      * @param statusCode the HTTP status code
      * @return {@code true} if the status alone marks the response as
@@ -1551,12 +1507,11 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Probes the WhatsApp CDN to verify that a media file exists and is
      * still available for download.
      *
-     * @apiNote
-     * Useful before kicking off a full download for an attachment that
-     * was referenced from elsewhere (a quoted message, a forwarded
-     * sticker) to avoid wasting bandwidth on a known-missing payload.
-     * Sends an HTTP HEAD request; a {@code 200} response signals
-     * availability, any other status is mapped through
+     * <p>Useful before kicking off a full download for an attachment that
+     * was referenced from elsewhere (a quoted message, a forwarded sticker)
+     * to avoid wasting bandwidth on a known-missing payload. Sends an HTTP
+     * HEAD request; a {@code 200} response signals availability, any other
+     * status is mapped through
      * {@link #validateMmsResponse(int, String, String)}.
      *
      * @param hostname    the CDN hostname
@@ -1564,8 +1519,8 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * @param directPath  the CDN direct path, or {@code null}
      * @param encFileHash the base64-encoded encrypted file hash, or
      *                    {@code null}
-     * @throws WhatsAppMediaException.Download if the media does not exist
-     *         or a network error occurs
+     * @throws WhatsAppMediaException.Download if the media does not exist or
+     *         a network error occurs
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsDownload", exports = "mmsCheckExistence",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -1582,8 +1537,7 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Retrieves the size in bytes of the encrypted media payload stored on
      * the WhatsApp CDN.
      *
-     * @apiNote
-     * Sends an HTTP HEAD request and reads the {@code Content-Length}
+     * <p>Sends an HTTP HEAD request and reads the {@code Content-Length}
      * header so the caller can pre-allocate buffers or estimate bandwidth
      * before invoking a full download.
      *
@@ -1593,9 +1547,9 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * @param encFileHash the base64-encoded encrypted file hash, or
      *                    {@code null}
      * @return the encrypted media file size in bytes
-     * @throws WhatsAppMediaException.Download if the
-     *         {@code Content-Length} header is missing, the server returns
-     *         a non-OK status, or a network error occurs
+     * @throws WhatsAppMediaException.Download if the {@code Content-Length}
+     *         header is missing, the server returns a non-OK status, or a
+     *         network error occurs
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsDownload", exports = "mmsGetEncryptedMediaSize",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -1618,11 +1572,9 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     }
 
     /**
-     * Issues a single HTTP HEAD request and returns the validated
-     * response.
+     * Issues a single HTTP HEAD request and returns the validated response.
      *
-     * @apiNote
-     * Shared helper for {@link #checkExistence} and
+     * <p>Shared helper for {@link #checkExistence} and
      * {@link #getEncryptedMediaSize}. Constructs the URL via
      * {@link #formatDownloadUrl} and validates the status code via
      * {@link #validateMmsResponse(int, String, String)}.
@@ -1668,121 +1620,6 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
         } catch (IOException | InterruptedException exception) {
             throw new WhatsAppMediaException.Download(functionName + ": network error", exception);
         }
-    }
-
-    /**
-     * Asks WhatsApp's MMS service to release the encrypted history-sync
-     * blob whose CDN coordinates were just consumed.
-     *
-     * @apiNote
-     * Called by the history-sync handler immediately after a chunk has
-     * been applied so the CDN does not retain the now-superfluous blob.
-     * The {@code encFilehash} and {@code directPath} arguments come from
-     * the {@link com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification}
-     * that triggered the apply; the {@code encHandle} and
-     * {@code companionMmsAuthNonce} arguments are the server-issued
-     * handle and the per-companion authentication nonce delivered with
-     * the initial bootstrap. When {@code encHandle} is {@code null} or
-     * {@code companionMmsAuthNonce} is {@code null} the
-     * {@code Companion_User_Secret} header is omitted, matching WA
-     * Web's guard in
-     * {@code WAWebMmsClientMmsDeleteMdHistorySyncBlob}.
-     *
-     * @implNote
-     * This implementation iterates over the candidate hosts via the
-     * same {@link #selectHost} ladder that
-     * {@link #download(MediaProvider)} uses, builds the URL through
-     * {@link #formatHashUrl} (path segment {@code mms/md-msg-hist}, the
-     * filename-position payload is the URL-safe base64 of
-     * {@code encFilehash}), attaches the {@code token}, {@code d_md},
-     * {@code auth}, and {@code e_handle} query parameters expected by
-     * the server, and sends a single HTTP {@code DELETE}. Retryable
-     * failures (network errors, {@code 401}, {@code 5xx} apart from
-     * {@code 507}) cycle to the next host with the same backoff schedule
-     * as the upload path; non-retryable failures propagate immediately.
-     * The retry policy mirrors WA Web's {@code q()} wrapper that wraps
-     * {@code WAWebMmsClientMmsDeleteMdHistorySyncBlob}.
-     *
-     * @param directPath            the CDN direct path of the blob to delete
-     * @param encFilehash           the raw bytes of the encrypted file
-     *                              SHA-256
-     * @param encHandle             the server-issued encryption handle,
-     *                              or {@code null}
-     * @param companionMmsAuthNonce the per-companion MMS authentication
-     *                              nonce, or {@code null}
-     * @throws WhatsAppMediaException if no host could service the
-     *                                delete, the request fails with a
-     *                                non-retryable HTTP error, or no
-     *                                hosts are available
-     * @throws NullPointerException   if {@code directPath} or
-     *                                {@code encFilehash} is {@code null}
-     */
-    @WhatsAppWebExport(moduleName = "WAWebMmsClient", exports = "deleteMdHistorySyncBlob",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsDeleteMdHistorySyncBlob", exports = "default",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void deleteHistorySyncBlob(
-            String directPath,
-            byte[] encFilehash,
-            String encHandle,
-            String companionMmsAuthNonce
-    ) throws WhatsAppMediaException, InterruptedException {
-        Objects.requireNonNull(directPath, "directPath cannot be null");
-        Objects.requireNonNull(encFilehash, "encFilehash cannot be null");
-
-        awaitInitialized();
-        var currentAuth = this.auth;
-        var currentHosts = this.hosts;
-        var currentMaxBuckets = this.maxBuckets;
-        var encFilehashBase64 = Base64.getEncoder().encodeToString(encFilehash);
-        var mediaType = MediaPath.HISTORY_SYNC;
-        var hostList = currentHosts instanceof List<? extends MediaHost> list ? list : List.copyOf(currentHosts);
-        var route = MediaHost.routeSelection(
-                Operation.UPLOAD,
-                mediaType,
-                hostList,
-                encFilehashBase64,
-                currentMaxBuckets > 0 ? currentMaxBuckets : null,
-                false
-        );
-
-        String lastHostUsed = null;
-        for (var attemptCount = 0; attemptCount < MAX_ATTEMPT_COUNT; attemptCount++) {
-            var hostname = selectHost(
-                    route.selectedHost().orElse(null),
-                    route.fallbackHost().orElse(null),
-                    lastHostUsed,
-                    attemptCount,
-                    false
-            );
-            if (hostname == null) {
-                continue;
-            }
-            lastHostUsed = hostname;
-        }
-
-        throw new WhatsAppMediaException.Upload(
-                "Cannot delete history sync blob: no hosts available");
-    }
-
-    /**
-     * Strips the {@code "?<query>"} suffix from a CDN direct path.
-     *
-     * @apiNote
-     * Helper for {@link #deleteHistorySyncBlob(String, byte[], String, String)}.
-     * Mirrors WA Web's {@code a.split("?")[0]} on the raw direct path
-     * before it is base64-encoded into the {@code d_md} parameter; the
-     * server treats the {@code d_md} value as the canonical, query-free
-     * direct-path identifier.
-     *
-     * @param url the direct path
-     * @return the path with the query string removed
-     */
-    @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsDeleteMdHistorySyncBlob", exports = "default",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    private static String stripQueryString(String url) {
-        var queryStart = url.indexOf('?');
-        return queryStart < 0 ? url : url.substring(0, queryStart);
     }
 
     /**
@@ -1911,12 +1748,11 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
     /**
      * Tests whether the current authentication token has expired.
      *
-     * @apiNote
-     * Returns {@code true} when the service has never been updated, or
+     * <p>Returns {@code true} when the service has never been updated, or
      * when the current clock is at or past {@code timestamp + authTtl}.
      * Callers that observe {@code true} must request a fresh
-     * {@code media_conn} via {@link #update(Node)} before issuing new
-     * CDN requests.
+     * {@code media_conn} via {@link #update(Node)} before issuing new CDN
+     * requests.
      *
      * @return {@code true} if no credentials are published or the auth
      *         token has expired
@@ -1934,13 +1770,12 @@ public final class DefaultMediaConnectionService implements MediaConnectionServi
      * Tests whether the current credentials should be proactively
      * refreshed.
      *
-     * @apiNote
-     * Returns {@code true} when the service has never been updated, or
-     * when either the routes TTL has elapsed, or 80% of the
-     * authentication TTL has elapsed, whichever happens first.
+     * <p>Returns {@code true} when the service has never been updated, or
+     * when either the routes TTL has elapsed, or 80% of the authentication
+     * TTL has elapsed, whichever happens first.
      *
-     * @return {@code true} if no credentials are published or refresh
-     *         is due
+     * @return {@code true} if no credentials are published or refresh is
+     *         due
      */
     @WhatsAppWebExport(moduleName = "WAWebMediaHosts", exports = "mediaHosts",
             adaptation = WhatsAppAdaptation.ADAPTED)

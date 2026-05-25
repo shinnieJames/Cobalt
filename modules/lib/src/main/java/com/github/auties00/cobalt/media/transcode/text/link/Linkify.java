@@ -15,170 +15,122 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The URL detector that recognises HTTP / HTTPS / mailto / IRC / FTP
- * links inside a free-form text body.
+ * Detects HTTP, HTTPS, mailto, IRC, and FTP links inside a free-form text body.
  *
- * @apiNote
- * Mirrors {@code WALinkify} ({@code findLinks} / {@code findLink} /
- * {@code validateEmail}) and the
- * {@code WAWebLinkify.hasHttpLink} thin wrapper. Used both by the
- * link-preview pipeline to detect the first URL in an outgoing body
- * and by the receive pipeline to flag messages as carrying a link.
+ * <p>Drives both the link-preview pipeline (detecting the first URL in an outgoing body)
+ * and the receive pipeline (flagging messages that carry a link). A successful match is
+ * validated against {@link #TLD}, has Punycode IDN labels decoded, has trailing
+ * punctuation balanced against opening brackets and quotes, and is given a synthesised
+ * scheme when the user typed a bare host. Each {@link Match} preserves the literal matched
+ * substring, the canonical URL, the post-match offset, the resolved scheme, and the parsed
+ * host, port, path, query, and fragment so consumers dispatch off the components without
+ * re-parsing.
  *
  * @implNote
- * This implementation transcribes {@code WALinkify}'s composite
- * regular expression and its nine capture groups verbatim, validates
- * the final TLD label against {@link #TLD}, decodes
- * Punycode IDN labels, balances trailing punctuation against opening
- * brackets and quotes (using the {@link #CLOSING_TO_OPENING} /
- * {@link #OPENING_TO_CLOSING} maps), and synthesises an explicit
- * scheme when the user typed a bare host. The output preserves the
- * literal matched substring, the canonical URL, the post-match
- * offset, the resolved scheme, and the parsed
- * host / port / path / query / fragment so consumers dispatch off
- * the components without re-parsing.
+ * This implementation transcribes the JS composite regular expression and its nine capture
+ * groups verbatim, then re-validates the final TLD label in Java (against {@link #TLD})
+ * rather than embedding the TLD alternation into the regex so the TLD list lives in a
+ * single {@link Set}.
  */
 @WhatsAppWebModule(moduleName = "WALinkify")
 @WhatsAppWebModule(moduleName = "WAWebLinkify")
 @WhatsAppWebModule(moduleName = "WATopLevelDomains")
 public final class Linkify {
     /**
-     * The atomic character class shared by host labels, paths,
-     * queries, and anchors.
+     * Holds the atomic character class shared by host labels, paths, queries, and anchors.
      *
-     * @apiNote
-     * Mirrors the {@code d} constant in {@code WALinkify}; an ASCII
-     * word character, any non-whitespace non-ASCII character outside
-     * a small set of formatting punctuation, or a percent-encoded
-     * byte.
+     * <p>Accepts an ASCII word character, any non-whitespace non-ASCII character outside a
+     * small set of formatting punctuation, or a percent-encoded byte.
      */
     private static final String CHAR_CLASS = "\\w|[^\\s\\u0000-\\u007F\\u00AB\\u00BB\\u2018\\u2019\\u201C\\u201D]|%[0-9a-f][0-9a-f]";
 
     /**
-     * The suffix matching either a letter-only TLD or a Punycode IDN
-     * label.
+     * Holds the suffix matching either a letter-only TLD or a Punycode IDN label.
      *
-     * @apiNote
-     * Mirrors the {@code m} constant in {@code WALinkify}; combines
-     * the explicit TLD enumeration with the {@code xn--...} prefix
-     * shape so both ASCII and IDN TLDs match.
+     * <p>Combines the letter-only TLD shape with the {@code xn--...} prefix shape so both
+     * ASCII and IDN TLDs match.
      */
     private static final String TLD_SUFFIX = "[a-z]{2,}|xn--(?:" + CHAR_CLASS + ")+";
 
     /**
-     * The single host-label fragment.
+     * Holds the single host-label fragment.
      *
-     * @apiNote
-     * Mirrors the {@code p} constant in {@code WALinkify}; a
-     * letter / digit run that may contain dashes but cannot start or
-     * end with one.
+     * <p>Matches a letter or digit run that may contain dashes but cannot start or end with
+     * one.
      */
     private static final String HOST_LABEL = "(?:" + CHAR_CLASS + ")|(?:" + CHAR_CLASS + ")(?:" + CHAR_CLASS + "|-)*(?:" + CHAR_CLASS + ")";
 
     /**
-     * The full host pattern.
+     * Holds the full host pattern.
      *
-     * @apiNote
-     * Mirrors the {@code _} constant in {@code WALinkify}; one or
-     * more labels followed by a final TLD label.
+     * <p>Matches one or more labels followed by a final TLD label.
      */
     private static final String HOST = "(?!_)(?:(?:" + HOST_LABEL + ")\\.)+(" + TLD_SUFFIX + ")(?!\\." + HOST_LABEL + ")";
 
     /**
-     * The optional port suffix.
+     * Holds the optional port suffix.
      *
-     * @apiNote
-     * Mirrors the {@code f} constant in {@code WALinkify}.
+     * <p>Matches a colon followed by one to five digits.
      */
     private static final String PORT = ":\\d{1,5}";
 
     /**
-     * The trailing-punctuation set that may appear at the end of a
-     * URL but should be trimmed because it belongs to the
-     * surrounding sentence.
-     *
-     * @apiNote
-     * Mirrors the {@code g} constant in {@code WALinkify}.
+     * Holds the trailing-punctuation set that may appear at the end of a URL but is trimmed
+     * because it belongs to the surrounding sentence.
      */
     private static final String TRAILING_PUNCT = "@!.?,(\\[{<\\u00AB\\u2018\\u201C:";
 
     /**
-     * The path-character class.
+     * Holds the path-character class.
      *
-     * @apiNote
-     * Mirrors the {@code h} constant in {@code WALinkify}; a
-     * {@link #CHAR_CLASS} character or any non-whitespace
-     * non-percent character.
+     * <p>Matches a {@link #CHAR_CLASS} character or any non-whitespace non-percent
+     * character.
      */
     private static final String PATH_CHAR = "(?:" + CHAR_CLASS + "|[^\\s%])";
 
     /**
-     * The path component matching a slash followed by lazy
-     * {@link #PATH_CHAR}s.
-     *
-     * @apiNote
-     * Mirrors the {@code y} constant in {@code WALinkify}.
+     * Holds the path component, a slash followed by lazy {@link #PATH_CHAR}s.
      */
     private static final String PATH = "/" + PATH_CHAR + "*?";
 
     /**
-     * The negative lookahead that terminates the URL match at
-     * sentence boundaries.
-     *
-     * @apiNote
-     * Mirrors the {@code C} constant in {@code WALinkify}.
+     * Holds the negative lookahead that terminates the URL match at sentence boundaries.
      */
     private static final String STOP_LOOKAHEAD = "[" + TRAILING_PUNCT + "]*(?!" + PATH_CHAR + "|#)";
 
     /**
-     * The query component.
-     *
-     * @apiNote
-     * Mirrors the {@code b} constant in {@code WALinkify}.
+     * Holds the query component.
      */
     private static final String QUERY = "\\?(?!" + STOP_LOOKAHEAD + ")" + PATH_CHAR + "*?";
 
     /**
-     * The anchor (fragment) component.
-     *
-     * @apiNote
-     * Mirrors the {@code v} constant in {@code WALinkify}.
+     * Holds the anchor (fragment) component.
      */
     private static final String ANCHOR = "#" + PATH_CHAR + "*?";
 
     /**
-     * The email local-part character class.
-     *
-     * @apiNote
-     * Mirrors the {@code S} constant in {@code WALinkify}; the
-     * RFC 5321 set of characters legal in an unquoted local part.
+     * Holds the email local-part character class, the RFC 5321 set of characters legal in
+     * an unquoted local part.
      */
     private static final String EMAIL_LOCAL_CHAR = "0-9a-z!#$%&'*+/=?^_`{|}~\\-";
 
     /**
-     * The email local-part fragment.
-     *
-     * @apiNote
-     * Mirrors the {@code L} constant in {@code WALinkify}.
+     * Holds the email local-part fragment.
      */
     private static final String EMAIL_LOCAL = "\\b\\w[" + EMAIL_LOCAL_CHAR + "]*(?:\\.[" + EMAIL_LOCAL_CHAR + "]+)*";
 
     /**
-     * The pre-context that must immediately precede the URL.
+     * Holds the pre-context that must immediately precede the URL.
      *
-     * @apiNote
-     * Mirrors the {@code E} constant in {@code WALinkify}; anchors
-     * the match so the URL never starts mid-identifier.
+     * <p>Anchors the match so the URL never starts mid-identifier.
      */
     private static final String PRE_CONTEXT = "^|\\W\\.|[^/\\w.]|_";
 
     /**
-     * The composite URL pattern with nine capture groups.
+     * Holds the composite URL pattern source with nine capture groups.
      *
-     * @apiNote
-     * Mirrors the {@code k} concatenation in {@code WALinkify}; the
-     * pattern is assembled at field-init time so the
-     * {@link Pattern#compile} call is paid once.
+     * <p>Assembled at field-init time so the {@link Pattern#compile(String, int)} call is
+     * paid once.
      */
     private static final String COMPOSITE = "(" + PRE_CONTEXT + ")"
             + "((?:http|https)://|mailto:)?"
@@ -192,91 +144,62 @@ public final class Linkify {
             + "(?=" + STOP_LOOKAHEAD + "))";
 
     /**
-     * The capture-group index for the pre-context.
-     *
-     * @apiNote
-     * Mirrors the JS {@code I} constant; the leading character or
-     * boundary that the URL match is anchored against.
+     * Holds the capture-group index for the pre-context, the leading character or boundary
+     * the URL match is anchored against.
      */
     private static final int GROUP_PRE_CONTEXT = 1;
 
     /**
-     * The capture-group index for the explicit scheme.
-     *
-     * @apiNote
-     * Mirrors the JS {@code T} constant; carries either
-     * {@code http://}, {@code https://}, or {@code mailto:} when one
-     * is typed.
+     * Holds the capture-group index for the explicit scheme, which carries either
+     * {@code http://}, {@code https://}, or {@code mailto:} when one is typed.
      */
     private static final int GROUP_SCHEME = 2;
 
     /**
-     * The capture-group index for the email local part.
-     *
-     * @apiNote
-     * Mirrors the JS {@code D} constant; non-null only on
+     * Holds the capture-group index for the email local part, non-null only on
      * mailto-shaped matches.
      */
     private static final int GROUP_EMAIL_LOCAL = 3;
 
     /**
-     * The capture-group index for the entire host fragment.
-     *
-     * @apiNote
-     * Mirrors the JS {@code x} constant.
+     * Holds the capture-group index for the entire host fragment.
      */
     private static final int GROUP_HOST = 4;
 
     /**
-     * The capture-group index for the TLD label inside the host.
+     * Holds the capture-group index for the TLD label inside the host.
      *
-     * @apiNote
-     * Mirrors the JS {@code $} constant; the TLD is re-validated
-     * against {@link #TLD} in {@link #build}.
+     * <p>The TLD is re-validated against {@link #TLD} in
+     * {@link #build(Matcher, String, boolean)}.
      */
     private static final int GROUP_TLD = 5;
 
     /**
-     * The capture-group index for the port suffix.
-     *
-     * @apiNote
-     * Mirrors the JS {@code P} constant; includes the leading colon.
+     * Holds the capture-group index for the port suffix, including the leading colon.
      */
     private static final int GROUP_PORT = 6;
 
     /**
-     * The capture-group index for the path.
-     *
-     * @apiNote
-     * Mirrors the JS {@code N} constant.
+     * Holds the capture-group index for the path.
      */
     private static final int GROUP_PATH = 7;
 
     /**
-     * The capture-group index for the query.
-     *
-     * @apiNote
-     * Mirrors the JS {@code M} constant; includes the leading
-     * question mark.
+     * Holds the capture-group index for the query, including the leading question mark.
      */
     private static final int GROUP_QUERY = 8;
 
     /**
-     * The capture-group index for the anchor.
-     *
-     * @apiNote
-     * Mirrors the JS {@code w} constant; includes the leading hash.
+     * Holds the capture-group index for the anchor, including the leading hash.
      */
     private static final int GROUP_ANCHOR = 9;
 
     /**
-     * The closing-to-opening punctuation table used by the
+     * Maps each closing bracket or quote to its opening counterpart for the
      * bracket-balancing truncation pass.
      *
-     * @apiNote
-     * Mirrors the {@code A} map in {@code WALinkify}; trailing
-     * brackets and quotes are trimmed only when they were not opened
-     * earlier in the URL.
+     * <p>A trailing bracket or quote is trimmed only when it was not opened earlier in the
+     * URL.
      */
     private static final Map<Integer, Integer> CLOSING_TO_OPENING = Map.ofEntries(
             Map.entry((int) '"', (int) '"'),
@@ -290,12 +213,11 @@ public final class Linkify {
     );
 
     /**
-     * The opening-to-closing punctuation table.
+     * Maps each opening bracket or quote to its closing counterpart for the
+     * bracket-balancing truncation pass.
      *
-     * @apiNote
-     * Mirrors the {@code F} map in {@code WALinkify}; opening
-     * brackets push their expected closer onto the truncation pass's
-     * pending stack.
+     * <p>An opening bracket pushes its expected closer onto the truncation pass's pending
+     * stack.
      */
     private static final Map<Integer, Integer> OPENING_TO_CLOSING = Map.ofEntries(
             Map.entry((int) '"', (int) '"'),
@@ -309,37 +231,32 @@ public final class Linkify {
     );
 
     /**
-     * The compiled composite pattern.
+     * Holds the compiled composite pattern.
      *
-     * @apiNote
-     * Mirrors the {@code O} pattern in {@code WALinkify}; compiled
-     * case-insensitive so a URL typed in mixed case still matches.
+     * <p>Compiled case-insensitive so a URL typed in mixed case still matches.
      */
     private static final Pattern PATTERN = Pattern.compile(COMPOSITE, Pattern.CASE_INSENSITIVE);
 
     /**
-     * The fast-path TLD presence check.
+     * Holds the fast-path TLD presence check.
      *
-     * @apiNote
-     * Mirrors the {@code B} pattern in {@code WALinkify}; consulted
-     * first to short-circuit a full match attempt when no candidate
-     * TLD appears in the body.
+     * <p>Consulted first to short-circuit a full match attempt when no candidate TLD
+     * appears in the body.
      */
     private static final Pattern TLD_GUARD = Pattern.compile("\\.(?:" + TLD_SUFFIX + ")", Pattern.CASE_INSENSITIVE);
 
     /**
-     * The snapshot of top-level domain labels WhatsApp Web considers
-     * eligible targets for URL detection and link-preview generation.
+     * Holds the snapshot of top-level domain labels eligible for URL detection and
+     * link-preview generation.
      *
-     * @apiNote
-     * Consulted by {@link #build} after the composite regex matches; a
-     * host whose final label is absent from this set is rejected.
-     * Cloned verbatim from {@code WATLD} so the
-     * Cobalt detector produces the same matches as the JS runtime.
-     * Includes the ASCII gTLDs and ccTLDs, the IANA-registered IDN
-     * gTLDs, and Cyrillic / Arabic / Indic country TLDs; entries are
-     * lower-cased and Unicode-normalised so the check can run
-     * directly without re-case folding.
+     * <p>Consulted by {@link #build(Matcher, String, boolean)} after the composite regex
+     * matches; a host whose final label is absent from this set is rejected. Includes the
+     * ASCII gTLDs and ccTLDs, the IANA-registered IDN gTLDs, and Cyrillic, Arabic, and
+     * Indic country TLDs.
+     *
+     * @implNote
+     * This implementation lower-cases and Unicode-normalises every entry so the check can
+     * run directly without re-case folding.
      */
     @WhatsAppWebExport(moduleName = "WATopLevelDomains", exports = "TLD",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -438,7 +355,7 @@ public final class Linkify {
     );
 
     /**
-     * The hidden constructor of the utility class.
+     * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -447,24 +364,21 @@ public final class Linkify {
     }
 
     /**
-     * Returns every URL detected in {@code text}, in order of
-     * appearance.
+     * Returns every URL detected in {@code text}, in order of appearance.
      *
-     * @apiNote
-     * Mirrors {@code WALinkify.findLinks}; consumed by Cobalt's
-     * receive pipeline (to flag chat messages as carrying links via
-     * {@link #hasHttpLink}) and by message-edit / message-summary
-     * surfaces that enumerate every URL in a body.
+     * <p>Returns the empty list for a {@code null} {@code text} and when no candidate TLD
+     * is present. When {@code requireExplicitScheme} is {@code true}, only matches carrying
+     * an explicit {@code http(s)://} scheme are kept. Each candidate is materialised by
+     * {@link #build(Matcher, String, boolean)}, which may reject it; rejected candidates do
+     * not appear in the result.
      *
      * @implNote
-     * This implementation runs the {@link #TLD_GUARD} fast path
-     * first and returns the empty list when no candidate TLD is
-     * present in the body; the JS regex would still run on every
-     * call without the guard.
+     * This implementation runs the {@link #TLD_GUARD} fast path first and returns the empty
+     * list when no candidate TLD is present in the body; the JS regex would otherwise run
+     * on every call.
      *
      * @param text                  the text to scan
-     * @param requireExplicitScheme whether to keep only matches that
-     *                              carry an explicit
+     * @param requireExplicitScheme whether to keep only matches that carry an explicit
      *                              {@code http(s)://} scheme
      * @return the detected URLs
      */
@@ -486,22 +400,18 @@ public final class Linkify {
     }
 
     /**
-     * Returns the first URL detected in {@code text}, when one is
-     * present.
+     * Returns the first URL detected in {@code text}, when one is present.
      *
-     * @apiNote
-     * Mirrors {@code WALinkify.findLink}; consumed by
-     * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run}
-     * to pick the URL to preview. Only the first regex match is
-     * considered, matching the JS semantics ({@code F.lastIndex = 0;
-     * return U(B(e), t)}); when {@link #build} rejects the candidate
-     * the function yields empty without attempting subsequent
-     * matches.
+     * <p>Returns empty for a {@code null} {@code text}, when no candidate TLD is present,
+     * and when the regex finds no match. Only the first regex match is considered; when
+     * {@link #build(Matcher, String, boolean)} rejects that candidate the result is empty
+     * without attempting subsequent matches. When {@code requireExplicitScheme} is
+     * {@code true}, a match without an explicit {@code http} / {@code https} /
+     * {@code mailto} scheme is rejected.
      *
      * @param text                  the text to scan
-     * @param requireExplicitScheme whether to require an explicit
-     *                              {@code http} / {@code https} /
-     *                              {@code mailto} scheme
+     * @param requireExplicitScheme whether to require an explicit {@code http} /
+     *                              {@code https} / {@code mailto} scheme
      * @return the first match, or empty when no URL is detected
      */
     @WhatsAppWebExport(moduleName = "WALinkify", exports = "findLink",
@@ -518,17 +428,15 @@ public final class Linkify {
     }
 
     /**
-     * Returns whether {@code text} contains at least one
-     * explicit-scheme HTTP / HTTPS link.
+     * Returns whether {@code text} contains at least one explicit-scheme HTTP / HTTPS link.
      *
-     * @apiNote
-     * Mirrors {@code WAWebLinkify.hasHttpLink}; consumed by
-     * Cobalt's DB-persistence pipeline so the {@code hasLink} bit on
-     * the message row can be set without parsing the body twice.
+     * <p>Delegates to {@link #findLink(String, boolean)} with the explicit-scheme
+     * requirement set, so a bare-host or mailto match does not satisfy it. Used by the
+     * persistence pipeline to set the message's has-link bit without parsing the body
+     * twice.
      *
      * @param text the text to scan
-     * @return {@code true} when at least one explicit-scheme HTTP /
-     *         HTTPS link is detected
+     * @return {@code true} when at least one explicit-scheme HTTP / HTTPS link is detected
      */
     @WhatsAppWebExport(moduleName = "WAWebLinkify", exports = "hasHttpLink",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -537,19 +445,16 @@ public final class Linkify {
     }
 
     /**
-     * Returns the match describing {@code text} when the entire input
-     * is a single, well-formed {@code mailto:} address.
+     * Returns the match describing {@code text} when the entire input is a single,
+     * well-formed {@code mailto:} address.
      *
-     * @apiNote
-     * Mirrors {@code WALinkify.validateEmail}. The candidate must
-     * cover {@code text} in its entirety, resolve to the
-     * {@code mailto:} scheme, expose a non-empty local part, and
-     * carry neither a query string nor a fragment. Any other match
-     * shape is rejected.
+     * <p>The candidate must cover {@code text} in its entirety, resolve to the
+     * {@code mailto:} scheme, expose a non-empty local part, and carry neither a query
+     * string nor a fragment. Any other match shape yields empty, as does a {@code null}
+     * {@code text}.
      *
      * @param text the candidate email address
-     * @return the match when {@code text} is a complete mailto
-     *         address, otherwise empty
+     * @return the match when {@code text} is a complete mailto address, otherwise empty
      */
     @WhatsAppWebExport(moduleName = "WALinkify", exports = "validateEmail",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -582,32 +487,24 @@ public final class Linkify {
     /**
      * Builds a single {@link Match} from the current matcher state.
      *
-     * @apiNote
-     * Mirrors the {@code G} helper in {@code WALinkify}: validates
-     * the TLD against {@link #TLD}, decodes Punycode
-     * IDN hosts, balances trailing punctuation against opening
-     * brackets, and synthesises an implicit scheme when none was
-     * typed. Returns {@code null} when the candidate fails any
-     * validation step so the enclosing {@link #findLink} /
-     * {@link #findLinks} loop can either bail or continue.
+     * <p>Validates the TLD against {@link #TLD} (decoding Punycode IDN hosts first),
+     * validates the port range, balances trailing punctuation against opening brackets and
+     * quotes, and synthesises an implicit scheme when none was typed. Returns {@code null}
+     * when the candidate fails any validation step, so the enclosing
+     * {@link #findLink(String, boolean)} or {@link #findLinks(String, boolean)} loop can
+     * either bail or continue.
      *
      * @implNote
-     * This implementation re-validates the TLD in Java rather than
-     * embedding the {@link #TLD} alternation into
-     * {@link #COMPOSITE} so the TLD list lives in a single Set;
-     * {@code WALinkify} embeds the list directly into the regex.
-     * The bracket-balancing pass mirrors the JS quirk where
-     * out-of-bounds string reads are treated as {@code undefined},
-     * including the {@code a[i-1] === "_"} trailing-underscore
-     * probe.
+     * This implementation re-validates the TLD in Java rather than embedding the
+     * {@link #TLD} alternation into {@link #COMPOSITE} so the TLD list lives in a single
+     * {@link Set}. The bracket-balancing pass mirrors the JS quirk where out-of-bounds
+     * string reads are treated as undefined, including the trailing-underscore probe on the
+     * character preceding the match.
      *
-     * @param matcher               the regex matcher positioned on a
-     *                              successful match
+     * @param matcher               the regex matcher positioned on a successful match
      * @param input                 the original input text
-     * @param requireExplicitScheme whether to drop matches without
-     *                              an explicit scheme
-     * @return the materialised {@link Match}, or {@code null} when
-     *         the candidate is invalid
+     * @param requireExplicitScheme whether to drop matches without an explicit scheme
+     * @return the materialised {@link Match}, or {@code null} when the candidate is invalid
      */
     private static Match build(Matcher matcher, String input, boolean requireExplicitScheme) {
         var preContext = matcher.group(GROUP_PRE_CONTEXT);
@@ -751,31 +648,28 @@ public final class Linkify {
     }
 
     /**
-     * One detected URL match.
+     * Represents one detected URL match.
      *
-     * @apiNote
-     * Mirrors the object returned by {@code WALinkify}'s {@code G}
-     * helper. Consumed by every preview branch and by the
-     * msg-links pipeline.
+     * <p>Carries the canonical URL, the literal matched substring, the post-match offset,
+     * the resolved scheme, and the parsed host, port, path, query, and fragment so every
+     * preview branch and the message-links pipeline can dispatch off the components without
+     * re-parsing.
      *
      * @param href     the canonical URL with an explicit scheme
-     * @param url      the literal substring as it appeared in the
-     *                 body
-     * @param index    the offset of the first character past the
-     *                 match in the source body
+     * @param url      the literal substring as it appeared in the body
+     * @param index    the offset of the first character past the match in the source body
      * @param input    the original input text
-     * @param scheme   the resolved scheme (always lower-case;
-     *                 synthesised when the user did not type one)
-     * @param username the email local part with the trailing
-     *                 {@code @}, or {@code null} for non-mailto URLs
+     * @param scheme   the resolved scheme (always lower-case; synthesised when the user did
+     *                 not type one)
+     * @param username the email local part with the trailing {@code @}, or {@code null} for
+     *                 non-mailto URLs
      * @param domain   the host portion of the URL
-     * @param port     the port suffix including the leading colon,
-     *                 or {@code null} when no port was provided
+     * @param port     the port suffix including the leading colon, or {@code null} when no
+     *                 port was provided
      * @param path     the path component, or {@code null}
      * @param params   the query component, or {@code null}
      * @param anchor   the fragment component, or {@code null}
-     * @param isHttp   whether the user typed an explicit
-     *                 {@code http(s)://} scheme
+     * @param isHttp   whether the user typed an explicit {@code http(s)://} scheme
      */
     public record Match(
             String href,

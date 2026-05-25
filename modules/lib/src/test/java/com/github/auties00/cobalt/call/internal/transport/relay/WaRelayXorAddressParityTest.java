@@ -16,37 +16,22 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Parity test for {@link WaRelayXorAddress} against the captured
- * Allocate Request fixture.
+ * Parity suite for {@link WaRelayXorAddress} against captured WA Web Allocate Request bytes.
  *
- * <p>Asserts that the XOR-RELAYED-ADDRESS attribute carried by every
- * captured 344-byte Allocate Request decodes to one of the IPv4
- * relay endpoints listed across the captured {@code RelayListUpdate}
- * events for that session, on port 3478.
+ * <p>Asserts that the XOR-RELAYED-ADDRESS attribute of every captured 344-byte Allocate Request
+ * decodes to one of the IPv4 relay endpoints listed across the captured {@code RelayListUpdate}
+ * events for that session, on port 3478, and that a decoded address round-trips byte-exact.
+ *
+ * <p>Fixtures are captured wasm-engine output under {@code src/test/resources/fixtures/relay/}:
+ * {@code stun-bytes-raw.json} (raw packet bytes) and {@code relay-list-updates.json} (the relays
+ * the engine considered per refresh; an Allocate Request must target one of their IPs).
  */
 public class WaRelayXorAddressParityTest {
 
-    /**
-     * Classpath path of the captured-bytes fixture.
-     */
     private static final String FIXTURE = "fixtures/relay/stun-bytes-raw.json";
 
-    /**
-     * Classpath path of the relay-list-updates fixture. Each
-     * {@code RelayListUpdate} lists the relays the wasm engine
-     * considered for that refresh; an Allocate Request must target
-     * one of the IPs across all RLUs in the same session.
-     */
     private static final String RLU_FIXTURE = "fixtures/relay/relay-list-updates.json";
 
-    /**
-     * Decodes the XOR-RELAYED-ADDRESS attribute of every captured
-     * 344-byte Allocate Request and asserts that the embedded endpoint
-     * matches one of the IPv4 addresses listed across the captured
-     * {@code RelayListUpdate} events on port 3478.
-     *
-     * @throws IOException if a fixture file cannot be read
-     */
     @Test
     public void xorRelayedAddressDecodesToOneOfTheRelays() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -87,12 +72,6 @@ public class WaRelayXorAddressParityTest {
         assertTrue(checked >= 1, "expected at least 1 Allocate Request, got " + checked);
     }
 
-    /**
-     * Round-trips a decoded address back to wire bytes and asserts
-     * byte-equality with the captured attribute value.
-     *
-     * @throws IOException if the fixture file cannot be read
-     */
     @Test
     public void xorRelayedAddressRoundTrips() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);

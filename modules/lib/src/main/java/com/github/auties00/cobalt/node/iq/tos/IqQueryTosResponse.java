@@ -13,74 +13,65 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Models the sealed family of inbound reply variants produced by the relay in response to an
  * {@link IqQueryTosRequest}.
  *
- * @apiNote
- * Switch on the returned variant to discriminate the relay outcome: a {@link Success}
- * carries the relay-clamped refresh interval plus the per-notice
- * {@link Success.NoticeState accepted-state} entries (used to drive WA Web's
- * {@code TosManager.run} cadence and to surface acceptance prompts), a
- * {@link ClientError} surfaces a relay rejection, and a {@link ServerError} surfaces
- * a transient relay failure WA Web retries via exponential backoff.
+ * <p>Callers discriminate the relay outcome by switching on the returned variant. A {@link Success}
+ * carries the clamped refresh interval plus the per-notice {@link Success.NoticeState accepted-state}
+ * entries, which drive the cadence of the local state-pull loop and the acceptance prompts. A
+ * {@link ClientError} surfaces a relay rejection, and a {@link ServerError} surfaces a transient
+ * relay failure that WhatsApp Web retries via exponential backoff.
  */
 public sealed interface IqQueryTosResponse extends IqOperation.Response
         permits IqQueryTosResponse.Success, IqQueryTosResponse.ClientError, IqQueryTosResponse.ServerError {
 
     /**
-     * Minimum server-recommended refresh interval in seconds.
+     * Holds the minimum server-recommended refresh interval in seconds.
      *
-     * @apiNote
-     * Replies below this floor are clamped to
-     * {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS}; the value matches WA Web's
-     * implicit local floor of {@code 7200} seconds (two hours).
+     * <p>Replies below this floor are clamped to {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS}.
+     *
+     * @implNote The value {@code 7200} (two hours) matches WhatsApp Web's implicit local floor.
      */
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
             exports = "queryTosState", adaptation = WhatsAppAdaptation.DIRECT)
     int MIN_TOS_REFRESH_INTERVAL_SECONDS = 7200;
 
     /**
-     * Maximum server-recommended refresh interval in seconds.
+     * Holds the maximum server-recommended refresh interval in seconds.
      *
-     * @apiNote
-     * Replies above this ceiling are clamped to
-     * {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS}; the value matches WA Web's
-     * implicit local ceiling of {@code 259200} seconds (three days).
+     * <p>Replies above this ceiling are clamped to {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS}.
+     *
+     * @implNote The value {@code 259200} (three days) matches WhatsApp Web's implicit local ceiling.
      */
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
             exports = "queryTosState", adaptation = WhatsAppAdaptation.DIRECT)
     int MAX_TOS_REFRESH_INTERVAL_SECONDS = 259200;
 
     /**
-     * Default server-recommended refresh interval in seconds (24h).
+     * Holds the default server-recommended refresh interval in seconds (24 hours).
      *
-     * @apiNote
-     * Used as a fallback when the reply's {@code refresh} value falls outside the
-     * {@code [MIN_TOS_REFRESH_INTERVAL_SECONDS, MAX_TOS_REFRESH_INTERVAL_SECONDS]}
-     * range; the value matches WA Web's
-     * {@code WAWebTosJob.DEFAULT_TOS_REFRESH_INTERVAL = 86400}.
+     * <p>Used as the fallback when the reply's {@code refresh} value falls outside the
+     * {@code [MIN_TOS_REFRESH_INTERVAL_SECONDS, MAX_TOS_REFRESH_INTERVAL_SECONDS]} range.
+     *
+     * @implNote The value {@code 86400} matches WhatsApp Web's
+     *           {@code WAWebTosJob.DEFAULT_TOS_REFRESH_INTERVAL}.
      */
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
             exports = "DEFAULT_TOS_REFRESH_INTERVAL", adaptation = WhatsAppAdaptation.DIRECT)
     int DEFAULT_TOS_REFRESH_INTERVAL_SECONDS = 86400;
 
     /**
-     * Parses the inbound stanza into the first matching {@link IqQueryTosResponse}
-     * variant.
+     * Parses the inbound stanza into the first matching {@link IqQueryTosResponse} variant.
      *
-     * @apiNote
-     * Try this once per inbound reply; the priority ordering (success, then
-     * client-error, then server-error) matches the wire shape and never returns
-     * ambiguous matches.
+     * <p>The priority ordering (success, then client-error, then server-error) matches the wire
+     * shape so the variants are mutually exclusive and the match is never ambiguous.
      *
-     * @implNote
-     * This implementation calls each variant's {@code of(node, request)} in turn
-     * and returns the first present result.
-     *
+     * @implNote This implementation calls each variant's {@code of(node, request)} in turn and
+     *           returns the first present result.
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty when no
-     *         documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant
+     *         matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
@@ -100,22 +91,19 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
     }
 
     /**
-     * Success variant. The relay returned the per-notice accepted-state plus the
+     * Models the success variant in which the relay returned the per-notice accepted state plus the
      * clamped refresh interval.
      *
-     * @apiNote
-     * Inspect {@link #refreshIntervalSeconds()} to drive the cadence of the
-     * {@link IqQueryTosRequest} loop and {@link #notices()} for the per-notice
-     * accepted-state. The list is filtered against the locally-known notice ids
-     * by the caller's {@code TosManager} before being applied to {@code UserPrefs}.
+     * <p>The caller reads {@link #refreshIntervalSeconds()} to drive the cadence of the
+     * {@link IqQueryTosRequest} loop and {@link #notices()} for the per-notice accepted state. The
+     * caller filters the entries against its locally-known notice ids before applying them.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class Success implements IqQueryTosResponse {
         /**
          * Holds the server-recommended refresh interval in seconds, clamped to
-         * {@code [MIN_TOS_REFRESH_INTERVAL_SECONDS, MAX_TOS_REFRESH_INTERVAL_SECONDS]}
-         * (falling back to {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS} on
-         * out-of-range).
+         * {@code [MIN_TOS_REFRESH_INTERVAL_SECONDS, MAX_TOS_REFRESH_INTERVAL_SECONDS]} and falling
+         * back to {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS} when out of range.
          */
         private final int refreshIntervalSeconds;
 
@@ -125,8 +113,8 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         private final List<NoticeState> notices;
 
         /**
-         * Constructs a successful reply bound to the clamped refresh interval and
-         * the per-notice entries.
+         * Constructs a successful reply bound to the clamped refresh interval and the per-notice
+         * entries.
          *
          * @param refreshIntervalSeconds the clamped refresh interval
          * @param notices                the per-notice entries; never {@code null}
@@ -157,24 +145,22 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         }
 
         /**
-         * Parses the inbound stanza into a {@link Success} variant when it
-         * matches the success schema.
+         * Parses the inbound stanza into a {@link Success} variant when it matches the success
+         * schema.
          *
-         * @apiNote
-         * Returns empty when the SMAX result-envelope check fails, when the
-         * {@code <tos>} child is absent, when its {@code refresh} attribute is
-         * missing, or when any {@code <notice>} grandchild is missing the
-         * {@code id} attribute.
+         * <p>Returns empty when the SMAX result-envelope check fails, when the {@code <tos>} child
+         * is absent, when its {@code refresh} attribute is missing, or when any {@code <notice>}
+         * grandchild is missing the {@code id} attribute. The parsed {@code refresh} value is
+         * clamped against the documented bounds, falling back to
+         * {@link #DEFAULT_TOS_REFRESH_INTERVAL_SECONDS} when out of range.
          *
-         * @implNote
-         * This implementation treats absent {@code state} attributes as
-         * "accepted" and only treats {@code state="false"} as not-accepted,
-         * matching WA Web's branch {@code maybeAttrString("state") !== "false"}.
-         *
+         * @implNote This implementation treats an absent {@code state} attribute as accepted and
+         *           only {@code state="false"} as not-accepted, matching WhatsApp Web's branch
+         *           {@code maybeAttrString("state") !== "false"}.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty when
-         *         the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "queryTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -209,6 +195,16 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
             return Optional.of(new Success(clampedRefresh, notices));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two successes are equal when they carry the same refresh interval and the same
+         * per-notice entries.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with an equal refresh interval
+         *         and entries, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -222,11 +218,21 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
                     && Objects.equals(this.notices, that.notices);
         }
 
+        /**
+         * Returns a hash code derived from the refresh interval and the per-notice entries.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(refreshIntervalSeconds, notices);
         }
 
+        /**
+         * Returns a debug string carrying the refresh interval and the per-notice entries.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqQueryTosResponse.Success[refreshIntervalSeconds="
@@ -234,20 +240,17 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         }
 
         /**
-         * Per-notice accepted-state entry projected from one {@code <notice/>}
-         * child of the {@code <tos/>} reply envelope.
+         * Models a per-notice accepted-state entry projected from one {@code <notice/>} child of
+         * the {@code <tos/>} reply envelope.
          *
-         * @apiNote
-         * Feeds WA Web's {@code TosManager} state map: an {@link #accepted() true}
-         * entry surfaces as {@code "ACCEPTED"} in {@code UserPrefs}, a false
-         * entry surfaces as {@code "NOT_ACCEPTED"} (which then drives the
-         * corresponding acceptance prompt on the next UI surface that gates on
-         * the notice).
+         * <p>An {@link #accepted() true} entry is recorded by the caller as accepted; a false entry
+         * is recorded as not-accepted, which then drives the corresponding acceptance prompt on the
+         * next surface that gates on the notice.
          */
         @WhatsAppWebModule(moduleName = "WAWebTosJob")
         public static final class NoticeState {
             /**
-             * Holds the notice id (echoed from the corresponding request entry).
+             * Holds the notice id, echoed from the corresponding request entry.
              */
             private final String id;
 
@@ -259,11 +262,9 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
             /**
              * Constructs a per-notice entry bound to the given id and flag.
              *
-             * @apiNote
-             * The {@code accepted} flag is {@code true} when the user has
-             * accepted the notice (or when the relay omits the {@code state}
-             * attribute), {@code false} only when the relay explicitly returns
-             * {@code state="false"}.
+             * <p>The flag is {@code true} when the user has accepted the notice or when the relay
+             * omits the {@code state} attribute, and {@code false} only when the relay explicitly
+             * returns {@code state="false"}.
              *
              * @param id       the notice id; never {@code null}
              * @param accepted the accepted-state flag
@@ -286,13 +287,21 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
             /**
              * Returns the accepted-state flag.
              *
-             * @return {@code true} when the notice has been accepted,
-             *         {@code false} otherwise
+             * @return {@code true} when the notice has been accepted, {@code false} otherwise
              */
             public boolean accepted() {
                 return accepted;
             }
 
+            /**
+             * Compares this entry to the given object for equality.
+             *
+             * <p>Two entries are equal when they carry the same id and accepted flag.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is a {@link NoticeState} with an equal id and
+             *         flag, {@code false} otherwise
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -306,11 +315,21 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
                         && Objects.equals(this.id, that.id);
             }
 
+            /**
+             * Returns a hash code derived from the id and accepted flag.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(id, accepted);
             }
 
+            /**
+             * Returns a debug string carrying the id and accepted flag.
+             *
+             * @return the string representation
+             */
             @Override
             public String toString() {
                 return "IqQueryTosResponse.Success.NoticeState[id="
@@ -320,12 +339,11 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
     }
 
     /**
-     * Client-error variant. The relay rejected the query with a {@code 4xx} code.
+     * Models the client-error variant in which the relay rejected the query with a {@code 4xx}
+     * code.
      *
-     * @apiNote
-     * WA Web's {@code TosManager.run} treats any non-500 code as a fatal failure
-     * (it stops the run loop instead of retrying); treat the same way unless the
-     * caller has a richer policy.
+     * <p>WhatsApp Web's state-pull loop treats any non-500 code as a fatal failure and stops
+     * retrying. A caller should treat this variant the same way unless it has a richer policy.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class ClientError implements IqQueryTosResponse {
@@ -335,7 +353,7 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -362,25 +380,23 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ClientError} variant when it
-         * matches the standard SMAX client-error envelope.
+         * Parses the inbound stanza into a {@link ClientError} variant when it matches the standard
+         * SMAX client-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails. Envelope parsing is delegated to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "queryTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -392,6 +408,15 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two client errors are equal when they carry the same code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with an equal code and
+         *         text, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -405,11 +430,21 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqQueryTosResponse.ClientError[errorCode=" + errorCode
@@ -418,13 +453,12 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
     }
 
     /**
-     * Server-error variant. The relay encountered a transient internal failure
+     * Models the server-error variant in which the relay encountered a transient internal failure
      * processing the query.
      *
-     * @apiNote
-     * WA Web specifically retries the {@code 500} arm via exponential backoff
-     * (max five retries, {@code 1s -> 16s} base) and treats any other 5xx as
-     * fatal; replicate this if a tight retry policy is required.
+     * <p>WhatsApp Web retries the {@code 500} arm via exponential backoff (up to five retries, with
+     * a base growing from 1 second to 16 seconds) and treats any other 5xx code as fatal. A caller
+     * that needs a tight retry policy can replicate this.
      */
     @WhatsAppWebModule(moduleName = "WAWebTosJob")
     final class ServerError implements IqQueryTosResponse {
@@ -434,7 +468,7 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text; {@code null} when the relay omitted it.
          */
         private final String errorText;
 
@@ -461,25 +495,23 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ServerError} variant when it
-         * matches the standard SMAX server-error envelope.
+         * Parses the inbound stanza into a {@link ServerError} variant when it matches the standard
+         * SMAX server-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails. Envelope parsing is delegated to
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does
+         *         not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebTosJob",
                 exports = "queryTosState", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -491,6 +523,15 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this variant to the given object for equality.
+         *
+         * <p>Two server errors are equal when they carry the same code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with an equal code and
+         *         text, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -504,11 +545,21 @@ public sealed interface IqQueryTosResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqQueryTosResponse.ServerError[errorCode=" + errorCode

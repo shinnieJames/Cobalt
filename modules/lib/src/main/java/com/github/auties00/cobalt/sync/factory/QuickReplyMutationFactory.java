@@ -17,32 +17,20 @@ import java.util.Objects;
 /**
  * Builds outgoing quick-reply sync mutations.
  *
- * @apiNote
- * Drives the Business quick-replies management surface on Settings;
- * supports the create, edit, and delete paths used by
- * {@code WAWebSendQuickReplyAddOrEditMutation} on WA Web. Mutations
- * produced here are consumed on the inbound side by
+ * <p>This factory backs the Business quick-replies management surface and supports the create,
+ * edit, and delete paths. Mutations produced here are consumed on receiving devices by
  * {@link com.github.auties00.cobalt.sync.handler.QuickReplyHandler}.
  *
  * @implNote
- * This implementation mirrors
- * {@code WAWebQuickRepliesSync.getQuickReplyDeleteMutation} and
- * {@code WAWebQuickRepliesSync.getQuickReplyAddOrEditMutation}, including
- * the always-empty {@code associatedLabelIds} field that WA Web emits on
- * both paths. Defensive null checks are added on every reference type
- * because the WA Web bundle assumes the caller never passes
- * {@code null}.
+ * This implementation emits the always-empty {@code associatedLabelIds} field that WA Web emits on
+ * both the add-or-edit and delete paths, and adds defensive {@code null} checks on every reference
+ * parameter because the WA Web bundle assumes the caller never passes {@code null}.
  */
 public final class QuickReplyMutationFactory {
     /**
      * Constructs a quick-reply mutation factory.
      *
-     * @apiNote
-     * Required by the dependency-injection container before the factory
-     * is wired into the public quick-reply setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient}. The
-     * factory keeps no state, so a single instance is sufficient per
-     * client.
+     * <p>The factory keeps no state, so a single instance is sufficient per client.
      */
     public QuickReplyMutationFactory() {
 
@@ -51,30 +39,19 @@ public final class QuickReplyMutationFactory {
     /**
      * Builds a pending mutation that deletes a quick reply by its id.
      *
-     * @apiNote
-     * Invoked from the public quick-reply deletion path; the receiver
-     * detects the deletion via {@code s.deleted === true} on
-     * {@link QuickReplyAction#deleted()} and removes the row from
-     * {@code WAWebSchemaQuickReply.getQuickReplyTable}, then fires a
-     * {@code removeQuickReplyFromCollection} backend event. The other
-     * payload fields are set to their canonical empty values to match
-     * WA Web's emitter shape.
+     * <p>The receiver detects the deletion via {@link QuickReplyAction#deleted()} returning
+     * {@code true} and removes the matching row. The remaining payload fields are set to their
+     * canonical empty values to match WA Web's emitter shape. The index follows the standard
+     * {@code [actionName, quickReplyId]} shape.
      *
      * @implNote
-     * This implementation adds defensive null checks on the
-     * {@code quickReplyId} and {@code timestamp} parameters not present
-     * in WA Web. The index follows the standard
-     * {@code [actionName, quickReplyId]} shape and writes into the
-     * {@code Regular} collection alongside the other quick-reply
-     * mutations.
+     * This implementation adds defensive {@code null} checks on the {@code quickReplyId} and
+     * {@code timestamp} parameters that are not present in WA Web.
      *
-     * @param quickReplyId the quick reply identifier (the
-     *                     {@code indexArgs[0]} entry)
+     * @param quickReplyId the quick reply identifier (the {@code indexArgs[0]} entry)
      * @param timestamp    the mutation timestamp
-     * @return the pending mutation that removes the quick reply on the
-     *         server side
-     * @throws NullPointerException if {@code quickReplyId} or
-     *                              {@code timestamp} is {@code null}
+     * @return the pending mutation that removes the quick reply on the server side
+     * @throws NullPointerException if {@code quickReplyId} or {@code timestamp} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebQuickRepliesSync", exports = "getQuickReplyDeleteMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getQuickReplyDeleteMutation(String quickReplyId, Instant timestamp) {
@@ -105,35 +82,22 @@ public final class QuickReplyMutationFactory {
     /**
      * Builds a pending mutation that creates or edits a quick reply.
      *
-     * @apiNote
-     * Invoked from the public quick-reply create-or-edit path; the
-     * receiver-side branch rejects mutations with an empty
-     * {@code shortcut} or empty {@code message} as malformed, so callers
-     * must supply non-empty strings on both. Receiving devices store the
-     * full record via {@code createOrReplace} on the quick-reply table
-     * and fire a {@code updateQuickReplyCollection} backend event with
-     * the new keyword list and usage counter.
+     * <p>The receiver-side branch rejects mutations with an empty {@code shortcut} or empty
+     * {@code message} as malformed, so callers must supply non-empty strings on both. The index
+     * follows the standard {@code [actionName, quickReplyId]} shape.
      *
      * @implNote
-     * This implementation adds defensive null checks not present in
-     * WA Web ({@code WAWebQuickRepliesSync.getQuickReplyAddOrEditMutation}
-     * trusts every caller-supplied reference). The index follows the
-     * standard {@code [actionName, quickReplyId]} shape and writes into
-     * the {@code Regular} collection.
+     * This implementation adds defensive {@code null} checks not present in WA Web, which trusts
+     * every caller-supplied reference.
      *
-     * @param quickReplyId the quick reply identifier (the
-     *                     {@code indexArgs[0]} entry)
+     * @param quickReplyId the quick reply identifier (the {@code indexArgs[0]} entry)
      * @param shortcut     the shortcut text; non-empty
      * @param message      the quick reply message body; non-empty
-     * @param count        the usage counter, incremented on every send
-     *                     of the quick reply
-     * @param keywords     the keyword list (may be empty but not
-     *                     {@code null})
+     * @param count        the usage counter, incremented on every send of the quick reply
+     * @param keywords     the keyword list (may be empty but not {@code null})
      * @param timestamp    the mutation timestamp
-     * @return the pending mutation that creates or updates the quick
-     *         reply on the server side
-     * @throws NullPointerException if any reference parameter is
-     *                              {@code null}
+     * @return the pending mutation that creates or updates the quick reply on the server side
+     * @throws NullPointerException if any reference parameter is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebQuickRepliesSync", exports = "getQuickReplyAddOrEditMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getQuickReplyAddOrEditMutation(

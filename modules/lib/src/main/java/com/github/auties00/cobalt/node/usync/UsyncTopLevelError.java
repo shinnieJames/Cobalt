@@ -7,12 +7,10 @@ import java.util.Objects;
 /**
  * Error envelope returned when the USync IQ failed wholesale.
  *
- * @apiNote
- * Surfaced through {@link UsyncResult#topLevelError()} when the relay's IQ
- * response carries a {@code type} attribute other than {@code "result"};
- * mirrors the {@code error.all} entry the JS module stores on its result
- * object in that path. Per-protocol errors that apply to every user are
- * exposed separately via {@link UsyncResult#getProtocolError(UsyncProtocol)}.
+ * <p>Surfaced through {@link UsyncResult#topLevelError()} when the relay's IQ
+ * response carries a {@code type} attribute other than {@code "result"}.
+ * Per-protocol errors that apply to every user are exposed separately via
+ * {@link UsyncResult#getProtocolError(UsyncProtocol)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public final class UsyncTopLevelError {
@@ -22,23 +20,21 @@ public final class UsyncTopLevelError {
     private final int errorCode;
 
     /**
-     * The {@code text} attribute on the IQ's {@code <error>} child, coerced
-     * to the empty string when absent.
+     * The {@code text} attribute on the IQ's {@code <error>} child, coerced to
+     * the empty string when absent.
      */
     private final String errorText;
 
     /**
-     * The {@code type} attribute on the IQ's {@code <error>} child, coerced
-     * to the empty string when absent.
+     * The {@code type} attribute on the IQ's {@code <error>} child, coerced to
+     * the empty string when absent.
      */
     private final String errorType;
 
     /**
      * Builds a new envelope from the parsed attributes.
      *
-     * @apiNote
-     * Constructed exclusively by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)};
-     * not part of the public surface.
+     * <p>Constructed exclusively by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)}.
      *
      * @param errorCode the numeric error code
      * @param errorText the human-readable text, coerced to the empty string

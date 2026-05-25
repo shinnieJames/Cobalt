@@ -15,12 +15,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that revokes the pending join codes of one or more
- * candidates against a membership-approval group.
+ * Models the outbound {@code <iq type="set" xmlns="w:g2">} stanza that revokes the pending join codes of one or
+ * more candidates against a membership-approval group.
  *
- * @apiNote Drives the admin-side affordance to cancel pending join codes that an admin issued to candidates for
- * an approval-mode group. The relay accepts up to 1000 entries per request and returns a per-participant outcome
- * list in the matching {@link SmaxGroupsRevokeRequestCodeResponse.Success#participants()}.
+ * <p>This request cancels pending join codes that an admin issued to candidates for an approval-mode group. The
+ * relay accepts up to 1000 entries per request and returns a per-participant outcome list in the matching
+ * {@link SmaxGroupsRevokeRequestCodeResponse.Success#participants()}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsRevokeRequestCodeRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -39,9 +39,9 @@ public final class SmaxGroupsRevokeRequestCodeRequest implements SmaxOperation.R
     /**
      * Constructs a revoke-request-code request.
      *
-     * @apiNote The relay enforces a 1..1000 cardinality on the {@code <participant>} children; callers should
-     * pre-batch larger candidate lists. The participant list is defensively copied so post-construction mutation
-     * of the caller's list has no effect on the request.
+     * <p>The relay enforces a 1..1000 cardinality on the {@code <participant>} children, so callers should
+     * pre-batch larger candidate lists. The participant list is copied so post-construction mutation of the
+     * caller's list has no effect on the request.
      *
      * @param groupJid     the parent group {@link Jid}
      * @param participants the candidate participant {@link Jid}s whose request codes are to be revoked
@@ -60,7 +60,7 @@ public final class SmaxGroupsRevokeRequestCodeRequest implements SmaxOperation.R
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -80,7 +80,7 @@ public final class SmaxGroupsRevokeRequestCodeRequest implements SmaxOperation.R
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <revoke>

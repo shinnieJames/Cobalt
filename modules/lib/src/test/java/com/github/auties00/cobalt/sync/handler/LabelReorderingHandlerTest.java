@@ -30,28 +30,17 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link LabelReorderingHandler} adapter for
- * {@code WAWebLabelReorderingSync}.
+ * Covers the {@link LabelReorderingHandler} for the {@code label_reordering}
+ * app-state sync action: metadata, the SET sort-order write, the REMOVE
+ * rejection, the empty-list rejection, the malformed-input fallbacks,
+ * timestamp-based conflict resolution and the
+ * {@link LabelReorderingMutationFactory} builder.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code label_reordering}
- * app-state sync action across metadata, the SET sort-order write,
- * the REMOVE rejection, the empty-list rejection, the
- * malformed-input fallbacks, the inherited timestamp-based conflict
- * resolution and the
- * {@link LabelReorderingMutationFactory}
- * builder.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so each
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so each
  * {@link com.github.auties00.cobalt.model.preference.Label#orderIndex()}
- * read-back can be asserted directly. Labels referenced by the
- * action but absent from the store are silently skipped, matching
- * WA Web's
- * {@code WAWebDBLabelsReorder.updateLabelsSortOrder} bulk-get
- * behaviour.
+ * read-back can be asserted directly. Labels referenced by the action but absent
+ * from the store are silently skipped rather than created.
  */
 @DisplayName("LabelReorderingHandler")
 class LabelReorderingHandlerTest {
@@ -72,23 +61,6 @@ class LabelReorderingHandlerTest {
         factory = new LabelReorderingMutationFactory();
     }
 
-    /**
-     * Builds a {@link DecryptedMutation.Trusted} carrying the given
-     * reordering action under the canonical
-     * {@code ["label_reordering"]} index.
-     *
-     * @apiNote
-     * Used by every test to centralise mutation construction. The
-     * {@code action} parameter is nullable so the malformed-value
-     * path can be exercised without re-implementing the envelope.
-     *
-     * @param action    the reordering action payload, may be
-     *                  {@code null}
-     * @param operation the {@link SyncdOperation} to wrap
-     * @param ts        the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} with the requested
-     *         shape
-     */
     private DecryptedMutation.Trusted buildMutation(LabelReorderingAction action, SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {
@@ -221,8 +193,6 @@ class LabelReorderingHandlerTest {
         @Test
         @DisplayName("a labelReorderingAction with no sortedLabelIds returns MALFORMED")
         void emptySortedLabelIds() {
-            // Per WAWebLabelReorderingSync.default.applyMutations, sortedLabelIds null/empty
-            // is reported as malformed-action-value.
             var action = new LabelReorderingActionBuilder().build();
 
             var result = handler.applyMutation(client, buildMutation(action, SyncdOperation.SET, Instant.now()));
@@ -236,9 +206,8 @@ class LabelReorderingHandlerTest {
         @Test
         @DisplayName("malformed index dimension is n/a - the index payload is unused")
         void indexUnused() {
-            // LabelReorderingHandler never reads the index array (only the wire-name comes through
-            // the dispatch in WebAppStateHandlerRegistry). Confirm that an empty or malformed
-            // string at the index slot does not prevent a valid SET from succeeding.
+            // The handler never reads the index array, so an empty or malformed index slot
+            // must not prevent a valid SET from succeeding.
             store.addLabel(new LabelBuilder().id("10").name("A").color(0).build());
             var action = new LabelReorderingActionBuilder().sortedLabelIds(List.of(10)).build();
             var ts = Instant.now();

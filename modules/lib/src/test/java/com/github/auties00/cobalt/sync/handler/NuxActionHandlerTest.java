@@ -29,33 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link NuxActionHandler} against the
- * {@code WAWebNuxSync.applyMutations} per-mutation flow.
+ * Covers {@link NuxActionHandler}: a {@link SyncdOperation#SET} with {@code acknowledged=true} or
+ * {@code acknowledged=false} writes a matching {@code dismissed} flag via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#putOnboardingHintState}, a missing
+ * {@code nuxAction} on the value coalesces to {@code dismissed=false} and still returns
+ * {@link SyncActionState#SUCCESS}, a missing {@code indexParts[1]} surfaces as
+ * {@link SyncActionState#MALFORMED}, {@link SyncdOperation#REMOVE} surfaces as
+ * {@link SyncActionState#UNSUPPORTED}, and the default {@code resolveConflicts} chooses the later
+ * timestamp. The {@link NuxActionMutationFactory} produces a SET pending mutation with the
+ * requested key, flag and timestamp, and rejects a {@code null} key or {@code null} timestamp.
  *
- * @apiNote
- * Verifies that the Cobalt handler matches WA Web's per-mutation
- * classification: a {@link SyncdOperation#SET} with
- * {@code acknowledged=true} or {@code acknowledged=false} writes a
- * matching {@code dismissed} flag via
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#putOnboardingHintState};
- * a missing {@code nuxAction} on the value coalesces to
- * {@code dismissed=false} and STILL returns
- * {@link SyncActionState#SUCCESS}
- * (matching WA Web's optional-chain default); a missing
- * {@code indexParts[1]} surfaces as
- * {@link SyncActionState#MALFORMED};
- * {@link SyncdOperation#REMOVE} surfaces as
- * {@link SyncActionState#UNSUPPORTED};
- * the default {@code resolveConflicts} chooses the later timestamp.
- * The
- * {@link NuxActionMutationFactory}
- * produces a SET pending mutation with the requested key, flag, and
- * timestamp, and rejects {@code null} key or {@code null} timestamp.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link NuxActionHandler#applyMutation} via the local
- * {@code nuxMutation} helper.
+ * <p>Inbound mutations are built directly via the local {@code nuxMutation} helper.
  */
 @DisplayName("NuxActionHandler")
 class NuxActionHandlerTest {
@@ -148,7 +132,7 @@ class NuxActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: orphan paths â€” n/a (handler always writes a hint record)")
+    @DisplayName("applyMutation: orphan paths - n/a (handler always writes a hint record)")
     class OrphanNa {
         @Test
         @DisplayName("NUX does not require an existing entity; any nuxKey is acceptable")
@@ -195,7 +179,7 @@ class NuxActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("getNuxMutation â€” builder helper")
+    @DisplayName("getNuxMutation - builder helper")
     class Builder {
         @Test
         @DisplayName("emits a SET pending mutation with the requested key, flag, and timestamp")
@@ -228,7 +212,7 @@ class NuxActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("getNuxMutation â€” acknowledged / un-acknowledged variants")
+    @DisplayName("getNuxMutation - acknowledged / un-acknowledged variants")
     class AckHelpers {
         @Test
         @DisplayName("acknowledged=true emits a SET pending mutation with acknowledged=true")
@@ -252,7 +236,7 @@ class NuxActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")

@@ -16,35 +16,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * USync {@code feature} protocol descriptor.
+ * Describes the USync {@code feature} protocol.
  *
- * @apiNote
- * Asks the relay which of the named features each peer supports. Used by
- * VoIP capability checks (see {@code WAWebDebugUsync}, which queries the
- * {@code voip} feature). The {@code <feature>} query element carries one
- * empty child per requested feature key; the response carries a {@code value}
- * attribute per supported key.
+ * This descriptor asks the relay which of the named features each peer
+ * supports. The {@code <feature>} query element carries one empty child per
+ * requested feature key; the response carries a {@code value} attribute per
+ * supported key. The descriptor carries no per-user request payload; the
+ * requested feature set is fixed at construction time.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncFeature")
 public final class UsyncFeatureProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "feature";
 
     /**
-     * Features the relay is asked to report on; never empty by
+     * Holds the features the relay is asked to report on; never empty by
      * construction.
      */
     private final List<FeatureQuery> queries;
 
     /**
-     * Builds a feature-protocol descriptor for the given queries.
+     * Creates a feature-protocol descriptor for the given queries.
      *
-     * @apiNote
-     * Pass at least one feature key; an empty list is rejected with
-     * {@link IllegalArgumentException}, matching the JS
-     * {@code err("must specify at least one query")} throw.
+     * At least one feature key must be supplied; an empty list is rejected
+     * with {@link IllegalArgumentException}.
      *
      * @param queries the features to request
      * @throws NullPointerException     if {@code queries} is {@code null}
@@ -75,9 +72,8 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation emits one empty child per requested feature key,
-     * keyed by {@link FeatureQuery#wireValue()}; the JS module ships the
-     * same shape pre-built in its {@code s} frozen-object dictionary so the
-     * Cobalt path stays closer to the request data.
+     * keyed by {@link FeatureQuery#wireValue()}, building the child set from
+     * the request data rather than from a pre-built dictionary.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -93,10 +89,8 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation always returns {@link Optional#empty()} because
-     * the feature protocol has no per-user payload on the request side,
-     * matching the JS {@code null} return in
-     * {@code USyncFeaturesProtocol.getUserElement}.
+     * This implementation always returns {@link Optional#empty()} because the
+     * feature protocol has no per-user payload on the request side.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -108,12 +102,14 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     /**
      * {@inheritDoc}
      *
+     * This override preserves every {@link FeatureQuery} key the relay
+     * returns with a {@code value} attribute, even keys that were not
+     * requested.
+     *
      * @implNote
      * This implementation walks every {@link FeatureQuery} constant rather
-     * than just the requested ones, mirroring the JS
-     * {@code Object.keys(s).forEach(...)} pass; the relay is allowed to
-     * return more keys than were asked for and the parser preserves
-     * whichever ones carry a {@code value} attribute.
+     * than only the requested ones, so a relay that reports more keys than
+     * were asked for has all of its values captured.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -137,64 +133,63 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     /**
      * Enumerates the feature keys the {@code <feature>} query understands.
      *
-     * @apiNote
-     * Constants mirror the eleven keys hardcoded in the JS {@code s}
-     * dictionary; the relay ignores keys it does not recognise.
+     * Each constant binds a Java name to the wire literal the relay matches
+     * against; the relay ignores keys it does not recognise.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsyncFeature")
     public enum FeatureQuery {
         /**
-         * Document-message support.
+         * Requests document-message support.
          */
         DOCUMENT("document"),
         /**
-         * Generic encryption support.
+         * Requests generic encryption support.
          */
         ENCRYPT("encrypt"),
         /**
-         * Encrypted block-list support.
+         * Requests encrypted block-list support.
          */
         ENCRYPT_BLIST("encrypt_blist"),
         /**
-         * Encrypted contact-card support.
+         * Requests encrypted contact-card support.
          */
         ENCRYPT_CONTACT("encrypt_contact"),
         /**
-         * Encrypted group v2 support.
+         * Requests encrypted group v2 support.
          */
         ENCRYPT_GROUP_GEN2("encrypt_group_gen2"),
         /**
-         * Encrypted image support.
+         * Requests encrypted image support.
          */
         ENCRYPT_IMAGE("encrypt_image"),
         /**
-         * Encrypted location-share support.
+         * Requests encrypted location-share support.
          */
         ENCRYPT_LOCATION("encrypt_location"),
         /**
-         * Encrypted URL support.
+         * Requests encrypted URL support.
          */
         ENCRYPT_URL("encrypt_url"),
         /**
-         * Encryption v2 support.
+         * Requests encryption v2 support.
          */
         ENCRYPT_V2("encrypt_v2"),
         /**
-         * VoIP signalling support.
+         * Requests VoIP signalling support.
          */
         VOIP("voip"),
         /**
-         * Multi-agent (CRM) support.
+         * Requests multi-agent (CRM) support.
          */
         MULTI_AGENT("multi_agent");
 
         /**
-         * Literal tag name on the wire.
+         * Holds the literal tag name on the wire.
          */
         private final String wireValue;
 
         /**
-         * Binds a new constant to its wire literal.
+         * Binds a constant to its wire literal.
          *
          * @param wireValue the literal tag name on the wire
          */
@@ -205,9 +200,9 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
         /**
          * Returns the literal tag name on the wire.
          *
-         * @apiNote
-         * Used by {@link #buildQueryElement()} to name the per-feature
-         * empty child and by {@link #parseUserResult(Node)} to look up the
+         * Used by {@link UsyncFeatureProtocol#buildQueryElement()} to name the
+         * per-feature empty child and by
+         * {@link UsyncFeatureProtocol#parseUserResult(Node)} to look up the
          * matching response element.
          *
          * @return the wire literal

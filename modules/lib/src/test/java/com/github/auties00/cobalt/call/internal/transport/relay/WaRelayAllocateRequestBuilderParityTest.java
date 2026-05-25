@@ -18,52 +18,27 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * End-to-end parity test for
- * {@link WaRelayAllocateRequestBuilder#build}.
+ * End-to-end parity suite for {@link WaRelayAllocateRequestBuilder#build} against captured
+ * WA Web relay traffic.
  *
- * <p>Reconstructs each captured 344-byte Allocate Request from its
- * documented inputs:
+ * <p>Each captured 344-byte Allocate Request is reconstructed from its inputs (transaction id,
+ * {@code WA-RELAY-TOKEN} blob, decoded {@link WaRelayCallInfo}, the relay endpoint decoded via
+ * {@link WaRelayXorAddress#decode}, and the matching {@code relay_key}) and asserted byte-identical
+ * to the capture, pinning every pipeline stage: packet header, attribute order, XOR encoding,
+ * protobuf encoding, padding, and HMAC-SHA1 stamping. The {@code relay_key} is keyed as raw ASCII
+ * bytes of its base64 string form, the WhatsApp-specific MESSAGE-INTEGRITY keying confirmed in
+ * {@link WaRelayMessageIntegrityParityTest}.
  *
- * <ul>
- *   <li>The captured 12-byte transaction id (from the packet header).</li>
- *   <li>The {@code WA-RELAY-TOKEN} blob (from the captured attribute,
- *       equal to {@code relay_tokens[token_id]} base64-decoded for the
- *       targeted relay).</li>
- *   <li>The decoded {@link WaRelayCallInfo}
- *       object (so the encoder is exercised, not just a byte
- *       passthrough).</li>
- *   <li>The targeted relay endpoint, decoded via
- *       {@link WaRelayXorAddress#decode}.</li>
- *   <li>The {@code relay_key} from the {@code RelayListUpdate} event
- *       whose {@code relay_tokens[]} contains the packet's
- *       WA-RELAY-TOKEN — used as <em>raw ASCII bytes of its base64
- *       string form</em>, the WhatsApp-specific MI keying confirmed
- *       in {@link WaRelayMessageIntegrityParityTest}.</li>
- * </ul>
- *
- * <p>Asserts the rebuilt packet is byte-identical to the captured
- * one, pinning every stage of the pipeline (packet header, attribute
- * order, XOR encoding, protobuf encoding, padding, and HMAC-SHA1
- * stamping with WhatsApp's base64-string key).
+ * <p>Fixtures are captured wasm-engine output under {@code src/test/resources/fixtures/relay/}:
+ * {@code stun-bytes-raw.json} holds the raw packet bytes and {@code relay-list-updates.json} the
+ * {@code RelayListUpdate} event stream that supplies each refresh's {@code relay_key}.
  */
 public class WaRelayAllocateRequestBuilderParityTest {
 
-    /**
-     * Classpath path of the captured-bytes fixture.
-     */
     private static final String FIXTURE = "fixtures/relay/stun-bytes-raw.json";
 
-    /**
-     * Classpath path of the relay-list-updates fixture.
-     */
     private static final String RLU_FIXTURE = "fixtures/relay/relay-list-updates.json";
 
-    /**
-     * Rebuilds the first captured 344-byte Allocate Request and
-     * asserts byte-exact equality with the capture.
-     *
-     * @throws IOException if a fixture file cannot be read
-     */
     @Test
     public void rebuildsFirstAllocateRequestByteExact() throws IOException {
         var raw = Fixtures.readJson(FIXTURE);
@@ -112,16 +87,6 @@ public class WaRelayAllocateRequestBuilderParityTest {
                 "rebuilt Allocate Request must be byte-exact with capture");
     }
 
-    /**
-     * Locates the {@code RelayListUpdate} whose {@code relay_tokens[]}
-     * contains the packet's WA-RELAY-TOKEN and returns its
-     * {@code relay_key} as raw ASCII bytes of the base64 string.
-     *
-     * @param tokenInPacket the WA-RELAY-TOKEN attribute value
-     * @param rlus          the array of captured RLU event payloads
-     * @return the HMAC key bytes (ASCII of base64 string), or
-     *         {@code null} if no match
-     */
     private static byte[] resolveRelayKey(byte[] tokenInPacket, JSONArray rlus) {
         for (var i = 0; i < rlus.size(); i++) {
             var rlu = rlus.getJSONObject(i);
@@ -129,6 +94,7 @@ public class WaRelayAllocateRequestBuilderParityTest {
             for (var j = 0; j < tokens.size(); j++) {
                 var t = Base64.getDecoder().decode(tokens.getString(j));
                 if (Arrays.equals(t, tokenInPacket)) {
+                    // HMAC key is the relay_key's base64 string as raw ASCII bytes, not its decode
                     return rlu.getString("relay_key").getBytes(StandardCharsets.US_ASCII);
                 }
             }

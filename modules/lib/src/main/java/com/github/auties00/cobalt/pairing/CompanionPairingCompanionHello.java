@@ -6,11 +6,11 @@ import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
  * Carries the intermediate state retained between sending
  * {@code companion_hello} and receiving {@code primary_hello}.
  *
- * @apiNote
- * Internal handshake intermediate; embedders do not see this type.
- * The {@link #linkCodePairingSecret} is surfaced to the user through
- * the {@link com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler.Web.PairingCode}
- * handler. The other two fields are cached on the
+ * <p>This is an internal handshake intermediate that no embedder
+ * observes. The {@link #linkCodePairingSecret} is surfaced to the user
+ * through the
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler.Web.PairingCode}
+ * handler, while the other two fields are cached on the
  * {@link CompanionPairingService} and consulted when a
  * {@code primary_hello} notification later arrives.
  *
@@ -32,10 +32,11 @@ import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
  *                                                    Crockford base32
  *                                                    pairing code shown
  *                                                    to the user
- * @param linkCodePairingWrappedCompanionEphemeralPub the salt || counter
- *                                                    || AES-CTR
- *                                                    ciphertext payload
- *                                                    carried in the
+ * @param linkCodePairingWrappedCompanionEphemeralPub the salt {@code ||}
+ *                                                    counter {@code ||}
+ *                                                    AES-CTR ciphertext
+ *                                                    payload carried in
+ *                                                    the
  *                                                    {@code companion_hello}
  *                                                    IQ
  * @param companionEphemeralKeyPair                   the companion's ADV

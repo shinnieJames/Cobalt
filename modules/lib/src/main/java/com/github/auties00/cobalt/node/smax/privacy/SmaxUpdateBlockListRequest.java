@@ -12,20 +12,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="blocklist" type="set">} stanza applying a block or unblock action to a user JID.
+ * Builds the outbound {@code <iq xmlns="blocklist" type="set">} stanza that applies a block or unblock action to a
+ * user JID.
  *
- * @apiNote
- * Drives the chat-info Block / Unblock action and the report-and-block flow; the WA Web caller is
- * {@code WAWebBlockUserJob.blockUnblockUser}, which builds the request from
- * {@code WAWebUserPrefsMultiDevice.getBlocklistHash} (for the optional digest), the action enum, the target JID,
- * and an optional report entry-point or marketing-message {@code <biz_opt_out>} payload.
+ * <p>This request drives the chat-info Block / Unblock action and the report-and-block flow. The {@link #action()}
+ * selects block versus unblock, {@link #itemJid()} names the target user, and {@link #itemDhash()} carries the
+ * optional cached blocklist digest used by the relay for its cache-match shortcut. The optional
+ * {@link #entryPointSource()} marks a block originating from "report and block", and the optional
+ * {@link #bizOptOut()} payload attaches a marketing-message opt-out reason to the block.
  *
- * @implNote
- * This implementation collapses WA Web's per-action and migrated-versus-non-migrated mixin-group dispatchers
- * into a single field: {@code action.wire()} is the per-action selector, and the migrated-versus-non-migrated
- * dispatcher reduces to the non-migrated branch since Cobalt does not yet generate the migrated branch's
- * {@code blocklist_ids} payload. The {@code id} attribute is generated downstream by the central client
- * dispatcher.
+ * @implNote This implementation collapses WA Web's per-action and migrated-versus-non-migrated mixin-group
+ * dispatchers into a single field: {@link SmaxUpdateBlockListAction#wire()} is the per-action selector, and the
+ * migrated-versus-non-migrated dispatcher reduces to the non-migrated branch since Cobalt does not yet generate the
+ * migrated branch's {@code blocklist_ids} payload. The {@code id} attribute is generated downstream by the central
+ * client dispatcher.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateBlockListRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup")
@@ -63,10 +63,9 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     /**
      * Constructs a block/unblock request with every optional field.
      *
-     * @apiNote
-     * The entry-point and {@code <biz_opt_out>} payload are only meaningful for block actions originating from
-     * the report-and-block or marketing-messages opt-out flows; pass {@code null} for both fields in the
-     * vanilla block/unblock case.
+     * <p>The {@code entryPointSource} and {@code bizOptOut} payload are only meaningful for block actions
+     * originating from the report-and-block or marketing-messages opt-out flows; the vanilla block/unblock case
+     * passes {@code null} for both, which makes {@link #toNode()} omit the corresponding children.
      *
      * @param action           the block-or-unblock action; never {@code null}
      * @param itemJid          the target user JID; never {@code null}
@@ -86,9 +85,8 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     /**
      * Constructs a block/unblock request without a marketing-messages opt-out payload.
      *
-     * @apiNote
-     * Convenience overload for the dominant call-pattern where no {@code <biz_opt_out>} child is attached; the
-     * underlying field defaults to {@code null}.
+     * <p>This is the convenience overload for the dominant call-pattern where no {@code <biz_opt_out>} child is
+     * attached; the underlying {@link #bizOptOut} field defaults to {@code null}.
      *
      * @param action           the block-or-unblock action; never {@code null}
      * @param itemJid          the target user JID; never {@code null}
@@ -121,6 +119,9 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     /**
      * Returns the cached digest when set.
      *
+     * <p>Absence means the request carries no cache-match shortcut, so the relay returns a full mismatch reply
+     * rather than a cache-match confirmation.
+     *
      * @return an {@link Optional} carrying the digest, or empty when no cached digest was supplied
      */
     public Optional<String> itemDhash() {
@@ -149,20 +150,18 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="blocklist"} and
-     * {@code type="set"}; the {@code id} attribute is filled in downstream by the central client dispatcher.
-     * The {@code <item>} child always carries the action and target JID; the {@code dhash} attribute,
-     * {@code <biz_opt_out>} child, and {@code <entry_point>} child are added only when their respective
-     * fields are set.
+     * <p>The returned {@link NodeBuilder} addresses {@link JidServer#user()} with {@code xmlns="blocklist"} and
+     * {@code type="set"}; the {@code id} attribute is filled in downstream by the central client dispatcher. The
+     * {@code <item>} child always carries the action and target JID; the {@code dhash} attribute, the
+     * {@code <biz_opt_out>} child, and the {@code <entry_point>} child are added only when their respective fields
+     * are set.
      *
-     * @implNote
-     * This implementation collapses WA Web's {@code mergeUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup}
-     * dispatcher (block versus unblock) and
+     * @implNote This implementation collapses WA Web's
+     * {@code mergeUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup} dispatcher (block versus unblock) and
      * {@code mergeUpdateBlockListOrUpdateBlockListNonMigratedBlockItemMixinGroup} dispatcher (migrated versus
      * non-migrated) into a single emission path; the {@code SmaxMixinGroupExhaustiveError} throw becomes
-     * unreachable because the enum closes the variant set, and the migrated branch's {@code blocklist_ids}
-     * payload is not generated because no Cobalt consumer needs it yet.
+     * unreachable because the enum closes the variant set, and the migrated branch's {@code blocklist_ids} payload
+     * is not generated because no Cobalt consumer needs it yet.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -210,6 +209,12 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
         return iqBuilder;
     }
 
+    /**
+     * Compares this request to another object for value equality across every field.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxUpdateBlockListRequest} with equal fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -226,11 +231,21 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
                 && Objects.equals(this.bizOptOut, that.bizOptOut);
     }
 
+    /**
+     * Returns a hash code derived from every field.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(action, itemJid, itemDhash, entryPointSource, bizOptOut);
     }
 
+    /**
+     * Returns a debug rendering listing every field.
+     *
+     * @return a diagnostic string; never {@code null}
+     */
     @Override
     public String toString() {
         return "SmaxUpdateBlockListRequest[action=" + action
@@ -244,10 +259,9 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
      * The {@code <biz_opt_out>} child attached to a block request when the action records a marketing-message
      * opt-out reason.
      *
-     * @apiNote
-     * Produced by {@code WAWebBlockUserJob.blockUnblockUser} from the {@code bizOptOutArgs} payload when the
-     * block originates from a marketing-message complaint flow; the seven attributes are independently optional
-     * and serialise as bare attributes on the {@code <biz_opt_out/>} child of {@code <item>}.
+     * <p>This payload is produced when a block originates from a marketing-message complaint flow. The seven
+     * attributes are independently optional and serialise as bare attributes on the {@code <biz_opt_out/>} child of
+     * {@code <item>}; an attribute is emitted only when its component is non-{@code null}.
      *
      * @param reason                      the optional reason marker; may be {@code null}
      * @param reasonDescription           the optional free-form reason description; may be {@code null}
@@ -263,14 +277,13 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
         /**
          * Builds the {@code <biz_opt_out>} stanza for this payload.
          *
-         * @apiNote
-         * Invoked from {@link SmaxUpdateBlockListRequest#toNode()} when the parent request carries a payload;
-         * the resulting node is attached as a child of the {@code <item>} element.
+         * <p>The resulting node is attached as a child of the {@code <item>} element by
+         * {@link SmaxUpdateBlockListRequest#toNode()}. Each attribute is emitted only when its component is
+         * non-{@code null}.
          *
-         * @implNote
-         * This implementation mirrors WA Web's {@code WASmaxAttrs.OPTIONAL} contract: each attribute is emitted
-         * only when its field is non-null, since {@code null} attributes would collapse to {@code DROP_ATTR}
-         * on the wire anyway.
+         * @implNote This implementation mirrors WA Web's {@code WASmaxAttrs.OPTIONAL} contract by emitting an
+         * attribute only when its component is non-{@code null}, since {@code null} attributes would collapse to
+         * {@code DROP_ATTR} on the wire anyway.
          *
          * @return the built {@link Node}; never {@code null}
          */

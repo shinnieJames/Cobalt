@@ -14,65 +14,52 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handles {@code type="devices"} notifications carrying device-list
- * mutations for a user.
+ * Handles {@code type="devices"} notifications carrying device-list mutations for a user.
  *
- * @apiNote
- * Dispatched by {@link NotificationDeviceDispatcher}. Each notification
- * carries one of three action children: {@code <add>} (a new companion
- * device linked), {@code <remove>} (an existing companion unlinked), or
- * {@code <update>} (the user's device list changed and a USync refresh
- * is required). The handler registers LID-PN mappings carried by the
- * {@code lid} attribute and processes the action against both the
- * primary user and the alternate (LID/PN) identity when available.
+ * <p>Dispatched by {@link NotificationDeviceDispatcher}. Each notification carries one of three
+ * action children: {@code <add>} (a new companion device linked), {@code <remove>} (an existing
+ * companion unlinked), or {@code <update>} (the user's device list changed and a USync refresh is
+ * required). The handler registers the LID-PN mapping carried by the {@code lid} attribute and
+ * processes the action against both the primary user JID and the alternate (LID or PN) identity
+ * when one is available, then always emits the protocol-level ACK.
  *
- * @implNote
- * This implementation processes both the PN-keyed and the LID-keyed
- * record for every notification, matching WA Web's
- * {@code WAWebHandleDeviceNotification.handleDevicesNotification} which
- * builds the dual entry list {@code [{wid: pn, ...}, {wid: lid, ...}]}
- * before fanning out. The {@code update} branch re-queries via
- * {@link DeviceService#getDeviceLists}; {@code add}/{@code remove}
- * normalise the action node (wrapping inline {@code <device>} children
- * in a {@code <device-list>} node when the stanza lacks one) before
- * delegating to {@link DeviceService#handleDeviceNotification}.
+ * @implNote This implementation processes both the PN-keyed and the LID-keyed record for every
+ * notification, matching WA Web's {@code WAWebHandleDeviceNotification.handleDevicesNotification}
+ * which builds the dual entry list {@code [{wid: pn, ...}, {wid: lid, ...}]} before fanning out.
+ * The {@code update} branch re-queries via {@link DeviceService#getDeviceLists(java.util.Collection, String, String, boolean)};
+ * {@code add} and {@code remove} normalise the action node (wrapping inline {@code <device>}
+ * children in a {@code <device-list>} node when the stanza lacks one) before delegating to
+ * {@link DeviceService#handleDeviceNotification(Node, String, Jid)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleDeviceNotification")
 public final class NotificationDeviceStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger used for warnings about malformed stanzas and errors
-     * surfaced by the per-entry processing loop.
+     * Logs warnings about malformed stanzas and errors surfaced by the per-entry processing loop.
      */
     private static final System.Logger LOGGER =
             System.getLogger(NotificationDeviceStreamHandler.class.getName());
 
     /**
-     * The {@link WhatsAppClient} used for store reads and LID-PN
-     * mapping registration.
+     * Provides store reads and LID-PN mapping registration.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The {@link DeviceService} used to apply the parsed device action
-     * (add/remove/update) to the cached device list.
+     * Applies the parsed device action (add, remove, or update) to the cached device list.
      */
     private final DeviceService deviceService;
 
     /**
-     * The {@link AckSender} used to ship the post-processing
-     * {@code <ack class="notification">} stanza (without a
-     * {@code type} attribute, with {@code to} set to the user-level
-     * form of the inbound device JID).
+     * Ships the post-processing {@code <ack class="notification">} stanza, omitting the {@code type}
+     * attribute and targeting the user-level form of the inbound device JID.
      */
     private final AckSender ackSender;
 
     /**
      * Constructs the handler with shared dependencies.
      *
-     * @apiNote
-     * Called once by {@link NotificationDeviceDispatcher}; embedders
-     * do not instantiate this handler directly.
+     * <p>Called once by {@link NotificationDeviceDispatcher}.
      *
      * @param whatsapp      the {@link WhatsAppClient}
      * @param deviceService the {@link DeviceService}
@@ -85,13 +72,16 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     }
 
     /**
-     * Validates the stanza shape, processes each entry (PN and optional
-     * LID), and always sends the protocol-level ACK.
+     * Validates the stanza shape, processes each entry, and always sends the protocol-level ACK.
      *
-     * @apiNote
-     * Invoked by {@link NotificationDeviceDispatcher}. Stanzas with no
-     * {@code from} attribute are debug-logged and dropped; stanzas
-     * without a known action child are warned about and dropped.
+     * <p>Stanzas that are not a {@code <notification type="devices">} return without side-effects.
+     * A stanza with no {@code from} attribute is warning-logged and dropped, and a stanza without a
+     * known action child ({@code <remove>}, {@code <add>}, or {@code <update>}) is warning-logged
+     * and dropped. When present, the {@code lid} attribute is registered as a LID-PN mapping. The
+     * action is then processed once for the primary user JID and once for the secondary identity
+     * (the PN looked up from a LID-server JID, or the LID otherwise) when one resolves; per-entry
+     * failures are caught and logged so a single failure does not skip the remaining entry. The ACK
+     * is sent unconditionally at the end.
      *
      * @param node the incoming {@code <notification>} stanza
      */
@@ -159,17 +149,15 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     /**
      * Routes the action to {@link DeviceService} based on its type.
      *
-     * @apiNote
-     * {@code add} and {@code remove} delegate to
-     * {@link DeviceService#handleDeviceNotification(Node, String, Jid)};
-     * {@code update} delegates to
-     * {@link DeviceService#getDeviceLists(List, String, Object, boolean)}
-     * to refresh from USync.
+     * <p>The {@code add} and {@code remove} actions normalise the action node and delegate to
+     * {@link DeviceService#handleDeviceNotification(Node, String, Jid)}. The {@code update} action
+     * delegates to {@link DeviceService#getDeviceLists(java.util.Collection, String, String, boolean)}
+     * with context {@code "notification"} to refresh the list from USync. Any other action
+     * description is warning-logged and ignored.
      *
-     * @implNote
-     * This implementation warns and drops {@code update} notifications
-     * with no {@code hash} attribute because WA Web's parser asserts
-     * the hash via {@code n.attrString("hash")} and throws otherwise.
+     * @implNote This implementation warns and drops {@code update} notifications with no
+     * {@code hash} attribute because WA Web's parser asserts the hash via {@code n.attrString("hash")}
+     * and throws otherwise.
      *
      * @param entryJid   the user JID being processed (PN or LID)
      * @param actionType the action description ({@code "add"}, {@code "remove"}, {@code "update"})
@@ -199,20 +187,15 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     }
 
     /**
-     * Wraps inline {@code <device>} children in a synthetic
-     * {@code <device-list>} child when the action node lacks one.
+     * Wraps inline {@code <device>} children in a synthetic {@code <device-list>} child when the
+     * action node lacks one.
      *
-     * @apiNote
-     * {@link DeviceService#handleDeviceNotification(Node, String, Jid)}
-     * expects an action node with a {@code <device-list>} child and a
-     * {@code <key-index-list>} sibling; this helper synthesises the
-     * {@code <device-list>} from inline {@code <device>} children when
-     * a stanza ships them flat (a server compatibility quirk).
-     *
-     * @implNote
-     * This implementation returns the action node unchanged when
-     * {@code <device-list>} is already present or when
-     * {@code <key-index-list>} is absent (no normalisation needed).
+     * <p>{@link DeviceService#handleDeviceNotification(Node, String, Jid)} expects an action node
+     * with a {@code <device-list>} child and a {@code <key-index-list>} sibling. This helper
+     * synthesises the {@code <device-list>} from inline {@code <device>} children when a stanza
+     * ships them flat. The action node is returned unchanged when a {@code <device-list>} is
+     * already present, when no {@code <key-index-list>} is present, or when there are no inline
+     * {@code <device>} children to wrap.
      *
      * @param actionNode the action child node
      * @return the normalised action node
@@ -244,15 +227,11 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     }
 
     /**
-     * Sends the {@code <ack class="notification" to="<user>"/>} stanza
-     * (no {@code type} attribute) for the processed notification.
+     * Sends the {@code <ack class="notification" to="<user>"/>} stanza for the processed
+     * notification.
      *
-     * @apiNote
-     * Fire-and-forget; identical attribute set to WA Web's
-     * {@code WAWebHandleDeviceNotification.handleDevicesNotification}
-     * ack-builder which uses
-     * {@code USER_JID(a.user)} (not the raw device JID from
-     * {@code from}) as the {@code to} target.
+     * <p>The ACK carries no {@code type} attribute and targets the user-level JID extracted from
+     * {@code from} rather than the raw device JID.
      *
      * @param node    the original {@code <notification>} stanza
      * @param userJid the user-level JID extracted from {@code from}

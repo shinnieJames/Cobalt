@@ -17,32 +17,35 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * VP8 encoder backed by libvpx's {@code vpx_codec_enc_*} family.
- * Bindings are jextract-generated; this class is the high-level
- * idiomatic-Java wrapper.
+ * Encodes raw I420 pictures into VP8 bitstream packets over libvpx.
  *
- * <p>Configured for WebRTC realtime use: single-pass VBR rate control,
- * keyframe interval of {@code fps * 5} (5 s), CPU-used 8 (fastest),
- * one threading slot. The defaults are appropriate for 1:1 WhatsApp
- * video calls; richer multi-stream/SVC configurations live in the VP8
- * branch of the video pipeline (#62).
+ * <p>This wrapper drives libvpx's {@code vpx_codec_enc_*} encoder family through
+ * jextract-generated {@code LibVpx} bindings, exposing an idiomatic-Java surface.
+ * It is configured for WebRTC realtime use: single-pass one-pass rate control, a
+ * keyframe interval of {@code fps * 5} frames (five seconds), CPU-used 8 (the
+ * fastest VP8 speed setting), and a single threading slot. These defaults suit
+ * one-to-one WhatsApp video calls; richer multi-stream and SVC configurations are
+ * out of scope for this class.
  *
- * <p>I/O contract: input frames are I420 (YUV 4:2:0 planar) with the
- * Y plane first, then U, then V — the canonical WebRTC raw-frame
- * layout. Output packets are complete VP8-bitstream frames suitable
- * for direct RTP packetisation.
+ * <p>Input frames are I420 (YUV 4:2:0 planar) with the Y plane first, then U, then
+ * V, which is the canonical WebRTC raw-frame layout. Output {@link Packet packets}
+ * are complete VP8 bitstream frames suitable for direct RTP packetisation. The
+ * encoder runs on a {@code (1, fps)} timebase, so the presentation timestamp passed
+ * to {@link #encode(byte[], long, boolean)} is the frame index. {@link #close()}
+ * destroys the native context and releases the backing arena.
  *
- * <p>Pipeline:
+ * <p>A typical encode loop captures I420 frames and forwards each emitted packet to
+ * the RTP layer:
  *
- * <pre>{@code
+ * {@snippet :
  *   var enc = new VP8Encoder(640, 480, 1_000_000, 30);
  *   for (long pts = 0; capturing; pts++) {
- *       byte[] yuv = capture.nextFrame();          // 640*480 + 2*320*240 = 460_800 bytes
+ *       byte[] yuv = capture.nextFrame(); // 640*480 + 2*320*240 = 460800 bytes
  *       for (var pkt : enc.encode(yuv, pts, false)) {
  *           rtp.send(pkt.payload(), pkt.keyFrame());
  *       }
  *   }
- * }</pre>
+ * }
  */
 public final class VP8Encoder implements AutoCloseable {
     static {
@@ -50,71 +53,88 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * libvpx CPU-used parameter for VP8 (-16 .. 16). Higher means
-     * faster/lower-quality. WebRTC uses 8 for realtime; we mirror.
+     * Selects the VP8 CPU-used speed level applied at construction.
+     *
+     * @implNote This implementation uses 8, the maximum of libvpx's {@code -16..16}
+     * VP8 CPU-used range, matching WebRTC's realtime speed setting; higher values
+     * trade encode quality for lower latency.
      */
     private static final int VP8_REALTIME_CPU_USED = 8;
 
     /**
-     * Per-instance arena for the codec context, config, image, and
-     * iter scratch.
+     * Holds the native allocations for this encoder.
+     *
+     * <p>Backs the codec context, the configuration struct, the reusable input
+     * image, the per-call input scratch buffer, and the iterator scratch slot. The
+     * arena is shared so the segments remain valid across the virtual threads that
+     * may drive {@link #encode(byte[], long, boolean)}, and is closed by
+     * {@link #close()}.
      */
     private final Arena arena;
 
     /**
-     * Pointer to the {@code vpx_codec_ctx_t} struct backing this
-     * encoder. Nulled out by {@link #close}.
+     * References the {@code vpx_codec_ctx_t} struct backing this encoder.
+     *
+     * <p>Set to {@link MemorySegment#NULL} by {@link #close()} to mark the encoder
+     * as destroyed; {@link #requireOpen()} treats both {@code null} and
+     * {@code NULL} as closed.
      */
     private MemorySegment ctx;
 
     /**
-     * Pre-allocated input image — populated in place each
-     * {@link #encode} call.
+     * Holds the pre-allocated {@code vpx_image_t} repopulated on each
+     * {@link #encode(byte[], long, boolean)} call.
      */
     private final MemorySegment image;
 
     /**
-     * Reusable iterator scratch (a single pointer slot) for
+     * Holds the single-pointer iterator scratch passed to
      * {@code vpx_codec_get_cx_data}.
+     *
+     * <p>Reset to {@link MemorySegment#NULL} at the start of every drain so the
+     * encoder yields packets from the beginning of its output queue.
      */
     private final MemorySegment iter;
 
     /**
-     * Width of every encoded frame, in pixels.
+     * Holds the width, in pixels, of every encoded frame.
      */
     private final int width;
 
     /**
-     * Height of every encoded frame, in pixels.
+     * Holds the height, in pixels, of every encoded frame.
      */
     private final int height;
 
     /**
-     * Cached I420 byte size: {@code w*h + 2*(w/2)*(h/2)}.
+     * Caches the expected I420 input byte count, {@code w*h + 2*(w/2)*(h/2)}.
      */
     private final int yuvSize;
 
     /**
-     * Live encoder configuration — kept around so
-     * {@link #setBitrate(int)} can mutate {@code rc_target_bitrate}
-     * and pass the updated config to {@code vpx_codec_enc_config_set}
-     * for runtime BWE adaptation.
+     * References the live {@code vpx_codec_enc_cfg} configuration struct.
+     *
+     * <p>Retained so {@link #setBitrate(int)} can mutate {@code rc_target_bitrate}
+     * in place and push the updated configuration to libvpx via
+     * {@code vpx_codec_enc_config_set} for runtime bandwidth-estimate adaptation.
      */
     private final MemorySegment cfg;
 
     /**
-     * One encoded VP8 packet — a complete frame in the VP8 bitstream
-     * suitable for RTP framing.
+     * Carries one encoded VP8 packet, a complete bitstream frame ready for RTP
+     * framing.
      *
      * @param payload  the encoded frame bytes
-     * @param pts      the presentation timestamp the encoder was
-     *                 driven with for this frame
-     * @param keyFrame {@code true} if this is a keyframe (start of a
-     *                 GOP), {@code false} otherwise
+     * @param pts      the presentation timestamp the encoder was driven with for
+     *                 this frame
+     * @param keyFrame {@code true} if this frame is a keyframe (the start of a
+     *                 group of pictures), {@code false} otherwise
      */
     public record Packet(byte[] payload, long pts, boolean keyFrame) {
         /**
-         * Compact constructor — null-checks the payload.
+         * Validates that the encoded payload is present.
+         *
+         * @throws NullPointerException if {@code payload} is {@code null}
          */
         public Packet {
             Objects.requireNonNull(payload, "payload cannot be null");
@@ -122,23 +142,32 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Constructs a new VP8 encoder.
+     * Constructs an encoder and initialises the underlying libvpx VP8 context.
      *
-     * @param width             frame width in pixels
-     * @param height            frame height in pixels
-     * @param targetBitrateBps  target bitrate in bits per second
-     * @param fps               capture frame rate; drives the
-     *                          encoder's timebase and keyframe interval
-     * @throws IllegalArgumentException if any argument is &lt; 1
-     * @throws WhatsAppCallException.Vpx             if libvpx rejects the config
-     *                                  or initialisation fails
-     * @throws UnsatisfiedLinkError     if libvpx cannot be loaded
+     * <p>Validates the geometry and rate parameters, caches the I420 byte size,
+     * allocates the shared arena and its native structs, initialises the encoder
+     * with the WebRTC realtime configuration, then applies the CPU-used control. If
+     * any step throws, the arena is closed before the exception propagates so no
+     * native memory is leaked. Width and height must be even because I420
+     * chroma planes are subsampled by two in each dimension.
+     *
+     * @param width            the frame width in pixels; must be even and at least 2
+     * @param height           the frame height in pixels; must be even and at least 2
+     * @param targetBitrateBps the target bitrate in bits per second; must be at
+     *                         least 1
+     * @param fps              the capture frame rate driving the encoder timebase
+     *                         and keyframe interval; must be at least 1
+     * @throws IllegalArgumentException if a dimension is not even, or a dimension or
+     *                                  rate is below its minimum
+     * @throws WhatsAppCallException.Vpx if libvpx rejects the configuration or
+     *                                   initialisation fails
+     * @throws UnsatisfiedLinkError      if libvpx cannot be loaded
      */
     public VP8Encoder(int width, int height, int targetBitrateBps, int fps) {
-        if (width < 1 || width % 2 != 0) throw new IllegalArgumentException("width must be even and ≥ 2");
-        if (height < 1 || height % 2 != 0) throw new IllegalArgumentException("height must be even and ≥ 2");
-        if (targetBitrateBps < 1) throw new IllegalArgumentException("targetBitrateBps must be ≥ 1");
-        if (fps < 1) throw new IllegalArgumentException("fps must be ≥ 1");
+        if (width < 1 || width % 2 != 0) throw new IllegalArgumentException("width must be even and >= 2");
+        if (height < 1 || height % 2 != 0) throw new IllegalArgumentException("height must be even and >= 2");
+        if (targetBitrateBps < 1) throw new IllegalArgumentException("targetBitrateBps must be >= 1");
+        if (fps < 1) throw new IllegalArgumentException("fps must be >= 1");
         this.width = width;
         this.height = height;
         this.yuvSize = width * height + 2 * (width / 2) * (height / 2);
@@ -157,25 +186,28 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Encodes one raw I420 frame and returns any VP8 packets the
-     * encoder produced for it. The encoder may emit zero packets
-     * when buffering, exactly one per frame in steady-state realtime
-     * mode, or more under unusual configurations.
+     * Encodes one raw I420 frame and returns the VP8 packets it produced.
      *
-     * @param yuvI420        the input frame bytes in I420 layout
-     *                       ({@code w*h + 2*(w/2)*(h/2)} bytes)
-     * @param pts            presentation timestamp in encoder ticks
-     *                       (the {@code (1, fps)} timebase set up at
-     *                       construction means {@code pts = frame index})
-     * @param forceKeyFrame  if {@code true}, request that this frame
-     *                       be encoded as a keyframe regardless of
-     *                       the natural GOP cadence
-     * @return zero or more output packets
+     * <p>Wraps the input bytes as a {@code vpx_image_t}, drives
+     * {@code vpx_codec_encode} on the realtime deadline, then drains the emitted
+     * compressed-frame packets. The encoder may emit zero packets while buffering,
+     * exactly one per frame in steady-state realtime mode, or more under unusual
+     * configurations. When {@code forceKeyFrame} is set the call requests a keyframe
+     * regardless of the natural keyframe cadence.
+     *
+     * @param yuvI420       the input frame bytes in I420 layout
+     *                      ({@code w*h + 2*(w/2)*(h/2)} bytes)
+     * @param pts           the presentation timestamp in encoder ticks; on the
+     *                      {@code (1, fps)} timebase set up at construction this
+     *                      equals the frame index
+     * @param forceKeyFrame {@code true} to request that this frame be encoded as a
+     *                      keyframe regardless of the natural cadence
+     * @return the encoded packets, possibly empty
+     * @throws NullPointerException     if {@code yuvI420} is {@code null}
      * @throws IllegalStateException    if the encoder is closed
-     * @throws IllegalArgumentException if {@code yuvI420.length} is
-     *                                  not the expected I420 byte
-     *                                  count
-     * @throws WhatsAppCallException.Vpx             if libvpx returns non-OK
+     * @throws IllegalArgumentException if {@code yuvI420.length} is not the expected
+     *                                  I420 byte count
+     * @throws WhatsAppCallException.Vpx if libvpx returns a non-OK status
      */
     public List<Packet> encode(byte[] yuvI420, long pts, boolean forceKeyFrame) {
         Objects.requireNonNull(yuvI420, "yuvI420 cannot be null");
@@ -198,32 +230,38 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Returns the number of bytes the encoder expects per
-     * {@link #encode} input — provided so callers don't have to
-     * recompute the I420 size formula.
+     * Returns the number of input bytes the encoder expects per
+     * {@link #encode(byte[], long, boolean)} call.
      *
-     * @return {@code w*h + 2*(w/2)*(h/2)}
+     * <p>Exposes the cached I420 size so callers do not have to recompute the
+     * {@code w*h + 2*(w/2)*(h/2)} formula.
+     *
+     * @return the expected I420 input byte count
      */
     public int frameByteSize() {
         return yuvSize;
     }
 
     /**
-     * Updates the encoder's target bitrate at runtime — drives the
-     * BWE feedback loop so the call's outbound video tracks the
-     * latest bandwidth estimate. Mutates {@code rc_target_bitrate}
-     * on the live {@code vpx_codec_enc_cfg} and pushes it to libvpx
-     * via {@code vpx_codec_enc_config_set}.
+     * Updates the encoder's target bitrate at runtime.
      *
-     * @param targetBitrateBps the new target bitrate in bps; must be
-     *                         &gt;= 1
-     * @throws IllegalArgumentException if {@code targetBitrateBps} is
-     *                                  &lt; 1
-     * @throws WhatsAppCallException.Vpx             if libvpx rejects the update
+     * <p>Mutates {@code rc_target_bitrate} on the live configuration and pushes it
+     * to libvpx via {@code vpx_codec_enc_config_set}, letting the call's outbound
+     * video track the latest bandwidth estimate from the BWE feedback loop.
+     *
+     * @param targetBitrateBps the new target bitrate in bits per second; must be at
+     *                         least 1
+     * @throws IllegalArgumentException if {@code targetBitrateBps} is below 1
+     * @throws IllegalStateException    if the encoder is closed
+     * @throws WhatsAppCallException.Vpx if libvpx rejects the update
+     * @implNote This implementation divides the bits-per-second argument by 1000
+     * because {@code rc_target_bitrate} is expressed in kilobits per second, and
+     * clamps the result to a floor of 1 kbps so sub-kilobit estimates do not round
+     * down to a zero target.
      */
     public void setBitrate(int targetBitrateBps) {
         if (targetBitrateBps < 1) {
-            throw new IllegalArgumentException("targetBitrateBps must be ≥ 1");
+            throw new IllegalArgumentException("targetBitrateBps must be >= 1");
         }
         requireOpen();
         vpx_codec_enc_cfg.rc_target_bitrate(cfg, Math.max(1, targetBitrateBps / 1000));
@@ -239,14 +277,22 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Initialises the VPX encoder with the constructor's parameters.
-     * Reads libvpx's defaults via {@code vpx_codec_enc_config_default},
-     * overrides the WebRTC-relevant fields, then runs
-     * {@code vpx_codec_enc_init_ver}.
+     * Initialises the libvpx VP8 encoder with the constructor's parameters.
      *
-     * @param targetBitrateBps target bitrate in bps
-     * @param fps              frame rate
-     * @throws WhatsAppCallException.Vpx if config or init returns non-OK
+     * <p>Loads libvpx's defaults via {@code vpx_codec_enc_config_default}, overrides
+     * the WebRTC-relevant fields (geometry, single threading slot, one-pass rate
+     * control, target bitrate, keyframe distance, and {@code (1, fps)} timebase),
+     * then runs {@code vpx_codec_enc_init_ver} with the ABI version the bindings
+     * were generated against.
+     *
+     * @param targetBitrateBps the target bitrate in bits per second
+     * @param fps              the frame rate driving the timebase and keyframe
+     *                         interval
+     * @throws WhatsAppCallException.Vpx if configuration or initialisation returns a
+     *                                   non-OK status
+     * @implNote This implementation sets {@code kf_min_dist} to 0 and
+     * {@code kf_max_dist} to {@code fps * 5}, forcing a keyframe at most every five
+     * seconds while leaving libvpx free to emit earlier keyframes on scene change.
      */
     private void initCodec(int targetBitrateBps, int fps) {
         var iface = vp8CxIface();
@@ -280,11 +326,16 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Wraps the current Java input byte[] as a {@code vpx_image_t}
-     * pointing at a per-call native scratch buffer. Re-used per
-     * encode call.
+     * Copies the Java input frame into native memory and wraps it as the encoder's
+     * {@code vpx_image_t}.
+     *
+     * <p>Allocates a per-call scratch buffer in the instance arena, copies the I420
+     * bytes into it, then binds the pre-allocated image to that buffer via
+     * {@code vpx_img_wrap} with the {@code VPX_IMG_FMT_I420} format and a stride
+     * alignment of 1.
      *
      * @param yuvI420 the input I420 bytes
+     * @throws WhatsAppCallException.Vpx if {@code vpx_img_wrap} returns NULL
      */
     private void loadImage(byte[] yuvI420) {
         var buf = arena.allocate(yuvSize);
@@ -296,11 +347,16 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Iterates {@code vpx_codec_get_cx_data} until it returns NULL,
-     * collecting any compressed-frame packets into a list. Other
-     * packet kinds (stats, PSNR) are skipped.
+     * Drains the encoder's pending compressed-frame packets into a list.
      *
-     * @return zero or more output packets
+     * <p>Iterates {@code vpx_codec_get_cx_data} until it returns NULL, keeping only
+     * {@code VPX_CODEC_CX_FRAME_PKT} packets and skipping other kinds such as
+     * two-pass stats and PSNR. For each frame packet it copies the bitstream bytes
+     * out of native memory and records the presentation timestamp and the keyframe
+     * flag.
+     *
+     * @return the encoded packets, possibly empty
+     * @throws WhatsAppCallException.Vpx if {@code vpx_codec_get_cx_data} throws
      */
     private List<Packet> drainPackets() {
         iter.set(ValueLayout.ADDRESS, 0, MemorySegment.NULL);
@@ -336,10 +392,13 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Resolves the VP8 encoder iface pointer via libvpx's
-     * {@code vpx_codec_vp8_cx} accessor function.
+     * Resolves the libvpx VP8 encoder interface pointer.
      *
-     * @return the iface pointer
+     * <p>Calls the {@code vpx_codec_vp8_cx} accessor and verifies the returned
+     * pointer is non-NULL.
+     *
+     * @return the VP8 encoder interface pointer
+     * @throws WhatsAppCallException.Vpx if the accessor throws or returns NULL
      */
     private static MemorySegment vp8CxIface() {
         try {
@@ -354,20 +413,27 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Lazily-cached variadic invoker for {@code vpx_codec_control_}
-     * specialised to {@code (ctx, ctrl_id, int)} — the typed shape of
-     * every {@code VP8E_SET_*} integer control.
+     * Caches the variadic invoker for integer-valued codec controls.
+     *
+     * <p>Holds the {@code vpx_codec_control_} invoker specialised to the
+     * {@code (ctx, ctrl_id, int)} shape shared by every {@code VP8E_SET_*} integer
+     * control. Declared {@code volatile} for the double-checked lazy initialisation
+     * in {@link #applyControl(int, int)}.
      */
     private static volatile LibVpx.vpx_codec_control_ INT_CONTROL_INVOKER;
 
     /**
      * Sends one integer-valued codec control to the encoder.
-     * {@code vpx_codec_control_} is variadic in C — the jextract
-     * surface exposes a {@code makeInvoker} factory that specialises
-     * the trailing-arg layout per-call-site.
      *
-     * @param controlId one of the {@code VP8E_*} codec-control IDs
-     * @param value     the integer payload
+     * <p>Lazily builds and caches the integer-specialised invoker on first use, then
+     * applies the control and checks the status. Since {@code vpx_codec_control_} is
+     * variadic in C, the bindings expose a {@code makeInvoker} factory that fixes the
+     * trailing-argument layout per call site, here {@link ValueLayout#JAVA_INT}.
+     *
+     * @param controlId one of the {@code VP8E_*} codec-control identifiers
+     * @param value     the integer payload for the control
+     * @throws WhatsAppCallException.Vpx if the control invocation throws or returns a
+     *                                   non-OK status
      */
     private void applyControl(int controlId, int value) {
         var invoker = INT_CONTROL_INVOKER;
@@ -392,8 +458,12 @@ public final class VP8Encoder implements AutoCloseable {
     }
 
     /**
-     * Throws if the underlying codec context has been destroyed via
-     * {@link #close}.
+     * Verifies that the codec context is still live.
+     *
+     * <p>Treats both a {@code null} reference and a {@link MemorySegment#NULL}
+     * pointer as closed.
+     *
+     * @throws IllegalStateException if the encoder has been closed
      */
     private void requireOpen() {
         if (ctx == null || ctx.equals(MemorySegment.NULL)) {
@@ -403,7 +473,10 @@ public final class VP8Encoder implements AutoCloseable {
 
     /**
      * Destroys the codec context and releases the per-instance arena.
-     * Idempotent.
+     *
+     * <p>Idempotent: a second call after the context has been nulled returns
+     * immediately. The native destroy is attempted on a best-effort basis and any
+     * failure from it is swallowed so the arena is always released.
      */
     @Override
     public void close() {

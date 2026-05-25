@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.internal.rtp;
 
 import com.github.auties00.cobalt.call.internal.rtp.srtp.SrtpEndpoint;
+import com.github.auties00.cobalt.call.internal.transport.dtls.DtlsSrtpDriver;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
 
 import java.security.SecureRandom;
@@ -8,81 +9,73 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Outbound side of an RTP stream — packetises payloads (Opus
- * frames, VP8 frames, etc.), assigns sequence numbers and RTP
- * timestamps, runs them through {@link SrtpEndpoint#protectRtp}, and
- * hands the protected bytes to a {@link Consumer} (typically wired to
- * {@link com.github.auties00.cobalt.call.internal.transport.dtls.DtlsSrtpDriver#sendSrtp}).
+ * Packetises outbound codec payloads into protected SRTP and hands them to a downstream sink.
  *
- * <p>RTP timestamps are computed from the {@code ptsMs} the codec
- * supplies, scaled by the configured {@link #clockRate} (RFC 3551
- * §6 — 48 kHz for Opus, 90 kHz for video). The internal sequence
- * number wraps modulo 65536 per RFC 3550.
+ * <p>Each call to {@link #send(byte[], long, boolean)} assigns the next sequence number, derives
+ * the RTP timestamp from the supplied presentation timestamp, builds an {@link RtpPacket}, protects
+ * it with {@link SrtpEndpoint#protectRtp(byte[])}, and passes the protected bytes to the configured
+ * {@link Consumer} (typically wired to {@link DtlsSrtpDriver#sendSrtp(byte[])}). The sequence number
+ * wraps modulo 65536 per RFC 3550.
  *
- * <p>The first sequence number and timestamp are randomised at
- * construction per RFC 3550 §5.1 — this isn't a security guarantee
- * (SRTP provides confidentiality), it's a rule the spec mandates so
- * receivers don't snap to wraparound on a fresh stream.
+ * <p>The initial sequence number and timestamp are randomised at construction. This is not a
+ * confidentiality measure, which SRTP provides, but the RFC 3550 section 5.1 rule that keeps a
+ * fresh stream from snapping a receiver to a wraparound boundary.
  */
 public final class RtpSender {
     /**
-     * The configured RTP payload type (0..127).
+     * Payload type stamped on every packet, in {@code [0, 127]}.
      */
     private final int payloadType;
 
     /**
-     * The 32-bit synchronization source identifier this stream
-     * announces.
+     * 32-bit synchronization source identifier announced by this stream.
      */
     private final int ssrc;
 
     /**
-     * Codec clock rate in Hz — 48000 for Opus, 90000 for video.
+     * Codec clock rate in Hz used to scale presentation timestamps into RTP ticks; 48000 for Opus
+     * and 90000 for video.
      */
     private final int clockRate;
 
     /**
-     * The SRTP endpoint that protects every packet before it ships.
+     * SRTP endpoint that protects every packet before it is dispatched.
      */
     private final SrtpEndpoint srtp;
 
     /**
-     * Where protected SRTP bytes are delivered.
+     * Sink that receives the protected SRTP bytes.
      */
     private final Consumer<byte[]> protectedSink;
 
     /**
-     * Next sequence number to use. Wraps at 0xFFFF.
+     * Next sequence number to assign, wrapping at {@code 0xFFFF}.
      */
     private int nextSequenceNumber;
 
     /**
-     * Initial timestamp offset — added to every per-packet timestamp
-     * computed from {@code ptsMs}.
+     * Random initial timestamp offset added to every per-packet tick count derived from the
+     * presentation timestamp.
      */
     private final long timestampBase;
 
     /**
-     * The {@code ptsMs} of the last sent packet, retained so callers
-     * can omit the parameter on subsequent calls (e.g. when the codec
-     * doesn't carry its own pts) and still get a monotonic stream.
+     * Presentation timestamp of the most recently sent packet in milliseconds, or {@code -1} before
+     * the first send, retained to enforce a monotonically non-decreasing stream.
      */
     private long lastPtsMs = -1;
 
     /**
-     * Constructs a new sender with a randomised initial sequence and
-     * timestamp.
+     * Constructs a sender with a randomised initial sequence number and timestamp.
      *
-     * @param payloadType    RTP payload type (0..127)
-     * @param ssrc           SSRC identifier
-     * @param clockRate      codec clock rate in Hz
-     * @param srtp           SRTP endpoint
-     * @param protectedSink  consumer for the protected bytes
-     * @throws NullPointerException     if any required argument is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code payloadType} or
-     *                                  {@code clockRate} is out of
-     *                                  range
+     * @param payloadType   the RTP payload type in {@code [0, 127]}
+     * @param ssrc          the SSRC identifier
+     * @param clockRate     the codec clock rate in Hz
+     * @param srtp          the SRTP endpoint
+     * @param protectedSink the consumer for the protected bytes
+     * @throws NullPointerException     if {@code srtp} or {@code protectedSink} is {@code null}
+     * @throws IllegalArgumentException if {@code payloadType} is outside {@code [0, 127]} or
+     *                                  {@code clockRate} is not positive
      */
     public RtpSender(int payloadType, int ssrc, int clockRate,
                      SrtpEndpoint srtp, Consumer<byte[]> protectedSink) {
@@ -90,16 +83,21 @@ public final class RtpSender {
     }
 
     /**
-     * Test-friendly constructor that takes an explicit
-     * {@link SecureRandom} so the initial sequence/timestamp are
-     * reproducible.
+     * Constructs a sender seeded from an explicit random source.
      *
-     * @param payloadType   RTP payload type
-     * @param ssrc          SSRC identifier
-     * @param clockRate     codec clock rate
-     * @param srtp          SRTP endpoint
-     * @param protectedSink protected bytes sink
-     * @param random        random source
+     * <p>This overload makes the randomised initial sequence number and timestamp reproducible, for
+     * example under a deterministic random source in tests.
+     *
+     * @param payloadType   the RTP payload type in {@code [0, 127]}
+     * @param ssrc          the SSRC identifier
+     * @param clockRate     the codec clock rate in Hz
+     * @param srtp          the SRTP endpoint
+     * @param protectedSink the consumer for the protected bytes
+     * @param random        the random source seeding the initial sequence number and timestamp
+     * @throws NullPointerException     if {@code srtp}, {@code protectedSink}, or {@code random} is
+     *                                  {@code null}
+     * @throws IllegalArgumentException if {@code payloadType} is outside {@code [0, 127]} or
+     *                                  {@code clockRate} is not positive
      */
     public RtpSender(int payloadType, int ssrc, int clockRate,
                      SrtpEndpoint srtp, Consumer<byte[]> protectedSink, SecureRandom random) {
@@ -121,25 +119,27 @@ public final class RtpSender {
     }
 
     /**
-     * Sends one payload as an RTP packet — assigns the next sequence
-     * number, computes the RTP timestamp from {@code ptsMs}, encodes
-     * the header, applies SRTP protection, and dispatches.
+     * Sends one codec payload as a protected RTP packet.
      *
-     * @param payload the codec payload bytes (e.g. one Opus packet)
-     * @param ptsMs   the source-frame presentation timestamp in ms;
-     *                must be monotonically non-decreasing (the sender
-     *                doesn't reorder)
-     * @param marker  whether to set the M bit (audio: first packet of
-     *                a talkspurt; video: last packet of a frame)
-     * @throws NullPointerException     if {@code payload} is {@code null}
-     * @throws IllegalArgumentException if {@code ptsMs} is negative or
-     *                                  goes backwards
-     * @throws WhatsAppCallException.Rtp             if SRTP protection fails
+     * <p>The method assigns the next sequence number, scales {@code ptsMs} by the clock rate and
+     * adds the random timestamp base to form the 32-bit RTP timestamp, encodes the packet, protects
+     * it with SRTP, and dispatches the protected bytes to the sink. The presentation timestamp must
+     * be monotonically non-decreasing because the sender does not reorder.
+     *
+     * @param payload the codec payload bytes, for example one Opus packet
+     * @param ptsMs   the source-frame presentation timestamp in milliseconds, which must be
+     *                monotonically non-decreasing
+     * @param marker  whether to set the M bit (audio: first packet of a talkspurt; video: last
+     *                packet of a frame)
+     * @throws NullPointerException      if {@code payload} is {@code null}
+     * @throws IllegalArgumentException  if {@code ptsMs} is negative or less than the previous
+     *                                   {@code ptsMs}
+     * @throws WhatsAppCallException.Rtp if the protected sink throws while accepting the bytes
      */
     public void send(byte[] payload, long ptsMs, boolean marker) {
         Objects.requireNonNull(payload, "payload cannot be null");
         if (ptsMs < 0) {
-            throw new IllegalArgumentException("ptsMs must be ≥ 0");
+            throw new IllegalArgumentException("ptsMs must be >= 0");
         }
         if (lastPtsMs >= 0 && ptsMs < lastPtsMs) {
             throw new IllegalArgumentException(
@@ -161,18 +161,18 @@ public final class RtpSender {
     }
 
     /**
-     * Returns the next sequence number that {@link #send} would use.
+     * Returns the sequence number that the next {@link #send(byte[], long, boolean)} would assign.
      *
-     * @return the next sequence number (0..65535)
+     * @return the next sequence number in {@code [0, 65535]}
      */
     public int nextSequenceNumber() {
         return nextSequenceNumber;
     }
 
     /**
-     * Returns the SSRC this sender stamps on every packet.
+     * Returns the SSRC stamped on every packet.
      *
-     * @return the SSRC
+     * @return the SSRC identifier
      */
     public int ssrc() {
         return ssrc;

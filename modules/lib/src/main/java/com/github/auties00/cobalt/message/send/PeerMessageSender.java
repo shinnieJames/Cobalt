@@ -32,39 +32,33 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateDeviceStanza")
 final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
     /**
-     * The {@link System.Logger} used for peer-send diagnostics.
+     * Surfaces peer-send diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(PeerMessageSender.class.getName());
 
     /**
-     * The {@link MessageEncryption} service used for per-device Signal
-     * encryption.
+     * Performs per-device Signal encryption.
      */
     private final MessageEncryption encryption;
 
     /**
-     * The {@link DeviceService} used to ensure an E2E session is established
-     * before encryption.
+     * Ensures an E2E session is established before encryption.
      */
     private final DeviceService deviceService;
 
     /**
-     * Constructs a {@link PeerMessageSender} bound to the supplied
-     * dependencies.
+     * Constructs a {@link PeerMessageSender} bound to the supplied dependencies.
      *
-     * @apiNote
-     * Constructed once by {@link MessageSendingService}; embedders should
-     * not instantiate directly.
+     * <p>Constructed once by {@link MessageSendingService}; embedders should not
+     * instantiate directly.
      *
-     * @param client         the {@link WhatsAppClient} used to dispatch
-     *                       stanzas
+     * @param client         the {@link WhatsAppClient} used to dispatch stanzas
      * @param encryption     the {@link MessageEncryption} service
      * @param deviceService  the {@link DeviceService} used to manage Signal
      *                       sessions
      * @param abPropsService the {@link ABPropsService} consulted by the base
      *                       sender
-     * @param wamService     the {@link WamService} shared with the base
-     *                       sender
+     * @param wamService     the {@link WamService} shared with the base sender
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendAppStateSyncMsgJob", exports = "encryptAndSendKeyMsg",
@@ -84,12 +78,11 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Encrypts the payload for the supplied {@code targetDevice}, wraps the
+     * <p>Encrypts the payload for the supplied {@code targetDevice}, wraps the
      * envelope in a {@code <message category="peer" push_priority="high">}
-     * stanza alongside a {@code <meta appdata="default">} child and an
-     * optional {@code <device-identity>} child (PKMSG only), and blocks
-     * until the server returns the ack.
+     * stanza alongside a {@code <meta appdata="default">} child and an optional
+     * {@code <device-identity>} child (PKMSG only), and blocks until the server
+     * returns the ack.
      */
     @WhatsAppWebExport(moduleName = "WAWebSendAppStateSyncMsgJob", exports = "encryptAndSendKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)

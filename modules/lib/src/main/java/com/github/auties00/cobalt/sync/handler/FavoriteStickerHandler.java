@@ -15,39 +15,22 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code favoriteSticker} app-state sync action that adds or
  * removes a sticker from the user's favourites collection.
  *
- * @apiNote
- * Drives the sticker-tray "favourite" star: the primary device fans out
- * each toggle through the {@link SyncPatchType#REGULAR_LOW} collection so
- * companions render the same favourites set. The mutation index keys
- * each entry by the sticker's filehash, formatted as
+ * <p>Each toggle fans out across the {@link SyncPatchType#REGULAR_LOW}
+ * collection so companions render the same favourites set. The mutation index
+ * keys each entry by the sticker's filehash, formatted as
  * {@snippet :
  *     ["favoriteSticker", stickerFileHash]
  * }
- *
- * @implNote
- * This implementation gates the apply path on the primary device's
- * {@code "favorite_sticker"} {@link com.github.auties00.cobalt.model.feature.PrimaryFeature}
- * report rather than WA Web's
- * {@code WAWebMiscGatingUtils.isFavoriteStickersEnabled()}, which itself
- * delegates to {@code WAWebPrimaryFeatures.primaryFeatureEnabled}; the
- * effect is identical because Cobalt mirrors the primary feature set in
- * its store. Removal is unconditional via
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#removeFavouriteSticker(String)}
- * because the call is idempotent, where WA Web pre-checks the entry and
- * short-circuits when absent.
+ * The apply path is gated by the primary device advertising the
+ * {@value #FAVORITE_STICKER_FEATURE} feature in
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#primaryFeatures()};
+ * when it does not, the mutation is reported as
+ * {@link MutationApplicationResult#orphan(String, String)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebStickersFavoriteSyncAction")
 public final class FavoriteStickerHandler implements WebAppStateActionHandler {
     /**
-     * The {@link com.github.auties00.cobalt.model.feature.PrimaryFeature}
-     * id consulted to gate favourite-sticker sync.
-     *
-     * @apiNote
-     * Mirrors the literal {@code "favorite_sticker"} that WA Web's
-     * {@code WAWebMiscGatingUtils.isFavoriteStickersEnabled} resolves
-     * through {@code primaryFeatureEnabled}; the gate is per-primary
-     * (not per-companion) so reading the store's primary-feature set is
-     * the correct source of truth.
+     * The primary-feature id consulted to gate favourite-sticker sync.
      */
     private static final String FAVORITE_STICKER_FEATURE = "favorite_sticker";
 
@@ -89,21 +72,28 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()}, a missing sticker hash
+     * slot or absent action payload as malformed, and an absent
+     * {@value #FAVORITE_STICKER_FEATURE} gate as
+     * {@link MutationApplicationResult#orphan(String, String)}. When
+     * {@link StickerAction#isFavorite()} is set the sticker is timestamped and
+     * added via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#addFavouriteSticker(String, com.github.auties00.cobalt.model.preference.Sticker)};
+     * otherwise it is removed via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#removeFavouriteSticker(String)}.
+     *
      * @implNote
      * This implementation classifies a missing index slot as
-     * {@link MutationApplicationResult#malformed()} explicitly so the
-     * outer try/catch does not turn the malformed index into
-     * {@link MutationApplicationResult#failed()} via an
-     * {@code IndexOutOfBoundsException} from {@code JSON.parseArray}.
-     * The {@link StickerAction#isFavorite()} accessor coalesces a
-     * {@code null} protobuf field to {@code false} per the project's
-     * "no Optional&lt;Boolean&gt;" rule, so the
-     * {@code malformedActionValue} branch that WA Web takes when
-     * {@code isFavorite} is {@code null} is not replicated. The set
-     * branch fast-paths an existing entry through
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findFavouriteSticker(String)}
-     * mirroring WA Web's
-     * {@code FavoriteStickerCollection.get(u)} short-circuit.
+     * {@link MutationApplicationResult#malformed()} before parsing so the outer
+     * try/catch does not turn it into {@link MutationApplicationResult#failed()}
+     * via an {@code IndexOutOfBoundsException} from {@code JSON.parseArray}.
+     * Because {@link StickerAction#isFavorite()} coalesces a {@code null}
+     * protobuf field to {@code false}, a {@code null} flag is treated as a
+     * removal rather than a malformed value. An add fast-paths an entry that is
+     * already present through
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findFavouriteSticker(String)},
+     * and a removal is unconditional because the store call is idempotent.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebStickersFavoriteSyncAction", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

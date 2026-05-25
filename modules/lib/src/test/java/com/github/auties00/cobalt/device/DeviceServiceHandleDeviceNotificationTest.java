@@ -16,52 +16,26 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Replays captured live {@code <notification type="account_sync">} stanzas
- * through {@link DeviceService#handleDeviceNotification} and asserts the
- * handler accepts the wire shape WA Web actually sends.
+ * Replays captured live {@code <notification type="account_sync">} stanzas through
+ * {@link DeviceService#handleDeviceNotification} and asserts the handler accepts the wire shape WA
+ * Web actually sends, completing without throwing on the captured shapes.
  *
- * @apiNote
- * Two captures live in the corpus: {@code adv-notification-link.jsonl}
- * emitted after linking device id 78 (the wrapped
+ * <p>Each test builds the full collaborator graph through {@link DefaultDeviceService} on a
+ * {@link TestWhatsAppClient} backed by a temporary store; no network is involved. Two captures live
+ * in the corpus, both taken from the {@code personal} live session on 2026-05-11:
+ * {@code adv-notification-link.jsonl} emitted after linking device id 78 (the wrapped
  * {@code <devices dhash="2:GgkHBG8F">} carries {@code [0, 73, 77, 78]}), and
- * {@code adv-notification-unlink.jsonl} emitted after unlinking the same
- * device (the wrapped {@code <devices dhash="2:wRn7yVQL">} carries
- * {@code [0, 73, 77]}). Both were captured from the {@code personal} live
- * session on 2026-05-11.
- *
- * @implNote
- * This implementation builds the full collaborator graph through
- * {@link DefaultDeviceService} on a {@link TestWhatsAppClient} backed by a
- * temporary store; no network is involved and the assertion bar is that the
- * handler completes without throwing on the captured shapes.
+ * {@code adv-notification-unlink.jsonl} emitted after unlinking the same device (the wrapped
+ * {@code <devices dhash="2:wRn7yVQL">} carries {@code [0, 73, 77]}).
  */
 @DisplayName("DeviceService.handleDeviceNotification")
 class DeviceServiceHandleDeviceNotificationTest {
     private static final Jid SELF_PN = Jid.of("393495089819@s.whatsapp.net");
     private static final Jid SELF_LID = Jid.of("258252122116273@lid");
 
-    /**
-     * Bundles the constructed client and device service so each test can
-     * share the same wiring.
-     *
-     * @apiNote
-     * Local record; never exposed outside this class.
-     *
-     * @param client        the test client
-     * @param deviceService the constructed device service
-     */
     private record Harness(TestWhatsAppClient client, DeviceService deviceService) {
     }
 
-    /**
-     * Builds a fresh harness with all collaborators wired against a
-     * temporary store.
-     *
-     * @apiNote
-     * Called by every test for isolation; never reused across tests.
-     *
-     * @return the constructed harness
-     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -76,14 +50,8 @@ class DeviceServiceHandleDeviceNotificationTest {
     }
 
     /**
-     * Returns the {@code <devices>} child of the first inbound captured
-     * notification in the topic.
-     *
-     * @apiNote
-     * {@link DeviceService#handleDeviceNotification} accepts the inner
-     * {@code <devices>} node; the outer {@code <notification>} wrapper is
-     * unwrapped by the stream handler before dispatch, so this helper does the
-     * same.
+     * Returns the {@code <devices>} child of the first inbound captured notification in the topic,
+     * mirroring the way the stream handler unwraps the outer {@code <notification>} before dispatch.
      *
      * @param topic the fixture topic
      * @return the {@code <devices>} child node
@@ -98,10 +66,6 @@ class DeviceServiceHandleDeviceNotificationTest {
         throw new AssertionError("no inbound event in fixture " + topic);
     }
 
-    /**
-     * Verifies the link notification's captured wire shape is accepted
-     * without throwing.
-     */
     @Test
     @DisplayName("link notification: handler accepts the captured wire shape without throwing")
     void linkNotification() {
@@ -115,10 +79,6 @@ class DeviceServiceHandleDeviceNotificationTest {
                 "handler completed without throwing (Optional check is structural)");
     }
 
-    /**
-     * Verifies the unlink notification's captured wire shape is accepted
-     * without throwing.
-     */
     @Test
     @DisplayName("unlink notification: handler accepts the captured wire shape without throwing")
     void unlinkNotification() {
@@ -127,9 +87,6 @@ class DeviceServiceHandleDeviceNotificationTest {
         h.deviceService.handleDeviceNotification(devicesNode, "remove", SELF_LID);
     }
 
-    /**
-     * Verifies an unknown action string is logged but does not throw.
-     */
     @Test
     @DisplayName("invalid action is logged but does not throw")
     void invalidAction() {

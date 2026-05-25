@@ -31,26 +31,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link UserStatusMuteHandler}'s parity with
- * {@code WAWebUserStatusMuteSync.applyMutations} plus the outgoing
- * {@code getMutationForStatusMute} builder.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch for both
- * a user JID (mutate the local {@link com.github.auties00.cobalt.model.contact.Contact})
- * and a group JID (mutate the
- * {@link GroupMetadata#statusMuted()} field), the orphan branch for an
- * unknown contact or group, the malformed-index branches (empty
- * array, empty wid string, wid that fails to parse), the
- * malformed-value branch for a missing {@link UserStatusMuteAction},
- * the {@code REMOVE} unsupported branch, and the default
- * conflict-resolution tiebreaker.
- *
- * @implNote
- * The fixture pre-seeds neither the contact nor the group metadata so
- * tests can opt-in case by case; the static
- * {@code getMutationForStatusMute(...)} builder is exercised
- * separately to confirm the legacy-JID serialization remains stable.
+ * Verifies {@link UserStatusMuteHandler} and the outgoing
+ * {@link UserStatusMuteHandler#getMutationForStatusMute(Jid, boolean, Instant)}
+ * builder: applying an incoming mutation and asserting the {@code statusMuted}
+ * side-effect on either the local
+ * {@link com.github.auties00.cobalt.model.contact.Contact} or the
+ * {@link GroupMetadata#statusMuted()} field. The fixture pre-seeds neither
+ * the contact nor the group metadata, so tests opt in case by case.
  */
 @DisplayName("UserStatusMuteHandler")
 class UserStatusMuteHandlerTest {
@@ -61,35 +48,13 @@ class UserStatusMuteHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
-     * contact and group metadata tables start empty.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given wid string and muted flag into a trusted
-     * mutation under the canonical {@code ["userStatusMute", wid]}
-     * index.
-     *
-     * @apiNote
-     * Tests pass arbitrary raw strings for {@code widString} to
-     * exercise the wid-parse malformed branches.
-     *
-     * @param widString the raw wid string at index slot 1
-     * @param muted     the new muted flag, or {@code null} to omit
-     * @param op        the mutation operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
+    // widString takes arbitrary raw strings to drive the wid-parse malformed branches.
     private static DecryptedMutation.Trusted mutationFor(String widString, Boolean muted, SyncdOperation op, Instant ts) {
         var action = new UserStatusMuteActionBuilder().muted(muted).build();
         var value = new SyncActionValueBuilder()

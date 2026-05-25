@@ -22,30 +22,19 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link WamService}'s per-channel
- * dirty-tracking for session globals across three successive
- * flushes.
+ * Exercises {@link WamService}'s per-channel dirty-tracking for session
+ * globals across three successive flushes: the encoder re-emits only the
+ * global attributes whose values have changed since the previous flush on
+ * the same channel.
  *
- * @apiNote
- * Mirrors WA Web's per-{@code WamContext} {@code prevGlobals}
- * dirty-tracking inside {@code WAWebWamLibContext}: the encoder
- * re-emits only the global attributes whose values have changed
- * since the previous flush on the same channel.
- *
- * @implNote
- * The observed signal is the byte length of the WAM buffer captured
- * via {@code client.sendNode}: the first flush carries every
- * current global, the second flush with identical state carries
- * none, and the third flush after mutating one global carries
- * exactly that one global's encoded entry.
+ * <p>The observed signal is the byte length of the WAM buffer captured via
+ * the test client's send handler: the first flush carries every current
+ * global, the second flush with identical state carries none, and the
+ * third flush after mutating one global carries exactly that one global's
+ * encoded entry.
  */
 @DisplayName("WamService prev-session-globals dirty-write")
 class WamServiceGlobalsDirtyWriteTest {
-    /**
-     * The dirty-tracking three-step invariant holds: the second
-     * flush is strictly smaller than the first and the third flush
-     * (after mutating a global) is strictly larger than the second.
-     */
     @Test
     @DisplayName("unchanged globals are skipped on the second flush; mutated globals re-emit on the third")
     void dirtyTrackingSkipsUnchangedAndEmitsMutated() {
@@ -61,7 +50,7 @@ class WamServiceGlobalsDirtyWriteTest {
                     capturedBuffers.add(extractBuffer(builder));
                     return successResponse();
                 });
-        var service = new InstrumentedWamService(client, props, new DefaultWamBeaconing());
+        var service = new InstrumentedWamService(client, props, new DefaultWamBeaconingService());
         service.markInitializedForTesting();
         service.setSamplingOverride(2862, 1);
 
@@ -92,17 +81,8 @@ class WamServiceGlobalsDirtyWriteTest {
                         + secondSize + " third=" + thirdSize);
     }
 
-    /**
-     * Builds a fresh {@code PsIdUpdate} event with the
-     * {@link PsIdAction#CREATED} action.
-     *
-     * @apiNote
-     * Each call returns a new instance so the spec's
-     * {@code markCommitted()} guard does not reject repeat commits
-     * across the three flushes.
-     *
-     * @return a fresh {@code PsIdUpdate} event spec
-     */
+    // Each call returns a new instance so the spec's markCommitted() guard does
+    // not reject repeat commits across the three flushes.
     private static WamEventSpec samplePsIdEvent() {
         return new PsIdUpdateEventBuilder()
                 .psIdAction(PsIdAction.CREATED)
@@ -111,14 +91,6 @@ class WamServiceGlobalsDirtyWriteTest {
                 .build();
     }
 
-    /**
-     * Builds a successful IQ response recognised by
-     * {@link WamService}'s
-     * {@code sendWithRetry} ({@code type="result"} on the root
-     * {@code <iq>}).
-     *
-     * @return the success node
-     */
     private static Node successResponse() {
         return new NodeBuilder()
                 .description("iq")
@@ -126,22 +98,9 @@ class WamServiceGlobalsDirtyWriteTest {
                 .build();
     }
 
-    /**
-     * Extracts the encoded WAM buffer from the captured outbound
-     * {@code <iq>} stanza.
-     *
-     * @apiNote
-     * The buffer lives in the binary content of the inner
-     * {@code <add>} child of
-     * {@link WamService}'s
-     * {@code sendViaIq} stanza shape; throws
-     * {@link AssertionError} when the captured stanza does not
-     * match that shape so a regression in the encoder pipeline is
-     * surfaced immediately.
-     *
-     * @param builder the captured outbound stanza builder
-     * @return the buffer bytes
-     */
+    // The buffer lives in the binary content of the inner <add> child of the
+    // WAM upload <iq>; an AssertionError on a shape mismatch surfaces an encoder
+    // pipeline regression immediately.
     private static byte[] extractBuffer(NodeBuilder builder) {
         var built = builder.build();
         var add = built.getChild("add").orElseThrow(
@@ -153,32 +112,18 @@ class WamServiceGlobalsDirtyWriteTest {
     }
 
     /**
-     * Test double for {@link WamService} that stubs the four
-     * abstract timing/scheduling hooks with no-op implementations.
-     *
-     * @apiNote
-     * The dirty-tracking test never sleeps, never schedules, and
-     * drives flushes synchronously via
-     * {@link WamService#flushChannel(WamChannel)}, so the abstract
-     * hooks have no captured-state requirements.
+     * Test double for {@link WamService} that stubs the four abstract
+     * timing/scheduling hooks with no-ops; the dirty-tracking test never
+     * sleeps or schedules and drives flushes synchronously via
+     * {@link WamService#flushChannel(WamChannel)}.
      */
     private static final class InstrumentedWamService extends WamService {
-        /**
-         * The fixed instant returned by {@link #now()}.
-         */
         private final AtomicReference<Instant> now = new AtomicReference<>(Instant.ofEpochSecond(1_747_000_000L));
 
-        /**
-         * Constructs the instrumented service.
-         *
-         * @param client    the bound test client
-         * @param props     the bound test AB-props service
-         * @param beaconing the beaconing implementation
-         */
         InstrumentedWamService(
                 WhatsAppClient client,
                 ABPropsService props,
-                WamBeaconing beaconing) {
+                WamBeaconingService beaconing) {
             super(client, props, beaconing);
         }
 

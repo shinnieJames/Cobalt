@@ -10,40 +10,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family discriminating an opt-out list entry by either a marketing brand id or a business user JID.
+ * Discriminates an opt-out list entry by either a marketing brand id or a business user JID.
  *
- * @apiNote
- * Drives the marketing-messages opt-out list surface exposed by {@link SmaxGetOptOutListResponse.Item#bizOptOutIds()}.
- * The {@link BrandId} arm is consumed by {@code WAWebGetOptOutList.getOptOutList} to expand a brand id into the
- * full set of business numbers via {@code WAWebGetNumbersForBrandIdsJob}, while the {@link UserJid} arm carries a
- * direct business JID that is rendered as a chat-list pill without further resolution.
+ * <p>The {@link BrandId} arm carries a marketing-brand id that must be expanded into the full set of business
+ * numbers before the business can be contacted. The {@link UserJid} arm carries a concrete business JID that is
+ * rendered directly without any further resolution. Each entry of {@link SmaxGetOptOutListResponse.Item} exposes
+ * one of these arms through {@link SmaxGetOptOutListResponse.Item#bizOptOutIds()}.
  *
- * @implNote
- * This implementation collapses the wire tagged-union ({@code name} discriminator of {@code "BizOptOutBrandID"} or
- * {@code "BizOptOutJid"}) into a sealed interface whose variant type is the discriminator. Pattern matching on
- * {@link BrandId} versus {@link UserJid} replaces the WA Web {@code bizOptOutIds.name === "..."} branch.
+ * @implNote This implementation collapses the wire tagged-union (a {@code name} discriminator of
+ * {@code "BizOptOutBrandID"} or {@code "BizOptOutJid"}) into a sealed interface whose variant type is the
+ * discriminator, so pattern matching on {@link BrandId} versus {@link UserJid} replaces a name comparison.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsBizOptOutIds")
 public sealed interface BizOptOutId permits BizOptOutId.BrandId, BizOptOutId.UserJid {
     /**
      * The {@code BizOptOutBrandID} arm of the disjunction, carrying a marketing-brand id with an optional business JID.
      *
-     * @apiNote
-     * Produced by {@link SmaxBizOptOutBrandIdMixin#parse(Node)} when the {@code <item>} carries a
-     * {@code biz_opt_out_brand_id} attribute. {@code WAWebGetOptOutList.getOptOutList} collects the brand ids
-     * into a batch and resolves them to business phone numbers and LIDs through
-     * {@code WAWebGetNumbersForBrandIdsJob.getNumbersForBrandIdsJob}.
+     * <p>The brand ids are collected and resolved to business phone numbers and LIDs in a single batch; the
+     * optional {@link #bizJid()} is the business JID echoed by the relay when it already knows the pairing.
      *
      * @param bizOptOutBrandId the marketing brand identifier; never {@code null}
      * @param bizJid           the optional business user JID echoed by the relay; may be {@code null}
      */
     record BrandId(String bizOptOutBrandId, Jid bizJid) implements BizOptOutId {
         /**
-         * Validates the {@link BrandId} payload.
-         *
-         * @apiNote
-         * The compact constructor enforces the wire-level mandatory-versus-optional split before exposing the
-         * value to callers of {@link SmaxGetOptOutListResponse.Item#bizOptOutIds()}.
+         * Validates the {@link BrandId} payload, rejecting a missing brand id.
          *
          * @param bizOptOutBrandId the brand id; never {@code null}
          * @param bizJid           the optional business JID; may be {@code null}
@@ -56,9 +47,8 @@ public sealed interface BizOptOutId permits BizOptOutId.BrandId, BizOptOutId.Use
         /**
          * Returns the business JID when present.
          *
-         * @apiNote
-         * Use to detect whether the relay paired the brand id with a concrete business JID; absence means the
-         * caller must run brand-id expansion before contacting the business.
+         * <p>Absence means the relay did not pair the brand id with a concrete business JID, so the caller must
+         * run brand-id expansion before contacting the business.
          *
          * @return an {@link Optional} carrying the JID, or empty when the relay omitted {@code biz_jid}
          */
@@ -70,20 +60,13 @@ public sealed interface BizOptOutId permits BizOptOutId.BrandId, BizOptOutId.Use
     /**
      * The {@code BizOptOutJid} arm of the disjunction, carrying a concrete business user JID.
      *
-     * @apiNote
-     * Produced by {@link SmaxBizOptOutJidMixin#parse(Node)} when the {@code <item>} carries a
-     * {@code biz_opt_out_jid} attribute. Used directly by {@code WAWebGetOptOutList.getOptOutList} to push a
-     * chat-list pill keyed on the resolved {@code wid} without any further brand-id lookup.
+     * <p>The JID is addressable as-is, so consumers render it without any brand-id lookup.
      *
      * @param bizOptOutJid the business user JID; never {@code null}
      */
     record UserJid(Jid bizOptOutJid) implements BizOptOutId {
         /**
-         * Validates the {@link UserJid} payload.
-         *
-         * @apiNote
-         * The compact constructor rejects a missing JID up front; the wire-level parser already validates the
-         * attribute against {@link Jid#hasUserServer()} before construction.
+         * Validates the {@link UserJid} payload, rejecting a missing JID.
          *
          * @param bizOptOutJid the business user JID; never {@code null}
          * @throws NullPointerException if {@code bizOptOutJid} is {@code null}
@@ -96,16 +79,12 @@ public sealed interface BizOptOutId permits BizOptOutId.BrandId, BizOptOutId.Use
     /**
      * Projects an {@code <item>} node onto a {@link BizOptOutId} variant.
      *
-     * @apiNote
-     * Called by {@link SmaxGetOptOutListResponse#parseItem(Node)} and any direct caller decoding the
-     * {@code biz_opt_out_ids} disjunction from an opt-out list response. Returns {@link Optional#empty()} when
-     * neither arm matches; callers then reject the enclosing item to preserve WA Web's
-     * {@code mapChildrenWithTag} fail-the-parent semantics.
+     * <p>The {@link BrandId} arm is tried first and the {@link UserJid} arm second. An empty result signals that
+     * neither arm matched; callers then reject the enclosing item, preserving the fail-the-parent semantics of the
+     * disjunction.
      *
-     * @implNote
-     * This implementation tries {@link SmaxBizOptOutBrandIdMixin#parse(Node)} first, mirroring the WA Web
-     * priority order, and falls back to {@link SmaxBizOptOutJidMixin#parse(Node)}. The
-     * {@code errorMixinDisjunction} envelope WA Web returns on no-match collapses to an empty {@link Optional}
+     * @implNote This implementation tries {@link SmaxBizOptOutBrandIdMixin#parse(Node)} before
+     * {@link SmaxBizOptOutJidMixin#parse(Node)} and collapses the no-match envelope to an empty {@link Optional},
      * since no caller introspects the disjunction-failure detail.
      *
      * @param item the source {@code <item>} node; never {@code null}

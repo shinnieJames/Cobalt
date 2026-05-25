@@ -11,30 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises the outgoing-mutation wire shape produced by
- * {@link LocaleSettingMutationFactory}.
- *
- * @apiNote
- * Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.LocaleSettingHandler}
- * whose incoming-side coverage lives in
- * {@code LocaleSettingHandlerTest}; WA Web's
- * {@code WAWebLocaleSettingSync} has no outgoing helper, so the parity
- * target is the generic
- * {@code WAWebSyncdActionUtils.buildPendingMutation} pathway.
- *
- * @implNote
- * This implementation skips when the oracle fixture is unavailable; when
- * present, the encoded {@link SyncActionValueSpec} bytes must match the
- * captured payload exactly for the {@code "en_US"} locale at a pinned
- * timestamp.
+ * Verifies that {@link LocaleSettingMutationFactory} encodes its {@link SyncActionValueSpec} bytes
+ * byte-for-byte against the captured WhatsApp Web encode oracle under
+ * {@code handler/locale-setting/encode}, for the {@code "en_US"} locale at a pinned timestamp. The
+ * test skips when the oracle fixture is absent.
  */
 @DisplayName("LocaleSettingMutationFactory")
 class LocaleSettingMutationFactoryTest {
-    /**
-     * Verifies that the encoded {@link SyncActionValueSpec} bytes match
-     * the captured WA Web oracle when the fixture is present.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
     void byteEqualityWithOracle() {

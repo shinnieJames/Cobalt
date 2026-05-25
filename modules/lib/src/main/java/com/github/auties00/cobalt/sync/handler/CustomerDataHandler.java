@@ -15,13 +15,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Acknowledges Business CRM customer-data mutations from {@code customer_data} sync mutations without persisting them.
  *
- * @apiNote
- * Drives the SMB Business CRM customer-record surface where the
- * merchant attaches CRM fields (contact type, email, alternate phone
- * numbers, birthday, address, acquisition source, lead stage, last
- * order) to a chat JID. When the merchant edits a record on another
- * device, the server replays the resulting
- * {@link CustomerDataAction} here.
+ * <p>This handler drives the SMB Business CRM customer-record surface where
+ * the merchant attaches CRM fields (contact type, email, alternate phone
+ * numbers, birthday, address, acquisition source, lead stage, last order) to a
+ * chat JID. When the merchant edits a record on another device, the server
+ * replays the resulting {@link CustomerDataAction} here.
  *
  * @implNote
  * This implementation validates the index and value but does not
@@ -38,9 +36,8 @@ public final class CustomerDataHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton customer-data handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this once during client
+     * bootstrap.
      */
     @WhatsAppWebExport(moduleName = "WAWebCustomerDataSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public CustomerDataHandler() {
@@ -67,15 +64,12 @@ public final class CustomerDataHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * For SET mutations, validates {@code indexParts[1]} as a chat
-     * JID and the value as a {@link CustomerDataAction}. For REMOVE
-     * mutations, validates the chat JID when present. Returns
-     * {@link MutationApplicationResult#unsupported()} for other
-     * operations and
-     * {@link SyncdIndexUtils#malformedActionValue(String)} when the
-     * index slot is empty, the JID fails to parse, or the value is
-     * mistyped.
+     * <p>For SET mutations, validates {@code indexParts[1]} as a chat JID and
+     * the value as a {@link CustomerDataAction}. For REMOVE mutations,
+     * validates the chat JID when present. Returns
+     * {@link MutationApplicationResult#unsupported()} for other operations and
+     * {@link SyncdIndexUtils#malformedActionValue(String)} when the index slot
+     * is empty, the JID fails to parse, or the value is mistyped.
      *
      * @implNote
      * This implementation acknowledges valid mutations with

@@ -13,52 +13,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code GetPrivacySetting} IQ request stanza for the
- * SMB data-sharing-with-Meta consent bridge.
- *
- * @apiNote
- * Used by Cobalt clients that mirror WA Web's
- * {@code WAWebCTWABizDataSharingJob.getCtwaBizDataSharingSettingJob}
- * flow, consulted from
- * {@code WAWebCommonCTWADataSharing.fetchDataSharingSettingAndUpdateModel}
- * to refresh the SMB data-sharing-with-Meta consent value before
- * surfacing the consent banner on the CTWA settings page.
- *
- * @implNote
- * This implementation mirrors WA Web's
- * {@code makeGetPrivacySettingRequest} by stamping the static
- * {@code xmlns="w:biz"} envelope and emitting a bare
- * {@code <privacy/>} child; the {@code id} attribute is appended by
- * Cobalt's send path, matching WA's {@code generateId()} insertion
- * point.
+ * Builds the outbound {@code GetPrivacySetting} IQ request stanza.
+ * <p>
+ * The request reads the SMB data-sharing-with-Meta consent value for the active user before
+ * the CTWA settings page surfaces the consent banner. The shape is parameter-free because the
+ * relay enumerates the single documented consent surface on the active user's account and
+ * accepts no client-side selectors.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsGetPrivacySettingRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsBaseIQGetRequestMixin")
 public final class SmaxGetPrivacySettingRequest implements SmaxOperation.Request {
     /**
-     * Constructs a new request.
-     *
-     * @apiNote
-     * The shape is parameter-free because the relay enumerates the
-     * single documented consent surface on the active user's
-     * account; no client-side selectors are accepted.
+     * Constructs a request.
      */
     public SmaxGetPrivacySettingRequest() {
     }
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     * <p>
+     * Stamps the {@code xmlns="w:biz"} envelope with {@code to} addressed to the user server
+     * and {@code type="get"}, and emits a bare {@code <privacy/>} child. The {@code id}
+     * attribute is appended by Cobalt's send path.
      *
-     * @implNote
-     * This implementation composes two WA Web mixins in a single
-     * pass: {@code makeGetPrivacySettingRequest} stamps the
-     * {@code xmlns="w:biz"} envelope and the bare
-     * {@code <privacy/>} child, and
-     * {@code mergeBaseIQGetRequestMixin} stamps {@code type="get"};
-     * the {@code id} attribute is appended by Cobalt's send path.
-     *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the bare {@code <privacy/>} child
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the bare {@code <privacy/>} child
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizSettingsGetPrivacySettingRequest",
@@ -79,7 +57,12 @@ public final class SmaxGetPrivacySettingRequest implements SmaxOperation.Request
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to another object for type equality.
+     * <p>
+     * All instances are interchangeable because the request carries no state.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxGetPrivacySettingRequest}
      */
     @Override
     public boolean equals(Object obj) {
@@ -90,7 +73,9 @@ public final class SmaxGetPrivacySettingRequest implements SmaxOperation.Request
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a constant hash code shared by all instances.
+     *
+     * @return the class hash code
      */
     @Override
     public int hashCode() {
@@ -98,7 +83,9 @@ public final class SmaxGetPrivacySettingRequest implements SmaxOperation.Request
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a constant debug rendering of this stateless request.
+     *
+     * @return the string representation
      */
     @Override
     public String toString() {

@@ -8,35 +8,16 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 /**
- * Validates {@link Ed25519Scalar} against {@link BigInteger} as the
- * oracle.
- *
- * @apiNote
- * For any input bytes the canonical reduction is
- * {@code BigInteger(bytes).mod(L)}; the test compares 32-byte
- * little-endian encodings of both sides.
- *
- * @implNote
- * This implementation seeds every {@link Random} for
- * reproducibility.
+ * Validates {@link Ed25519Scalar#reduce} against {@link BigInteger} as the oracle: for any input
+ * bytes the canonical reduction is {@code BigInteger(bytes).mod(L)}, compared as 32-byte
+ * little-endian encodings on both sides. Each {@link Random} is seeded for reproducibility.
  */
 class Ed25519ScalarTest {
-    /**
-     * The Ed25519 group order
-     * {@code L = 2^252 + 27742317777372353535851937790883648493}.
-     */
     private static final BigInteger L =
             BigInteger.ONE.shiftLeft(252).add(new BigInteger("27742317777372353535851937790883648493"));
 
-    /**
-     * The number of random iterations per property-style test.
-     */
     private static final int ITERATIONS = 256;
 
-    /**
-     * Asserts {@link Ed25519Scalar#reduce} on a random 64-byte
-     * buffer matches the {@link BigInteger#mod} oracle.
-     */
     @Test
     void reduceMatchesOracle() {
         var rng = new Random(0xC0BA30L);
@@ -55,10 +36,6 @@ class Ed25519ScalarTest {
         }
     }
 
-    /**
-     * Asserts {@link Ed25519Scalar#reduce} zeroes the high 32 bytes
-     * of the 64-byte buffer.
-     */
     @Test
     void reduceZeroesHighHalf() {
         var rng = new Random(0xC0BA31L);
@@ -74,12 +51,6 @@ class Ed25519ScalarTest {
         }
     }
 
-    /**
-     * Asserts boundary inputs reduce correctly: {@code 0},
-     * {@code L-1}, {@code L} (must reduce to {@code 0}),
-     * {@code L+1} (must reduce to {@code 1}), and the maximum
-     * 512-bit value.
-     */
     @Test
     void reduceHandlesBoundaryInputs() {
         assertReducesTo(BigInteger.ZERO, BigInteger.ZERO);
@@ -91,11 +62,6 @@ class Ed25519ScalarTest {
         assertReducesTo(maxWide, maxWide.mod(L));
     }
 
-    /**
-     * Asserts a scalar already in the canonical {@code [0, L)}
-     * range is preserved when zero-padded to 64 bytes and run
-     * through {@link Ed25519Scalar#reduce}.
-     */
     @Test
     void reduceIsIdentityOnCanonicalScalars() {
         var rng = new Random(0xC0BA32L);
@@ -116,13 +82,6 @@ class Ed25519ScalarTest {
         }
     }
 
-    /**
-     * Asserts reducing the wide encoding of {@code input} yields
-     * the canonical 32-byte encoding of {@code expected}.
-     *
-     * @param input    the value to reduce
-     * @param expected the expected reduced value
-     */
     private static void assertReducesTo(BigInteger input, BigInteger expected) {
         var buffer = new byte[Ed25519Scalar.WIDE_BYTES];
         var bytes = bigIntegerToWideBytes(input);
@@ -135,13 +94,6 @@ class Ed25519ScalarTest {
                 "reduce(" + input + ") should equal " + expected);
     }
 
-    /**
-     * Decodes a little-endian byte array as an unsigned
-     * {@link BigInteger}.
-     *
-     * @param le the little-endian bytes
-     * @return the decoded value
-     */
     private static BigInteger littleEndianToBigInteger(byte[] le) {
         var be = new byte[le.length + 1];
         for (var i = 0; i < le.length; i++) {
@@ -150,36 +102,14 @@ class Ed25519ScalarTest {
         return new BigInteger(be);
     }
 
-    /**
-     * Encodes a {@link BigInteger} as a 32-byte little-endian
-     * canonical scalar.
-     *
-     * @param x the value
-     * @return the scalar bytes
-     */
     private static byte[] bigIntegerToScalarBytes(BigInteger x) {
         return bigIntegerToBytes(x, Ed25519Scalar.SCALAR_BYTES);
     }
 
-    /**
-     * Encodes a {@link BigInteger} as a 64-byte little-endian wide
-     * buffer.
-     *
-     * @param x the value
-     * @return the wide buffer bytes
-     */
     private static byte[] bigIntegerToWideBytes(BigInteger x) {
         return bigIntegerToBytes(x, Ed25519Scalar.WIDE_BYTES);
     }
 
-    /**
-     * Encodes a non-negative {@link BigInteger} as {@code width}
-     * little-endian bytes.
-     *
-     * @param x     the value
-     * @param width the target width in bytes
-     * @return the little-endian encoding
-     */
     private static byte[] bigIntegerToBytes(BigInteger x, int width) {
         var be = x.toByteArray();
         var out = new byte[width];

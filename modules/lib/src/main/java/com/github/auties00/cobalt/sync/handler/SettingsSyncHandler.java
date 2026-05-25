@@ -22,31 +22,28 @@ import java.util.List;
  * Applies the cross-device user-preference mirror carried by
  * {@code settings_sync} mutations.
  *
- * @apiNote
- * Cobalt embedders never invoke this handler directly; the sync dispatcher
- * routes incoming {@code settings_sync} mutations here whenever a paired
- * desktop client (typically the Windows hybrid shell) changes a setting
- * the user expects mirrored across companions: locale, link-preview
- * suppression, notification tone selection, font size, theme, wallpaper,
- * media auto-download policy. Cobalt persists the subset for which the
- * store has a backing field and silently ignores the rest because the
- * remaining settings are pure UI shell concerns.
+ * <p>The sync dispatcher routes incoming {@code settings_sync} mutations here
+ * whenever a paired desktop client (typically the Windows hybrid shell) changes
+ * a setting the user expects mirrored across companions: locale, link-preview
+ * suppression, notification tone selection, font size, theme, wallpaper, media
+ * auto-download policy. Cobalt persists the subset for which the store has a
+ * backing field and silently ignores the rest because the remaining settings
+ * are pure UI shell concerns.
  *
  * @implNote
- * This implementation flattens WA Web's batch entry point plus the
- * per-mutation {@code $SettingsSync$p_1} closure into a single
+ * This implementation flattens WA Web's batch entry point plus the per-mutation
+ * {@code $SettingsSync$p_1} closure into a single
  * {@link #applyMutationBatch(WhatsAppClient, List)} that reproduces the
- * latest-mutation-per-index dedup map. Mutations whose index is unique
- * within the batch reach the validation pipeline below; mutations
- * displaced by a later same-index entry are reported as
- * {@link MutationApplicationResult#skipped()}.
+ * latest-mutation-per-index dedup map. Mutations whose index is unique within
+ * the batch reach the validation pipeline; mutations displaced by a later
+ * same-index entry are reported as {@link MutationApplicationResult#skipped()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebSettingsSync")
 @WhatsAppWebModule(moduleName = "WAWebSettingsSyncHelpers")
 public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
-     * The {@code "app"} scope literal used as the wildcard mutation scope
-     * for global (non-per-chat) settings.
+     * The {@code "app"} scope literal used as the wildcard mutation scope for
+     * global (non-per-chat) settings.
      */
     private static final String APP_SCOPE = "app";
 
@@ -56,23 +53,19 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     private final ABPropsService abPropsService;
 
     /**
-     * The required arity of the parsed {@code indexParts} array for a
-     * settings sync mutation.
+     * The required arity of the parsed {@code indexParts} array for a settings
+     * sync mutation.
      *
-     * @apiNote
-     * The four index slots are
-     * {@code [userIndex, platform, settingKey, scope]} as produced by WA
-     * Web's {@code getMutation} builder.
+     * <p>The four index slots are {@code [userIndex, platform, settingKey, scope]}
+     * as produced by WA Web's {@code getMutation} builder.
      */
     private static final int INDEX_PARTS_LENGTH = 4;
 
     /**
      * Constructs the handler.
      *
-     * @apiNote
-     * The handler is stateful only through the injected
-     * {@link ABPropsService}; Cobalt's sync registry holds a single
-     * instance per client.
+     * <p>The handler is stateful only through the injected {@link ABPropsService};
+     * Cobalt's sync registry holds a single instance per client.
      *
      * @param abPropsService the AB-props service consulted on every mutation
      */
@@ -111,19 +104,16 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation mirrors WA Web's
-     * {@code WAWebSettingsSync.applyMutations} batch pipeline: when the
-     * {@code settings_sync_enabled} primary feature or
-     * {@link ABProp#SETTINGS_SYNC_ENABLED} is disabled, every mutation
-     * resolves to {@link MutationApplicationResult#unsupported()};
-     * otherwise the handler builds an index-to-latest-{@code SET} map and
-     * dispatches each input mutation to one of three outcomes:
-     * {@link MutationApplicationResult#malformed()} when no {@code SET}
-     * exists for that index, {@link MutationApplicationResult#skipped()}
-     * when a later {@code SET} supersedes this one, or the
-     * {@link #applyOne(WhatsAppClient, DecryptedMutation.Trusted)} result
-     * for the per-index winner.
+     * <p>When the {@code settings_sync_enabled} primary feature or
+     * {@link ABProp#SETTINGS_SYNC_ENABLED} is disabled, every mutation resolves
+     * to {@link MutationApplicationResult#unsupported()}. Otherwise the handler
+     * builds an index-to-latest-{@code SET} map and dispatches each input
+     * mutation to one of three outcomes:
+     * {@link MutationApplicationResult#malformed()} when no {@code SET} exists for
+     * that index, {@link MutationApplicationResult#skipped()} when a later
+     * {@code SET} supersedes this one, or the
+     * {@link #applyOne(WhatsAppClient, DecryptedMutation.Trusted)} result for the
+     * per-index winner.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSettingsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -165,16 +155,13 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation is the per-mutation adapter for callers that
-     * bypass the batch entry point. It performs the same
-     * {@code settings_sync_enabled} gate and delegates to
-     * {@link #applyOne(WhatsAppClient, DecryptedMutation.Trusted)}.
-     * Non-{@code SET} operations are reported as
-     * {@link MutationApplicationResult#unsupported()} as a defensive
-     * shortcut; in the batch entry point such mutations would never reach
-     * the per-mutation path because the dedup map only keeps {@code SET}
-     * entries.
+     * <p>This is the per-mutation adapter for callers that bypass the batch entry
+     * point. It performs the same {@code settings_sync_enabled} gate and
+     * delegates to {@link #applyOne(WhatsAppClient, DecryptedMutation.Trusted)}.
+     * Non-{@link SyncdOperation#SET} operations are reported as
+     * {@link MutationApplicationResult#unsupported()}; in the batch entry point
+     * such mutations never reach the per-mutation path because the dedup map only
+     * keeps {@code SET} entries.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSettingsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -189,30 +176,27 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Validates a single {@code SET} mutation and writes the resolved
-     * setting into the store.
+     * Validates a single {@code SET} mutation and writes the resolved setting
+     * into the store.
      *
-     * @apiNote
-     * Used as the per-mutation worker for both
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * and {@link #applyMutationBatch(WhatsAppClient, List)}; the caller is
-     * responsible for the {@code settings_sync_enabled} gate and the
-     * {@code SET} operation filter.
+     * <p>Serves as the per-mutation worker for both
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)} and
+     * {@link #applyMutationBatch(WhatsAppClient, List)}; the caller is responsible
+     * for the {@code settings_sync_enabled} gate and the {@code SET} operation
+     * filter. The JSON index is parsed and required to hold exactly
+     * {@value #INDEX_PARTS_LENGTH} elements. The mutation is gated on the
+     * {@link SettingsSyncAction.SettingPlatform} (only
+     * {@link SettingsSyncAction.SettingPlatform#WEB} or, on the Windows hybrid
+     * client, {@link SettingsSyncAction.SettingPlatform#HYBRID}). The
+     * {@link SettingsSyncAction.SettingKey} is decoded (rejecting
+     * {@link SettingsSyncAction.SettingKey#SETTING_KEY_UNKNOWN}), the value is
+     * verified to carry a {@link SettingsSyncAction} with the field that backs the
+     * key, and the resolved value is written through
+     * {@link #applySettingUpdate(WhatsAppClient, SettingsSyncAction, SettingsSyncAction.SettingKey, String)}.
      *
      * @implNote
-     * This implementation mirrors WA Web's {@code $SettingsSync$p_1}: it
-     * parses the JSON index, requires exactly
-     * {@value #INDEX_PARTS_LENGTH} elements, gates on the
-     * {@link SettingsSyncAction.SettingPlatform} (only
-     * {@link SettingsSyncAction.SettingPlatform#WEB} or, on the Windows
-     * hybrid client, {@link SettingsSyncAction.SettingPlatform#HYBRID}),
-     * decodes the {@link SettingsSyncAction.SettingKey} (rejecting
-     * {@link SettingsSyncAction.SettingKey#SETTING_KEY_UNKNOWN}), verifies
-     * the value carries a {@link SettingsSyncAction} with the field that
-     * backs the key, and finally calls
-     * {@link #applySettingUpdate(WhatsAppClient, SettingsSyncAction, SettingsSyncAction.SettingKey, String)}.
-     * WA Web's trailing {@code WALogger.WARN}/{@code ERROR} messages are
-     * omitted as telemetry.
+     * This implementation omits WA Web's trailing {@code WALogger.WARN}/{@code ERROR}
+     * messages as telemetry.
      *
      * @param client   the {@link WhatsAppClient} whose store receives the update
      * @param mutation the mutation to apply
@@ -266,18 +250,11 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Reports whether settings sync is currently enabled for the given
-     * client.
+     * Reports whether settings sync is currently enabled for the given client.
      *
-     * @apiNote
-     * Both the {@code settings_sync_enabled} primary feature (reported by
-     * the paired phone) and {@link ABProp#SETTINGS_SYNC_ENABLED} must be
-     * {@code true}; either gate disables the entire batch.
-     *
-     * @implNote
-     * This implementation mirrors WA Web's local
-     * {@code function h()} helper which performs the same two-way
-     * conjunction.
+     * <p>Both the {@code settings_sync_enabled} primary feature (reported by the
+     * paired phone) and {@link ABProp#SETTINGS_SYNC_ENABLED} must be {@code true};
+     * either gate disables the entire batch.
      *
      * @param client the {@link WhatsAppClient} whose feature flags are inspected
      * @return {@code true} if both gates are open
@@ -291,15 +268,10 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
      * Parses the raw platform string from {@code indexParts[1]} into a
      * {@link SettingsSyncAction.SettingPlatform}.
      *
-     * @apiNote
-     * Returns {@code null} for any value that is not a numeric string
-     * mapping to a known enum index; callers take the "skip" branch when
-     * the platform is unknown rather than the malformed branch.
-     *
-     * @implNote
-     * This implementation mirrors WA Web's
-     * {@code SettingPlatform.cast(Number(l))} which returns the casted
-     * enum or {@code null}.
+     * <p>Returns {@code null} for any value that is not a numeric string mapping
+     * to a known enum index; callers take the
+     * {@link MutationApplicationResult#skipped()} branch when the platform is
+     * unknown rather than the malformed branch.
      *
      * @param value the raw platform string, may be {@code null}
      * @return the parsed platform, or {@code null} if the value does not map
@@ -325,16 +297,10 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
      * Parses the raw setting-key string from {@code indexParts[2]} into a
      * {@link SettingsSyncAction.SettingKey}.
      *
-     * @apiNote
-     * Returns {@code null} for any value that is not a numeric string
-     * mapping to a known enum index; callers take the
-     * {@link MutationApplicationResult#malformed()} branch when the key
-     * is unknown.
-     *
-     * @implNote
-     * This implementation mirrors WA Web's
-     * {@code SettingKey.cast(Number(p))} which returns the casted enum or
-     * {@code null}.
+     * <p>Returns {@code null} for any value that is not a numeric string mapping
+     * to a known enum index; callers take the
+     * {@link MutationApplicationResult#malformed()} branch when the key is
+     * unknown.
      *
      * @param value the raw setting-key string, may be {@code null}
      * @return the parsed key, or {@code null} if the value does not map
@@ -357,23 +323,20 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Reports whether a mutation targeting the given platform should be
-     * applied on the current client.
+     * Reports whether a mutation targeting the given platform should be applied
+     * on the current client.
      *
-     * @apiNote
-     * Mutations targeting {@link SettingsSyncAction.SettingPlatform#WEB}
-     * apply unconditionally; mutations targeting
-     * {@link SettingsSyncAction.SettingPlatform#HYBRID} apply only when the
-     * paired device's platform is
-     * {@link ClientPlatformType#WINDOWS}, mirroring WA Web's
-     * {@code WAWebEnvironment.isWindows} check.
+     * <p>Mutations targeting {@link SettingsSyncAction.SettingPlatform#WEB} apply
+     * unconditionally; mutations targeting
+     * {@link SettingsSyncAction.SettingPlatform#HYBRID} apply only when the paired
+     * device's platform is {@link ClientPlatformType#WINDOWS}. A {@code null}
+     * platform is never applied.
      *
      * @implNote
      * This implementation reads the paired-device platform from
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#device()}
-     * rather than from a runtime environment probe; Cobalt has no
-     * per-client environment object equivalent to WA Web's
-     * {@code WAWebEnvironment}.
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#device()} rather than
+     * from a runtime environment probe; Cobalt has no per-client environment
+     * object equivalent to WA Web's {@code WAWebEnvironment.isWindows} check.
      *
      * @param client   the {@link WhatsAppClient} whose paired-device platform is consulted
      * @param platform the parsed platform from the mutation index, may be {@code null}
@@ -391,25 +354,22 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Reports whether the protobuf field that backs the given setting key
-     * is present on the action.
+     * Reports whether the protobuf field that backs the given setting key is
+     * present on the action.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code var b = C[y]; if (b === void 0)} guard;
-     * mutations whose declared {@link SettingsSyncAction.SettingKey} does
-     * not have the matching value populated are reported as
-     * {@link MutationApplicationResult#malformed()}.
+     * <p>Mutations whose declared {@link SettingsSyncAction.SettingKey} does not
+     * have the matching value populated are reported as
+     * {@link MutationApplicationResult#malformed()} by the caller.
      *
      * @implNote
      * This implementation cannot strictly inspect "field present" for
-     * {@code Boolean}-typed fields because the boolean accessor coalesces
-     * a missing value to {@code false} per Cobalt's nullable-boolean
-     * convention; for those keys the method conservatively returns
-     * {@code true} so a default-{@code false} mutation is still applied,
-     * which matches the protobuf deserialization model where a {@code BOOL}
-     * field defaults to its zero value when absent on the wire. The
-     * {@link SettingsSyncAction.SettingKey#SETTING_KEY_UNKNOWN} branch is
-     * filtered out by the caller and exists here only for exhaustiveness.
+     * {@code Boolean}-typed fields because the boolean accessor coalesces a
+     * missing value to {@code false} per Cobalt's nullable-boolean convention;
+     * for those keys the method returns {@code true} so a default-{@code false}
+     * mutation is still applied, which matches the protobuf deserialization model
+     * where a {@code BOOL} field defaults to its zero value when absent on the
+     * wire. The {@link SettingsSyncAction.SettingKey#SETTING_KEY_UNKNOWN} branch
+     * is filtered out by the caller and exists here only for exhaustiveness.
      *
      * @param action the decoded settings sync action
      * @param key    the setting key whose backing field is being checked
@@ -455,23 +415,17 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
      * Writes the resolved setting value into the local store.
      *
-     * @apiNote
-     * WA Web forwards the {@code (settingKey, value, scope)} triple to the
-     * Windows hybrid shell via
-     * {@code WAWebSettingsSyncHelpers.applySettingUpdate} which calls
-     * {@code WAWebBackendApi.frontendSendAndReceive("applyAppSetting" | "applyPerChatSetting", ...)};
-     * Cobalt has no shell, so only those keys with a backing store field
-     * produce an observable side-effect. Per-chat overrides (any scope
-     * other than {@link #APP_SCOPE}) are also a no-op for the same
-     * reason.
+     * <p>Only keys with a backing {@link com.github.auties00.cobalt.store.WhatsAppStore}
+     * field produce an observable side-effect; every other key resolves to a
+     * successful no-op so the WA-side action state stays consistent. Per-chat
+     * overrides (any scope other than {@link #APP_SCOPE}) are likewise a no-op.
      *
      * @implNote
-     * This implementation only writes for the {@code LANGUAGE} and
-     * {@code DISABLE_LINK_PREVIEWS} keys, which are the only two keys
-     * with a backing
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} field; every
-     * other key resolves to a successful no-op so the WA-side action
-     * state telemetry stays consistent.
+     * WA Web forwards the {@code (settingKey, value, scope)} triple to the Windows
+     * hybrid shell via {@code WAWebSettingsSyncHelpers.applySettingUpdate} which
+     * calls {@code WAWebBackendApi.frontendSendAndReceive}; Cobalt has no shell, so
+     * the only persisted keys are {@code LANGUAGE} and {@code DISABLE_LINK_PREVIEWS},
+     * which are the two keys with a backing store field.
      *
      * @param client     the {@link WhatsAppClient} whose store receives the update
      * @param action     the decoded settings sync action carrying the new value

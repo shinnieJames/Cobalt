@@ -13,39 +13,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
- * {@link SmaxWaffleStateExistsRequest}.
- *
- * @apiNote
- * Mirrors WA Web's three documented {@code StateExists} reply shapes:
- * a {@link Success} carrying the {@code wf_state} code and the optional
- * {@code <suspended_state/>} marker, a {@link ClientError} for
- * malformed or unauthorised requests, and a {@link ServerError} for
- * transient relay failures. {@code WAWebAccountLinkingAPI.stateExists}
- * casts the success {@code wf_state} into the
- * {@code AccountLinkingStateExists} enum ({@code UNLINKED=1},
- * {@code ACTIVE=2}, {@code PAUSED=3}) and treats every other variant as
- * "state unknown" by returning {@code null}.
+ * Models the sealed family of inbound replies to a {@link SmaxWaffleStateExistsRequest}.
+ * <p>
+ * A reply is exactly one of three shapes: a {@link Success} carrying the {@code wf_state} code and the
+ * optional suspended-state marker, a {@link ClientError} for malformed or unauthorised requests (codes below
+ * {@code 500}), or a {@link ServerError} for transient relay failures (codes at or above {@code 500}). The
+ * success {@code wf_state} code is one of {@code 1} (unlinked), {@code 2} (active), or {@code 3} (paused);
+ * any other value is treated as an unknown state.
  */
 public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Response
         permits SmaxWaffleStateExistsResponse.Success, SmaxWaffleStateExistsResponse.ClientError, SmaxWaffleStateExistsResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxWaffleStateExistsResponse} variant in
-     * priority order and returns the first that parses cleanly.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code sendStateExistsRPC} dispatch: the
-     * incoming stanza is offered to the {@link Success} parser first,
-     * then the {@link ClientError} parser, then the {@link ServerError}
-     * parser; the WA Web equivalent of an empty {@link Optional} is the
-     * {@code SmaxParsingFailure} thrown by
-     * {@code WASmaxParsingFailure.SmaxParsingFailure}.
+     * Parses the inbound stanza into the first matching variant.
+     * <p>
+     * The stanza is offered to the {@link Success} parser first, then the {@link ClientError} parser, then
+     * the {@link ServerError} parser; the first that parses cleanly wins. An empty {@link Optional} means
+     * none of the three matched.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty
-     *         when none of the three parsers matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when none of the three parsers matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxWaffleStateExistsRPC",
@@ -65,52 +53,38 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant: the relay reported the
-     * current Waffle state code and, optionally, the suspended-state
-     * marker.
-     *
-     * @apiNote
-     * Consumed by {@code WAWebAccountLinkingAPI.stateExists}, which
-     * casts {@link #wfState()} into the {@code AccountLinkingStateExists}
-     * enum ({@code UNLINKED=1}, {@code ACTIVE=2}, {@code PAUSED=3}). The
-     * optional {@code <suspended_state/>} child surfaces only when the
-     * account is currently suspended, and carries an inner {@code npr}
-     * attribute (no-personal-recovery flag) when the suspension blocks
+     * Models the success reply: the relay reported the current Waffle state code and, optionally, the
+     * suspended-state marker.
+     * <p>
+     * The {@link #wfState()} code is one of {@code 1} (unlinked), {@code 2} (active), or {@code 3} (paused).
+     * The optional suspended-state marker surfaces only when the account is currently suspended, and carries
+     * an inner no-personal-recovery flag (exposed by {@link #suspendedNpr()}) when the suspension blocks
      * personal-recovery flows.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleStateExistsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleIQResultResponseMixin")
     final class Success implements SmaxWaffleStateExistsResponse {
         /**
-         * The {@code <wf_state/>} integer.
+         * Holds the {@code <wf_state/>} integer.
          */
         private final int wfState;
 
         /**
-         * The {@code <suspended_state npr="..."/>} {@code npr} flag, or
-         * {@code null} when the attribute is absent.
+         * Holds the suspended-state no-personal-recovery flag, or {@code null} when the attribute is absent.
          */
         private final Boolean suspendedNpr;
 
         /**
-         * {@code true} when the relay surfaced an explicit
-         * {@code <suspended_state/>} child.
+         * Holds whether the relay surfaced an explicit suspended-state child.
          */
         private final boolean suspended;
 
         /**
-         * Constructs a new success projection.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope and
-         * payload have been validated; embedders typically do not
-         * instantiate this directly.
+         * Constructs a success reply from the state code, suspension flag, and no-personal-recovery flag.
          *
          * @param wfState      the {@code <wf_state/>} integer
-         * @param suspended    {@code true} when a {@code <suspended_state/>}
-         *                     child was present
-         * @param suspendedNpr the inner {@code npr} flag, or {@code null}
-         *                     when absent
+         * @param suspended    {@code true} when a suspended-state child was present
+         * @param suspendedNpr the inner no-personal-recovery flag, or {@code null} when absent
          */
         public Success(int wfState, boolean suspended, Boolean suspendedNpr) {
             this.wfState = wfState;
@@ -120,14 +94,9 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
 
         /**
          * Returns the Waffle state code.
-         *
-         * @apiNote
-         * Embedders typically cast the result through the
-         * {@code AccountLinkingStateExists} enum: {@code UNLINKED=1},
-         * {@code ACTIVE=2}, {@code PAUSED=3}. Any other value is treated
-         * by WA Web as an unrecognised state and triggers an
-         * {@code [WAFFLE] Failed to parse state exists response} log
-         * line.
+         * <p>
+         * The code is one of {@code 1} (unlinked), {@code 2} (active), or {@code 3} (paused); any other value
+         * is treated as an unrecognised state.
          *
          * @return the state code as supplied by the relay
          */
@@ -136,57 +105,40 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Reports whether the relay surfaced an explicit
-         * {@code <suspended_state/>} child.
+         * Reports whether the relay surfaced an explicit suspended-state child.
          *
-         * @return {@code true} when the account is reported as
-         *         suspended
+         * @return {@code true} when the account is reported as suspended
          */
         public boolean suspended() {
             return suspended;
         }
 
         /**
-         * Returns the {@code npr} (no-personal-recovery) flag when the
-         * {@code <suspended_state/>} child carried one.
+         * Returns the no-personal-recovery flag when the suspended-state child carried one.
+         * <p>
+         * An empty {@link Optional} represents the wire absence rather than {@code false}, so callers can
+         * distinguish a flag that was not surfaced from a flag that was explicitly false.
          *
-         * @apiNote
-         * The attribute is parsed as a {@code FALSE_TRUE} enum on the
-         * WA Web side; {@link Optional#empty()} represents the wire
-         * absence rather than {@code false}, so callers can distinguish
-         * "flag not surfaced" from "flag explicitly false".
-         *
-         * @return an {@link Optional} carrying the flag, or empty when
-         *         absent
+         * @return an {@link Optional} carrying the flag, or empty when absent
          */
         public Optional<Boolean> suspendedNpr() {
             return Optional.ofNullable(suspendedNpr);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the inbound
-         * stanza.
+         * Parses a success variant from the inbound stanza.
+         * <p>
+         * Returns an empty {@link Optional} when the envelope check fails, when the {@code <wf_state/>} child
+         * is missing or non-numeric, or when the optional suspended-state child is malformed.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope check
-         * fails (wrong {@code id}/{@code from} echo or wrong
-         * {@code type}), when the {@code <wf_state/>} child is missing
-         * or non-numeric, or when the optional {@code <suspended_state/>}
-         * child is malformed.
-         *
-         * @implNote
-         * This implementation parses {@code wf_state} content as an
-         * ASCII integer via {@link Integer#parseInt(String)}; WA Web
-         * uses its typed {@code contentInt} parser which would reject
-         * leading whitespace strictly, while Cobalt's {@link String#trim()}
-         * pass is more permissive. The {@code npr} flag is matched
-         * case-insensitively against the literal {@code "true"} to
-         * mirror WA Web's {@code ENUM_FALSE_TRUE} parsing.
+         * @implNote This implementation parses the {@code wf_state} content as an ASCII integer after a
+         * {@link String#trim()} pass, which is more permissive about surrounding whitespace than WhatsApp
+         * Web's typed content parser. The no-personal-recovery flag is matched case-insensitively against the
+         * literal {@code "true"}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleStateExistsResponseSuccess",
                 exports = "parseStateExistsResponseSuccess",
@@ -224,12 +176,10 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the given object is a {@link Success} with
-         * equal payload fields.
+         * Returns whether the given object is a {@link Success} with equal payload fields.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when state, suspension flag, and
-         *         {@code npr} flag all match
+         * @return {@code true} when state, suspension flag, and no-personal-recovery flag all match
          */
         @Override
         public boolean equals(Object obj) {
@@ -248,8 +198,7 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         /**
          * Returns a hash code derived from the three payload fields.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -270,40 +219,28 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant: the relay rejected the
-     * request with a code below {@code 500}.
-     *
-     * @apiNote
-     * {@code WAWebAccountLinkingAPI.stateExists} forwards the error
-     * name to {@code WAWebWaffleIQErrorHandler.handleCommonWaffleIQError}
-     * and logs {@code [WAFFLE] StateExists RPC failed}. The error name
-     * is the only signal embedders typically consume; the integer code
-     * is preserved for telemetry and tooling.
+     * Models the client-error reply: the relay rejected the request with a code below {@code 500}.
+     * <p>
+     * The carried {@link #errorCode()} and {@link #errorText()} are the relay-reported failure details; the
+     * error text is the signal embedders typically consume, while the code is preserved for telemetry.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleStateExistsResponseError")
     final class ClientError implements SmaxWaffleStateExistsResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated by
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)};
-         * embedders typically do not instantiate this directly.
+         * Constructs a client-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -322,27 +259,22 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the inbound
-         * stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * which only matches codes below {@code 500}; codes at or above
-         * that threshold fall through to {@link ServerError}.
+         * Parses a client-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which only matches codes below
+         * {@code 500}; codes at or above that threshold fall through to {@link ServerError}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleStateExistsResponseError",
                 exports = "parseStateExistsResponseError",
@@ -356,8 +288,7 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the given object is a {@link ClientError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ClientError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -377,8 +308,7 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -398,40 +328,29 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant: the relay rejected the
-     * request with a code of {@code 500} or above.
-     *
-     * @apiNote
-     * Indicates a transient relay-side failure. WA Web treats this the
-     * same as {@link ClientError} at the API boundary (both are routed
-     * through {@code WAWebWaffleIQErrorHandler}); the split exists so
-     * that telemetry can distinguish client-side from server-side
-     * regressions.
+     * Models the server-error reply: the relay rejected the request with a code of {@code 500} or above.
+     * <p>
+     * Indicates a transient relay-side failure. The split from {@link ClientError} exists so telemetry can
+     * distinguish client-side from server-side regressions; the carried {@link #errorCode()} and
+     * {@link #errorText()} are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleStateExistsResponseError")
     final class ServerError implements SmaxWaffleStateExistsResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated by
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
-         * embedders typically do not instantiate this directly.
+         * Constructs a server-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -450,26 +369,21 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which only matches codes at or above {@code 500}.
+         * Parses a server-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which only matches codes at or above {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleStateExistsResponseError",
                 exports = "parseStateExistsResponseError",
@@ -483,8 +397,7 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the given object is a {@link ServerError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ServerError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -504,8 +417,7 @@ public sealed interface SmaxWaffleStateExistsResponse extends SmaxOperation.Resp
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {

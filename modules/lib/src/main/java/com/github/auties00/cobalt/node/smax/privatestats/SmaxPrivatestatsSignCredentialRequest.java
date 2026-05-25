@@ -14,43 +14,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="privatestats" type="get">} stanza
- * asking the relay to sign a blinded ACS credential.
+ * Models the outbound {@code <iq xmlns="privatestats" type="get">} stanza that asks the relay to sign a blinded ACS credential.
  *
- * @apiNote
- * Backs the privatestats anonymous-credential pipeline driven by WA
- * Web's {@code WAWebFetchACSTokens}; the local client mints a blinded
- * credential, the relay signs it with the per-project ACS key, and the
- * signed credential is later spent on a privatestats event submission
- * so the relay can authenticate the report without learning the
- * device identity. The reply is parsed by
+ * <p>This request backs the privatestats anonymous-credential pipeline: the local client mints a
+ * blinded credential, the relay signs it with the per-project ACS key, and the signed credential is
+ * later spent on a privatestats event submission so the relay can authenticate the report without
+ * learning the device identity. The reply is parsed into one of the variants of
  * {@link SmaxPrivatestatsSignCredentialResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPrivatestatsSignCredentialRequest")
 public final class SmaxPrivatestatsSignCredentialRequest implements SmaxOperation.Request {
     /**
-     * The blinded credential bytes generated locally by the client.
+     * Holds the blinded credential bytes generated locally by the client.
      */
     private final byte[] blindedCredentialElementValue;
 
     /**
-     * The project-name string identifying the privatestats project
-     * the credential is being minted for.
+     * Holds the project-name string identifying the privatestats project the credential is minted for.
      */
     private final String projectNameElementValue;
 
     /**
-     * Constructs a new sign-credential request.
+     * Constructs a new sign-credential request from the blinded credential bytes and the project name.
      *
-     * @apiNote
-     * The pair {@code (projectName, blindedCredential)} matches the
-     * keys WA Web's {@code WAWebFetchACSTokens} passes to
-     * {@code WASmaxPrivatestatsSignCredentialRPC.sendSignCredentialRPC}.
+     * <p>The pair {@code (projectName, blindedCredential)} carries the two values the relay needs to
+     * sign the credential against the correct per-project ACS key.
      *
-     * @param blindedCredentialElementValue the blinded credential
-     *                                      bytes; never {@code null}
-     * @param projectNameElementValue the project name; never
-     *                                {@code null}
+     * @param blindedCredentialElementValue the blinded credential bytes; never {@code null}
+     * @param projectNameElementValue the project name; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxPrivatestatsSignCredentialRequest(byte[] blindedCredentialElementValue, String projectNameElementValue) {
@@ -81,23 +72,24 @@ public final class SmaxPrivatestatsSignCredentialRequest implements SmaxOperatio
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote
-     * Produces
-     * {@code <iq xmlns="privatestats" type="get" to="s.whatsapp.net">
+     * <p>The result carries the {@code privatestats} IQ envelope addressed to {@link Jid#userServer()}
+     * with a {@code <sign_credential>} child wrapping the {@code <blinded_credential>} and
+     * {@code <project_name>} payloads, as shown below; the envelope's {@code id} is stamped by the
+     * dispatch path.
+     * {@snippet lang="xml" :
+     * <iq xmlns="privatestats" type="get" to="s.whatsapp.net">
      *   <sign_credential version="2">
      *     <blinded_credential>BYTES</blinded_credential>
      *     <project_name>STRING</project_name>
-     *   </sign_credential></iq>}; the envelope's {@code id} is
-     * stamped by the dispatch path.
+     *   </sign_credential>
+     * </iq>
+     * }
      *
      * @implNote
-     * This implementation pins {@code version="2"} on the
-     * {@code <sign_credential>} child to match WA Web's
-     * {@code makeSignCredentialRequest}; the older version-1 shape is
-     * not supported.
+     * This implementation pins {@code version="2"} on the {@code <sign_credential>} child; the older
+     * version-1 shape is not supported.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <sign_credential>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <sign_credential>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPrivatestatsSignCredentialRequest",
@@ -125,9 +117,7 @@ public final class SmaxPrivatestatsSignCredentialRequest implements SmaxOperatio
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxPrivatestatsSignCredentialRequest} with equal
-     * blinded credential bytes and project name.
+     * Returns whether the given object is a {@link SmaxPrivatestatsSignCredentialRequest} with equal blinded credential bytes and project name.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when both fields match
@@ -146,8 +136,7 @@ public final class SmaxPrivatestatsSignCredentialRequest implements SmaxOperatio
     }
 
     /**
-     * Returns a hash code derived from the blinded credential bytes
-     * and the project name.
+     * Returns a hash code derived from the blinded credential bytes and the project name.
      *
      * @return the hash code
      */

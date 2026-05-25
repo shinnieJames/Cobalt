@@ -13,29 +13,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2" to="<parentGroupJid>">} stanza that deactivates a community
- * (parent group) along with its sub-groups.
+ * Deactivates a community (parent group) along with its sub-groups via an
+ * {@code <iq type="set" xmlns="w:g2">} stanza.
  *
- * @apiNote
- * Drives the community-delete pipeline surfaced by {@code WAWebGroupCommunityJob.deleteParentGroup}; emit
- * one of these per community to be torn down and pair it with {@link SmaxGroupsDeleteParentGroupResponse} to
- * read the relay's verdict. The payload is a bare {@code <delete_parent/>} child with no attributes; the
- * target community is identified solely by the IQ envelope's {@code to} attribute.
+ * <p>The payload is a bare {@code <delete_parent/>} child with no attributes; the target community is
+ * identified solely by the IQ envelope's {@code to} attribute. Callers emit one request per community to be
+ * torn down and pair it with {@link SmaxGroupsDeleteParentGroupResponse} to read the relay's verdict.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsDeleteParentGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsDeleteParentGroupRequest implements SmaxOperation.Request {
     /**
-     * The parent (community) group {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
+     * Holds the parent (community) group {@link Jid} routed verbatim into the IQ envelope's {@code to}
+     * attribute.
      */
     private final Jid parentGroupJid;
 
     /**
      * Constructs a request targeting the given community.
      *
-     * @apiNote
-     * Build one request per community deletion; the relay does not accept multiple parents in a single IQ.
+     * <p>The relay does not accept multiple parents in a single IQ, so callers build one request per community
+     * deletion.
      *
      * @param parentGroupJid the community {@link Jid}; never {@code null}
      * @throws NullPointerException if {@code parentGroupJid} is {@code null}
@@ -47,8 +46,7 @@ public final class SmaxGroupsDeleteParentGroupRequest implements SmaxOperation.R
     /**
      * Returns the parent community {@link Jid} targeted by this request.
      *
-     * @apiNote
-     * Mirrors the value that will appear in the rendered IQ envelope's {@code to} attribute.
+     * <p>The returned value is the one rendered into the IQ envelope's {@code to} attribute.
      *
      * @return the parent group {@link Jid}; never {@code null}
      */
@@ -60,9 +58,9 @@ public final class SmaxGroupsDeleteParentGroupRequest implements SmaxOperation.R
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a single empty {@code <delete_parent/>} child inside the canonical
-     * {@code <iq xmlns="w:g2" type="set" to="<parentGroupJid>">} envelope; no further attributes or children
-     * are sent.
+     * This implementation emits a single empty {@code <delete_parent/>} child inside the
+     * {@code <iq xmlns="w:g2" type="set">} envelope addressed to {@link #parentGroupJid()}; no further
+     * attributes or children are sent.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsDeleteParentGroupRequest",
@@ -79,6 +77,13 @@ public final class SmaxGroupsDeleteParentGroupRequest implements SmaxOperation.R
                 .content(deleteParentNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsDeleteParentGroupRequest} with the same
+     *         parent group {@link Jid}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -91,11 +96,21 @@ public final class SmaxGroupsDeleteParentGroupRequest implements SmaxOperation.R
         return Objects.equals(this.parentGroupJid, that.parentGroupJid);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(parentGroupJid);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsDeleteParentGroupRequest[parentGroupJid=" + parentGroupJid + ']';

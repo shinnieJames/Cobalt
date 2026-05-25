@@ -13,13 +13,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that asks the relay to traverse a community parent-or-sub
- * linkage and return the linked group's preview metadata.
+ * Traverses a community parent-or-sub linkage to fetch the linked group's preview metadata via an
+ * {@code <iq xmlns="w:g2" type="get">} stanza.
  *
- * @apiNote Drives the {@code WAWebGroupQuerySubGroupsJob.querySubgroup} flow: from the community page the caller passes
- * the parent group JID as {@link #groupJid()} (the IQ target), {@code "sub_group"} as {@link #queryLinkedType()}, and
- * the target sub-group JID as {@link #queryLinkedJid()}. The optional {@link #subGroupJid()} disambiguates the sub-group
- * lookup when the parent hosts multiple linked groups with the same announcement role.
+ * <p>From the community page the caller passes the anchor group JID as {@link #groupJid()} (the IQ target),
+ * the linkage direction as {@link #queryLinkedType()} (typically {@code "sub_group"} or {@code "parent_group"}),
+ * and the target group JID as {@link #queryLinkedJid()}. The optional {@link #subGroupJid()} disambiguates the
+ * sub-group lookup when the anchor hosts multiple linked groups with the same announcement role.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetLinkedGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -28,30 +28,32 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsOptionalSubGroupMixin")
 public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Request {
     /**
-     * The {@link Jid} surfaced on the IQ's {@code to} attribute; identifies the anchor group of the linkage.
+     * Holds the {@link Jid} surfaced on the IQ's {@code to} attribute; identifies the anchor group of the
+     * linkage.
      */
     private final Jid groupJid;
 
     /**
-     * The linkage direction selector echoed under {@code <query_linked type="..."/>} (typically {@code "sub_group"} or
-     * {@code "parent_group"}).
+     * Holds the linkage direction selector echoed under {@code <query_linked type="..."/>} (typically
+     * {@code "sub_group"} or {@code "parent_group"}).
      */
     private final String queryLinkedType;
 
     /**
-     * The {@link Jid} of the linked group being queried; carried under {@code <query_linked jid="..."/>}.
+     * Holds the {@link Jid} of the linked group being queried; carried under {@code <query_linked jid="..."/>}.
      */
     private final Jid queryLinkedJid;
 
     /**
-     * The optional sub-group disambiguation hint surfaced under {@code <query_linked sub_group_jid="..."/>}.
+     * Holds the optional sub-group disambiguation hint surfaced under
+     * {@code <query_linked sub_group_jid="..."/>}.
      */
     private final Jid subGroupJid;
 
     /**
      * Constructs a request without a sub-group disambiguation hint.
      *
-     * @apiNote Convenience overload for the common case where {@code queryLinkedJid} alone identifies the target.
+     * <p>Convenience overload for the common case where {@code queryLinkedJid} alone identifies the target.
      *
      * @param groupJid        the IQ {@code to} group {@link Jid}; never {@code null}
      * @param queryLinkedType the linkage direction; never {@code null}
@@ -65,8 +67,8 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
     /**
      * Constructs a fully-parametrised request.
      *
-     * @apiNote Pass {@code subGroupJid} when the anchor group hosts multiple linked groups sharing the same
-     * announcement role; the relay uses it to scope the lookup.
+     * <p>The caller passes {@code subGroupJid} when the anchor group hosts multiple linked groups sharing the
+     * same announcement role; the relay uses it to scope the lookup.
      *
      * @param groupJid        the IQ {@code to} group {@link Jid}; never {@code null}
      * @param queryLinkedType the linkage direction; never {@code null}
@@ -94,8 +96,8 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
     /**
      * Returns the linkage direction selector.
      *
-     * @apiNote Surfaced verbatim under {@code <query_linked type="..."/>}; typically {@code "sub_group"} or
-     * {@code "parent_group"}.
+     * <p>The value is surfaced verbatim under {@code <query_linked type="..."/>}; typically {@code "sub_group"}
+     * or {@code "parent_group"}.
      *
      * @return the linkage direction token; never {@code null}
      */
@@ -122,9 +124,9 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
     }
 
     /**
-     * Materialises the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="get">
      *         <query_linked type="<queryLinkedType>" jid="<queryLinkedJid>" sub_group_jid="<subGroupJid>"/>

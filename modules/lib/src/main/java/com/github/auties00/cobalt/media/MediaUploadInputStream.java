@@ -31,19 +31,19 @@ import java.util.Optional;
  * {@link Plaintext} passes the second group through while still computing
  * the SHA-256 hash that the server expects on the upload metadata.
  *
- * @apiNote
- * Constructed indirectly by {@link MediaConnectionService#upload(MediaProvider, InputStream)}
- * through {@link #of(MediaProvider, InputStream)}. Once the stream has
- * been fully consumed, callers query {@link #fileSha256()},
+ * <p>Constructed indirectly by
+ * {@link MediaConnectionService#upload(MediaProvider, MediaPayload)}
+ * through {@link #of(MediaProvider, InputStream)}. Once the stream has been
+ * fully consumed, callers query {@link #fileSha256()},
  * {@link #fileEncSha256()}, {@link #fileKey()}, and {@link #fileLength()}
  * to populate the outgoing message protobuf.
  *
  * @implNote
  * This implementation is a streaming adapter over WA Web's batch
- * {@code encryptAndHmac}: WA Web encrypts the full plaintext in memory
- * and emits one {@code ArrayBuffer}, whereas Cobalt produces ciphertext
- * chunk by chunk so large attachments can be piped to a temporary file
- * without holding the whole payload in heap.
+ * {@code encryptAndHmac}: WA Web encrypts the full plaintext in memory and
+ * emits one {@code ArrayBuffer}, whereas Cobalt produces ciphertext chunk
+ * by chunk so large attachments can be piped to a temporary file without
+ * holding the whole payload in heap.
  */
 @WhatsAppWebModule(moduleName = "WAMediaCrypto")
 @WhatsAppWebModule(moduleName = "WAWebCryptoEncryptMedia")
@@ -52,8 +52,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * Constructs a new upload stream wrapping the given raw plaintext
      * stream.
      *
-     * @apiNote
-     * Subclass-only constructor invoked by {@link Ciphertext} and
+     * <p>Subclass-only constructor invoked by {@link Ciphertext} and
      * {@link Plaintext} via {@link #of(MediaProvider, InputStream)}.
      *
      * @param rawInputStream the underlying plaintext input stream
@@ -66,11 +65,10 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * Returns the total number of plaintext bytes processed from the
      * underlying stream.
      *
-     * @apiNote
-     * Recorded into the outgoing message protobuf's {@code fileLength}
-     * field so that recipients can pre-allocate buffers and report
-     * accurate progress. Stable only after the upload stream has been
-     * fully consumed.
+     * <p>Recorded into the outgoing message protobuf's {@code fileLength}
+     * field so that recipients can pre-allocate buffers and report accurate
+     * progress. Stable only after the upload stream has been fully
+     * consumed.
      *
      * @implSpec
      * Implementations must return the total number of bytes read from the
@@ -86,8 +84,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
     /**
      * Returns the SHA-256 digest of the plaintext content.
      *
-     * @apiNote
-     * Available only after the stream has been fully consumed (a
+     * <p>Available only after the stream has been fully consumed (a
      * {@code read} returned {@code -1}). The value populates the outgoing
      * message protobuf's {@code fileSha256} field so that recipients can
      * verify the decrypted bytes after download.
@@ -98,7 +95,8 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * truncated to fewer than 32 bytes.
      *
      * @return the plaintext SHA-256 hash
-     * @throws IllegalStateException if the stream has not been fully consumed
+     * @throws IllegalStateException if the stream has not been fully
+     *         consumed
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoEncryptMedia", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -108,8 +106,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * Returns the SHA-256 digest of the encrypted payload
      * ({@code ciphertext || HMAC[0:10]}).
      *
-     * @apiNote
-     * Available only after the stream has been fully consumed. Populates
+     * <p>Available only after the stream has been fully consumed. Populates
      * the outgoing message protobuf's {@code fileEncSha256} field. Empty
      * for plaintext uploads that skip encryption.
      *
@@ -131,8 +128,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
     /**
      * Returns the 32-byte random media key used as the HKDF seed.
      *
-     * @apiNote
-     * The media key is stored in the outgoing message protobuf so that
+     * <p>The media key is stored in the outgoing message protobuf so that
      * recipients can reproduce the same IV, cipher key, and HMAC key when
      * decrypting. Empty for plaintext uploads.
      *
@@ -152,8 +148,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * Creates the appropriate upload stream variant for the supplied
      * provider.
      *
-     * @apiNote
-     * Returns a {@link Ciphertext} stream when the provider's media path
+     * <p>Returns a {@link Ciphertext} stream when the provider's media path
      * advertises a key name (end-to-end encrypted media) or a
      * {@link Plaintext} stream otherwise (newsletter media, profile
      * pictures, business cover photos).
@@ -173,13 +168,13 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * Creates the appropriate upload stream variant for the supplied
      * provider with a caller-supplied media key.
      *
-     * @apiNote
-     * Used by {@link MediaConnectionService}'s two-pass upload: pass 1 generates
-     * the random 32-byte media key, pass 2 (and every retry) reuses it so
-     * the ciphertext bytes remain identical between attempts and match
-     * the {@code fileEncSha256} captured during pass 1. When the provider
-     * does not request encryption (newsletter / profile pictures /
-     * business cover photos) {@code mediaKey} is ignored.
+     * <p>Used by the two-pass upload in
+     * {@link MediaConnectionService#upload(MediaProvider, MediaPayload)}:
+     * pass 1 generates the random 32-byte media key, pass 2 (and every
+     * retry) reuses it so the ciphertext bytes remain identical between
+     * attempts and match the {@code fileEncSha256} captured during pass 1.
+     * When the provider does not request encryption (newsletter media,
+     * profile pictures, business cover photos) {@code mediaKey} is ignored.
      *
      * @param provider    the media provider describing the media type
      * @param inputStream the raw plaintext input stream
@@ -205,23 +200,21 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
      * An encrypted upload stream that performs AES-CBC encryption with a
      * trailing truncated HMAC-SHA256 authentication tag.
      *
-     * @apiNote
-     * The pipeline generates a random 32-byte media key, derives the IV,
-     * cipher key, and HMAC key via HKDF-SHA256, encrypts the plaintext
-     * with AES-CBC, computes HMAC-SHA256 over {@code IV || ciphertext}
-     * truncated to 10 bytes, and emits {@code ciphertext || HMAC[0:10]}
-     * on the wire while accumulating SHA-256 over both the plaintext and
-     * the encrypted output.
+     * <p>The pipeline generates a random 32-byte media key, derives the IV,
+     * cipher key, and HMAC key via HKDF-SHA256, encrypts the plaintext with
+     * AES-CBC, computes HMAC-SHA256 over {@code IV || ciphertext} truncated
+     * to {@link #MAC_LENGTH} bytes, and emits {@code ciphertext || HMAC[0:10]}
+     * on the wire while accumulating SHA-256 over both the plaintext and the
+     * encrypted output.
      */
     @WhatsAppWebModule(moduleName = "WAMediaCrypto")
     @WhatsAppWebModule(moduleName = "WAWebCryptoEncryptMedia")
     private static final class Ciphertext extends MediaUploadInputStream {
         /**
-         * Accumulates SHA-256 over the plaintext as bytes are read from
-         * the underlying stream.
+         * Accumulates SHA-256 over the plaintext as bytes are read from the
+         * underlying stream.
          *
-         * @apiNote
-         * The final value is exposed by {@link #fileSha256()}.
+         * <p>The final value is exposed by {@link #fileSha256()}.
          */
         @WhatsAppWebExport(moduleName = "WAWebCryptoEncryptMedia", exports = "default",
                 adaptation = WhatsAppAdaptation.DIRECT)
@@ -231,8 +224,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * Accumulates SHA-256 over the encrypted output
          * ({@code ciphertext || HMAC[0:10]}).
          *
-         * @apiNote
-         * The final value is exposed by {@link #fileEncSha256()}.
+         * <p>The final value is exposed by {@link #fileEncSha256()}.
          */
         @WhatsAppWebExport(moduleName = "WAWebCryptoEncryptMedia", exports = "default",
                 adaptation = WhatsAppAdaptation.DIRECT)
@@ -242,10 +234,8 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * The HMAC-SHA256 instance computing the authentication tag over
          * {@code IV || ciphertext}.
          *
-         * @apiNote
-         * Only the first {@link #MAC_LENGTH} bytes of the final tag are
-         * written to the output stream, matching WA Web's
-         * {@code WAMediaCrypto.encryptAndHmac} wire format.
+         * <p>Only the first {@link #MAC_LENGTH} bytes of the final tag are
+         * written to the output stream.
          */
         @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "encryptAndHmac",
                 adaptation = WhatsAppAdaptation.DIRECT)
@@ -269,8 +259,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * Scratch buffer for the cipher output.
          *
-         * @apiNote
-         * Sized to accommodate one extra AES block so that
+         * <p>Sized to accommodate one extra AES block so that
          * {@link Cipher#doFinal(byte[], int)} can emit its trailing PKCS5
          * padding block without reallocation.
          */
@@ -297,9 +286,9 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * The finalised SHA-256 digest of the plaintext.
          *
-         * @apiNote
-         * Populated by {@link #ensureDataAvailable()} when the underlying
-         * stream is exhausted, and surfaced by {@link #fileSha256()}.
+         * <p>Populated by {@link #ensureDataAvailable()} when the
+         * underlying stream is exhausted, and surfaced by
+         * {@link #fileSha256()}.
          */
         @WhatsAppWebExport(moduleName = "WAWebCryptoEncryptMedia", exports = "default",
                 adaptation = WhatsAppAdaptation.DIRECT)
@@ -308,9 +297,9 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * The finalised SHA-256 digest of {@code ciphertext || HMAC[0:10]}.
          *
-         * @apiNote
-         * Populated by {@link #ensureDataAvailable()} when the underlying
-         * stream is exhausted, and surfaced by {@link #fileEncSha256()}.
+         * <p>Populated by {@link #ensureDataAvailable()} when the
+         * underlying stream is exhausted, and surfaced by
+         * {@link #fileEncSha256()}.
          */
         @WhatsAppWebExport(moduleName = "WAWebCryptoEncryptMedia", exports = "default",
                 adaptation = WhatsAppAdaptation.DIRECT)
@@ -343,8 +332,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * Constructs an encrypted upload stream for the given media type.
          *
-         * @apiNote
-         * Invoked from {@link #of(MediaProvider, InputStream)} for media
+         * <p>Invoked from {@link #of(MediaProvider, InputStream)} for media
          * paths whose {@code keyName} is present.
          *
          * @implNote
@@ -371,10 +359,10 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * Constructs an encrypted upload stream with a caller-provided
          * media key.
          *
-         * @apiNote
-         * Used by {@link MediaConnectionService}'s two-pass upload so the second
-         * pass produces the same ciphertext as the first (matching the
-         * {@code fileEncSha256} embedded in the upload URL).
+         * <p>Used by the two-pass upload in
+         * {@link MediaConnectionService#upload(MediaProvider, MediaPayload)}
+         * so the second pass produces the same ciphertext as the first
+         * (matching the {@code fileEncSha256} embedded in the upload URL).
          *
          * @param rawInputStream the plaintext input stream to encrypt
          * @param keyName        the HKDF info string for the media type
@@ -414,9 +402,8 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * Reads a single byte of the encrypted payload.
          *
-         * @apiNote
-         * Drives {@link #ensureDataAvailable()} to stage the next chunk on
-         * demand.
+         * <p>Drives {@link #ensureDataAvailable()} to stage the next chunk
+         * on demand.
          *
          * @return the next byte of encrypted data, or {@code -1} if the
          *         stream is exhausted
@@ -438,9 +425,8 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * Reads up to {@code len} bytes of the encrypted payload into the
          * supplied array.
          *
-         * @apiNote
-         * Drives {@link #ensureDataAvailable()} to stage the next chunk on
-         * demand; returns as soon as the staging buffer has data, up to
+         * <p>Drives {@link #ensureDataAvailable()} to stage the next chunk
+         * on demand; returns as soon as the staging buffer has data, up to
          * {@code len} bytes.
          *
          * @param b   the destination buffer
@@ -470,12 +456,11 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * Refills {@link #outputBuffer} with encrypted data from the
          * underlying stream.
          *
-         * @apiNote
-         * Each pass reads a plaintext chunk, encrypts it with AES-CBC,
+         * <p>Each pass reads a plaintext chunk, encrypts it with AES-CBC,
          * extends the HMAC and digest accumulators, and copies the
-         * ciphertext into the output buffer. On end-of-stream the cipher
-         * is finalised, the truncated HMAC is appended, and the SHA-256
-         * hashes are captured for the accessor methods.
+         * ciphertext into the output buffer. On end-of-stream the cipher is
+         * finalised, the truncated HMAC is appended, and the SHA-256 hashes
+         * are captured for the accessor methods.
          *
          * @implNote
          * This implementation appends the truncated HMAC into the same
@@ -532,12 +517,11 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * {@code encFilehash} digest, the HMAC accumulator, and the
          * caller-facing output buffer.
          *
-         * @apiNote
-         * Invoked by {@link #ensureDataAvailable()} after every cipher
+         * <p>Invoked by {@link #ensureDataAvailable()} after every cipher
          * update.
          *
-         * @param length the number of valid ciphertext bytes in the
-         *               cipher output buffer
+         * @param length the number of valid ciphertext bytes in the cipher
+         *               output buffer
          */
         @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "encryptAndHmac",
                 adaptation = WhatsAppAdaptation.ADAPTED)
@@ -609,22 +593,20 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
 
     /**
      * A plaintext upload stream that passes the underlying content through
-     * unchanged while computing the SHA-256 digest needed for the
-     * outgoing message protobuf.
+     * unchanged while computing the SHA-256 digest needed for the outgoing
+     * message protobuf.
      *
-     * @apiNote
-     * Used for media types that do not participate in end-to-end
-     * encryption, such as newsletter media, profile pictures, and
-     * business cover photos.
+     * <p>Used for media types that do not participate in end-to-end
+     * encryption, such as newsletter media, profile pictures, and business
+     * cover photos.
      */
     @WhatsAppWebModule(moduleName = "WAWebCryptoEncryptMedia")
     private static final class Plaintext extends MediaUploadInputStream {
         /**
          * Accumulates SHA-256 over the plaintext content.
          *
-         * @apiNote
-         * Consumed by {@link #fileSha256()} once the underlying stream is
-         * exhausted.
+         * <p>Consumed by {@link #fileSha256()} once the underlying stream
+         * is exhausted.
          */
         @WhatsAppWebExport(moduleName = "WAWebCryptoEncryptMedia", exports = "default",
                 adaptation = WhatsAppAdaptation.DIRECT)
@@ -641,8 +623,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * The finalised SHA-256 digest of the plaintext.
          *
-         * @apiNote
-         * Populated when {@link #read()} or
+         * <p>Populated when {@link #read()} or
          * {@link #read(byte[], int, int)} observes end-of-stream, and
          * surfaced by {@link #fileSha256()}.
          */
@@ -659,8 +640,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
         /**
          * Constructs a plaintext upload stream.
          *
-         * @apiNote
-         * Invoked from {@link #of(MediaProvider, InputStream)} for media
+         * <p>Invoked from {@link #of(MediaProvider, InputStream)} for media
          * paths whose {@code keyName} is absent.
          *
          * @param rawInputStream the underlying input stream to pass through
@@ -681,8 +661,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * Reads a single byte from the underlying stream while extending
          * the plaintext digest.
          *
-         * @apiNote
-         * Finalises the plaintext digest the first time end-of-stream is
+         * <p>Finalises the plaintext digest the first time end-of-stream is
          * observed.
          *
          * @return the next byte of data, or {@code -1} if end of stream
@@ -707,8 +686,7 @@ abstract sealed class MediaUploadInputStream extends MediaInputStream {
          * Reads up to {@code len} bytes from the underlying stream while
          * extending the plaintext digest.
          *
-         * @apiNote
-         * Finalises the plaintext digest the first time end-of-stream is
+         * <p>Finalises the plaintext digest the first time end-of-stream is
          * observed.
          *
          * @param b   the destination buffer

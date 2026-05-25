@@ -15,64 +15,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Byte-identical KAT for the 8-byte WAM buffer header against vectors
- * captured from {@code WAWebWamLibContext}.
+ * Byte-identical known-answer test for the 8-byte WAM buffer header,
+ * asserting Cobalt reproduces the {@code "WAM"} magic, protocol version,
+ * stream id, little-endian sequence number, and channel byte against
+ * vectors captured from {@code WAWebWamLibContext}.
  *
- * @apiNote
- * Pins the on-the-wire layout {@code WamService} produces at the head
- * of every upload buffer: {@code "WAM"} magic, protocol version,
- * stream id, little-endian sequence number, channel byte. Vectors live
- * in {@code fixtures/wam/wam-buffer-headers.json} and pin snapshot
- * revision {@code 1039260921}. The end-to-end {@code WamService} flush
- * path that emits this header sits in {@code WamServiceTest}; this
- * file checks the bytes only.
- *
- * @implNote
- * Reconstructs the header in-line via {@link DataUtils#putShort} (the
- * same primitive {@code WamService.writeHeader} uses), because the
- * production method is private and exercising it from outside the
- * package would require a permission edit. Vector ordering covers the
- * {@code 0xFFFF -> 1} lower wrap and the 256-boundary, which are the
- * two cases a big-endian regression would surface first.
+ * <p>Vectors live in {@code fixtures/wam/wam-buffer-headers.json}, pinned
+ * to snapshot revision {@code 1039260921}; their ordering covers the
+ * {@code 0xFFFF -> 1} lower wrap and the 256-boundary, the two cases a
+ * big-endian regression would surface first. The header is reconstructed
+ * in-line via {@link DataUtils#putShort} (the same primitive the
+ * production writer uses) because that writer is package-private; the
+ * end-to-end flush path is covered by {@code WamServiceTest}.
  */
 @DisplayName("WAM buffer header KAT against live WhatsApp Web bundle")
 class WamBufferHeaderKatTest {
-    /**
-     * The snapshot revision the KAT vectors were captured against;
-     * compared against the fixture header so revision drift fails
-     * loudly.
-     */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
-    /**
-     * The fixed 8-byte header length.
-     */
     private static final int HEADER_SIZE = 8;
 
-    /**
-     * The {@code "WAM"} magic bytes at the start of every buffer.
-     */
     private static final byte[] WAM_MAGIC = {'W', 'A', 'M'};
 
-    /**
-     * The wire protocol version pinned at fixture capture; cross-checked
-     * against the fixture's own {@code protocolVersion} entry before
-     * any vector runs so a server-side bump fails loudly rather than
-     * surfacing as a per-vector byte mismatch.
-     */
     private static final int PROTOCOL_VERSION = 5;
 
-    /**
-     * The stream id; always {@code 1} for the regular client stream.
-     */
+    // Always 1 for the regular client stream.
     private static final int STREAM_ID = 1;
 
-    /**
-     * Returns one dynamic test per captured (channelByte, seqNum)
-     * combination.
-     *
-     * @return the test factory stream
-     */
     @TestFactory
     List<DynamicTest> headerBytesAgreeWithLiveBundle() {
         var fixture = WamFixtures.loadOracle("wam-buffer-headers");
@@ -92,13 +60,6 @@ class WamBufferHeaderKatTest {
         return tests;
     }
 
-    /**
-     * Builds the 8-byte header for the captured
-     * (channelByte, seqNum) pair and asserts the produced hex matches
-     * the captured bytes.
-     *
-     * @param vector the captured header descriptor
-     */
     private static void assertVectorAgrees(JSONObject vector) {
         var channelByte = vector.getIntValue("channelByte");
         var seqNum = vector.getIntValue("seqNum");

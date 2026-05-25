@@ -11,6 +11,18 @@ The user invokes this command as: `/validate` (no arguments).
 - Preserve existing validation outputs under `validation/` across runs.
 - NEVER run `mvn` yourself. The user uses their IDE for compile diagnostics. Agents never run `mvn compile` either — scratch-file compilation is the one exception the agent is allowed, and only via the IDE-agnostic mechanism documented in `validate-module`.
 
+### Clean Working Tree (required)
+
+`/validate` requires a clean working tree. Run `git status --porcelain`; if it
+prints anything, STOP and tell the user to commit (or otherwise clear) their
+changes first. This is a hard precondition, not a soft warning, and there is no
+dirty-tree fallback.
+
+The clean-tree rule is what makes incremental mode exact. A run starts from a
+known commit and ends (Phase 4.5) by committing the fixes its agents applied, so
+the next run can diff those two commits with neither false positives nor missed
+changes. A dirty tree at either boundary would smear that delta.
+
 ### Verify MCP Server
 
 Before doing anything else, verify the whatsapp MCP server is reachable:
@@ -22,6 +34,30 @@ Before doing anything else, verify the whatsapp MCP server is reachable:
    ```
    Wait a few seconds, then re-check. The server runs on port 8787 by default.
 3. If the server cannot be started (missing build, missing data), stop and tell the user.
+
+### Determine Run Mode (incremental vs full)
+
+Decide FULL or INCREMENTAL once, here, and record it as the first line of
+`scope.md`.
+
+Run INCREMENTAL when ALL of these hold:
+- `validation/run-state.json` exists and its `schemaVersion` equals the current
+  schema (1).
+- Every `snapshots.<platform>.snapshotId` it records still appears in
+  `list_snapshots(<platform>)`, so `get_revision_diff` can resolve its `from`.
+- Its `cobaltCommit` is reachable: `git cat-file -e <cobaltCommit>^{commit}`
+  succeeds.
+
+Otherwise run FULL. The user may also pass `--full` to force FULL even when a
+valid anchor exists; `--full` is the ONLY argument `/validate` accepts.
+
+- FULL runs Phase 1 (whole-universe discovery, Steps 1.1-1.4) and seeds the
+  anchor at Phase 4.5 so the next run can be incremental.
+- INCREMENTAL runs Phase 1-INC (changed-set discovery), then Phases 2-4 scoped
+  to the changed-set.
+
+If you fall back to FULL because an anchor was present but unusable (snapshot
+pruned, commit unreachable, schema bumped), say so in one line in `scope.md`.
 
 ### Verify Registered Emulators
 
@@ -78,6 +114,7 @@ validation/
   scope.md                 # Phase 1 scope report (for the user to review)
   manifest.json            # Whole-universe module-to-owner mapping
   plan.md                  # Topologically ordered agent list
+  run-state.json           # Incremental-mode anchor: per-platform snapshots + fixes commit + per-module verdicts (git-ignored)
   reports/<Module>.md      # Per-module reports — outcome is VALIDATED or SKIPPED
   captures/<Module>/       # Live captures + Cobalt captures + diffs (persist across runs)
     live.json              # Captured real WA Web stanzas / WAM / HTTP
@@ -100,9 +137,16 @@ validation/
 
 `validation/captures/` MUST persist across runs. Agents read existing captures and reuse them; they only re-drive the live runtime when a capture is missing or the user has explicitly invalidated it.
 
+The entire `validation/` tree is git-ignored; it is local run data (including the `run-state.json` anchor), not committed artefacts.
+
 ---
 
 ## Phase 1: Whole-Universe Discovery (You Do This Inline)
+
+This phase runs in FULL mode. In INCREMENTAL mode, skip Step 1.1's enumeration
+and run Phase 1-INC (below) instead. Phase 1-INC still reuses Step 1.2 (owner
+mapping) and Step 1.3 (dependency graph), because the reverse-dependency closure
+needs the full graph even when only a handful of modules changed.
 
 ### Step 1.1: Enumerate the WA Module Universe
 
@@ -142,9 +186,83 @@ Note in scope.md that there is **no upfront skip list**. Each per-module agent i
 
 Ask the user to confirm or to amend the skip criteria in the agent prompt. Do NOT proceed to Phase 2 until they say go.
 
+### Phase 1-INC: Incremental Discovery (INCREMENTAL mode only)
+
+Replaces Step 1.1. Computes the changed-set: every module whose validation could
+have been invalidated since the recorded anchor. Everything outside the
+changed-set inherits its prior verdict from `run-state.json`.
+
+You MAY use `.claude/scripts/diff-scope.mjs` for the closure and topo math in
+steps 6 and 8: pass it `{ "graph": { "<module>": ["<dep>", ...] }, "seed":
+["<module>", ...] }` (stdin or a file path arg) and it returns
+`{ "closure": [...], "topoOrder": [...], "cyclesDetected": bool }`.
+
+1. **Build the graph.** Run `list_modules` (no platform) and perform Steps 1.2
+   and 1.3 exactly as in FULL mode. This yields the dependency graph and the
+   Cobalt owner reverse-index. No agents are spawned for the universe.
+
+2. **WA-source delta.** For each platform p in {web, desktop_windows,
+   desktop_macos, ios}, read `active = get_active_snapshot(p)`. If
+   `active.snapshotId == run-state.snapshots[p].snapshotId` the WA delta for p is
+   empty; otherwise call `get_revision_diff(fromSnapshotId =
+   run-state.snapshots[p].snapshotId, toSnapshotId = active.snapshotId, platform
+   = p)` and collect `addedModules` + `removedModules` + the `module` of each
+   `changedModules` entry. Keep each entry's `sourceChanged` flag for step 7.
+
+3. **Cobalt-code delta.** The tree is clean (precondition) and the prior run's
+   fixes were committed at its Phase 4.5, so the anchor commit IS the
+   last-validated Cobalt state. Compute both:
+   - `git diff --name-status <run-state.cobaltCommit> -- modules/lib/src/main/java`
+     (modified, added, renamed, deleted tracked owner files), and
+   - `git ls-files --others --exclude-standard -- modules/lib/src/main/java`
+     (new untracked owner files that `git diff` does not show).
+   Map each path to its WA module(s) via the Step 1.2 reverse-index. For `D` and
+   `R` entries, also include the module the old path used to claim. This delta is
+   exact: no false positives, nothing missed.
+
+4. **Carry-forward.** Add every `run-state.verdicts` entry with `open == true`
+   (a prior MISMATCH, MISSING_IN_COBALT, LIVE_MISMATCH, or FUNCTIONAL_BLOCKED the
+   last run could not close), plus any module in the current universe that is
+   absent from `run-state.verdicts` (never validated).
+
+5. **seed-set** = (WA delta) + (Cobalt delta) + (carry-forward).
+
+6. **changed-set** = the reverse-dependency closure of seed-set over the Step 1.3
+   graph: starting from seed-set, repeatedly add any module that depends
+   (directly or transitively) on a module already in the set. This catches a
+   consumer whose own source did not change but whose dependency's export shape
+   did, the same invalidation Phase 4.2 handles in FULL mode.
+
+7. **Invalidate stale captures.** For each module in the seed-set, under
+   `validation/captures/<Module>/` delete `cobalt.json` (Cobalt code may have
+   moved) and, when its WA `sourceChanged` flag is set, `live.json` (runtime
+   behaviour moved). Leave `input.json` and `session.json`. Modules pulled in
+   only by closure with no WA or Cobalt change of their own keep their captures.
+
+8. **Topologically sort** the changed-set subgraph (leaves first), exactly as
+   Step 1.3 sorts the universe.
+
+9. **Write scope.md and gate.** Present: run mode INCREMENTAL; per-platform
+   `from -> to` snapshot ids and revisions; the anchor `cobaltCommit`; the sizes
+   of the WA delta, Cobalt delta, carry-forward, and the final changed-set after
+   closure; and the topological order of the changed-set. Apply the same
+   no-upfront-skip-list note as Step 1.4, then ask the user to confirm. Do NOT
+   proceed to Phase 2 until they say go.
+
+   If the changed-set is empty (no snapshot moved, no owner file changed, no open
+   verdict), write scope.md stating the validation is up to date against the
+   anchor and STOP. There is nothing to validate, and run-state.json is already
+   current, so do not rewrite it.
+
 ---
 
 ## Phase 2: Manifest Building
+
+In INCREMENTAL mode, "every kept WA module" below means every module in the
+changed-set, not the whole universe. Build fresh manifest entries for those and
+merge them over the prior `validation/manifest.json`, so untouched modules keep
+their existing entries and `validationOrderIndex`. In FULL mode, build the entire
+manifest as usual.
 
 ### Step 2.1: For every kept WA module, enumerate exports
 
@@ -196,6 +314,11 @@ One line per module in validation order, plus coverage counts and the layer brea
 ## Phase 3: Strict Sequential Validation
 
 **Rule — no parallelism.** Spawn exactly one `validate-module` agent. Wait for it to finish. Spawn the next. No `run_in_background`, no worktrees. Every agent operates on the live codebase and sees every fix from every previous agent.
+
+In INCREMENTAL mode, "each module" below means each module in the changed-set,
+walked in the changed-set's own topological order. Modules outside the
+changed-set are never spawned; their prior `validation/reports/<Module>.md` and
+verdicts stand unchanged. In FULL mode, walk the whole universe.
 
 For each module in topological order:
 
@@ -356,6 +479,11 @@ forgets to refresh the chat list.
 
 This phase closes that gap.
 
+In INCREMENTAL mode, run this phase only for features whose module group
+intersects the changed-set; every other (sub-)feature inherits its prior verdict
+from `feature-summary.md`, and existing `live.json` captures with unchanged
+scenario inputs are reused. In FULL mode, run the whole feature tree.
+
 ### Step 3.11.1: Group VALIDATED modules into a feature taxonomy
 
 Spawn one `validate-feature-grouper` agent. It reads every Phase 3 report whose
@@ -479,10 +607,17 @@ carried forward.
 
 Output: `validation/flow-report.md`.
 
+This phase runs fully in both FULL and INCREMENTAL mode: it is a single agent and
+cheap relative to Phase 3, and cross-file issues can surface from any pairing of
+changed and inherited modules.
+
 ## Phase 3.13: Phantom Code Sweep
 
 After cross-cutting flow validation, spawn `validate-phantom` to remove dead
 code. Same contract as before. Output: `validation/phantom-report.md`.
+
+This phase runs fully in both modes; dead-code detection is whole-codebase by
+definition.
 
 ---
 
@@ -499,9 +634,13 @@ For every (sub-)feature in `feature-tree.md`, confirm a row in
 `feature-summary.md` with a verdict in {`FUNCTIONAL_PARITY`,
 `FUNCTIONAL_DIVERGENCE`, `FUNCTIONAL_FIXED`, `FUNCTIONAL_BLOCKED`}.
 
+In INCREMENTAL mode, a module outside the changed-set takes the verdict inherited
+from `run-state.json`. Confirm every universe module has either a fresh verdict
+(changed-set) or an inherited one, with none missing.
+
 ### Step 4.2: Re-validation Pass
 
-If any agent applied fixes, re-run Phase 3 from the first module that depended (directly or transitively) on a fixed leaf. This converges quickly because dependency order already got most issues in the first pass.
+If any agent applied fixes, re-run Phase 3 from the first module that depended (directly or transitively) on a fixed leaf. This converges quickly because dependency order already got most issues in the first pass. In INCREMENTAL mode this re-validation stays within the changed-set: a fixed leaf there may force re-running its changed-set consumers, but inherited modules are not reopened.
 
 ### Step 4.3: Stop the Live Session
 
@@ -549,11 +688,58 @@ Modules where Cobalt intentionally diverges, with reason.
 |--------|-------------|---------|-------|----------|----------------|------------|---------------|---------|
 ```
 
+### Step 4.5: Commit Fixes and Write `validation/run-state.json`
+
+This finalizes the anchor for the next run and runs in BOTH modes.
+
+1. **Commit the fixes.** Agents applied fixes during Phases 3, 3.11, 3.12, and
+   3.13, so the tree is now dirty under `modules/`. Stage and commit them as a
+   single commit (do NOT stage `validation/`, which is git-ignored):
+   ```bash
+   git add -- modules/
+   git commit -m "validation fixes"
+   ```
+   If nothing changed, skip the commit; the existing HEAD is already the
+   validated state. This end-of-run commit is a deliberate, command-scoped
+   exception to the usual "commit only when asked" rule; it is what lets the next
+   run diff exactly.
+
+2. **Record the anchor.** Write `validation/run-state.json`:
+   - `schemaVersion`: 1
+   - `completedAt`: now, ISO 8601
+   - `cobaltCommit`: `git rev-parse HEAD` (the commit from step 1, or the
+     unchanged HEAD if nothing was committed)
+   - `snapshots`: the `{snapshotId, revision}` from `get_active_snapshot(p)` for
+     each platform p
+   - `verdicts`: one entry per WA module, `{outcome, open, reason?}`. In FULL
+     mode this covers the whole universe; in INCREMENTAL mode merge the fresh
+     changed-set verdicts over the inherited ones. `open` is `true` for any
+     module the run left unresolved (an unfixed MISMATCH, MISSING_IN_COBALT, or
+     LIVE_MISMATCH, or a FUNCTIONAL_BLOCKED feature touching it).
+
+```json
+{
+  "schemaVersion": 1,
+  "completedAt": "<ISO>",
+  "cobaltCommit": "<sha>",
+  "snapshots": {
+    "web":             { "snapshotId": "...", "revision": "..." },
+    "desktop_windows": { "snapshotId": "...", "revision": "..." },
+    "desktop_macos":   { "snapshotId": "...", "revision": "..." },
+    "ios":             { "snapshotId": "...", "revision": "..." }
+  },
+  "verdicts": {
+    "WAWebSendMessageJob": { "outcome": "VALIDATED", "open": false }
+  }
+}
+```
+
 ---
 
 ## Rules
 
-- **No argument.** The command enumerates the whole universe. A feature-scoped variant can be added later; do not accept one now.
+- **Auto mode, one optional flag.** With no argument the command auto-selects INCREMENTAL when a valid `validation/run-state.json` anchor exists and FULL otherwise (see "Determine Run Mode"). The ONLY accepted argument is `--full`, which forces a whole-universe pass. Do not accept feature-scoped or module-scoped arguments.
+- **Clean tree in, committed fixes out.** The command aborts on a dirty working tree and ends (Phase 4.5) by committing the fixes its agents applied. That end-of-run commit is the one sanctioned exception to "commit only when asked" and is required for incremental diffing to stay exact.
 - **Strict sequential.** One agent at a time, full stop. The 5-hour usage ceiling makes parallel waves impossible.
 - **No mvn by the orchestrator.** The user's IDE owns compilation diagnostics. Agents may compile their own scratch file, nothing else.
 - **No live-run timeouts.** Live MCP calls wait as long as they need. The orchestrator gates on agent completion, not on wall-clock.
@@ -564,4 +750,6 @@ Modules where Cobalt intentionally diverges, with reason.
 - **Topological order is mandatory.** Leaves first. Every leaf must be complete against WA Web, regardless of current consumer needs.
 - **Every issue must be fixed, not only reported.**
 - **No orchestrator-side shortcuts.** The orchestrator (you) MUST NOT auto-skip modules by writing reports directly, MUST NOT bulk-classify modules by name pattern without an agent, MUST NOT pre-filter the universe by guessing which modules are "obviously" UI / generated / locale / vendored / codegen-guaranteed — these decisions belong to the per-module `validate-module` agent. Every module in the topological plan goes through exactly one `validate-module` agent invocation, end of story. The agent's first action is to read the module source via the MCP and decide `VALIDATED` / `SKIPPED` with a reason — that decision is the agent's, not the orchestrator's. Even when the module name screams "obvious skip" (e.g. `*.pb`, `*.graphql`, `*Loadable`, `WAWebLocale*`, `WAWebFbt*`, `WAWebWam*`, `WAWebAbProps*`), still spawn the agent. The cost of a 30-second agent confirming the obvious is dramatically less than the cost of a misclassified module silently sliding through. Auto-skip heuristics are a footgun that lose information; do not introduce them under any pretext (throughput, context budget, "optimization"). If the orchestrator is tempted to write a SKIPPED report itself, stop — that is a guard violation; spawn the agent instead.
+
+  The INCREMENTAL changed-set is NOT a violation of this rule and is NOT an auto-skip. It is a tool-computed delta (snapshot `get_revision_diff` plus `git diff` against the anchor commit plus reverse-dependency closure); every module in it still goes through a full `validate-module` agent; and every module outside it retains a verdict a real agent produced on a prior run, recorded in `run-state.json`, not a name-pattern guess. The prohibited shortcut is GUESSING which modules are skippable. Deriving the changed-set from revisions is not guessing. You still may not hand-write or bulk-edit reports for changed-set modules.
 - **No agent-replacement scripts.** Driver helpers like `next-modules.js` are allowed (they only read the manifest and check which reports exist). Helpers that would bulk-write reports, bulk-edit owner files, or otherwise act in lieu of an agent are not.

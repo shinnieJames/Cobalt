@@ -35,9 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ArchiveChatHandler} - the WAWebArchiveChatSync adapter
- * that owns archive/unarchive mutations including their message-range based
- * conflict resolution.
+ * Covers {@link ArchiveChatHandler}, which owns archive/unarchive mutations including their
+ * message-range based conflict resolution. The conflict matrix exercises the range-enclosure
+ * outcomes (remote-encloses, local-encloses, equal ranges, non-enclosing merge) that drive the
+ * {@link ConflictResolutionState} returned by {@code resolveConflicts}.
  */
 @DisplayName("ArchiveChatHandler")
 class ArchiveChatHandlerTest {
@@ -232,7 +233,6 @@ class ArchiveChatHandlerTest {
 
             var result = new ArchiveChatHandler().applyMutation(client, mutation);
             assertEquals(SyncActionState.UNSUPPORTED, result.actionState());
-            // Side-effect untouched: chat is still archived.
             assertTrue(chat.archived());
         }
     }
@@ -319,9 +319,6 @@ class ArchiveChatHandlerTest {
         }
     }
 
-    /**
-     * Builds a mutation whose timestamp equals the lastMessageTimestamp of its range.
-     */
     private static DecryptedMutation.Trusted mutationWithRange(boolean archived, long lastTsSeconds, List<SyncActionMessage> messages) {
         return mutationWithRangeAt(archived, lastTsSeconds, messages, Instant.ofEpochSecond(lastTsSeconds));
     }

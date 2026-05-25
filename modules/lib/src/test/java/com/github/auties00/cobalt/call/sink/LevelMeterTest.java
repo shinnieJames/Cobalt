@@ -11,12 +11,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LevelMeter}.
+ * Covers {@link LevelMeter}: peak/RMS/frame-count snapshots, pass-through forwarding to a
+ * downstream {@link AudioSink}, empty-frame handling, and null-frame rejection.
  */
 class LevelMeterTest {
-    /**
-     * Snapshots track peak / rms / frame count.
-     */
     @Test
     void measuresLevels() throws InterruptedException {
         var meter = new LevelMeter();
@@ -24,14 +22,11 @@ class LevelMeterTest {
         meter.write(new AudioFrame(pcm, 0L));
         var snap = meter.snapshot();
         assertEquals(1, snap.frameCount());
+        // peak normalises against 32768 (full scale), so a 16384 sample reads as 0.5
         assertEquals(0.5, snap.peak(), 0.001);
         assertTrue(snap.rms() > 0);
     }
 
-    /**
-     * Frames are forwarded to the downstream sink when one is
-     * provided.
-     */
     @Test
     void forwardsToDownstream() throws InterruptedException {
         var captured = new ArrayList<AudioFrame>();
@@ -42,9 +37,6 @@ class LevelMeterTest {
         assertEquals(4L, captured.getFirst().ptsMs());
     }
 
-    /**
-     * Empty frames don't increment the frame count.
-     */
     @Test
     void emptyFrameDoesNotCount() throws InterruptedException {
         var meter = new LevelMeter();
@@ -52,9 +44,6 @@ class LevelMeterTest {
         assertEquals(0, meter.snapshot().frameCount());
     }
 
-    /**
-     * Null frame is rejected.
-     */
     @Test
     void rejectsNullFrame() {
         var meter = new LevelMeter();

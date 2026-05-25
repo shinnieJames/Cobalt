@@ -17,11 +17,9 @@ import java.time.Instant;
 import java.util.Arrays;
 
 /**
- * A single mutation that has come off the wire and been (partially or fully)
- * authenticated and decrypted.
+ * A single mutation that has come off the wire and been authenticated and decrypted.
  *
- * <p>The two variants capture the two stages of WA Web's incoming-patch
- * pipeline:
+ * <p>The two variants capture the two stages of the incoming-patch pipeline:
  * <ul>
  *   <li>{@link Untrusted} is the freshly decrypted form produced by
  *       {@link Untrusted#of}; it still carries the raw {@code indexMac},
@@ -32,11 +30,10 @@ import java.util.Arrays;
  *       application-level fields remain.</li>
  * </ul>
  *
- * @apiNote
- * Embedders never construct these directly. The receive pipeline produces
- * {@link Untrusted} from {@link SyncActionValue}-bearing wire records,
- * verifies the patch and snapshot MACs against the resulting value MACs,
- * and only then promotes the survivors to {@link Trusted}.
+ * <p>The receive pipeline produces {@link Untrusted} from
+ * {@link SyncActionValue}-bearing wire records, verifies the patch and snapshot
+ * MACs against the resulting value MACs, and only then promotes the survivors
+ * to {@link Trusted}.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdDecryptMutations")
 @WhatsAppWebModule(moduleName = "WAWebSyncdDecryptMutationsWrapper")
@@ -44,9 +41,8 @@ public sealed interface DecryptedMutation {
     /**
      * Returns the UTF-8 decoded mutation index string.
      *
-     * @apiNote
-     * The index is the JSON-array key under which the sync handlers locate
-     * the mutation target (e.g. {@code ["archive","1234@s.whatsapp.net"]}).
+     * <p>The index is the JSON-array key under which the sync handlers locate
+     * the mutation target, for example {@code ["archive","1234@s.whatsapp.net"]}.
      *
      * @return the index string
      */
@@ -62,9 +58,8 @@ public sealed interface DecryptedMutation {
     /**
      * Returns the timestamp the originating device stamped on the action.
      *
-     * @apiNote
-     * Used by handlers that order conflicting actions by recency (chat
-     * archive, mute, pin); not a server-supplied wall clock.
+     * <p>Handlers that order conflicting actions by recency (chat archive,
+     * mute, pin) read this value; it is not a server-supplied wall clock.
      *
      * @return the action timestamp
      */
@@ -74,15 +69,14 @@ public sealed interface DecryptedMutation {
      * A decrypted mutation that still carries the MAC and key-id metadata
      * needed to chain LT-Hash and snapshot-MAC verification.
      *
-     * @apiNote
-     * Produced exclusively by {@link Untrusted#of}. Downstream code consumes
+     * <p>Produced exclusively by {@link Untrusted#of}. Downstream code consumes
      * {@link #indexMac()} and {@link #valueMac()} when feeding the
      * {@link MutationIntegrityVerifier} patch path, and {@link #keyId()} when
-     * recording the {@code SyncActionEntry} that LT-Hash recomputation reads
-     * back during consistency checks.
+     * recording the {@link com.github.auties00.cobalt.model.sync.SyncActionEntry}
+     * that LT-Hash recomputation reads back during consistency checks.
      *
      * @param index         the decoded index string
-     * @param indexMac      the wire index MAC (also recomputed from the index)
+     * @param indexMac      the wire index MAC, also recomputed from the index
      * @param valueMac      the trailing 32 bytes of the wire encrypted value
      * @param value         the decoded {@link SyncActionValue} payload
      * @param operation     the sync operation
@@ -103,20 +97,16 @@ public sealed interface DecryptedMutation {
         /**
          * Decrypts and authenticates a single wire mutation.
          *
-         * @apiNote
-         * Called from the snapshot and patch decryption fan-outs that the
-         * incoming sync pipeline runs against {@code SyncdRecord} arrays.
-         * The expected wire format is
+         * <p>The expected wire format is
          * {@snippet :
          *     // encryptedValue = IV (16 bytes)
          *     //                || AES-CBC(SyncActionData protobuf)
          *     //                || HMAC-SHA512(...)[0..32]   // trailing valueMac
          *     // indexMac        = HMAC-SHA256(indexKey, SyncActionData.index)
          * }
-         * Verification proceeds in the order the WA Web routine uses: value
-         * MAC first (so a tampered ciphertext fails before the AES-CBC step),
-         * then the protobuf decode, then the index MAC. The thrown exception
-         * subtype names the failed step.
+         * Verification proceeds value MAC first (so a tampered ciphertext fails
+         * before the AES-CBC step), then the protobuf decode, then the index MAC;
+         * the thrown exception subtype names the failed step.
          *
          * @implNote
          * This implementation extracts the {@link SyncActionValue} and
@@ -219,8 +209,7 @@ public sealed interface DecryptedMutation {
      * A validated mutation that the sync handlers can apply to the local
      * store without further crypto checks.
      *
-     * @apiNote
-     * Produced either by promoting an {@link Untrusted} after MAC chaining
+     * <p>Produced either by promoting an {@link Untrusted} after MAC chaining
      * succeeds, or by the outgoing path that originates mutations locally
      * (no decryption involved). Carries no MAC metadata; the sync handlers
      * see only the application-level fields.

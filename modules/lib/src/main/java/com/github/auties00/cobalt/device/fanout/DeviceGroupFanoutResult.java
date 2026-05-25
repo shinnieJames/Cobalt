@@ -10,15 +10,15 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Bundles the two outputs of a group-message fanout: the recipient device {@link Jid} set and
- * the {@code phash} string attached to the outgoing stanza.
+ * Bundles the two outputs of a group-message fanout: the recipient device {@link Jid} set and the
+ * {@code phash} string attached to the outgoing stanza.
  *
- * @apiNote
- * Produced by {@link com.github.auties00.cobalt.device.DeviceService#getGroupFanout(Jid, Jid)}.
- * The {@link #phash()} value goes on the {@code <message phash="...">} attribute so the server
- * can detect a stale view of the group's device membership and reject the stanza or instruct
- * the client to resync; pairing the two values in one object prevents callers from using one
- * without the other.
+ * <p>An instance is produced by
+ * {@link com.github.auties00.cobalt.device.DeviceService#getGroupFanout(Jid, Jid)}. The
+ * {@link #phash()} value is set on the outgoing {@code <message phash="...">} attribute so the
+ * server can detect a stale view of the group's device membership and reject the stanza or instruct
+ * the client to resync. Pairing the two values in one object keeps callers from using one without
+ * the other.
  */
 @WhatsAppWebModule(moduleName = "WAWebDBDeviceListFanout")
 @WhatsAppWebModule(moduleName = "WAWebPhashUtils")
@@ -37,9 +37,8 @@ public final class DeviceGroupFanoutResult {
     /**
      * Constructs a result from a recipient set and the matching {@code phash}.
      *
-     * @apiNote
-     * Constructed by {@link com.github.auties00.cobalt.device.DeviceService}; callers do not
-     * normally instantiate this directly.
+     * <p>Instances are constructed by {@link com.github.auties00.cobalt.device.DeviceService};
+     * callers do not normally instantiate this directly.
      *
      * @param devices the device JIDs to encrypt to
      * @param phash   the participant hash computed from {@code devices} via
@@ -60,9 +59,8 @@ public final class DeviceGroupFanoutResult {
     /**
      * Returns the recipient device {@link Jid} set.
      *
-     * @apiNote
-     * The returned view is the set the group message must be encrypted for; iterate to drive
-     * the per-device send loop in {@link com.github.auties00.cobalt.device.DeviceService}.
+     * <p>The returned view is the set the group message must be encrypted for and drives the
+     * per-device send loop in {@link com.github.auties00.cobalt.device.DeviceService}.
      *
      * @return an unmodifiable view of the underlying device JID set
      */
@@ -76,10 +74,9 @@ public final class DeviceGroupFanoutResult {
     /**
      * Returns the {@code phash} attribute value to place on the outgoing stanza.
      *
-     * @apiNote
-     * The string is already prefixed with the version tag ({@code "1:"} for V1, {@code "2:"}
-     * for V2) and ready to set on the {@code <message phash="...">} stanza attribute; the
-     * server uses it to confirm both ends agree on the group's device membership.
+     * <p>The string is already prefixed with its version tag ({@code "1:"} for V1, {@code "2:"} for
+     * V2) and ready to set on the {@code <message phash="...">} stanza attribute; the server uses
+     * it to confirm both ends agree on the group's device membership.
      *
      * @return the participant hash string
      */

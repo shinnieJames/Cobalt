@@ -18,41 +18,40 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 
 /**
- * A recursive-descent parser for Apple's XML property-list format.
+ * Parses Apple's XML property-list format into a {@link PlistValue} tree by recursive descent.
  *
- * @apiNote
- * Tailored to the small subset Cobalt's APNS code exchanges with
- * Apple's activation and bag endpoints; consumed indirectly via
- * {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#parse(byte[])}.
- * The recognised element set is exactly
- * {@code true / false / string / integer / real / data / date /
- * dict / array}; anything else surfaces as {@link IOException}.
+ * <p>The parser accepts the small subset of the plist grammar that Cobalt's APNS code exchanges with
+ * Apple's activation and bag endpoints. The recognised element set is exactly {@code true}, {@code false},
+ * {@code string}, {@code integer}, {@code real}, {@code data}, {@code date}, {@code dict}, and {@code array};
+ * any other element name raises {@link IOException}. The {@code <?xml?>} prolog, a single {@code <!DOCTYPE>}
+ * declaration, and {@code <!-- ... -->} comments are tolerated and skipped wherever whitespace is allowed.
+ * Self-closing forms such as {@code <true/>}, {@code <dict/>}, and {@code <array/>} yield the empty
+ * equivalent. Instances are single-use and bound to one source buffer; callers obtain a result through
+ * {@link #parse(byte[])} rather than constructing the parser directly.
  *
- * @implNote
- * This implementation runs single-pass over the source
- * {@code byte[]} (no {@link java.io.Reader} wrappers) and tolerates
- * the {@code <?xml?>} prolog, a single {@code <!DOCTYPE>}, and
- * {@code <!-- ... -->} comments interleaved between elements;
- * namespaces and DTD validation are deliberately not honoured
- * because Apple's plist DTD has been stable since 2002 and no
- * production plist Cobalt parses uses either feature.
+ * @implNote This implementation runs a single pass over the source {@code byte[]} with no
+ * {@link java.io.Reader} wrapper, advancing an integer cursor through the raw bytes. XML namespaces and DTD
+ * validation are deliberately not honoured: Apple's plist DTD has been stable since 2002 and no production
+ * plist Cobalt parses relies on either feature, so the {@code <!DOCTYPE>} declaration is skipped wholesale
+ * rather than interpreted. Dictionary entries are collected into a {@link LinkedHashMap} so source order
+ * survives the round-trip.
  */
 public final class PlistXmlParser {
     /**
-     * The source bytes.
+     * Holds the source bytes being parsed.
      */
     private final byte[] src;
 
     /**
-     * The current read position within {@link #src}.
+     * Tracks the current read offset within {@link #src}.
      */
     private int pos;
 
     /**
-     * Constructs a parser bound to a source buffer.
+     * Binds a parser instance to a source buffer.
      *
-     * @apiNote
-     * Private; callers must route through {@link #parse(byte[])}.
+     * <p>The constructor is private so callers route through {@link #parse(byte[])}, which constructs the
+     * instance and drives the parse.
      *
      * @param src the source bytes
      */
@@ -61,28 +60,25 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Parses the source bytes into a {@link PlistValue} tree.
+     * Parses XML plist bytes into a {@link PlistValue} tree.
      *
-     * @apiNote
-     * Entry point; constructs an internal parser instance and drives
-     * the root parse.
+     * <p>Constructs an internal parser bound to {@code data} and drives the parse from the start of the
+     * buffer through the single root value.
      *
      * @param data the XML plist bytes
      * @return the parsed root value
-     * @throws IOException if the source is malformed
+     * @throws IOException if the source is malformed or contains an unrecognised element
      */
     public static PlistValue parse(byte[] data) throws IOException {
         return new PlistXmlParser(data).parseRoot();
     }
 
     /**
-     * Drives the parse from the start of the source through the
-     * {@code <plist>} root.
+     * Drives the parse from the start of the source through the {@code <plist>} root.
      *
-     * @apiNote
-     * Skips the {@code <?xml?>} prolog and {@code <!DOCTYPE>}
-     * preamble, optionally opens the {@code <plist>} wrapper, then
-     * delegates to {@link #parseValue()} for the single child.
+     * <p>Skips the {@code <?xml?>} prolog and {@code <!DOCTYPE>} preamble, optionally opens the
+     * {@code <plist>} wrapper when present, then delegates to {@link #parseValue()} for the single child
+     * value the wrapper contains.
      *
      * @return the root value
      * @throws IOException if the source is malformed
@@ -97,17 +93,17 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Reads exactly one value element starting at the current
-     * position.
+     * Reads exactly one value element starting at the current position.
      *
-     * @apiNote
-     * Dispatches on the opening element name through a
-     * {@code switch}; self-closing variants (e.g. {@code <true/>},
-     * {@code <dict/>}) are tolerated and yield the empty equivalent.
+     * <p>Consumes the opening tag, then dispatches on the element name to the matching value constructor.
+     * Self-closing variants are tolerated and yield the empty equivalent: {@code <true/>} and
+     * {@code <false/>} yield the corresponding boolean, {@code <string/>} yields the empty string,
+     * {@code <data/>} yields a zero-length blob, and {@code <dict/>} / {@code <array/>} yield empty
+     * containers.
      *
      * @return the parsed value
-     * @throws IOException if the element name is unknown or the
-     *                     element body is malformed
+     * @throws IOException if the leading {@code <} is missing, the tag is unterminated, or the element name
+     *                     is not one of the recognised plist elements
      */
     private PlistValue parseValue() throws IOException {
         skipMisc();
@@ -169,19 +165,15 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Reads alternating {@code <key>} / value pairs until the
-     * closing {@code </dict>}.
+     * Reads alternating {@code <key>} and value pairs until the closing {@code </dict>}.
      *
-     * @apiNote
-     * Drives the dict parse after {@link #parseValue()} has consumed
-     * the opening {@code <dict>}.
+     * <p>Invoked after {@link #parseValue()} has consumed the opening {@code <dict>}. Each iteration reads
+     * one {@code <key>} element, decodes its entity-escaped text, then recurses into {@link #parseValue()}
+     * for the associated value. Iteration stops at the closing tag.
      *
-     * @implNote
-     * This implementation uses {@link LinkedHashMap} so the source
-     * order of the dict entries survives the round-trip.
-     *
-     * @return the parsed dictionary
-     * @throws IOException if the contents are malformed
+     * @return the parsed dictionary, preserving source order
+     * @throws IOException if a {@code <key>} is expected but absent, a {@code </key>} close is missing, or a
+     *                     value is malformed
      */
     private PlistDictionaryValue parseDict() throws IOException {
         var entries = new LinkedHashMap<String, PlistValue>();
@@ -209,14 +201,13 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Reads values until the closing {@code </array>}.
+     * Reads successive values until the closing {@code </array>}.
      *
-     * @apiNote
-     * Drives the array parse after {@link #parseValue()} has
-     * consumed the opening {@code <array>}.
+     * <p>Invoked after {@link #parseValue()} has consumed the opening {@code <array>}. Each iteration
+     * recurses into {@link #parseValue()} for one element; iteration stops at the closing tag.
      *
      * @return the parsed array
-     * @throws IOException if the contents are malformed
+     * @throws IOException if an element is malformed before the close tag is reached
      */
     private PlistArrayValue parseArray() throws IOException {
         var items = new ArrayList<PlistValue>();
@@ -231,16 +222,15 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Reads the text content of an element up to the next
-     * {@code <}, then consumes the matching closing tag.
+     * Reads the text content of an element up to the next {@code <}, then consumes the matching close tag.
      *
-     * @apiNote
-     * Used by the {@code string}, {@code integer}, {@code real},
-     * {@code data}, and {@code date} parsers.
+     * <p>Serves the {@code string}, {@code integer}, {@code real}, {@code data}, and {@code date} branches
+     * of {@link #parseValue()}. The captured text is entity-decoded through {@link #decodeEntities(String)}
+     * before being returned.
      *
-     * @param tag the element name (used to validate the close)
+     * @param tag the element name, used to validate the close tag
      * @return the entity-decoded text content
-     * @throws IOException if the close tag is missing
+     * @throws IOException if the expected close tag is not present
      */
     private String readTextAndClose(String tag) throws IOException {
         var start = pos;
@@ -255,12 +245,11 @@ public final class PlistXmlParser {
     /**
      * Consumes a closing tag at the current position.
      *
-     * @apiNote
-     * Helper for the value parsers; throws when the expected close
-     * is not present rather than tolerating mismatches.
+     * <p>Verifies that the literal {@code </tag>} appears at the cursor and advances past it. A mismatch
+     * is rejected rather than tolerated.
      *
-     * @param tag the element name
-     * @throws IOException if the expected close tag is not present
+     * @param tag the element name whose close tag is expected
+     * @throws IOException if the expected close tag is not present at the current position
      */
     private void consumeClose(String tag) throws IOException {
         var close = "</" + tag + ">";
@@ -271,21 +260,17 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Skips whitespace, XML processing instructions,
-     * {@code <!DOCTYPE>} declarations and comments.
+     * Skips whitespace, XML processing instructions, {@code <!DOCTYPE>} declarations, and comments.
      *
-     * @apiNote
-     * Called before every value read so the parser tolerates
-     * arbitrary whitespace and comment interleaving.
+     * <p>Called before every value read so the parser tolerates arbitrary whitespace and comment
+     * interleaving between elements. The cursor stops at the first byte that begins a value element.
      *
-     * @implNote
-     * This implementation loops until a non-skip token is observed;
-     * processing instructions and comments are required to be
-     * terminated by their canonical {@code ?>} / {@code -->}
-     * trailer respectively.
+     * @implNote This implementation loops until a non-skip token is observed. Processing instructions and
+     * comments must be terminated by their canonical {@code ?>} and {@code -->} trailers; a {@code <!DOCTYPE>}
+     * declaration is skipped wholesale up to its closing {@code >} without interpreting its contents, since
+     * Apple's plist DTD is fixed and never validated here.
      *
-     * @throws IOException if a processing instruction or comment is
-     *                     unterminated
+     * @throws IOException if a processing instruction or comment is unterminated
      */
     private void skipMisc() throws IOException {
         while (pos < src.length) {
@@ -319,14 +304,13 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Reports whether a literal appears at the current read
-     * position.
+     * Reports whether a literal appears at the current read position.
      *
-     * @apiNote
-     * Helper used by every keyword-driven branch of the parser.
+     * <p>Compares {@code expected} byte-for-byte against the source starting at {@link #pos} without
+     * advancing the cursor.
      *
-     * @param expected the literal to test
-     * @return {@code true} if {@code expected} starts at {@link #pos}
+     * @param expected the literal to test for
+     * @return {@code true} if {@code expected} starts at {@link #pos}, {@code false} otherwise
      */
     private boolean matchAt(String expected) {
         if (pos + expected.length() > src.length) {
@@ -341,16 +325,13 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Returns the next byte position of a single character starting
-     * from the current read position.
+     * Returns the next byte position of a single character at or after the current read position.
      *
-     * @apiNote
-     * Helper used to skip past {@code <plist ...>} attributes and
-     * {@code <!DOCTYPE ...>} declarations to the closing
-     * {@code >}.
+     * <p>Used to skip past {@code <plist ...>} attributes and {@code <!DOCTYPE ...>} declarations to their
+     * closing {@code >}.
      *
      * @param target the byte to find
-     * @return the index, or {@code -1} if the source ends first
+     * @return the index of the first occurrence, or {@code -1} if the source ends first
      */
     private int indexOf(char target) {
         for (var i = pos; i < src.length; i++) {
@@ -362,16 +343,12 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Returns the next position at which a multi-character sequence
-     * starts.
+     * Returns the next position at which a multi-character sequence starts.
      *
-     * @apiNote
-     * Helper used to locate {@code ?>} / {@code -->} terminators
-     * during {@link #skipMisc()}.
+     * <p>Used to locate the {@code ?>} and {@code -->} terminators during {@link #skipMisc()}.
      *
-     * @param pair the two-or-more character sequence
-     * @return the start index, or {@code -1} if the source ends
-     *         first
+     * @param pair the two-or-more character sequence to find
+     * @return the start index of the first occurrence, or {@code -1} if the source ends first
      */
     private int indexOfPair(String pair) {
         outer:
@@ -387,20 +364,16 @@ public final class PlistXmlParser {
     }
 
     /**
-     * Decodes the XML entities that may appear in plist payloads.
+     * Decodes the XML entities that may appear in plist text payloads.
      *
-     * @apiNote
-     * Recognises {@code &amp;}, {@code &lt;}, {@code &gt;},
-     * {@code &quot;}, {@code &apos;}, and numeric character
-     * references in both decimal ({@code &#NN;}) and hexadecimal
-     * ({@code &#xNN;}) forms. Untranslated entities are passed
-     * through verbatim so non-standard payloads still survive the
-     * round-trip.
+     * <p>Recognises the named entities {@code &amp;}, {@code &lt;}, {@code &gt;}, {@code &quot;}, and
+     * {@code &apos;}, as well as numeric character references in both decimal ({@code &#NN;}) and hexadecimal
+     * ({@code &#xNN;}) forms. An unrecognised entity is passed through verbatim, including its surrounding
+     * {@code &} and {@code ;}, so non-standard payloads still survive the round-trip.
      *
-     * @implNote
-     * This implementation fast-paths the common case (no
-     * {@code &}) by returning the input unchanged; otherwise it
-     * walks character-by-character into a {@link StringBuilder}.
+     * @implNote This implementation fast-paths the common case of text containing no {@code &} by returning
+     * the input unchanged; otherwise it walks the string character by character into a
+     * {@link StringBuilder}.
      *
      * @param raw the raw text
      * @return the decoded text

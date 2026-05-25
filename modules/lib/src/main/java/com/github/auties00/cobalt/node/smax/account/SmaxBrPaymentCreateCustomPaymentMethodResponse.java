@@ -14,41 +14,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The reply produced by the relay for a
- * {@link SmaxBrPaymentCreateCustomPaymentMethodRequest}; either a
- * {@link Success} carrying the persisted method or an {@link IqError}
- * with the rejection code-text pair.
+ * Models the reply produced by the relay for a
+ * {@link SmaxBrPaymentCreateCustomPaymentMethodRequest}.
  *
- * @apiNote
- * Returned by the smax send pipeline that
- * {@code WASmaxBrPaymentCreateCustomPaymentMethodRPC.sendCreateCustomPaymentMethodRPC}
- * drives. The {@link Success} arm hands the caller the relay-assigned
- * credential id so subsequent payment flows can reference the newly
- * registered method.
+ * <p>The reply is either a {@link Success} carrying the persisted method or an
+ * {@link IqError} with the rejection code-text pair. The {@link Success} arm
+ * hands the caller the relay-assigned credential id so subsequent payment flows
+ * can reference the newly registered method.
  */
 public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends SmaxOperation.Response
         permits SmaxBrPaymentCreateCustomPaymentMethodResponse.Success, SmaxBrPaymentCreateCustomPaymentMethodResponse.IqError {
 
     /**
-     * Resolves an inbound IQ reply into the first matching response
-     * variant.
+     * Resolves an inbound IQ reply into the first matching response variant.
      *
-     * @apiNote
-     * Called by the smax send pipeline after dispatching a
-     * {@link SmaxBrPaymentCreateCustomPaymentMethodRequest};
-     * {@link Success} is tried first and falls through to
-     * {@link IqError} on schema mismatch.
-     *
-     * @implNote
-     * This implementation mirrors the WA Web
-     * {@code sendCreateCustomPaymentMethodRPC} disjunction.
+     * <p>Called by the smax send pipeline after dispatching a
+     * {@link SmaxBrPaymentCreateCustomPaymentMethodRequest}. {@link Success} is
+     * tried first and falls through to {@link IqError} on schema mismatch.
      *
      * @param node    the inbound IQ stanza; never {@code null}
-     * @param request the originating outbound IQ stanza; never
-     *                {@code null}
+     * @param request the originating outbound IQ stanza; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched
+     *         {@link Optional#empty()} when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBrPaymentCreateCustomPaymentMethodRPC",
@@ -65,19 +52,17 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
     }
 
     /**
-     * Validates the {@code <iq type="result">} envelope on an inbound
-     * reply by cross-checking description, type, id and from against
-     * the originating request.
+     * Validates the {@code <iq type="result">} envelope on an inbound reply by
+     * cross-checking description, type, id and from against the originating
+     * request.
      *
-     * @apiNote
-     * Used internally by {@link Success#of(Node, Node)} to gate
-     * further parsing; a failed envelope short-circuits before any
-     * payload inspection.
+     * <p>Used by {@link Success#of(Node, Node)} to gate further parsing; a
+     * failed envelope short-circuits before any payload inspection.
      *
      * @implNote
-     * This implementation allows the {@code from} echo check to
-     * succeed when the request lacked a {@code to} attribute, which
-     * is the WA Web parser's behaviour for IQ result mixins.
+     * This implementation allows the {@code from} echo check to succeed when
+     * the request lacked a {@code to} attribute, matching WA Web's IQ-result
+     * mixin behaviour.
      *
      * @param reply   the inbound IQ stanza
      * @param request the originating outbound IQ stanza
@@ -104,14 +89,13 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
     }
 
     /**
-     * The positive reply variant carrying the relay-persisted method
+     * Models the positive reply variant carrying the relay-persisted method
      * projection.
      *
-     * @apiNote
-     * Surfaced to callers when the relay registered the custom
-     * payment method; hands back the assigned credential id plus the
-     * echoed type, flow, eligibility flags, and any persisted
-     * metadata for subsequent payment flows.
+     * <p>Surfaced to callers when the relay registered the custom payment
+     * method; hands back the assigned credential id plus the echoed type, flow,
+     * eligibility flags, and any persisted metadata for subsequent payment
+     * flows.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBrPaymentCreateCustomPaymentMethodResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBrPaymentCustomPaymentMethodMixin")
@@ -120,114 +104,97 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
     @WhatsAppWebModule(moduleName = "WASmaxInBrPaymentCustomPaymentMethodMetaDataMixin")
     final class Success implements SmaxBrPaymentCreateCustomPaymentMethodResponse {
         /**
-         * The echoed method-type literal; one of
+         * Holds the echoed method-type literal; one of
          * {@code "pay_on_delivery"} or {@code "pix_key"}.
          *
-         * @apiNote
-         * Mirrors the value the caller originally submitted via
+         * <p>Mirrors the value the caller originally submitted via
          * {@link SmaxBrPaymentCreateCustomPaymentMethodRequest#customPaymentMethodType()}.
          */
         private final String customPaymentMethodType;
 
         /**
-         * The optional echoed {@code country} attribute; always
+         * Holds the optional echoed {@code country} attribute; always
          * {@code "BR"} when present.
          *
-         * @apiNote
-         * The Brazilian-payments wire schema only emits this when the
-         * relay's serialiser feels like echoing it; absence is normal.
+         * <p>The Brazilian-payments wire schema emits this inconsistently;
+         * absence is normal.
          */
         private final String country;
 
         /**
-         * The optional creation-timestamp string echoed by the relay.
+         * Holds the optional creation-timestamp string echoed by the relay.
          *
-         * @apiNote
-         * Format mirrors the relay's
-         * {@code custom_payment_method created="..."} attribute (a
-         * raw string; not normalised).
+         * <p>Carries the relay's {@code custom_payment_method created="..."}
+         * attribute as a raw string; not normalised.
          */
         private final String created;
 
         /**
-         * The optional flow enum literal; one of {@code "p2p"} or
+         * Holds the optional flow enum literal; one of {@code "p2p"} or
          * {@code "p2m"}.
-         *
-         * @apiNote
-         * Validated against
-         * {@code WASmaxInBrPaymentEnums.ENUM_P2M_P2P} during parsing.
          */
         private final String flow;
 
         /**
-         * The credential-id assigned by the relay.
+         * Holds the credential-id assigned by the relay.
          *
-         * @apiNote
-         * Use this as the stable key when referencing this method in
+         * <p>Serves as the stable key when referencing this method in
          * subsequent payment flows.
          */
         private final String credentialId;
 
         /**
-         * The optional {@code p2p-eligible} flag; one of {@code "0"}
-         * or {@code "1"}.
+         * Holds the optional {@code p2p-eligible} flag; one of {@code "0"} or
+         * {@code "1"}.
          */
         private final String p2pEligible;
 
         /**
-         * The optional {@code p2m-eligible} flag; one of {@code "0"}
-         * or {@code "1"}.
+         * Holds the optional {@code p2m-eligible} flag; one of {@code "0"} or
+         * {@code "1"}.
          */
         private final String p2mEligible;
 
         /**
-         * The echoed metadata key-value pairs, preserving the relay's
+         * Holds the echoed metadata key-value pairs, preserving the relay's
          * emit order.
          *
-         * @apiNote
-         * Empty when the relay omitted the {@code <metadata_info>}
-         * child or when the metadata sub-mixin failed to parse; the
-         * outer mixin's WA Web behaviour swallows nested-parse
-         * failures.
+         * <p>Empty when the relay omitted the {@code <metadata_info>} child or
+         * when the metadata sub-mixin failed to parse, since the outer mixin
+         * swallows nested-parse failures.
          */
         private final Map<String, String> metadata;
 
         /**
-         * Constructs a successful reply carrying the echoed method
-         * projection.
+         * Constructs a successful reply carrying the echoed method projection.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after a successful parse;
-         * not intended for direct caller use.
+         * <p>Called by {@link #of(Node, Node)} after a successful parse; not
+         * intended for direct caller use.
          *
          * @implNote
-         * This implementation defensively copies the metadata map
-         * into a {@link LinkedHashMap} wrapped via
-         * {@link Collections#unmodifiableMap(Map)};
-         * {@code null} input becomes the empty map so the accessor
-         * never returns {@code null}.
+         * This implementation defensively copies the metadata map into a
+         * {@link LinkedHashMap} wrapped via
+         * {@link Collections#unmodifiableMap(Map)}; {@code null} input becomes
+         * the empty map so the {@link #metadata()} accessor never returns
+         * {@code null}.
          *
-         * @param customPaymentMethodType the method-type literal;
-         *                                never {@code null}
-         * @param country                 the optional country; may
-         *                                be {@code null}
-         * @param created                 the optional creation
-         *                                timestamp; may be
+         * @param customPaymentMethodType the method-type literal; never
          *                                {@code null}
-         * @param flow                    the optional flow literal;
-         *                                may be {@code null}
-         * @param credentialId            the credential-id; never
+         * @param country                 the optional country; may be
          *                                {@code null}
-         * @param p2pEligible             the optional p2p flag; may
+         * @param created                 the optional creation timestamp; may
          *                                be {@code null}
-         * @param p2mEligible             the optional p2m flag; may
-         *                                be {@code null}
+         * @param flow                    the optional flow literal; may be
+         *                                {@code null}
+         * @param credentialId            the credential-id; never {@code null}
+         * @param p2pEligible             the optional p2p flag; may be
+         *                                {@code null}
+         * @param p2mEligible             the optional p2m flag; may be
+         *                                {@code null}
          * @param metadata                the optional metadata map;
-         *                                {@code null} treated as
-         *                                empty
-         * @throws NullPointerException if {@code customPaymentMethodType}
-         *                              or {@code credentialId} is
-         *                              {@code null}
+         *                                {@code null} treated as empty
+         * @throws NullPointerException if {@code customPaymentMethodType} or
+         *                              {@code credentialId} is {@code null}
          */
         public Success(String customPaymentMethodType,
                        String country,
@@ -252,8 +219,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the echoed method-type literal.
          *
-         * @apiNote
-         * Lets callers branch UI on {@code "pay_on_delivery"} vs
+         * <p>Lets callers branch UI on {@code "pay_on_delivery"} vs
          * {@code "pix_key"}.
          *
          * @return the literal; never {@code null}
@@ -265,8 +231,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the optional echoed country.
          *
-         * @apiNote
-         * Always {@code "BR"} when present.
+         * <p>Always {@code "BR"} when present.
          *
          * @return an {@link Optional} carrying the country, or
          *         {@link Optional#empty()} when omitted
@@ -278,8 +243,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the optional relay-supplied creation timestamp.
          *
-         * @apiNote
-         * Raw string from the relay; not normalised.
+         * <p>Raw string from the relay; not normalised.
          *
          * @return an {@link Optional} carrying the timestamp, or
          *         {@link Optional#empty()} when omitted
@@ -291,9 +255,8 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the optional flow literal.
          *
-         * @apiNote
-         * Lets callers tell apart {@code "p2p"} (person-to-person)
-         * and {@code "p2m"} (person-to-merchant) registrations.
+         * <p>Lets callers tell apart {@code "p2p"} (person-to-person) and
+         * {@code "p2m"} (person-to-merchant) registrations.
          *
          * @return an {@link Optional} carrying the literal, or
          *         {@link Optional#empty()} when omitted
@@ -305,9 +268,8 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the relay-assigned credential-id.
          *
-         * @apiNote
-         * Use this as the stable key for subsequent payment flows
-         * referencing this method.
+         * <p>Serves as the stable key for subsequent payment flows referencing
+         * this method.
          *
          * @return the id; never {@code null}
          */
@@ -318,8 +280,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the optional p2p-eligibility flag.
          *
-         * @apiNote
-         * Value is the wire literal {@code "0"} or {@code "1"}.
+         * <p>Value is the wire literal {@code "0"} or {@code "1"}.
          *
          * @return an {@link Optional} carrying the flag, or
          *         {@link Optional#empty()} when omitted
@@ -331,8 +292,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the optional p2m-eligibility flag.
          *
-         * @apiNote
-         * Value is the wire literal {@code "0"} or {@code "1"}.
+         * <p>Value is the wire literal {@code "0"} or {@code "1"}.
          *
          * @return an {@link Optional} carrying the flag, or
          *         {@link Optional#empty()} when omitted
@@ -344,9 +304,8 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the echoed metadata key-value pairs.
          *
-         * @apiNote
-         * Empty when the relay omitted {@code <metadata_info>} or
-         * when the sub-mixin failed to parse.
+         * <p>Empty when the relay omitted {@code <metadata_info>} or when the
+         * sub-mixin failed to parse.
          *
          * @return an unmodifiable map; never {@code null}
          */
@@ -355,33 +314,28 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         }
 
         /**
-         * Parses a {@code Success} reply from the given inbound
-         * stanza cross-checked against the originating request.
+         * Parses a {@code Success} reply from the given inbound stanza
+         * cross-checked against the originating request.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any deviation from
-         * the documented success schema (missing
-         * {@code <custom_payment_method>}, unknown type literal,
-         * mismatched action attribute, missing credential-id, unknown
-         * flow or eligibility literal).
+         * <p>Returns {@link Optional#empty()} for any deviation from the
+         * documented success schema (missing {@code <custom_payment_method>},
+         * unknown type literal, mismatched action attribute, missing
+         * credential-id, or an unknown flow or eligibility literal).
          *
          * @implNote
-         * This implementation diverges from WA Web's
-         * {@code optionalLiteral(country, "BR")} step: WA Web parses
-         * country both through the outer mixin (literal-pin to
-         * {@code "BR"}) and through {@code parseMethodBaseMixin} as a
-         * free string; here a single check accepts either {@code "BR"}
-         * or absence. The metadata sub-mixin failure swallow is
-         * adapted from WA Web: any failure inside
-         * {@code <metadata_info>} collapses to the empty map without
-         * failing the parent parse, matching the WA Web
-         * {@code spread} on {@code s.success ? s.value : null}.
+         * This implementation diverges from WA Web's twin parse of country:
+         * WA Web parses country both through the outer mixin (literal-pinned to
+         * {@code "BR"}) and through {@code parseMethodBaseMixin} as a free
+         * string, whereas here a single check accepts either {@code "BR"} or
+         * absence. The metadata sub-mixin failure swallow is adapted from WA
+         * Web: any failure inside {@code <metadata_info>} collapses to the
+         * empty map without failing the parent parse.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not
-         *         match the success schema
+         *         {@link Optional#empty()} when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBrPaymentCreateCustomPaymentMethodResponseSuccess",
                 exports = "parseCreateCustomPaymentMethodResponseSuccess",
@@ -481,12 +435,12 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         }
 
         /**
-         * Compares this success reply to another for value equality
-         * on every echoed field.
+         * Compares this success reply to another for value equality on every
+         * echoed field.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a {@link Success}
-         *         with identical fields
+         * @return {@code true} when {@code obj} is a {@link Success} with
+         *         identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -519,11 +473,9 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         }
 
         /**
-         * Returns a debug-friendly representation of this success
-         * reply.
+         * Returns a debug-friendly representation of this success reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
+         * <p>The format is intended for logging and is not part of any
          * contract.
          *
          * @return the string form
@@ -543,42 +495,35 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
     }
 
     /**
-     * The negative reply variant carrying the generic IQ-error
-     * code-text pair.
+     * Models the negative reply variant carrying the generic IQ-error code-text
+     * pair.
      *
-     * @apiNote
-     * Surfaced to callers when the relay rejected the method-create
-     * with an {@code <iq type="error">} envelope; the code-text pair
-     * disambiguates the rejection reason.
+     * <p>Surfaced to callers when the relay rejected the method-create with an
+     * {@code <iq type="error">} envelope; the code-text pair disambiguates the
+     * rejection reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBrPaymentCreateCustomPaymentMethodResponseIQErrorWithCodeAndReason")
     @WhatsAppWebModule(moduleName = "WASmaxInBrPaymentIQErrorGenericResponseMixin")
     final class IqError implements SmaxBrPaymentCreateCustomPaymentMethodResponse {
         /**
-         * The numeric error code; always {@code >= 1}.
-         *
-         * @apiNote
-         * Mirrors the WA Web {@code attrIntRange(code, 1, undefined)}
-         * range check.
+         * Holds the numeric error code; always {@code >= 1}.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text echoed by the relay.
+         * Holds the human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
          * Constructs an error reply.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after a successful parse;
-         * not intended for direct caller use.
+         * <p>Called by {@link #of(Node, Node)} after a successful parse; not
+         * intended for direct caller use.
          *
          * @param errorCode the numeric error code
          * @param errorText the error text; never {@code null}
-         * @throws NullPointerException if {@code errorText} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code errorText} is {@code null}
          */
         public IqError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -588,8 +533,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * Mirrors the relay's HTTP-style code, always {@code >= 1}.
+         * <p>Mirrors the relay's HTTP-style code, always {@code >= 1}.
          *
          * @return the code
          */
@@ -600,10 +544,8 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns the human-readable error text.
          *
-         * @apiNote
-         * Wrapped in {@link Optional} for parity with sibling Error
-         * variants in the smax module; the text is in practice
-         * always present.
+         * <p>Wrapped in {@link Optional} for parity with sibling error variants
+         * in the smax module; the text is in practice always present.
          *
          * @return an {@link Optional} carrying the text; never empty
          */
@@ -612,28 +554,25 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         }
 
         /**
-         * Parses an {@code IqError} reply from the given inbound
-         * stanza.
+         * Parses an {@code IqError} reply from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any deviation from the
-         * generic-IQ-error schema (missing {@code <error/>} child,
-         * missing or out-of-range {@code code}, missing
-         * {@code text}, mismatched id/from echoes).
+         * <p>Returns {@link Optional#empty()} for any deviation from the
+         * generic-IQ-error schema (missing {@code <error/>} child, missing or
+         * out-of-range {@code code}, missing {@code text}, or mismatched
+         * id/from echoes).
          *
          * @implNote
-         * This implementation reads the first {@code <error/>} child
-         * via {@code getChild}; WA Web's
-         * {@code flattenedChildWithTag} fails when more than one
-         * matches, but the relay only ever emits a single error in
-         * practice so the observable behaviour is identical for
-         * documented payloads.
+         * This implementation reads the first {@code <error/>} child via
+         * {@code getChild}; WA Web's {@code flattenedChildWithTag} fails when
+         * more than one matches, but the relay only ever emits a single error
+         * in practice so the observable behaviour is identical for documented
+         * payloads.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not
-         *         match the generic IQ-error schema
+         *         {@link Optional#empty()} when the stanza does not match the
+         *         generic IQ-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBrPaymentCreateCustomPaymentMethodResponseIQErrorWithCodeAndReason",
                 exports = "parseCreateCustomPaymentMethodResponseIQErrorWithCodeAndReason",
@@ -679,12 +618,12 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         }
 
         /**
-         * Compares this error reply to another for value equality on
-         * the code-text pair.
+         * Compares this error reply to another for value equality on the
+         * code-text pair.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is an {@link IqError}
-         *         with identical code and text
+         * @return {@code true} when {@code obj} is an {@link IqError} with
+         *         identical code and text
          */
         @Override
         public boolean equals(Object obj) {
@@ -712,8 +651,7 @@ public sealed interface SmaxBrPaymentCreateCustomPaymentMethodResponse extends S
         /**
          * Returns a debug-friendly representation of this error reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
+         * <p>The format is intended for logging and is not part of any
          * contract.
          *
          * @return the string form

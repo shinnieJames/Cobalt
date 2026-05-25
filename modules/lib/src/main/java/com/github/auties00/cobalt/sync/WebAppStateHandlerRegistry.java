@@ -14,29 +14,20 @@ import java.util.Optional;
 
 /**
  * Dispatch table that maps every supported sync action name onto the
- * {@link WebAppStateActionHandler} that processes incoming mutations of
- * that action.
+ * {@link WebAppStateActionHandler} that processes incoming mutations of that
+ * action.
  *
- * @apiNote Owned by {@link WebAppStateService} and used by every incoming
- * patch the server delivers: the syncd response parser pulls each
- * decrypted mutation's action name out of its
- * {@code WAWebProtobufSyncAction.pb SyncActionValueSpec}, looks up the
- * handler here, and invokes its {@code applyMutation} hook. Outgoing
- * mutation generation does NOT live here; per-handler factories under
- * {@code com.github.auties00.cobalt.sync.factory} build the WAM-side
- * payloads that callers like
- * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient}
- * enqueue for upload, so the registry stays a pure incoming-mutation
- * router. {@link #maxSupportedVersion()} is consumed by the response
- * parser to drop mutations whose declared version exceeds any handler's
- * capability, mirroring WA Web's
- * {@code WAWebSyncdGetActionHandler.maxSupportedVersion} fast-path.
+ * <p>The registry is owned by {@link WebAppStateService} and consulted for
+ * every incoming patch the server delivers: the syncd response parser reads a
+ * decrypted mutation's action name, looks up the handler with
+ * {@link #findHandler(String)}, and invokes it. Outgoing mutation generation
+ * does not live here; per-handler factories build the WAM-side payloads, so
+ * the registry stays a pure incoming-mutation router. The
+ * {@link #maxSupportedVersion()} value is consumed by the response parser to
+ * drop mutations whose declared version exceeds any handler's capability.
  *
  * @implNote This implementation eagerly registers every default handler in
- * the constructor, matching the once-only initialisation pattern of WA
- * Web's {@code WAWebSyncdGetActionHandler.setActionHandlers}, which is
- * called by the success handler in {@code WAWebHandleSuccess} with the
- * full {@code WAWebCollectionHandlerActions.ActionHandlers} array.
+ * the constructor, a once-only initialisation rather than lazy population.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdGetActionHandler")
 public final class WebAppStateHandlerRegistry {
@@ -49,19 +40,16 @@ public final class WebAppStateHandlerRegistry {
     /**
      * Builds a registry pre-populated with every default handler.
      *
-     * @apiNote Called once by {@link WebAppStateService} during its own
-     * construction; the dependencies are forwarded to the handlers that
-     * need them. Callers that want a custom dispatch table should
-     * register additional or replacement handlers via
-     * {@link #registerHandler(WebAppStateActionHandler)} after
-     * construction.
+     * <p>Constructed once by {@link WebAppStateService}; the dependencies are
+     * forwarded to the handlers that need them. Callers that want a custom
+     * dispatch table register additional or replacement handlers via
+     * {@link #registerHandler(WebAppStateActionHandler)} after construction.
      *
      * @param abPropsService      the AB-prop service forwarded to every
      *                            handler that gates behaviour on remote
      *                            configuration
      * @param lidMigrationService the LID migration service forwarded to
-     *                            handlers that observe LID 1:1 migration
-     *                            state
+     *                            handlers that observe LID 1:1 migration state
      * @param wamService          the WAM telemetry service forwarded to
      *                            handlers that emit per-mutation events
      */
@@ -72,13 +60,11 @@ public final class WebAppStateHandlerRegistry {
     }
 
     /**
-     * Instantiates every handler in the
-     * {@code WAWebCollectionHandlerActions.ActionHandlers} catalog and
-     * registers it under its declared action name.
+     * Instantiates every default action handler and registers it under its
+     * declared action name.
      *
-     * @apiNote Internal helper invoked exactly once from the constructor;
-     * not exposed because callers that want to swap a handler should
-     * call {@link #registerHandler(WebAppStateActionHandler)} after
+     * <p>Invoked exactly once from the constructor. Callers that want to swap
+     * a handler call {@link #registerHandler(WebAppStateActionHandler)} after
      * construction instead of going through this method.
      *
      * @param abPropsService      the AB-prop service injected into every
@@ -171,11 +157,9 @@ public final class WebAppStateHandlerRegistry {
      * {@link WebAppStateActionHandler#actionName()} key, replacing any
      * existing entry.
      *
-     * @apiNote Public so test suites and integration cycles can register a
-     * custom handler over a default one (the registry behaves like a
-     * map: last writer wins per action name, mirroring WA Web's
-     * {@code new Map(u.map(...))} pattern in
-     * {@code WAWebSyncdGetActionHandler.getActionHandler}).
+     * <p>The registry behaves like a map: the last writer wins per action
+     * name, so test suites and integration cycles can register a custom
+     * handler over a default one.
      *
      * @param handler the handler to register
      */
@@ -187,14 +171,11 @@ public final class WebAppStateHandlerRegistry {
     /**
      * Looks up a handler by action name.
      *
-     * @apiNote Called by the syncd response parser for every decrypted
-     * mutation; an empty result means the action name is unknown to
-     * this version of Cobalt and the mutation is recorded as orphan,
-     * matching WA Web's
-     * {@code WAWebSyncdGetActionHandler.getActionHandler} miss path.
+     * <p>Called by the syncd response parser for every decrypted mutation; an
+     * empty result means the action name is unknown to this version of Cobalt
+     * and the mutation is recorded as orphan.
      *
-     * @param actionName the action name read from the mutation's
-     *                   {@code SyncActionValueSpec}
+     * @param actionName the action name read from the mutation's index
      * @return the registered handler wrapped in {@link Optional}, or
      *         {@link Optional#empty()} when no handler was registered
      */
@@ -204,15 +185,12 @@ public final class WebAppStateHandlerRegistry {
     }
 
     /**
-     * Returns the maximum
-     * {@link WebAppStateActionHandler#version()} over every registered
-     * handler.
+     * Returns the maximum {@link WebAppStateActionHandler#version()} over
+     * every registered handler.
      *
-     * @apiNote Read by the syncd response parser to drop mutations whose
-     * declared version exceeds any registered handler's capability,
-     * matching WA Web's
-     * {@code WAWebSyncdGetActionHandler.maxSupportedVersion} fast-path
-     * filter. Returns {@code 0} when no handlers are registered.
+     * <p>Read by the syncd response parser to drop mutations whose declared
+     * version exceeds any registered handler's capability. Returns {@code 0}
+     * when no handlers are registered.
      *
      * @return the highest supported action version across the registry
      */

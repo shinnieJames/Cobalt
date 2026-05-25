@@ -6,35 +6,46 @@ import com.github.auties00.cobalt.call.frame.audio.AudioSink;
 import java.util.Objects;
 
 /**
- * Resamples frames written into this sink (at one rate) and
- * forwards them to a delegate sink at another rate — the inverse
- * of {@link ResamplingAudioSource}, used when the call decoder emits
- * 16 kHz mono but the OS speaker wants 48 kHz.
+ * Resamples frames written to this sink from one PCM rate to another before forwarding them to a
+ * delegate sink.
  *
- * <p>Pure-Java linear-interpolation fallback.
+ * <p>This is the inverse of {@link ResamplingAudioSource}: it accepts frames at an input rate and
+ * writes them to the wrapped sink at the output rate, for example when the call decoder emits 16 kHz
+ * mono but the OS speaker wants 48 kHz. Each {@link #write(AudioFrame)} resamples one frame
+ * independently and forwards a new {@link AudioFrame} carrying the original
+ * {@link AudioFrame#ptsMs()}. When the input and output rates are equal, the frame is forwarded
+ * unchanged. The sink keeps no state between frames; each call resamples in isolation.
+ *
+ * @implNote This implementation resamples by per-sample linear interpolation, the pure-Java
+ * fallback used when no native resampler is available. The output sample count is rounded from
+ * {@code inputSamples * outSampleRate / inSampleRate}, samples beyond the input are treated as
+ * silence, and each interpolated sample is clamped to the signed 16-bit range.
  */
 public final class ResamplingAudioSink implements AudioSink {
     /**
-     * Wrapped sink the resampled frames are written into.
+     * Wrapped sink that receives the resampled frames.
      */
     private final AudioSink delegate;
 
     /**
-     * Source-side sample rate frames arrive at.
+     * Sample rate, in hertz, at which frames are written to this sink.
      */
     private final int inSampleRate;
 
     /**
-     * Target sample rate the wrapped sink expects.
+     * Sample rate, in hertz, at which frames are forwarded to the delegate.
      */
     private final int outSampleRate;
 
     /**
-     * Constructs a resampling sink.
+     * Constructs a resampling sink forwarding to {@code delegate}.
      *
-     * @param delegate      sink to forward to
-     * @param inSampleRate  source-side rate
-     * @param outSampleRate target rate
+     * @param delegate      the sink that receives resampled frames
+     * @param inSampleRate  the sample rate, in hertz, of incoming frames
+     * @param outSampleRate the sample rate, in hertz, expected by the delegate
+     * @throws NullPointerException     if {@code delegate} is {@code null}
+     * @throws IllegalArgumentException if {@code inSampleRate} or {@code outSampleRate} is not
+     *                                  positive
      */
     public ResamplingAudioSink(AudioSink delegate, int inSampleRate, int outSampleRate) {
         this.delegate = Objects.requireNonNull(delegate, "delegate cannot be null");
@@ -48,6 +59,17 @@ public final class ResamplingAudioSink implements AudioSink {
         this.outSampleRate = outSampleRate;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation forwards the frame unchanged when the input and output rates are
+     * equal. Otherwise it allocates an output buffer of
+     * {@code round(in.length * outSampleRate / inSampleRate)} samples, fills each output sample by
+     * linear interpolation between the two nearest input samples (reading silence past the input
+     * end), clamps to the signed 16-bit range, and forwards a new {@link AudioFrame} carrying the
+     * original {@link AudioFrame#ptsMs()}.
+     * @throws NullPointerException if {@code frame} is {@code null}
+     */
     @Override
     public void write(AudioFrame frame) throws InterruptedException {
         Objects.requireNonNull(frame, "frame cannot be null");

@@ -11,46 +11,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza for the CTWA ad-account access-token-and-session-cookies
- * SMAX RPC, wrapping the user-supplied verification code in the canonical
- * {@code <iq xmlns="fb:thrift_iq" type="get" to="s.whatsapp.net">} envelope.
- *
- * @apiNote
- * Cobalt callers drive this request from the click-to-WhatsApp ad-creation
- * "verify email code" flow surfaced by WA Web in
- * {@code WAWebBizAdCreationVerifyEmailCode.verifyEmailCodeAndPersistToken}
- * and {@code WAWebFetchAdAccountToken}; the user types the recovery code
- * sent to their Facebook business account into the modal, the code is
- * forwarded here, and the relay replies with a
- * {@link SmaxGetAccessTokenAndSessionCookiesResponse} carrying the Graph
- * API bearer token plus the session cookies needed to open the Facebook
- * Ads Manager web UI.
+ * Builds the outbound stanza for the CTWA ad-account access-token-and-session-cookies request.
+ * <p>
+ * Wraps the user-supplied verification code in the canonical
+ * {@code <iq xmlns="fb:thrift_iq" type="get" to="s.whatsapp.net">} envelope. This drives the
+ * click-to-WhatsApp ad-creation verify-email-code flow: the user types the recovery code sent to
+ * their Facebook business account into the modal, the code is forwarded here, and the relay replies
+ * with a {@link SmaxGetAccessTokenAndSessionCookiesResponse} carrying the Graph API bearer token
+ * plus the session cookies needed to open the Facebook Ads Manager web UI.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountGetAccessTokenAndSessionCookiesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountHackBaseIQGetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountBaseIQGetRequestMixin")
 public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOperation.Request {
     /**
-     * The user-supplied verification code embedded as the text content of
-     * the {@code <code/>} child under the {@code <parameters/>} payload.
+     * The user-supplied verification code embedded as the text content of the {@code <code/>} child
+     * under the {@code <parameters/>} payload.
      */
     private final String code;
 
     /**
-     * The optional {@code from} attribute echoed onto the outbound IQ
-     * envelope via {@code HackBaseIQGetRequestMixin}.
+     * The optional {@code from} attribute echoed onto the outbound IQ envelope.
      */
     private final Jid fromUserJid;
 
     /**
-     * Constructs a request for the given verification code without echoing
-     * a {@code from} attribute.
-     *
-     * @apiNote
-     * The common entry point for the verify-email-code flow; the relay
-     * derives the user identity from the authenticated socket. Use the
-     * two-arg constructor when echoing the local user JID is required
-     * (rare on Web, reserved for the hack-mixin path).
+     * Constructs a request for the given verification code without echoing a {@code from}
+     * attribute.
+     * <p>
+     * This is the common entry point for the verify-email-code flow; the relay derives the user
+     * identity from the authenticated socket. Use the two-argument constructor when echoing the
+     * local user JID is required.
      *
      * @param code the verification code; never {@code null}
      * @throws NullPointerException if {@code code} is {@code null}
@@ -60,15 +51,14 @@ public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOpe
     }
 
     /**
-     * Constructs a request for the given verification code, optionally
-     * echoing the supplied user JID onto the {@code from} attribute.
-     *
-     * @apiNote
-     * The {@code from} echo is the documented {@code HackBaseIQGetRequestMixin}
-     * extension point; pass {@code null} to skip it.
+     * Constructs a request for the given verification code, optionally echoing the supplied user JID
+     * onto the {@code from} attribute.
+     * <p>
+     * Pass {@code null} for {@code fromUserJid} to skip the echo.
      *
      * @param code        the verification code; never {@code null}
-     * @param fromUserJid the optional user JID to echo onto the {@code from} attribute; may be {@code null}
+     * @param fromUserJid the optional user JID to echo onto the {@code from} attribute; may be
+     *                    {@code null}
      * @throws NullPointerException if {@code code} is {@code null}
      */
     public SmaxGetAccessTokenAndSessionCookiesRequest(String code, Jid fromUserJid) {
@@ -78,11 +68,9 @@ public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOpe
 
     /**
      * Returns the verification code.
-     *
-     * @apiNote
-     * Identical to the code typed by the user in the verify-email-code
-     * modal; the relay validates it against the nonce previously marked
-     * used by {@code WAWebCTWABizAccessTokenNonceManager}.
+     * <p>
+     * Identical to the code typed by the user in the verify-email-code modal; the relay validates
+     * it against the nonce previously marked used.
      *
      * @return the verification code; never {@code null}
      */
@@ -92,10 +80,8 @@ public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOpe
 
     /**
      * Returns the optional {@code from} echo.
-     *
-     * @apiNote
-     * Empty when no {@code from} echo was supplied to the constructor;
-     * present when the caller opted into the hack-mixin path.
+     * <p>
+     * Empty when no {@code from} echo was supplied to the constructor.
      *
      * @return an {@link Optional} carrying the user JID, or empty
      */
@@ -105,25 +91,17 @@ public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOpe
 
     /**
      * {@inheritDoc}
+     * <p>
+     * Builds the canonical {@code <iq xmlns="fb:thrift_iq" type="get" to="s.whatsapp.net">}
+     * envelope wrapping a {@code <parameters>} body that holds a single {@code <code>} element
+     * carrying the verification code.
      *
-     * @apiNote
-     * Builds the canonical
-     * {@code <iq xmlns="fb:thrift_iq" type="get" to="s.whatsapp.net">}
-     * envelope wrapping a {@code <parameters>} body that itself holds a
-     * single {@code <code>} element carrying the verification code.
+     * @implNote This implementation hard-codes {@code xmlns="fb:thrift_iq"} and {@code type="get"};
+     * the {@code id} attribute is not stamped here because Cobalt delegates id assignment to the
+     * send path. The optional {@link #fromUserJid()} echo is appended last.
      *
-     * @implNote
-     * This implementation hard-codes {@code xmlns="fb:thrift_iq"} and
-     * {@code type="get"} per the {@code mergeBaseIQGetRequestMixin} and
-     * {@code mergeHackBaseIQGetRequestMixin} composition order; the
-     * {@code id} attribute is delegated to
-     * {@code WhatsAppClient.sendNode} (matching WA Web's
-     * {@code WAComms.sendSmaxStanza} which lets the comms layer assign
-     * the id). The optional {@link #fromUserJid()} echo is appended last
-     * to match the WA Web {@code OPTIONAL(USER_JID, ...)} merge.
-     *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <parameters/>} payload; never {@code null}
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <parameters/>} payload;
+     *         never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizCtwaAdAccountGetAccessTokenAndSessionCookiesRequest",
@@ -157,8 +135,8 @@ public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOpe
     }
 
     /**
-     * Compares this request to {@code obj} for structural equality on the
-     * code and the optional {@code from} echo.
+     * Compares this request to {@code obj} for structural equality on the code and the optional
+     * {@code from} echo.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when {@code obj} is a {@link SmaxGetAccessTokenAndSessionCookiesRequest}
@@ -188,8 +166,7 @@ public final class SmaxGetAccessTokenAndSessionCookiesRequest implements SmaxOpe
     }
 
     /**
-     * Returns a debug-friendly rendering naming the code and the optional
-     * {@code from} echo.
+     * Returns a debug-friendly rendering naming the code and the optional {@code from} echo.
      *
      * @return a record-style string with the code and {@code from} echo
      */

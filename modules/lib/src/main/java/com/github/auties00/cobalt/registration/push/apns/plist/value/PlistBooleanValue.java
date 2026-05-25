@@ -1,20 +1,13 @@
 package com.github.auties00.cobalt.registration.push.apns.plist.value;
 
 /**
- * Plist boolean leaf, the binary plist {@code 0x08} (false) and
- * {@code 0x09} (true) markers.
+ * Holds a plist boolean leaf, the binary plist {@code 0x08} (false) and {@code 0x09} (true)
+ * markers.
  *
- * @apiNote
- * Used wherever an APNS plist payload encodes a true/false flag (for
- * example the {@code APNSEnvironment} sandbox indicator on the connect
- * handshake).
+ * <p>An instance represents a true/false flag carried by an APNS plist payload, such as the sandbox
+ * indicator on the connect handshake. The primitive {@code boolean} is stored directly.
  *
- * @implNote
- * This implementation is a value-typed {@code record} carrying the
- * primitive {@code boolean} directly to keep the parsed tree
- * allocation-light.
- *
- * @param value the boolean
+ * @param value the boolean value
  */
 public record PlistBooleanValue(boolean value) implements PlistValue {
 }

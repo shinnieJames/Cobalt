@@ -10,44 +10,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="optoutlist" type="get">} stanza fetching the user's marketing-message opt-out list.
+ * Builds the outbound {@code <iq xmlns="optoutlist" type="get">} stanza that fetches the marketing-message opt-out list.
  *
- * @apiNote
- * Drives the marketing-messages opt-out surface; the WA Web caller is {@code WAWebGetOptOutList.getOptOutList},
- * which seeds the request with the cached digest from {@code WAWebUserPrefsMultiDevice.getOptOutListHash} and
- * optionally scopes the result to a single marketing category.
+ * <p>This stanza backs the marketing-messages opt-out surface. The caller may seed the request with the digest of
+ * the locally cached list to enable the relay's cache-match short-circuit, and may scope the result to a single
+ * marketing category. The reply is parsed by {@link SmaxGetOptOutListResponse}.
  *
- * @implNote
- * This implementation flattens WA Web's {@code makeGetOptOutListRequest} and
- * {@code makeGetOptOutListRequestItem} factories into a single method; both attributes are optional and emitted
- * only when the corresponding field is set.
+ * @implNote This implementation flattens the separate WA Web request and request-item factories into a single
+ * method; both attributes are optional and emitted only when the corresponding field is set.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsGetOptOutListRequest")
 public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
     /**
-     * The cached digest of the opt-out list or {@code null} to request a full list.
+     * The cached digest of the opt-out list, or {@code null} to request a full list.
      *
-     * @apiNote
-     * Populated from {@code WAWebUserPrefsMultiDevice.getOptOutListHash}; pass {@code null} on first boot or
-     * after a cache wipe.
+     * <p>Pass {@code null} on first boot or after a cache wipe.
      */
     private final String itemDhash;
 
     /**
-     * The marketing-message category scoping the query or {@code null} for an unscoped fetch.
+     * The marketing-message category scoping the query, or {@code null} for an unscoped fetch.
      *
-     * @apiNote
-     * One of the user-controls category constants; consumers typically pass the active category surfaced by the
-     * UI.
+     * <p>One of the user-controls category constants; consumers typically pass the active category surfaced by
+     * the UI.
      */
     private final String iqCategory;
 
     /**
      * Constructs an opt-out-list request.
      *
-     * @apiNote
-     * Pass {@code null} for either argument to omit the corresponding wire attribute and fall back to the
-     * relay's defaults (full list, all categories).
+     * <p>Pass {@code null} for either argument to omit the corresponding wire attribute and fall back to the
+     * relay's defaults of full list and all categories.
      *
      * @param itemDhash  the cached digest; may be {@code null}
      * @param iqCategory the category filter; may be {@code null}
@@ -78,10 +71,9 @@ public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="optoutlist"} and
-     * {@code type="get"}; the {@code id} attribute is filled in downstream by the central client dispatcher.
-     * The {@code category} attribute is added only when {@link #iqCategory()} is present; the
+     * <p>The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="optoutlist"} and
+     * {@code type="get"}; the {@code id} attribute is filled in downstream by the central client dispatcher. The
+     * {@code category} attribute is added only when {@link #iqCategory()} is present; the
      * {@code <item dhash="..."/>} child is added only when {@link #itemDhash()} is present.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
@@ -110,6 +102,12 @@ public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
         return iqBuilder;
     }
 
+    /**
+     * Compares this request with another for equality by cached digest and category filter.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxGetOptOutListRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -123,11 +121,21 @@ public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
                 && Objects.equals(this.iqCategory, that.iqCategory);
     }
 
+    /**
+     * Returns a hash code derived from the cached digest and category filter.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(itemDhash, iqCategory);
     }
 
+    /**
+     * Returns a debug representation carrying the cached digest and category filter.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxGetOptOutListRequest[itemDhash=" + itemDhash

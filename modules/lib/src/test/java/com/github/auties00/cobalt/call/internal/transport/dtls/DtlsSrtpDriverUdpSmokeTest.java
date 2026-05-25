@@ -19,18 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * End-to-end smoke test for the Phase 3 + Phase 4 path: drives the
- * full DTLS-SRTP handshake through {@link DtlsSrtpDriver} on top of a
- * pair of {@link com.github.auties00.cobalt.call.internal.transport.ice.UdpDatagramTransport}-shaped
- * UDP sockets on the loopback interface.
- *
- * <p>{@link DtlsSrtpDriverTest} already exercises the driver
- * exhaustively over an in-memory {@code LoopbackDatagramPair}; this
- * test adds the real-socket layer to prove the same pipeline works
- * when the bytes actually traverse the kernel — the same shape Cobalt
- * uses post-{@code connectRelay} when DTLS sits on the
- * {@code UdpDatagramTransport} returned by
- * {@code WaRelayConnector}.
+ * Smoke test that drives the full DTLS-SRTP handshake through {@link DtlsSrtpDriver} on top of a
+ * pair of real UDP sockets bound to the loopback interface. Where {@link DtlsSrtpDriverTest}
+ * exercises the driver over an in-memory transport, this suite adds the real-socket layer so the
+ * datagrams traverse the kernel, mirroring how Cobalt runs DTLS over the
+ * {@link com.github.auties00.cobalt.call.internal.transport.ice.UdpDatagramTransport}. The nested
+ * {@code TwoEndedUdp} helper is a {@link DatagramTransport} backed by a connected
+ * {@link DatagramChannel} bound to a caller-supplied local port, so both endpoints know each
+ * other's port at construction time.
  */
 @DisplayName("DtlsSrtpDriver — Phase 3+4 smoke test over loopback UDP")
 class DtlsSrtpDriverUdpSmokeTest {
@@ -38,8 +34,7 @@ class DtlsSrtpDriverUdpSmokeTest {
     @Test
     @DisplayName("client + server DTLS handshake completes over UDP loopback sockets")
     void udpLoopbackDtlsHandshake() throws Exception {
-        // Pre-allocate two ephemeral ports so each side knows the
-        // other's port at construction time.
+        // Pre-allocate two ephemeral ports so each side knows the other's port at construction time.
         int portA, portB;
         try (var t1 = new DatagramSocket(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
              var t2 = new DatagramSocket(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))) {
@@ -68,8 +63,7 @@ class DtlsSrtpDriverUdpSmokeTest {
                 assertNotNull(clientSrtp);
                 assertNotNull(serverSrtp);
 
-                // Prove key derivation via an SRTP round-trip — the
-                // same shape as the other DTLS tests.
+                // An SRTP round-trip proves both sides derived matching keying material.
                 var rtp = makeRtpPacket();
                 var encrypted = clientSrtp.protectRtp(rtp);
                 var decrypted = serverSrtp.unprotectRtp(encrypted);
@@ -78,10 +72,6 @@ class DtlsSrtpDriverUdpSmokeTest {
         }
     }
 
-    /**
-     * Returns a 24-byte RTP packet that the SRTP layer accepts
-     * (12 bytes header + 12 bytes payload).
-     */
     private static byte[] makeRtpPacket() {
         var p = new byte[24];
         p[0] = (byte) 0x80;
@@ -94,12 +84,10 @@ class DtlsSrtpDriverUdpSmokeTest {
     }
 
     /**
-     * Test helper — a Cobalt
-     * {@link DatagramTransport} backed by a UDP socket bound to a
-     * specific local port (so the two endpoints of the handshake can
-     * know each other's ports at construction time). Functionally
-     * equivalent to {@link com.github.auties00.cobalt.call.internal.transport.ice.UdpDatagramTransport}
-     * but with explicit local-port control.
+     * Cobalt {@link DatagramTransport} backed by a connected {@link DatagramChannel} bound to a
+     * caller-supplied local port. Functionally equivalent to
+     * {@link com.github.auties00.cobalt.call.internal.transport.ice.UdpDatagramTransport} but with
+     * explicit local-port control so the two handshake endpoints can address each other.
      */
     private static final class TwoEndedUdp implements DatagramTransport {
         private final DatagramChannel channel;

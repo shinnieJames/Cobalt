@@ -9,52 +9,40 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <presence type? name?/>} availability broadcast.
+ * Models the outbound {@code <presence type? name?/>} availability broadcast.
  *
- * @apiNote
- * Drives WA Web's
- * {@code WASmaxPresenceAvailabilityRPC.sendAvailabilityRPC}, the
- * fire-and-forget {@code castSmaxStanza} surface invoked by
- * {@code WASendPresenceStatusProtocol.sendPresenceStatusProtocol} when
- * the local user transitions between
- * {@code available}/{@code unavailable} or republishes their push name;
- * Cobalt embedders dispatch one of these to announce their own
- * presence to peers subscribed via {@link SmaxSubscribeRequest}.
+ * <p>This is the fire-and-forget stanza a client dispatches to announce its own presence to peers
+ * that subscribed through {@link SmaxSubscribeRequest}. Both attributes are optional, so a single
+ * dispatch can carry a pure available/unavailable transition, a pure push-name republish, or both
+ * at once. The stanza is built by {@link #toNode()} and serialised through the
+ * {@link SmaxOperation.Request} dispatch contract.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPresenceAvailabilityRequest")
 public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     /**
-     * The optional presence type.
+     * Holds the optional presence type rendered into the {@code type} attribute.
      *
-     * @apiNote
-     * Routed verbatim into the {@code type} attribute as an
-     * {@code OPTIONAL(CUSTOM_STRING, presenceType)}; typically
-     * {@code "available"} or {@code "unavailable"}, though the relay
-     * accepts any string. When {@code null} the stanza degenerates to
-     * a pure name republish.
+     * <p>Typically {@code "available"} or {@code "unavailable"}, though the relay accepts any
+     * string. When {@code null} the stanza degenerates to a pure name republish and the attribute
+     * is dropped at render time.
      */
     private final String presenceType;
 
     /**
-     * The optional push-name to advertise.
+     * Holds the optional push-name rendered into the {@code name} attribute.
      *
-     * @apiNote
-     * Routed verbatim into the {@code name} attribute as an
-     * {@code OPTIONAL(CUSTOM_STRING, presenceName)}; the relay reuses
-     * the previously-broadcast value when {@code null}.
+     * <p>When {@code null} the attribute is dropped at render time and the relay reuses the
+     * previously broadcast value.
      */
     private final String presenceName;
 
     /**
      * Constructs a new availability broadcast.
      *
-     * @apiNote
-     * Both fields are optional so callers may craft pure
-     * type-transition, pure name-republish, or combined stanzas in a
-     * single dispatch.
+     * <p>Both arguments are optional so callers may craft a pure type transition, a pure name
+     * republish, or a combined stanza in a single dispatch.
      *
-     * @param presenceType the optional presence type; may be
-     *                     {@code null}
+     * @param presenceType the optional presence type; may be {@code null}
      * @param presenceName the optional push-name; may be {@code null}
      */
     public SmaxAvailabilityRequest(String presenceType, String presenceName) {
@@ -65,9 +53,7 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     /**
      * Returns the optional presence type.
      *
-     * @apiNote
-     * Empty when this broadcast does not change the user's
-     * available/unavailable status.
+     * <p>Empty when this broadcast does not change the user's available/unavailable status.
      *
      * @return an {@link Optional} carrying the type
      */
@@ -78,9 +64,7 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     /**
      * Returns the optional push-name.
      *
-     * @apiNote
-     * Empty when this broadcast does not republish the user's display
-     * name.
+     * <p>Empty when this broadcast does not republish the user's display name.
      *
      * @return an {@link Optional} carrying the name
      */
@@ -89,16 +73,13 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Builds the outbound presence stanza ready for dispatch.
+     * Builds the outbound {@code <presence type? name?/>} stanza ready for dispatch.
      *
-     * @apiNote
-     * Returned unbuilt so the dispatch path can stamp a fresh stanza
-     * id before flushing; null-valued attributes are dropped at
-     * render time, matching the WA Web {@code OPTIONAL} attribute
-     * semantics.
+     * <p>The {@link NodeBuilder} is returned unbuilt so the dispatch path can stamp a fresh stanza
+     * id before flushing. Null-valued attributes are dropped at render time by
+     * {@link NodeBuilder#attribute(String, String)}.
      *
-     * @return a {@link NodeBuilder} carrying the
-     *         {@code <presence type? name?/>} envelope
+     * @return a {@link NodeBuilder} carrying the {@code <presence type? name?/>} envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPresenceAvailabilityRequest",
@@ -110,6 +91,14 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
                 .attribute("name", presenceName);
     }
 
+    /**
+     * Compares this broadcast with another for value equality.
+     *
+     * <p>Two instances are equal when both the presence type and the push-name are equal.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} if {@code obj} is an equal {@link SmaxAvailabilityRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -123,11 +112,21 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
                 && Objects.equals(this.presenceName, that.presenceName);
     }
 
+    /**
+     * Returns a hash code derived from the presence type and push-name.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(presenceType, presenceName);
     }
 
+    /**
+     * Returns a debug string exposing the presence type and push-name.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxAvailabilityRequest[presenceType=" + presenceType

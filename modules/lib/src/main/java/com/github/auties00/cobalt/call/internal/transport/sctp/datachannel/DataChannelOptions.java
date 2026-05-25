@@ -4,39 +4,32 @@ import java.util.Objects;
 import java.util.OptionalInt;
 
 /**
- * Configuration for a {@link DataChannel} that the local peer is
- * about to {@link DataChannelTransport#open opening}, mirroring the
- * fields of W3C {@code RTCDataChannelInit} and the parameters carried
- * by an RFC 8832 {@code DATA_CHANNEL_OPEN} message.
+ * Captures the configuration for a {@link DataChannel} the local peer is about to
+ * {@linkplain DataChannelTransport#open(String, DataChannelOptions) open}.
  *
- * <p>Reliability is mutually exclusive: at most one of
- * {@link #maxRetransmits()} and {@link #maxLifetimeMs()} may be set.
- * If both are empty the channel is fully reliable; otherwise
- * partial-reliability semantics apply per RFC 3758/8832.
+ * <p>The fields mirror W3C {@code RTCDataChannelInit} and the parameters carried by an
+ * RFC 8832 {@code DATA_CHANNEL_OPEN} message. Reliability is mutually exclusive: at most one of
+ * {@link #maxRetransmits()} and {@link #maxLifetimeMs()} may be present. When both are empty the
+ * channel is fully reliable; otherwise partial-reliability semantics apply. When
+ * {@link #negotiated()} is {@code true} the application has agreed the {@link #streamId()}
+ * out-of-band, so no DCEP handshake is sent or expected and both peers create their
+ * {@link DataChannel} directly in {@link DataChannelState#OPEN}. The compact constructor enforces
+ * these invariants together with the numeric ranges of the stream id, priority, and reliability
+ * parameters.
  *
- * <p>If {@link #negotiated()} is {@code true} the application has
- * agreed on the {@link #streamId()} out-of-band and no DCEP
- * handshake will be sent or expected — both peers create their
- * {@link DataChannel} in {@link DataChannelState#OPEN} immediately.
- *
- * @param ordered        whether messages must be delivered in send
- *                       order
- * @param maxRetransmits the maximum number of retransmissions before
- *                       a message is dropped, or empty for fully
- *                       reliable
- * @param maxLifetimeMs  the maximum lifetime of a message in
- *                       milliseconds before it is dropped, or empty
- *                       for fully reliable
- * @param protocol       the application-level subprotocol identifier;
- *                       empty string if unused
- * @param negotiated     whether the channel is created with the
- *                       stream-id agreed out-of-band; suppresses DCEP
- * @param streamId       the agreed-upon stream id when
- *                       {@code negotiated} is {@code true}; ignored
- *                       otherwise
- * @param priority       the {@code priority} field encoded into the
- *                       DCEP {@code DATA_CHANNEL_OPEN}; defaults to
- *                       {@value #DEFAULT_PRIORITY} per RFC 8831 §6.4
+ * @param ordered        whether messages must be delivered in send order
+ * @param maxRetransmits the maximum number of retransmissions before a message is dropped, or
+ *                       empty for fully reliable
+ * @param maxLifetimeMs  the maximum lifetime of a message in milliseconds before it is dropped,
+ *                       or empty for fully reliable
+ * @param protocol       the application-level subprotocol identifier, or the empty string when
+ *                       unused
+ * @param negotiated     whether the channel is created with the stream id agreed out-of-band,
+ *                       which suppresses DCEP
+ * @param streamId       the agreed stream id, required when {@code negotiated} is {@code true}
+ *                       and ignored otherwise
+ * @param priority       the {@code priority} field encoded into the DCEP {@code DATA_CHANNEL_OPEN},
+ *                       defaulting to {@value #DEFAULT_PRIORITY}
  */
 public record DataChannelOptions(
         boolean ordered,
@@ -48,13 +41,17 @@ public record DataChannelOptions(
         int priority
 ) {
     /**
-     * RFC 8831 §6.4 default priority value: "below normal".
+     * The default DCEP priority value, denoting "below normal".
+     *
+     * @implNote This implementation uses {@code 256}, the "below normal" priority defined by
+     * RFC 8831 as the default for a data channel.
      */
     public static final int DEFAULT_PRIORITY = 256;
 
     /**
-     * Compact constructor — validates the mutually-exclusive
-     * reliability fields and the negotiated/stream-id pairing.
+     * Validates the option invariants, rejecting null {@link OptionalInt} or string fields, both
+     * reliability parameters set at once, a negative reliability parameter, a negotiated channel
+     * without a stream id, an out-of-range stream id, and an out-of-range priority.
      */
     public DataChannelOptions {
         Objects.requireNonNull(maxRetransmits, "maxRetransmits cannot be null");
@@ -88,9 +85,11 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns the default options: ordered, fully reliable, empty
-     * protocol, in-band negotiated, default priority. Suitable for
-     * the typical "send a JSON blob over the channel" use case.
+     * Returns options for an ordered, fully reliable, in-band channel with an empty protocol and
+     * the {@linkplain #DEFAULT_PRIORITY default priority}.
+     *
+     * <p>These are the typical defaults for sending application payloads such as JSON blobs over
+     * the channel.
      *
      * @return the default options
      */
@@ -100,9 +99,9 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns reliable, but unordered, options.
+     * Returns options for a fully reliable but unordered in-band channel.
      *
-     * @return reliable + unordered
+     * @return the reliable, unordered options
      */
     public static DataChannelOptions reliableUnordered() {
         return new DataChannelOptions(false, OptionalInt.empty(), OptionalInt.empty(),
@@ -110,13 +109,12 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns options for a partially-reliable channel that gives up
-     * after {@code maxRetransmits} retransmits.
+     * Returns options for a partially reliable channel that gives up on a message after the given
+     * number of retransmissions.
      *
-     * @param maxRetransmits the maximum number of retransmissions
-     *                       (>= 0)
-     * @param ordered        whether to preserve ordering
-     * @return partial-reliability-by-retransmit options
+     * @param maxRetransmits the maximum number of retransmissions, which must be non-negative
+     * @param ordered        whether to preserve message ordering
+     * @return the retransmit-limited partial-reliability options
      */
     public static DataChannelOptions partialReliableByRetransmit(int maxRetransmits, boolean ordered) {
         return new DataChannelOptions(ordered, OptionalInt.of(maxRetransmits), OptionalInt.empty(),
@@ -124,12 +122,13 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns options for a partially-reliable channel that gives up
-     * after a wall-clock lifetime in milliseconds.
+     * Returns options for a partially reliable channel that gives up on a message after the given
+     * wall-clock lifetime in milliseconds.
      *
-     * @param maxLifetimeMs the maximum message lifetime (>= 0 ms)
-     * @param ordered       whether to preserve ordering
-     * @return partial-reliability-by-lifetime options
+     * @param maxLifetimeMs the maximum message lifetime in milliseconds, which must be
+     *                      non-negative
+     * @param ordered       whether to preserve message ordering
+     * @return the lifetime-limited partial-reliability options
      */
     public static DataChannelOptions partialReliableByLifetime(int maxLifetimeMs, boolean ordered) {
         return new DataChannelOptions(ordered, OptionalInt.empty(), OptionalInt.of(maxLifetimeMs),
@@ -137,11 +136,13 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns a copy of these options with {@link #streamId()} set —
-     * implies {@link #negotiated()} is {@code true} and the peer is
-     * expected to create its side with the matching stream id.
+     * Returns a copy of these options with the {@link #streamId()} set and {@link #negotiated()}
+     * forced to {@code true}.
      *
-     * @param streamId the agreed-upon stream id
+     * <p>The peer is then expected to create its side of the channel out-of-band with the same
+     * stream id, so no DCEP is exchanged.
+     *
+     * @param streamId the agreed stream id
      * @return the negotiated copy
      */
     public DataChannelOptions withNegotiatedStreamId(int streamId) {
@@ -150,7 +151,7 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns a copy of these options with {@link #protocol()} set.
+     * Returns a copy of these options with the {@link #protocol()} set.
      *
      * @param protocol the subprotocol identifier
      * @return the copy
@@ -161,7 +162,7 @@ public record DataChannelOptions(
     }
 
     /**
-     * Returns a copy of these options with {@link #priority()} set.
+     * Returns a copy of these options with the {@link #priority()} set.
      *
      * @param priority the DCEP priority field
      * @return the copy

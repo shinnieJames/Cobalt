@@ -9,6 +9,7 @@
     "speexdsp/windows-x86_64": { "sha256": "f2b2c7cd1be3919698336147e2cd2a46dd03bebc895c1fec9246f7b00853de57", "size": 381045, "path": "modules/lib/dependencies/speexdsp/bin/windows-x86_64/speexdsp.dll" },
     "usrsctp/windows-x86_64": { "sha256": "3213d2c8bf76a3a2ebb7193f067589888e3be38f5d47bb87feb7bf1b66349589", "size": 771110, "path": "modules/lib/dependencies/usrsctp/bin/windows-x86_64/usrsctp.dll" },
     "cobalt_usrsctp/windows-x86_64": { "sha256": "33c1e0ab06fda63533ca4d925ad954a23f5e0e16252f0349b92771e160390557", "size": 95901, "path": "modules/lib/dependencies/usrsctp/bin/windows-x86_64/cobalt_usrsctp.dll" },
+    "mdbx/windows-x86_64": { "sha256": "f0a0ae1d34eea8ed0f54f1f39ae8a6b0d3c7f03091f2816a934c2721554dc4b7", "size": 671116, "path": "modules/lib/dependencies/libmdbx/bin/windows-x86_64/mdbx.dll" },
     "ffmpeg-avformat/windows-x86_64": { "sha256": "f4fe354ca06c8ede2b7df1f92aef3a68c2c3d23202476276d3390e59bd7dc3e6", "size": 946176, "path": "modules/lib/dependencies/ffmpeg/bin/windows-x86_64/avformat.dll" },
     "ffmpeg-avcodec/windows-x86_64": { "sha256": "da333dac66ca1a588a3d9adc439c4724deb1283cd85cff9a16d5ffed91422cc7", "size": 1612800, "path": "modules/lib/dependencies/ffmpeg/bin/windows-x86_64/avcodec.dll" },
     "ffmpeg-avdevice/windows-x86_64": { "sha256": "54109e0c9d6927a77dda33fb0c56401396f0ddb7d2548839e52dca7cc3c0c4f3", "size": 96256, "path": "modules/lib/dependencies/ffmpeg/bin/windows-x86_64/avdevice.dll" },

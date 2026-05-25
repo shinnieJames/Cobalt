@@ -25,40 +25,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Exercises every primitive on {@link MutationKeys} against WA Web's byte
- * layout.
- *
- * @apiNote
- * Covers the production class that wraps {@code WAWebSyncdCrypto},
- * {@code WAWebSyncdCryptoHelper}, and {@code WAWebSyncdMutationsCryptoUtils}.
- * The matrix is constructed around two scenarios: synthetic deterministic
- * vectors that pin down the internal contract (slice offsets, AAD layout,
- * IV-prefix layout, MAC truncation length, round-trip correctness), and WA
- * Web byte-equality oracles for fixtures captured via
- * {@code src/test/resources/fixtures/sync/generate.mjs --phase=2}.
- *
- * @implNote
- * Oracle assertions are gated on {@link SyncFixtures#isOracleAvailable(String)}
- * so the synthetic suite still runs before the captured corpus lands. The
- * {@link #SYNC_KEY_PATTERN} matches the {@code "pattern"} sample in the
- * captured {@code crypto/mutation-keys.expected} fixture.
+ * layout: HKDF slice derivation, associated-data layout, AES-CBC round-trips,
+ * the HMAC-SHA512 value MAC, the index MAC, value-MAC slicing, key-material
+ * destruction on close, and the wire constants. Each primitive pairs synthetic
+ * deterministic vectors (slice offsets, AAD layout, IV-prefix layout, MAC
+ * truncation length, round-trip correctness) with a WA Web byte-equality
+ * oracle. Oracle assertions are gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so the synthetic suite still
+ * runs before the captured corpus lands; {@code SYNC_KEY_PATTERN} matches the
+ * {@code "pattern"} sample in the captured {@code crypto/mutation-keys.expected}
+ * fixture so the synthetic derivation tests and the oracle exercise the same
+ * key.
  */
 @DisplayName("MutationKeys")
 class MutationKeysTest {
-    /**
-     * A 32-byte sync key whose contents are {@code k[i] = (i * 7) & 0xFF}.
-     *
-     * @implNote
-     * Matches the {@code "pattern"} sample in the captured
-     * {@code crypto/mutation-keys.expected} fixture so the synthetic
-     * derivation tests and the oracle assertion exercise the same key.
-     */
+    // k[i] = (i * 7) & 0xFF; matches the "pattern" sample in the captured fixture
     private static final byte[] SYNC_KEY_PATTERN = patternKey();
 
-    /**
-     * Builds the {@link #SYNC_KEY_PATTERN} byte array.
-     *
-     * @return a freshly allocated 32-byte array
-     */
     private static byte[] patternKey() {
         var k = new byte[32];
         for (var i = 0; i < k.length; i++) {
@@ -67,13 +50,6 @@ class MutationKeysTest {
         return k;
     }
 
-    /**
-     * Builds a byte array filled with a single byte value.
-     *
-     * @param length the array length
-     * @param value  the fill value, truncated to a byte
-     * @return a freshly allocated array
-     */
     private static byte[] filled(int length, int value) {
         var b = new byte[length];
         for (var i = 0; i < length; i++) b[i] = (byte) value;
@@ -179,21 +155,9 @@ class MutationKeysTest {
             assertOracleSample(oracle, "pattern", SYNC_KEY_PATTERN);
         }
 
-        /**
-         * Asserts every derived key slice of one oracle sample matches the
-         * sample's recorded values.
-         *
-         * @implNote
-         * The oracle file groups three samples ({@code "zero"}, {@code "ones"},
-         * {@code "pattern"}) under the same JSON object. This helper looks up
-         * the sample by tag, re-derives the keys from the recorded sync key,
-         * and compares each of the five 32-byte slices in turn so a failure
-         * names the specific slice that disagreed.
-         *
-         * @param oracle  the loaded oracle JSON object
-         * @param tag     the sample name to look up
-         * @param syncKey the sync key the test code expects the oracle to record
-         */
+        // The oracle file groups three samples ("zero", "ones", "pattern") under
+        // one JSON object; this compares each of the five slices so a failure
+        // names the specific slice that disagreed.
         private void assertOracleSample(JSONObject oracle, String tag, byte[] syncKey) {
             var sample = oracle.getJSONObject(tag);
             assertNotNull(sample, "missing oracle sample '" + tag + "'");

@@ -10,48 +10,45 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <localisation_metadata/>} child of any CTWA banner-suggestion
- * {@code <localised_*>} parallel, carrying the translation identifiers and
- * up to twenty placeholder substitutions.
- *
- * @apiNote
- * Carries the data downstream translation telemetry needs to attribute
- * the localised copy back to its translation-system entry: the
- * {@code uid} is the translation unit identifier and
- * {@code translation_project} is the owning translation project. The
- * {@code <parameter/>} children carry the runtime placeholder
- * substitutions inserted into the translated string (cardinality
- * bound 0..20 enforced server-side).
+ * Models the {@code <localisation_metadata/>} child of any CTWA
+ * banner-suggestion {@code <localised_*>} parallel, carrying the translation
+ * identifiers and up to twenty placeholder substitutions.
+ * <p>
+ * Supplies the data downstream translation telemetry needs to attribute the
+ * localised copy back to its translation-system entry: {@link #uid()} is the
+ * translation-unit identifier and {@link #translationProject()} is the owning
+ * translation project. The {@link #parameters()} carry the runtime placeholder
+ * substitutions inserted into the translated string, bounded to 0 to 20 entries.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionLocalisationMetadataMixin")
 public final class SmaxBannerSuggestionLocalisationMetadata {
     /**
-     * The mandatory {@code uid} attribute (translation-unit identifier).
+     * Holds the mandatory {@code uid} attribute, the translation-unit
+     * identifier.
      */
     private final String uid;
 
     /**
-     * The mandatory {@code translation_project} attribute (owning
-     * translation project).
+     * Holds the mandatory {@code translation_project} attribute, the owning
+     * translation project.
      */
     private final String translationProject;
 
     /**
-     * The list of {@code <parameter name value/>} entries (0..20).
+     * Holds the list of {@code <parameter name value/>} entries (0 to 20).
      */
     private final List<Parameter> parameters;
 
     /**
      * Constructs a projection from already-validated wire values.
-     *
-     * @apiNote
-     * Cobalt callers normally obtain a projection by parsing a node via
+     * <p>
+     * Callers normally obtain a projection by parsing a node via
      * {@link #of(Node)}; this constructor is exposed for tests and for
      * hand-built fixtures.
      *
      * @param uid                the translation-unit identifier; never {@code null}
      * @param translationProject the owning translation project; never {@code null}
-     * @param parameters         the placeholder list (0..20 entries); may be {@code null} (treated as empty)
+     * @param parameters         the placeholder list (0 to 20 entries); may be {@code null} (treated as empty)
      * @throws NullPointerException if {@code uid} or {@code translationProject} is {@code null}
      */
     public SmaxBannerSuggestionLocalisationMetadata(String uid, String translationProject, List<Parameter> parameters) {
@@ -63,8 +60,7 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
     /**
      * Returns the translation-unit identifier.
-     *
-     * @apiNote
+     * <p>
      * Used by downstream telemetry to tie the localised copy back to its
      * translation-system entry.
      *
@@ -76,10 +72,9 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
     /**
      * Returns the owning translation project.
-     *
-     * @apiNote
-     * Identifies the translation-system project that authored the
-     * localised copy.
+     * <p>
+     * Identifies the translation-system project that authored the localised
+     * copy.
      *
      * @return the project name; never {@code null}
      */
@@ -89,13 +84,11 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
     /**
      * Returns the placeholder substitutions list.
+     * <p>
+     * Each entry pairs a placeholder name with its runtime value; the list is
+     * bounded to 0 to 20 entries and an empty list is legal.
      *
-     * @apiNote
-     * Each entry pairs a placeholder name with its runtime value. The
-     * list is bounded to 0..20 entries server-side; an empty list is
-     * legal.
-     *
-     * @return an unmodifiable list of 0..20 entries; never {@code null}
+     * @return an unmodifiable list of 0 to 20 entries; never {@code null}
      */
     public List<Parameter> parameters() {
         return parameters;
@@ -103,20 +96,14 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
     /**
      * Parses the projection from a {@code <localisation_metadata/>} node.
+     * <p>
+     * Returns empty when the node tag is wrong, when either mandatory attribute
+     * is missing, when the {@code <parameter/>} cardinality exceeds the 0 to 20
+     * bound, or when any individual parameter entry fails to parse.
      *
-     * @apiNote
-     * Returns empty when the node tag is wrong, when either mandatory
-     * attribute is missing, when the {@code <parameter/>} cardinality
-     * exceeds the 0..20 bound, or when any individual parameter entry
-     * fails to parse.
-     *
-     * @implNote
-     * This implementation enforces the cardinality bound BEFORE walking
-     * individual children, matching WA Web's
-     * {@code mapChildrenWithTag(t, "parameter", 0, 20, e)} where the
-     * bound check fires first and short-circuits before any
+     * @implNote This implementation enforces the cardinality bound before
+     * walking individual children, so the bound check short-circuits before any
      * {@link Parameter#of(Node)} call.
-     *
      * @param node the candidate {@code <localisation_metadata/>} node; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty when
      *         parsing fails at any step
@@ -155,13 +142,13 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
     }
 
     /**
-     * Compares this projection to {@code obj} for structural equality on
-     * uid, translation project, and the parameters list.
+     * Compares this projection to {@code obj} for structural equality on uid,
+     * translation project, and the parameters list.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionLocalisationMetadata}
-     *         with matching {@link #uid()}, {@link #translationProject()},
-     *         and {@link #parameters()}
+     *         with matching {@link #uid()}, {@link #translationProject()}, and
+     *         {@link #parameters()}
      */
     @Override
     public boolean equals(Object obj) {
@@ -200,34 +187,33 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
     }
 
     /**
-     * A single placeholder substitution carried by the surrounding
+     * Models a single placeholder substitution carried by the surrounding
      * {@link SmaxBannerSuggestionLocalisationMetadata} as a
      * {@code <parameter name value/>} child.
-     *
-     * @apiNote
-     * Each entry binds a translation-string placeholder name to its
-     * runtime value (for example the merchant name or product price
-     * spliced into the localised copy).
+     * <p>
+     * Each entry binds a translation-string placeholder name to its runtime
+     * value, such as the merchant name or product price spliced into the
+     * localised copy.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionLocalisationMetadataMixin")
     public static final class Parameter {
         /**
-         * The mandatory {@code name} attribute (placeholder identifier).
+         * Holds the mandatory {@code name} attribute, the placeholder
+         * identifier.
          */
         private final String name;
 
         /**
-         * The mandatory {@code value} attribute (placeholder value).
+         * Holds the mandatory {@code value} attribute, the placeholder value.
          */
         private final String value;
 
         /**
          * Constructs a parameter from already-validated wire values.
-         *
-         * @apiNote
-         * Cobalt callers normally obtain a parameter by parsing a node
-         * via {@link #of(Node)}; this constructor is exposed for tests
-         * and for hand-built fixtures.
+         * <p>
+         * Callers normally obtain a parameter by parsing a node via
+         * {@link #of(Node)}; this constructor is exposed for tests and for
+         * hand-built fixtures.
          *
          * @param name  the placeholder identifier; never {@code null}
          * @param value the placeholder value; never {@code null}
@@ -240,10 +226,9 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
         /**
          * Returns the placeholder identifier.
-         *
-         * @apiNote
-         * Matches the named token in the translation-system source string
-         * (for example {@code "merchant_name"}).
+         * <p>
+         * Matches the named token in the translation-system source string, such
+         * as {@code "merchant_name"}.
          *
          * @return the name; never {@code null}
          */
@@ -253,10 +238,9 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
         /**
          * Returns the placeholder value.
-         *
-         * @apiNote
-         * The runtime substitution spliced into the localised copy where
-         * the {@link #name()} placeholder appears.
+         * <p>
+         * The runtime substitution spliced into the localised copy where the
+         * {@link #name()} placeholder appears.
          *
          * @return the value; never {@code null}
          */
@@ -266,14 +250,13 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
 
         /**
          * Parses a parameter from a {@code <parameter/>} node.
-         *
-         * @apiNote
-         * Returns empty when the node tag is wrong or either mandatory
-         * attribute is missing.
+         * <p>
+         * Returns empty when the node tag is wrong or either mandatory attribute
+         * is missing.
          *
          * @param node the candidate {@code <parameter/>} node; never {@code null}
-         * @return an {@link Optional} carrying the parsed entry, or empty
-         *         when parsing fails
+         * @return an {@link Optional} carrying the parsed entry, or empty when
+         *         parsing fails
          * @throws NullPointerException if {@code node} is {@code null}
          */
         @WhatsAppWebExport(
@@ -297,8 +280,8 @@ public final class SmaxBannerSuggestionLocalisationMetadata {
         }
 
         /**
-         * Compares this parameter to {@code obj} for structural equality
-         * on name and value.
+         * Compares this parameter to {@code obj} for structural equality on name
+         * and value.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when {@code obj} is a {@link Parameter}

@@ -18,36 +18,29 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the update-newsletter-user-setting mutation
- * built by {@link UpdateNewsletterUserSettingMexRequest}.
+ * Parses the MEX response of the update-newsletter-user-setting mutation built by
+ * {@link UpdateNewsletterUserSettingMexRequest}.
  *
- * @apiNote
- * Hands back the newsletter Jid echoed under
- * {@code xwa2_newsletter_update_user_setting} together with a
- * {@link State} lifecycle marker. WA Web's
- * {@code WAWebMexUpdateNewsletterUserSetting.mexUpdateNewsletterUserSetting}
- * forwards the same shape through
- * {@code WAWebMexNewsletterUtils.convertMutationResponse} before applying
- * the local mute-state change to the chat or newsletter-metadata table.
+ * <p>Hands back the newsletter Jid echoed under {@code xwa2_newsletter_update_user_setting}
+ * together with a {@link State} lifecycle marker, which downstream code uses to apply the local
+ * mute-state change to the chat or newsletter-metadata table.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUpdateNewsletterUserSetting")
 public final class UpdateNewsletterUserSettingMexResponse implements MexOperation.Response.Json {
     /**
-     * The newsletter Jid string echoed under {@code id}.
+     * Holds the newsletter Jid string echoed under {@code id}.
      */
     private final String id;
 
     /**
-     * The lifecycle state marker echoed under {@code state}.
+     * Holds the lifecycle state marker echoed under {@code state}.
      */
     private final State state;
 
     /**
      * Constructs a response wrapping the echoed newsletter id and state.
      *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
+     * <p>External callers obtain instances through {@link #of(Node)} rather than this constructor.
      *
      * @param id    the newsletter Jid string echoed by the relay
      * @param state the lifecycle state marker
@@ -60,15 +53,13 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_update_user_setting} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser; the returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_update_user_setting} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<UpdateNewsletterUserSettingMexResponse> of(Node node) {
         return node.getChild("result")
@@ -79,10 +70,8 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
     /**
      * Returns the newsletter Jid string echoed by the relay.
      *
-     * @apiNote
-     * Empty when the GraphQL envelope omits {@code id}; otherwise carries
-     * the same Jid string sent in
-     * {@link UpdateNewsletterUserSettingMexRequest}.
+     * <p>Empty when the GraphQL envelope omits {@code id}; otherwise carries the same Jid string
+     * sent in {@link UpdateNewsletterUserSettingMexRequest}.
      *
      * @return the echoed newsletter id, or empty when omitted
      */
@@ -91,13 +80,10 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
     }
 
     /**
-     * Returns the lifecycle state marker the relay attached to the
-     * mutation result.
+     * Returns the lifecycle state marker the relay attached to the mutation result.
      *
-     * @apiNote
-     * Empty when the GraphQL envelope omits {@code state}; otherwise
-     * carries the relay-defined state-type string (for example
-     * {@code "ACTIVE"}, {@code "DELETED"}).
+     * <p>Empty when the GraphQL envelope omits {@code state}; otherwise carries the relay-defined
+     * state-type string, for example {@code "ACTIVE"} or {@code "DELETED"}.
      *
      * @return the parsed {@link State}, or empty when omitted
      */
@@ -106,26 +92,21 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
     }
 
     /**
-     * The lifecycle {@code state} marker echoed on the
-     * update-user-setting mutation result.
+     * Models the lifecycle {@code state} marker echoed on the update-user-setting mutation result.
      *
-     * @apiNote
-     * Carries the relay-defined state-type string. WA Web's
-     * {@code WAWebMexNewsletterUtils.convertMutationResponse} normalises
-     * the value before letting downstream code apply the local cache
-     * update.
+     * <p>Carries the relay-defined state-type string that downstream code reads before applying the
+     * local cache update.
      */
     public static final class State {
         /**
-         * The relay-defined state-type string.
+         * Holds the relay-defined state-type string.
          */
         private final String type;
 
         /**
          * Constructs a parsed {@code state} value.
          *
-         * @apiNote
-         * Reserved for {@link #of(JSONObject)}.
+         * <p>Instances are produced by {@link #of(JSONObject)} rather than this constructor.
          *
          * @param type the state-type string
          */
@@ -136,8 +117,7 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
         /**
          * Returns the state-type string.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code type}.
+         * <p>Empty when the GraphQL envelope omits {@code type}.
          *
          * @return the {@code type} value, or empty when omitted
          */
@@ -148,13 +128,10 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
         /**
          * Parses a {@code state} fragment from the given JSON object.
          *
-         * @apiNote
-         * Reserved for the parent parser; returns {@link Optional#empty()}
-         * when {@code obj} is {@code null}.
+         * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
          *
          * @param obj the JSON object to parse
-         * @return the parsed value, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed value, or empty when {@code obj} is {@code null}
          */
         static Optional<State> of(JSONObject obj) {
             if (obj == null) {
@@ -168,13 +145,11 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
         /**
          * Parses every {@code state} fragment in the given JSON array.
          *
-         * @apiNote
-         * Reserved for callers that handle batched state arrays; returns
-         * {@link List#of()} when {@code arr} is {@code null}.
+         * <p>Returns {@link List#of()} when {@code arr} is {@code null}; each null or malformed
+         * element is skipped rather than collected.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed values, empty when {@code arr} is
-         *         {@code null}
+         * @return the list of parsed values, empty when {@code arr} is {@code null}
          */
         static List<State> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -190,22 +165,18 @@ public final class UpdateNewsletterUserSettingMexResponse implements MexOperatio
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload; callers should not
-     * hold raw JSON bytes.
+     * <p>Backs the public {@link #of(Node)} overload, which holds the raw JSON bytes so that callers
+     * do not have to.
      *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception, mirroring the defensive null-checks in WA Web's caller.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception, mirroring the defensive
+     * null-checks in WhatsApp Web's caller.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_update_user_setting}
-     *         root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_update_user_setting} root
      */
     private static Optional<UpdateNewsletterUserSettingMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

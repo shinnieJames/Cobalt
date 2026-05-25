@@ -14,43 +14,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Discriminates the inbound reply variants produced by the relay in response to an
  * {@link IqUsyncRequest}.
- *
- * @apiNote
- * Switch on the returned variant to discriminate the relay outcome: a {@link Success}
- * carries the per-user attribute projections plus the per-protocol envelopes (which
- * carry per-protocol errors and refresh-TTL hints), a {@link ClientError} surfaces a
- * full-query rejection (malformed envelope or unauthorised caller), and a
- * {@link ServerError} surfaces a transient relay failure.
+ * <p>
+ * Switching on the parsed variant separates the relay outcome: a {@link Success} carries the
+ * per-user attribute projections plus the per-protocol envelopes (which themselves carry per-protocol
+ * errors and refresh-TTL hints), a {@link ClientError} surfaces a full-query rejection (malformed
+ * envelope or unauthorised caller), and a {@link ServerError} surfaces a transient relay failure.
  *
  * @implNote
- * This implementation mirrors WA Web's {@code usyncParser} verbatim. The per-protocol
- * envelope grouping (one {@link ProtocolEnvelope} per requested protocol tag,
- * carrying either an error or a refresh hint) plus the per-user list grouping (one
- * {@link UserResult} per resolved user) is identical to the WA Web split, except
- * Cobalt exposes it as typed records rather than a free-form object map.
+ * This implementation groups the reply into one {@link ProtocolEnvelope} per requested protocol tag
+ * (each carrying either an error or a refresh hint) plus one {@link UserResult} per resolved user,
+ * exposing both as typed records rather than a free-form object map.
  */
 public sealed interface IqUsyncResponse extends IqOperation.Response
         permits IqUsyncResponse.Success, IqUsyncResponse.ClientError, IqUsyncResponse.ServerError {
 
     /**
-     * Parses the inbound stanza into the first matching {@link IqUsyncResponse}
-     * variant.
-     *
-     * @apiNote
-     * Try this once per inbound reply; the priority ordering (success, then
-     * client-error, then server-error) matches the wire shape and never returns
-     * ambiguous matches.
+     * Parses the inbound stanza into the first matching {@link IqUsyncResponse} variant.
+     * <p>
+     * Called once per inbound reply. The priority ordering ({@link Success}, then
+     * {@link ClientError}, then {@link ServerError}) matches the wire shape so the variants never
+     * overlap.
      *
      * @implNote
-     * This implementation calls each variant's {@code of(node, request)} in turn
-     * and returns the first present result.
+     * This implementation calls each variant's {@code of(node, request)} in turn and returns the
+     * first present result.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty when no
-     *         documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant
+     *         matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
@@ -70,31 +64,29 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
     }
 
     /**
-     * Success variant. The relay returned the per-protocol envelopes plus the per-user
-     * attribute projections.
-     *
-     * @apiNote
-     * Inspect {@link #protocolEnvelopes()} for per-protocol errors and refresh hints
-     * (WA Web stores the backoff hints in its {@code WAWebUsyncBackoff} module) and
-     * {@link #userResults()} for the per-user projection rows.
+     * Holds a successful reply carrying the per-protocol envelopes plus the per-user attribute
+     * projections.
+     * <p>
+     * The {@link #protocolEnvelopes()} list reports per-protocol errors and refresh hints, while
+     * {@link #userResults()} reports the per-user projection rows.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsync")
     final class Success implements IqUsyncResponse {
         /**
-         * Holds the per-protocol envelopes returned in the {@code <result>}
-         * grandchild, one entry per protocol tag the request asked for.
+         * Holds the per-protocol envelopes returned in the {@code <result>} grandchild, one entry
+         * per protocol tag the request asked for.
          */
         private final List<ProtocolEnvelope> protocolEnvelopes;
 
         /**
-         * Holds the per-user results returned in the {@code <list>} grandchild,
-         * one entry per user the relay resolved.
+         * Holds the per-user results returned in the {@code <list>} grandchild, one entry per user
+         * the relay resolved.
          */
         private final List<UserResult> userResults;
 
         /**
-         * Constructs a successful reply bound to the given per-protocol envelopes
-         * and per-user results.
+         * Constructs a successful reply bound to the given per-protocol envelopes and per-user
+         * results.
          *
          * @param protocolEnvelopes the per-protocol envelopes; never {@code null}
          * @param userResults       the per-user results; never {@code null}
@@ -126,22 +118,20 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
         }
 
         /**
-         * Parses the inbound stanza into a {@link Success} variant when it matches
-         * the success schema.
-         *
-         * @apiNote
-         * Returns empty when the SMAX result-envelope check fails or when the
-         * {@code <usync>} child is absent.
+         * Parses the inbound stanza into a {@link Success} variant when it matches the success
+         * schema.
+         * <p>
+         * Returns empty when the SMAX result-envelope check fails or when the {@code <usync>} child
+         * is absent.
          *
          * @implNote
-         * This implementation accepts a missing {@code <result>} or {@code <list>}
-         * grandchild by returning an empty list in the corresponding slot, matching
-         * WA Web's {@code usyncParser} which treats both as zero-iteration loops.
+         * This implementation accepts a missing {@code <result>} or {@code <list>} grandchild by
+         * returning an empty list in the corresponding slot, treating both as zero-iteration loops.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty when
-         *         the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebUsync",
                 exports = "USyncQuery", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -173,6 +163,13 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
             return Optional.of(new Success(envelopes, users));
         }
 
+        /**
+         * Compares this reply with the given object for value equality across the envelope and
+         * result lists.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with equal envelopes and results
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -186,11 +183,21 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
                     && Objects.equals(this.userResults, that.userResults);
         }
 
+        /**
+         * Returns a hash code derived from the envelope and result lists.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(protocolEnvelopes, userResults);
         }
 
+        /**
+         * Returns a debug string listing the envelope and result lists.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "IqUsyncResponse.Success[protocolEnvelopes=" + protocolEnvelopes
@@ -199,28 +206,23 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
     }
 
     /**
-     * Per-protocol envelope projected from one grandchild of the inbound
-     * {@code <result>} child.
-     *
-     * @apiNote
-     * Each envelope carries either a per-protocol error code (with optional text and
-     * backoff hint) or a per-protocol refresh hint, never both. WA Web feeds the
-     * backoff hints into its {@code WAWebUsyncBackoff} module so subsequent queries
-     * skip the failing protocol until the backoff elapses; the refresh hint sets
-     * the per-protocol cache TTL.
+     * Projects one per-protocol envelope from a grandchild of the inbound {@code <result>} child.
+     * <p>
+     * Each envelope carries either a per-protocol error code (with optional text and backoff hint)
+     * or a per-protocol refresh hint, never both. The backoff hint is intended to gate subsequent
+     * queries against the failing protocol until it elapses, while the refresh hint sets the
+     * per-protocol cache TTL.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsync")
     final class ProtocolEnvelope {
         /**
-         * Holds the protocol tag this envelope corresponds to (e.g.
-         * {@code "devices"}, {@code "contact"}), routed from the grandchild's tag
-         * name.
+         * Holds the protocol tag this envelope corresponds to (e.g. {@code "devices"},
+         * {@code "contact"}), routed from the grandchild's tag name.
          */
         private final String protocol;
 
         /**
-         * Holds the numeric per-protocol error code, or {@code null} when no
-         * error.
+         * Holds the numeric per-protocol error code, or {@code null} when there is no error.
          */
         private final Integer errorCode;
 
@@ -241,11 +243,9 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
 
         /**
          * Constructs a new per-protocol envelope.
-         *
-         * @apiNote
-         * Construct with all error fields {@code null} and a present
-         * {@code refresh} for a clean refresh-hint envelope; construct with a
-         * present {@code errorCode} and {@code refresh = null} for an error
+         * <p>
+         * All error fields {@code null} with a present {@code refresh} yields a clean refresh-hint
+         * envelope; a present {@code errorCode} with {@code refresh} {@code null} yields an error
          * envelope.
          *
          * @param protocol     the protocol tag; never {@code null}
@@ -276,8 +276,7 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
         /**
          * Returns the optional per-protocol error code.
          *
-         * @return an {@link Optional} carrying the code, or empty when the
-         *         envelope has no error
+         * @return an {@link Optional} carrying the code, or empty when the envelope has no error
          */
         public Optional<Integer> errorCode() {
             return Optional.ofNullable(errorCode);
@@ -294,11 +293,9 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
 
         /**
          * Returns the optional per-protocol backoff hint in seconds.
-         *
-         * @apiNote
-         * Multiply by {@code 1000} to convert to milliseconds before feeding into
-         * an exponential-backoff scheduler, matching WA Web's
-         * {@code setProtocolBackoffMs(protocol, errorBackoff * 1e3)} call.
+         * <p>
+         * The value is expressed in seconds and is multiplied by {@code 1000} to convert to
+         * milliseconds before feeding into an exponential-backoff scheduler.
          *
          * @return an {@link Optional} carrying the seconds, or empty
          */
@@ -317,18 +314,17 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
 
         /**
          * Parses an envelope from the given protocol grandchild.
-         *
-         * @apiNote
-         * Drives {@link Success#of(Node, Node)}; never returns empty because the
-         * minimum schema (a tag name) is always present.
+         * <p>
+         * Drives {@link Success#of(Node, Node)} and never returns empty, because the minimum schema
+         * (a tag name) is always present.
          *
          * @implNote
-         * This implementation prefers the {@code <error>} sub-envelope over the
-         * {@code refresh} attribute, matching WA Web's branch ordering inside
-         * {@code usyncParser}.
+         * This implementation prefers the {@code <error>} sub-envelope over the {@code refresh}
+         * attribute when both are present.
          *
          * @param protocolNode the protocol grandchild; never {@code null}
          * @return the parsed envelope
+         * @throws NullPointerException if {@code protocolNode} is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WAWebUsync",
                 exports = "usyncParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -352,6 +348,12 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
             return new ProtocolEnvelope(protocol, errorCode, errorText, errorBackoff, refresh);
         }
 
+        /**
+         * Compares this envelope with the given object for value equality across all five fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ProtocolEnvelope} with equal fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -368,11 +370,21 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
                     && Objects.equals(this.refresh, that.refresh);
         }
 
+        /**
+         * Returns a hash code derived from all five fields.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(protocol, errorCode, errorText, errorBackoff, refresh);
         }
 
+        /**
+         * Returns a debug string listing all five fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "IqUsyncResponse.ProtocolEnvelope[protocol=" + protocol
@@ -384,14 +396,12 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
     }
 
     /**
-     * Per-user result projected from one {@code <user>} grandchild of the inbound
-     * {@code <list>} child.
-     *
-     * @apiNote
-     * Carries the relay-resolved JIDs plus the raw per-protocol payload nodes
-     * ({@code <devices/>}, {@code <contact/>}, {@code <picture/>}, etc.); the
-     * caller routes each payload through the matching per-protocol parser based on
-     * which protocols the original request asked for.
+     * Projects one per-user result from a {@code <user>} grandchild of the inbound {@code <list>}
+     * child.
+     * <p>
+     * Carries the relay-resolved JIDs plus the raw per-protocol payload nodes ({@code <devices/>},
+     * {@code <contact/>}, {@code <picture/>}, and so on); each payload is routed through the matching
+     * per-protocol parser based on which protocols the original request asked for.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsync")
     final class UserResult {
@@ -411,13 +421,11 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
         private final List<Node> protocolPayloads;
 
         /**
-         * Constructs a user result bound to the given JIDs and per-protocol
-         * payloads.
+         * Constructs a user result bound to the given JIDs and per-protocol payloads.
          *
          * @param userJid          the optional primary JID
          * @param pnJid            the optional phone JID
-         * @param protocolPayloads the per-protocol payload nodes; never
-         *                         {@code null}
+         * @param protocolPayloads the per-protocol payload nodes; never {@code null}
          * @throws NullPointerException if {@code protocolPayloads} is {@code null}
          */
         public UserResult(Jid userJid, Jid pnJid, List<Node> protocolPayloads) {
@@ -454,6 +462,13 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
             return protocolPayloads;
         }
 
+        /**
+         * Compares this result with the given object for value equality across both JIDs and the
+         * payload list.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link UserResult} with equal JIDs and payloads
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -468,11 +483,21 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
                     && Objects.equals(this.protocolPayloads, that.protocolPayloads);
         }
 
+        /**
+         * Returns a hash code derived from both JIDs and the payload list.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(userJid, pnJid, protocolPayloads);
         }
 
+        /**
+         * Returns a debug string listing both JIDs and the payload list.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "IqUsyncResponse.UserResult[userJid=" + userJid
@@ -482,14 +507,12 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
     }
 
     /**
-     * Client-error variant. The relay rejected the entire usync as malformed or
+     * Holds a client-error reply where the relay rejected the entire usync as malformed or
      * unauthorised.
-     *
-     * @apiNote
-     * A full-query rejection is rare; per-protocol failures land in
-     * {@link ProtocolEnvelope} instead. Look here for malformed envelopes
-     * (e.g. missing {@code sid}, missing {@code mode}) or auth issues that affect
-     * the entire query.
+     * <p>
+     * A full-query rejection is rare; per-protocol failures land in {@link ProtocolEnvelope}
+     * instead. This variant covers malformed envelopes (e.g. missing {@code sid}, missing
+     * {@code mode}) or auth issues that affect the entire query.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsync")
     final class ClientError implements IqUsyncResponse {
@@ -526,25 +549,23 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ClientError} variant when it
-         * matches the standard SMAX client-error envelope.
-         *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * Parses the inbound stanza into a {@link ClientError} variant when it matches the standard
+         * SMAX client-error envelope.
+         * <p>
+         * Returns empty when the envelope check fails; delegates the envelope match to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebUsync",
                 exports = "USyncQuery", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -556,6 +577,12 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with the given object for value equality across the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with equal code and text
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -569,11 +596,21 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string listing the code and text.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "IqUsyncResponse.ClientError[errorCode=" + errorCode
@@ -582,12 +619,11 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
     }
 
     /**
-     * Server-error variant. The relay encountered a transient internal failure while
+     * Holds a server-error reply where the relay encountered a transient internal failure while
      * processing the usync.
-     *
-     * @apiNote
-     * Typically retryable after a short backoff; WA Web routes this through its
-     * standard query-failure path that surfaces an empty result.
+     * <p>
+     * Typically retryable after a short backoff; the standard query-failure path surfaces an empty
+     * result to the caller.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsync")
     final class ServerError implements IqUsyncResponse {
@@ -624,25 +660,23 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty when the
-         *         relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses the inbound stanza into a {@link ServerError} variant when it
-         * matches the standard SMAX server-error envelope.
-         *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * Parses the inbound stanza into a {@link ServerError} variant when it matches the standard
+         * SMAX server-error envelope.
+         * <p>
+         * Returns empty when the envelope check fails; delegates the envelope match to
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebUsync",
                 exports = "USyncQuery", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -654,6 +688,12 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with the given object for value equality across the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with equal code and text
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -667,11 +707,21 @@ public sealed interface IqUsyncResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string listing the code and text.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "IqUsyncResponse.ServerError[errorCode=" + errorCode

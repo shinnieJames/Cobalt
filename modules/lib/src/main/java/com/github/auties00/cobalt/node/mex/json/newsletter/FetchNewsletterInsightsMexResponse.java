@@ -19,48 +19,43 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the fetch-newsletter-insights query
- * built by {@link FetchNewsletterInsightsMexRequest}.
+ * Parses the MEX response of the fetch-newsletter-insights query built by
+ * {@link FetchNewsletterInsightsMexRequest}.
  *
- * @apiNote
- * Exposes the admin insights payload echoed under
- * {@code xwa2_newsletter_admin_insights}; each {@link Result} carries
- * one metric id and the per-time-bucket values that drive the admin
- * dashboard charts, plus a top-level {@code last_update_time} and
- * {@code metrics_status} freshness indicator.
+ * <p>Exposes the admin insights payload echoed under {@code xwa2_newsletter_admin_insights}. Each
+ * {@link Result} carries one metric id and the per-time-bucket values that drive the admin
+ * dashboard charts, plus a top-level {@code last_update_time} and {@code metrics_status} freshness
+ * indicator.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterInsightsJob")
 public final class FetchNewsletterInsightsMexResponse implements MexOperation.Response.Json {
     /**
-     * The newsletter Jid string echoed back by the server.
+     * Holds the newsletter Jid string echoed back by the server.
      */
     private final String newsletterId;
 
     /**
-     * The optional admin insights state sub-object.
+     * Holds the optional admin insights state sub-object.
      */
     private final State state;
 
     /**
-     * The epoch-second of the last insights aggregation pass.
+     * Holds the epoch-second of the last insights aggregation pass.
      */
     private final Long lastUpdateTime;
 
     /**
-     * The insights freshness status label.
+     * Holds the insights freshness status label.
      */
     private final String metricsStatus;
 
     /**
-     * The per-metric value series.
+     * Holds the per-metric value series.
      */
     private final List<Result> result;
 
     /**
      * Constructs a response wrapping the parsed insights payload.
-     *
-     * @apiNote
-     * Reserved for the static parser.
      *
      * @param newsletterId   the newsletter Jid string
      * @param state          the optional admin insights state sub-object
@@ -79,15 +74,13 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_admin_insights} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_admin_insights} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<FetchNewsletterInsightsMexResponse> of(Node node) {
         return node.getChild("result")
@@ -107,8 +100,7 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     /**
      * Returns the admin insights state sub-object.
      *
-     * @return the parsed {@link State}, or empty when the relay omitted the
-     *         field
+     * @return the parsed {@link State}, or empty when the relay omitted the field
      */
     public Optional<State> state() {
         return Optional.ofNullable(state);
@@ -117,10 +109,9 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     /**
      * Returns the last-aggregation instant.
      *
-     * @apiNote
-     * When the relay omits this field WA Web falls back to the current
-     * wall-clock; Cobalt callers receive {@link Optional#empty()} and can
-     * apply the same fallback or render the chart as stale.
+     * <p>When the relay omits this field WhatsApp Web falls back to the current wall-clock; Cobalt
+     * callers receive {@link Optional#empty()} and can apply the same fallback or render the chart
+     * as stale.
      *
      * @return the instant, or empty when the relay omitted the field
      */
@@ -131,10 +122,7 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     /**
      * Returns the insights freshness status label.
      *
-     * @apiNote
-     * WA Web maps the label through
-     * {@code WAWebNewsletterInsightUtils.getNewsletterInsightsDataStatus}
-     * to drive the per-card status badges.
+     * <p>WhatsApp Web maps the label onto the per-card status badges shown in the dashboard.
      *
      * @return the status label, or empty when the relay omitted the field
      */
@@ -154,22 +142,16 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     /**
      * Wraps the {@code state} sub-object.
      *
-     * @apiNote
-     * Carries a single {@code type} label describing the overall insights
-     * state (typically one of the WA Web {@code AdminInsightsStateType}
-     * values).
+     * <p>Carries a single {@code type} label describing the overall insights state.
      */
     public static final class State {
         /**
-         * The state type label.
+         * Holds the state type label.
          */
         private final String type;
 
         /**
          * Constructs a state wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param type the state type label
          */
@@ -189,13 +171,8 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
         /**
          * Parses a {@link State} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link FetchNewsletterInsightsMexResponse#of(byte[])} to
-         * hydrate the nested {@code state} entry.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed entry, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed entry, or empty when {@code obj} is {@code null}
          */
         static Optional<State> of(JSONObject obj) {
             if (obj == null) {
@@ -208,10 +185,6 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
 
         /**
          * Parses a list of {@link State} entries from the given JSON array.
-         *
-         * @apiNote
-         * Provided for symmetry; the insights envelope does not carry a
-         * {@code state} array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -230,30 +203,24 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     }
 
     /**
-     * Wraps one entry of the {@code result} array: one metric id and its
-     * per-bucket values.
+     * Wraps one entry of the {@code result} array: one metric id and its per-bucket values.
      *
-     * @apiNote
-     * The {@code id} is the metric identifier the request asked for; the
-     * {@link Values} list carries one point per time bucket (often broken
-     * down by {@code country} and {@code role}).
+     * <p>The {@code id} is the metric identifier the request asked for; the {@link Values} list
+     * carries one point per time bucket, often broken down by {@code country} and {@code role}.
      */
     public static final class Result {
         /**
-         * The metric identifier.
+         * Holds the metric identifier.
          */
         private final String id;
 
         /**
-         * The per-bucket metric values.
+         * Holds the per-bucket metric values.
          */
         private final List<Values> values;
 
         /**
          * Constructs a result wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param id     the metric identifier
          * @param values the per-bucket metric values
@@ -284,37 +251,32 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
         /**
          * Wraps one bucket inside a metric's {@code values} array.
          *
-         * @apiNote
-         * Each bucket carries a numeric {@code value} (as a string for
-         * 64-bit precision), an optional country breakdown, an optional
-         * role breakdown, and the bucket timestamp.
+         * <p>Each bucket carries a numeric {@code value} held as a string for 64-bit precision, an
+         * optional country breakdown, an optional role breakdown, and the bucket timestamp.
          */
         public static final class Values {
             /**
-             * The numeric value as a string.
+             * Holds the numeric value as a string.
              */
             private final String value;
 
             /**
-             * The country-breakdown label.
+             * Holds the country-breakdown label.
              */
             private final String country;
 
             /**
-             * The role-breakdown label.
+             * Holds the role-breakdown label.
              */
             private final String role;
 
             /**
-             * The bucket epoch-second.
+             * Holds the bucket epoch-second.
              */
             private final Long timestamp;
 
             /**
              * Constructs a values wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param value     the numeric value as a string
              * @param country   the country-breakdown label
@@ -340,8 +302,7 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
             /**
              * Returns the country-breakdown label.
              *
-             * @return the country label, or empty when the relay omitted
-             *         the field
+             * @return the country label, or empty when the relay omitted the field
              */
             public Optional<String> country() {
                 return Optional.ofNullable(country);
@@ -350,8 +311,7 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
             /**
              * Returns the role-breakdown label.
              *
-             * @return the role label, or empty when the relay omitted the
-             *         field
+             * @return the role label, or empty when the relay omitted the field
              */
             public Optional<String> role() {
                 return Optional.ofNullable(role);
@@ -360,8 +320,7 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
             /**
              * Returns the bucket instant.
              *
-             * @return the instant, or empty when the relay omitted the
-             *         field
+             * @return the instant, or empty when the relay omitted the field
              */
             public Optional<Instant> timestamp() {
                 return Optional.ofNullable(timestamp).map(Instant::ofEpochSecond);
@@ -370,13 +329,8 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
             /**
              * Parses a {@link Values} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link Result#of(JSONObject)} to hydrate one entry
-             * of the {@code values} array.
-             *
              * @param obj the JSON object to parse
-             * @return the parsed entry, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed entry, or empty when {@code obj} is {@code null}
              */
             static Optional<Values> of(JSONObject obj) {
                 if (obj == null) {
@@ -391,16 +345,10 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
             }
 
             /**
-             * Parses a list of {@link Values} entries from the given JSON
-             * array.
-             *
-             * @apiNote
-             * Used by {@link Result#of(JSONObject)} to hydrate the
-             * {@code values} array.
+             * Parses a list of {@link Values} entries from the given JSON array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Values> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -418,13 +366,8 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
         /**
          * Parses a {@link Result} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link FetchNewsletterInsightsMexResponse#of(byte[])} to
-         * hydrate one entry of the {@code result} array.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed entry, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed entry, or empty when {@code obj} is {@code null}
          */
         static Optional<Result> of(JSONObject obj) {
             if (obj == null) {
@@ -437,12 +380,7 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
         }
 
         /**
-         * Parses a list of {@link Result} entries from the given JSON
-         * array.
-         *
-         * @apiNote
-         * Used by {@link FetchNewsletterInsightsMexResponse#of(byte[])} to
-         * hydrate the {@code result} array.
+         * Parses a list of {@link Result} entries from the given JSON array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -461,20 +399,14 @@ public final class FetchNewsletterInsightsMexResponse implements MexOperation.Re
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_admin_insights} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_admin_insights} root
      */
     private static Optional<FetchNewsletterInsightsMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

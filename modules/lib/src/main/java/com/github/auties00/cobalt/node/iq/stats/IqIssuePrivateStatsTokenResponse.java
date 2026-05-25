@@ -12,30 +12,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Roots the sealed family of inbound reply variants the relay produces in response to an
  * {@link IqIssuePrivateStatsTokenRequest}.
  *
- * @apiNote
- * The {@link ClientError} and {@link ServerError} split mirrors WA Web's WAM telemetry
- * classification ({@code WAWebWamEnumSignCredentialResult.ERROR_BAD_REQUEST} versus
- * {@code ERROR_SERVER}); the private-stats driver retries the credential mint on
- * {@link ServerError} but not on {@link ClientError}.
+ * <p>The hierarchy permits exactly three variants: {@link Success} carries the signed credential
+ * and its DLEQ proof, {@link ClientError} reports a non-retryable rejection, and
+ * {@link ServerError} reports a transient internal failure that the private-stats driver may
+ * retry with the same blinded credential. The {@link ClientError} and {@link ServerError} split
+ * mirrors the relay's WAM telemetry classification of credential signing failures.
  */
 public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Response
         permits IqIssuePrivateStatsTokenResponse.Success, IqIssuePrivateStatsTokenResponse.ClientError, IqIssuePrivateStatsTokenResponse.ServerError {
 
     /**
-     * Tries each {@link IqIssuePrivateStatsTokenResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Parses the inbound stanza into the first {@link IqIssuePrivateStatsTokenResponse} variant
+     * that matches.
      *
-     * @apiNote
-     * The priority order ({@link Success}, {@link ClientError}, {@link ServerError}) mirrors
-     * the order WA Web's reply parser tries.
+     * <p>The variants are tried in the fixed priority order {@link Success}, {@link ClientError},
+     * {@link ServerError}, and the first that parses cleanly is returned. An empty result means
+     * none of the documented variants matched the stanza shape.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza, used to validate echoed identifiers
-     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
-     *         when no documented variant matched the stanza shape
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         documented variant matched the stanza shape
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPrivatestatsSignCredentialRPC",
@@ -55,59 +55,57 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
     }
 
     /**
-     * Reply variant carrying the signed credential, the relay's public key, and the DLEQ
-     * proof of correct signing.
+     * Models the reply variant carrying the signed credential, the relay's public key, and the
+     * DLEQ proof of correct signing.
      *
-     * @apiNote
-     * The signed credential, the public key, and both DLEQ coordinates ({@code c},
-     * {@code s}) are 32-byte elliptic-curve scalars; the client unblinds the signed
-     * credential against the blinding factor it retained from request-build time and
-     * verifies the DLEQ proof against the relay's published public key before redeeming the
-     * resulting token. The {@code signCredentialT} timestamp records the relay-side
-     * wall-clock when the signature was minted.
+     * <p>The signed credential, the public key, and both DLEQ coordinates ({@code c} and
+     * {@code s}) are 32-byte elliptic-curve scalars. The client unblinds the signed credential
+     * against the blinding factor it retained from request-build time and verifies the DLEQ proof
+     * against the relay's published public key before redeeming the resulting token. The
+     * {@code signCredentialT} timestamp records the relay-side wall-clock when the signature was
+     * minted.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialResponseSuccess")
     final class Success implements IqIssuePrivateStatsTokenResponse {
         /**
-         * Relay-side mint timestamp in seconds since epoch, read from the
+         * Holds the relay-side mint timestamp in seconds since epoch, read from the
          * {@code <sign_credential t/>} attribute.
          */
         private final long signCredentialT;
 
         /**
-         * Raw 32-byte signed-credential elliptic-curve scalar.
+         * Holds the raw 32-byte signed-credential elliptic-curve scalar.
          */
         private final byte[] signedCredential;
 
         /**
-         * Raw 32-byte ACS public key the relay published when signing the credential.
+         * Holds the raw 32-byte ACS public key the relay published when signing the credential.
          */
         private final byte[] acsPublicKey;
 
         /**
-         * Raw 32-byte DLEQ proof {@code c} coordinate.
+         * Holds the raw 32-byte DLEQ proof {@code c} coordinate.
          */
         private final byte[] dleqProofC;
 
         /**
-         * Raw 32-byte DLEQ proof {@code s} coordinate.
+         * Holds the raw 32-byte DLEQ proof {@code s} coordinate.
          */
         private final byte[] dleqProofS;
 
         /**
-         * Echoed project-name string (UTF-8) carried under the {@code <project_name>}
-         * grandchild; equals the request's project name modulo encoding.
+         * Holds the echoed UTF-8 project-name string carried under the {@code <project_name>}
+         * grandchild, equal to the request's project name modulo encoding.
          */
         private final String projectName;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a new successful reply from the minted credential and its DLEQ proof.
          *
-         * @apiNote
-         * Defensively clones every byte-array argument; the string is immutable and stored
+         * <p>Every byte-array argument is defensively cloned; the string is immutable and stored
          * directly.
          *
-         * @param signCredentialT  relay-side mint timestamp
+         * @param signCredentialT  the relay-side mint timestamp in seconds since epoch
          * @param signedCredential the 32-byte signed-credential scalar
          * @param acsPublicKey     the 32-byte ACS public key
          * @param dleqProofC       the 32-byte DLEQ proof {@code c} coordinate
@@ -181,24 +179,23 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given inbound stanza.
+         * Parses a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when any of the four mandatory scalar fields is
-         * missing or not 32 bytes long, when the {@code <sign_credential t/>} timestamp is
-         * absent or negative, when the {@code <dleq_proof/>} grandchild is missing, or when
-         * the {@code <project_name>} grandchild is absent; the caller falls through to the
-         * error variants in any of those cases.
+         * <p>An empty result is returned when any of the four mandatory scalar fields is missing
+         * or not 32 bytes long, when the {@code <sign_credential t/>} timestamp is absent or
+         * negative, when the {@code <dleq_proof/>} grandchild is missing, or when the
+         * {@code <project_name>} grandchild is absent; the caller then falls through to the error
+         * variants.
          *
          * @implNote
-         * This implementation enforces a strict 32-byte width on every scalar field
-         * regardless of the relay's wire encoding; WA Web's parser is silent on the width
-         * but the consuming {@code WAACSTokenUtils.unblindToken} requires it.
+         * This implementation enforces a strict 32-byte width on every scalar field regardless of
+         * the relay's wire encoding; WhatsApp Web's parser is silent on the width, but the
+         * consuming credential-unblinding routine requires it.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPrivatestatsSignCredentialResponseSuccess",
                 exports = "parseSignCredentialResponseSuccess", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -253,7 +250,13 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply with the given object for equality.
+         *
+         * <p>Two replies are equal when their mint timestamps match, all four scalar byte arrays
+         * are element-wise equal, and their project names are equal.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if the objects are equal, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -273,7 +276,10 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the timestamp, the four scalar byte arrays, and the
+         * project name.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -283,7 +289,12 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string carrying the timestamp, scalar lengths, and project name.
+         *
+         * <p>Only the scalar lengths are rendered, never the raw credential bytes, so the value
+         * can be logged without leaking the signed credential or the DLEQ proof.
+         *
+         * @return a string describing this reply
          */
         @Override
         public String toString() {
@@ -297,29 +308,29 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
     }
 
     /**
-     * Reply variant signalling that the relay rejected the credential issuance request as
-     * malformed or otherwise non-retryable.
+     * Models the reply variant signalling that the relay rejected the credential issuance request
+     * as malformed or otherwise non-retryable.
      *
-     * @apiNote
-     * Maps to WA Web's {@code SIGN_CREDENTIAL_RESULT.ERROR_BAD_REQUEST} branch (covering
-     * {@code bad-request}, {@code feature-not-implemented},
-     * {@code service-unavailable}, {@code decryption-error}, and unknown SMAX statuses);
-     * the private-stats driver should not retry the same blinded credential after this.
+     * <p>This variant covers the relay's non-retryable error branch, spanning {@code bad-request},
+     * {@code feature-not-implemented}, {@code service-unavailable}, {@code decryption-error}, and
+     * unknown SMAX statuses. The private-stats driver should not retry the same blinded credential
+     * after receiving it.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialResponseErrorNoRetry")
     final class ClientError implements IqIssuePrivateStatsTokenResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code read from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text read from the {@code <error text/>}
+         * attribute, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a new client-error reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text, or {@code null} when omitted
@@ -341,27 +352,25 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
+         * Parses a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls in the {@code 4xx} range, per the parsing contract of
+         * <p>A populated result is returned only when the stanza is a {@code type="error"} envelope
+         * echoing the {@code request} id and carrying an {@code <error/>} child whose {@code code}
+         * attribute is below {@code 500}, per the partition enforced by
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPrivatestatsSignCredentialResponseErrorNoRetry",
                 exports = "parseSignCredentialResponseErrorNoRetry",
@@ -375,7 +384,12 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply with the given object for equality.
+         *
+         * <p>Two replies are equal when their error codes match and their error texts are equal.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if the objects are equal, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -390,7 +404,9 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the error code and error text.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -398,7 +414,9 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string carrying the error code and error text.
+         *
+         * @return a string describing this reply
          */
         @Override
         public String toString() {
@@ -408,29 +426,28 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
     }
 
     /**
-     * Reply variant signalling that the relay encountered a transient internal failure while
-     * issuing the credential; the caller may retry with the same blinded credential after a
-     * backoff.
+     * Models the reply variant signalling that the relay encountered a transient internal failure
+     * while issuing the credential.
      *
-     * @apiNote
-     * Maps to WA Web's {@code SIGN_CREDENTIAL_RESULT.ERROR_SERVER} branch (covering
-     * {@code internal-server-error}); WA Web's {@code getToken} retries up to three times
-     * with the same blinded input on this branch.
+     * <p>This variant covers the relay's retryable error branch, spanning
+     * {@code internal-server-error}. The caller may retry with the same blinded credential after a
+     * backoff; WhatsApp Web retries up to three times with the same blinded input on this branch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialResponseErrorRetry")
     final class ServerError implements IqIssuePrivateStatsTokenResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code read from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text read from the {@code <error text/>}
+         * attribute, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a new server-error reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text, or {@code null} when omitted
@@ -452,27 +469,25 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
+         * Parses a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing
-         * contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>A populated result is returned only when the stanza is a {@code type="error"} envelope
+         * echoing the {@code request} id and carrying an {@code <error/>} child whose {@code code}
+         * attribute is {@code 500} or greater, per the partition enforced by
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPrivatestatsSignCredentialResponseErrorRetry",
                 exports = "parseSignCredentialResponseErrorRetry",
@@ -486,7 +501,12 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply with the given object for equality.
+         *
+         * <p>Two replies are equal when their error codes match and their error texts are equal.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if the objects are equal, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -501,7 +521,9 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the error code and error text.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -509,7 +531,9 @@ public sealed interface IqIssuePrivateStatsTokenResponse extends IqOperation.Res
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string carrying the error code and error text.
+         *
+         * @return a string describing this reply
          */
         @Override
         public String toString() {

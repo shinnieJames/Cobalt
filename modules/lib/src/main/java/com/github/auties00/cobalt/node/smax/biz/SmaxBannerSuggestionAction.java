@@ -8,45 +8,40 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The optional {@code <action/>} sub-element of the CTWA banner-suggestion
- * payload, carrying the cross-platform plus per-platform-fallback deep-link
- * triple.
+ * Models the optional {@code <action/>} sub-element of the CTWA
+ * banner-suggestion payload, carrying the cross-platform plus
+ * per-platform-fallback deep-link triple.
+ * <p>
+ * Surfaces the deep link the banner call to action navigates to when the user
+ * taps it from the WhatsApp Business surface. All three URLs are optional;
+ * per-platform link selection is left to the consumer, which prefers a
+ * platform-matched {@link SmaxBannerSuggestionNativeAction native action} entry
+ * and falls back to the cross-platform {@link #deepLink()} value carried here.
  *
- * @apiNote
- * Surfaces the deep-link the banner CTA navigates to when the user taps
- * it from the WhatsApp Business surface produced by
- * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion}. All three URLs
- * are optional; per-platform link selection is performed by the consumer
- * (WA Web prefers a {@code platform="web"} {@code <native_action/>} entry
- * and falls back to the cross-platform {@code deep_link} value here).
- *
- * @implNote
- * This implementation models the action as a flat triple of optional
- * strings; WA Web's parser is equally lax and never rejects on a missing
- * URL.
+ * @implNote This implementation models the action as a flat triple of optional
+ * strings, never rejecting on a missing URL.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
 public final class SmaxBannerSuggestionAction {
     /**
-     * The optional cross-platform deep-link URL.
+     * Holds the optional cross-platform deep-link URL.
      */
     private final String deepLink;
 
     /**
-     * The optional iOS-flavoured local deep-link URL.
+     * Holds the optional iOS-flavoured local deep-link URL.
      */
     private final String localLink;
 
     /**
-     * The optional Android-flavoured local deep-link URL.
+     * Holds the optional Android-flavoured local deep-link URL.
      */
     private final String localAndroidLink;
 
     /**
      * Constructs a projection from already-validated attribute strings.
-     *
-     * @apiNote
-     * Cobalt callers normally obtain a projection by parsing a node via
+     * <p>
+     * Callers normally obtain a projection by parsing a node via
      * {@link #of(Node)}; this constructor is exposed for tests and for
      * hand-built fixtures.
      *
@@ -62,9 +57,8 @@ public final class SmaxBannerSuggestionAction {
 
     /**
      * Returns the optional cross-platform deep link.
-     *
-     * @apiNote
-     * Used as the platform-agnostic fallback when no
+     * <p>
+     * Serves as the platform-agnostic fallback when no
      * {@link SmaxBannerSuggestionNativeAction native action} matches the
      * client's platform.
      *
@@ -77,10 +71,9 @@ public final class SmaxBannerSuggestionAction {
 
     /**
      * Returns the optional iOS-local deep link.
-     *
-     * @apiNote
-     * iOS-specific override carried for parity with WA Mobile clients;
-     * Cobalt does not consume this on the Web surface.
+     * <p>
+     * Carries the iOS-specific override for parity with WA Mobile clients; the
+     * Web surface does not consume it.
      *
      * @return an {@link Optional} carrying the URL, or empty when the relay
      *         omitted the {@code local_link} attribute
@@ -91,10 +84,9 @@ public final class SmaxBannerSuggestionAction {
 
     /**
      * Returns the optional Android-local deep link.
-     *
-     * @apiNote
-     * Android-specific override carried for parity with WA Mobile clients;
-     * Cobalt does not consume this on the Web surface.
+     * <p>
+     * Carries the Android-specific override for parity with WA Mobile clients;
+     * the Web surface does not consume it.
      *
      * @return an {@link Optional} carrying the URL, or empty when the relay
      *         omitted the {@code local_android_link} attribute
@@ -105,16 +97,11 @@ public final class SmaxBannerSuggestionAction {
 
     /**
      * Parses the projection from an {@code <action/>} node.
-     *
-     * @apiNote
+     * <p>
      * Returns empty when the node tag is not {@code "action"}. All three
-     * attributes are optional and any combination of present/absent values
-     * is accepted; a node bearing no attributes still parses cleanly.
-     *
-     * @implNote
-     * This implementation mirrors WA Web's
-     * {@code assertTag + optional(attrString, ...)} chain exactly. A
-     * wrong tag short-circuits to empty before any attribute lookup.
+     * attributes are optional and any combination of present or absent values
+     * is accepted; a node bearing no attributes still parses cleanly. A wrong
+     * tag short-circuits to empty before any attribute lookup.
      *
      * @param node the candidate {@code <action/>} node; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty when the
@@ -136,8 +123,8 @@ public final class SmaxBannerSuggestionAction {
     }
 
     /**
-     * Compares this projection to {@code obj} for structural equality on
-     * all three optional URL strings.
+     * Compares this projection to {@code obj} for structural equality on all
+     * three optional URL strings.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionAction}

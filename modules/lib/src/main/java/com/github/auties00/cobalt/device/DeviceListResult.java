@@ -14,21 +14,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed outcome of parsing one user's slot inside a USync device-list response.
+ * Models the sealed outcome of parsing one user's slot inside a USync device-list response.
  *
- * @apiNote
- * Drives the multi-device fanout path. After a USync round-trip resolves a chat's
- * recipients, the parser walks each {@code <user>} child and emits one of the three
- * variants: {@link Full} for a fresh device list with a signed key-index list,
- * {@link Omitted} when the server confirms the local device-hash already matches,
- * and {@link Error} when the server refused that user's slot or the entire batch.
- * Downstream code switches on the variant before persisting, fanning out, or
- * surfacing the failure.
+ * <p>This drives the multi-device fanout path. After a USync round-trip resolves a chat's
+ * recipients, the parser walks each {@code <user>} child and emits one of the three variants:
+ * {@link Full} for a fresh device list with a signed key-index list, {@link Omitted} when the
+ * server confirms the local device-hash already matches, and {@link Error} when the server refused
+ * that user's slot or the entire batch. Downstream code switches on the variant before persisting,
+ * fanning out, or surfacing the failure.
  *
  * @implNote
- * This implementation mirrors {@code WAWebAdvHandlerApi.handleADVDeviceSyncResult}
- * but flattens its three internal branches into a single sealed hierarchy so
- * callers can pattern-match instead of inspecting object shape.
+ * This implementation flattens the three internal branches of
+ * {@code WAWebAdvHandlerApi.handleADVDeviceSyncResult} into a single sealed hierarchy so callers
+ * can pattern-match instead of inspecting object shape.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvHandlerApi")
 public sealed interface DeviceListResult {
@@ -36,11 +34,14 @@ public sealed interface DeviceListResult {
     /**
      * Returns the user JID this result refers to.
      *
-     * @apiNote
-     * Used by the device-list applier to address each variant's downstream effect
-     * (cache replacement for {@link Full}, expected-timestamp refresh for
-     * {@link Omitted}, error reporting for per-user {@link Error}). Returns empty
-     * only for a global batch-fatal {@link Error} that is not bound to any user.
+     * <p>The device-list applier uses this to address each variant's downstream effect (cache
+     * replacement for {@link Full}, expected-timestamp refresh for {@link Omitted}, error reporting
+     * for a per-user {@link Error}). The value is empty only for a global batch-fatal {@link Error}
+     * that is not bound to any user.
+     *
+     * @implSpec
+     * Implementations must return a present value for {@link Full} and {@link Omitted}, and an
+     * empty value only for a batch-fatal {@link Error}.
      *
      * @return the user JID, or empty for global errors not tied to a user
      */
@@ -52,12 +53,14 @@ public sealed interface DeviceListResult {
     /**
      * Returns a copy of this result with hosted business-coexistence devices removed.
      *
-     * @apiNote
-     * Called on the receive path when the {@code adv_accept_hosted_devices} AB prop
-     * is off so the local cache stays free of HOSTED entries (id
-     * {@link DeviceConstants#HOSTED_DEVICE_ID}). Only {@link Full} actually filters;
-     * {@link Omitted} and {@link Error} return themselves unchanged because they
-     * carry no device list.
+     * <p>The receive path calls this when the {@code adv_accept_hosted_devices} AB prop is off so
+     * the local cache stays free of HOSTED entries (id {@link DeviceConstants#HOSTED_DEVICE_ID}).
+     * Only {@link Full} actually filters; {@link Omitted} and {@link Error} return themselves
+     * unchanged because they carry no device list.
+     *
+     * @implSpec
+     * Implementations that carry no device list must return {@code this}; those that do must return
+     * a copy with hosted-device entries removed, or {@code this} when none are present.
      *
      * @return a result without hosted devices
      */
@@ -67,16 +70,14 @@ public sealed interface DeviceListResult {
     DeviceListResult withoutHostedDevices();
 
     /**
-     * Full device list response variant emitted when the server returned a complete
-     * device list for a user.
+     * Models the full device list response emitted when the server returned a complete device list
+     * for a user.
      *
-     * @apiNote
-     * Materialised from the {@code <devices>} child of a USync {@code <user>} slot
-     * once {@code WAWebHandleAdvKeyIndexResultApi.handleKeyIndexResultSync} has
-     * verified the signed key-index list against the primary identity. Carries the
-     * decoded device list, the account signature key needed to verify subsequent
-     * key rotations, and the username co-fetched via the username USync protocol
-     * when that protocol was included in the query.
+     * <p>This is materialised from the {@code <devices>} child of a USync {@code <user>} slot once
+     * {@code WAWebHandleAdvKeyIndexResultApi.handleKeyIndexResultSync} has verified the signed
+     * key-index list against the primary identity. It carries the decoded device list, the account
+     * signature key needed to verify subsequent key rotations, and the username co-fetched via the
+     * username USync protocol when that protocol was included in the query.
      */
     @WhatsAppWebModule(moduleName = "WAWebHandleAdvForUsyncApi")
     @WhatsAppWebModule(moduleName = "WAWebHandleAdvKeyIndexResultApi")
@@ -87,25 +88,22 @@ public sealed interface DeviceListResult {
         private final DeviceList deviceList;
 
         /**
-         * The account signature key embedded in the signed key-index list, or
-         * {@code null} when the server omitted it.
+         * The account signature key embedded in the signed key-index list, or {@code null} when the
+         * server omitted it.
          */
         private final byte[] accountSignatureKey;
 
         /**
-         * The username returned by the {@code username} USync protocol on the same
-         * round-trip, or {@code null} when the protocol was not requested or returned
-         * nothing.
+         * The username returned by the {@code username} USync protocol on the same round-trip, or
+         * {@code null} when the protocol was not requested or returned nothing.
          */
         private final String username;
 
         /**
          * Constructs a new {@link Full} result.
          *
-         * @apiNote
-         * Invoked by the USync response parser once both the device list and the
-         * signed key-index list have been validated; callers do not normally
-         * construct one directly.
+         * <p>The USync response parser invokes this once both the device list and the signed
+         * key-index list have been validated; callers do not normally construct one directly.
          *
          * @param deviceList          the device list
          * @param accountSignatureKey the account signature key, or {@code null}
@@ -132,10 +130,8 @@ public sealed interface DeviceListResult {
         /**
          * Returns the decoded device list.
          *
-         * @apiNote
-         * Used by {@link DeviceService} to replace
-         * the cached entry for {@link #userJid()} and to drive identity-update side
-         * effects on the Signal store.
+         * <p>The device service uses this to replace the cached entry for {@link #userJid()} and to
+         * drive identity-update side effects on the Signal store.
          *
          * @return the device list
          */
@@ -146,10 +142,9 @@ public sealed interface DeviceListResult {
         /**
          * Returns the account signature key embedded in the signed key-index list.
          *
-         * @apiNote
-         * Forwarded by the hosted-business coexistence path; the standard E2EE path
-         * verifies against the locally-stored primary identity and returns empty
-         * here. Callers that persist the key only do so for hosted accounts.
+         * <p>The hosted-business coexistence path forwards this key; the standard E2EE path
+         * verifies against the locally-stored primary identity and returns empty here. Callers that
+         * persist the key only do so for hosted accounts.
          *
          * @return the account signature key, or empty when none was provided
          */
@@ -163,11 +158,10 @@ public sealed interface DeviceListResult {
         /**
          * Returns the username co-fetched via the {@code username} USync protocol.
          *
-         * @apiNote
-         * Present only when the USync query bundled the username protocol alongside
-         * the devices protocol; otherwise empty. The username feeds the
-         * {@code WAWebUsyncUsername.usernameParser} consumer that maps it onto the
-         * contact's display name.
+         * <p>The value is present only when the USync query bundled the username protocol alongside
+         * the devices protocol; otherwise it is empty. The username feeds the
+         * {@code WAWebUsyncUsername.usernameParser} consumer that maps it onto the contact's
+         * display name.
          *
          * @return the username, or empty when none was returned
          */
@@ -179,19 +173,16 @@ public sealed interface DeviceListResult {
         }
 
         /**
-         * Returns whether the embedded device list contains at least one hosted
-         * business-coexistence device (id {@link DeviceConstants#HOSTED_DEVICE_ID}).
+         * Returns whether the embedded device list contains at least one hosted business-coexistence
+         * device (id {@link DeviceConstants#HOSTED_DEVICE_ID}).
          *
-         * @apiNote
-         * Inspected by the receive path before routing to
-         * {@link #withoutHostedDevices()}; lets the caller short-circuit when there
-         * is nothing to strip.
+         * <p>The receive path inspects this before routing to {@link #withoutHostedDevices()}, so
+         * the caller can short-circuit when there is nothing to strip.
          *
          * @implNote
-         * This implementation does not have a direct WA Web counterpart export; WA
-         * Web inlines the same {@code devices.some(d => d.id === HOSTED_DEVICE_ID)}
-         * check at every call site. Cobalt centralises it as a {@code boolean}
-         * helper.
+         * This implementation centralises the hosted-device check as a {@code boolean} helper where
+         * WA Web inlines the equivalent {@code devices.some(d => d.id === HOSTED_DEVICE_ID)} test at
+         * every call site.
          *
          * @return {@code true} when a hosted device is present
          */
@@ -237,17 +228,14 @@ public sealed interface DeviceListResult {
     }
 
     /**
-     * Omitted device list variant emitted when the server confirms the local device
-     * hash is up-to-date and declines to retransmit the full list.
+     * Models the omitted device list emitted when the server confirms the local device hash is
+     * up-to-date and declines to retransmit the full list.
      *
-     * @apiNote
-     * Materialised by {@code WAWebHandleAdvOmittedResultApi.handleOmittedResult}
-     * when the USync {@code <user>} slot carries timestamps but no
-     * {@code signedKeyIndexBytes}. Callers refresh the cached
-     * expected-timestamp tracking fields without touching the device set.
-     * The {@link #fromHandleOmittedResult()} flag separates real omitted responses
-     * from the synthetic ones the HOSTED-to-E2EE coexistence transition emits to
-     * piggy-back on the same applier.
+     * <p>This is materialised by {@code WAWebHandleAdvOmittedResultApi.handleOmittedResult} when the
+     * USync {@code <user>} slot carries timestamps but no {@code signedKeyIndexBytes}. Callers
+     * refresh the cached expected-timestamp tracking fields without touching the device set. The
+     * {@link #fromHandleOmittedResult()} flag separates real omitted responses from the synthetic
+     * ones the HOSTED-to-E2EE coexistence transition emits to piggy-back on the same applier.
      */
     @WhatsAppWebModule(moduleName = "WAWebHandleAdvOmittedResultApi")
     final class Omitted implements DeviceListResult {
@@ -257,40 +245,32 @@ public sealed interface DeviceListResult {
         private final Jid userJid;
 
         /**
-         * The server-reported snapshot timestamp, or {@code null} when the slot
-         * carried none.
+         * The server-reported snapshot timestamp, or {@code null} when the slot carried none.
          */
         private final Instant timestamp;
 
         /**
-         * The server-reported expected timestamp, or {@code null} when the slot
-         * carried none.
+         * The server-reported expected timestamp, or {@code null} when the slot carried none.
          */
         private final Instant expectedTimestamp;
 
         /**
-         * Whether this result was produced by the genuine omitted-result code path
-         * rather than synthesised as part of a HOSTED-to-E2EE coexistence
-         * transition.
+         * Whether this result was produced by the genuine omitted-result code path rather than
+         * synthesised as part of a HOSTED-to-E2EE coexistence transition.
          */
         private final boolean fromHandleOmittedResult;
 
         /**
          * Constructs a new {@link Omitted} result.
          *
-         * @apiNote
-         * Invoked by the USync response parser; the synthetic
-         * HOSTED-to-E2EE transition path sets {@code fromHandleOmittedResult} to
-         * {@code true} so the downstream applier can recognise the
-         * {@code advAccountType} flip.
+         * <p>The USync response parser invokes this; the synthetic HOSTED-to-E2EE transition path
+         * sets {@code fromHandleOmittedResult} to {@code true} so the downstream applier can
+         * recognise the {@code advAccountType} flip.
          *
          * @param userJid                 the user JID
-         * @param timestamp               the server's snapshot timestamp, or
-         *                                {@code null}
-         * @param expectedTimestamp       the server's expected timestamp, or
-         *                                {@code null}
-         * @param fromHandleOmittedResult whether this result came from the omitted
-         *                                code path
+         * @param timestamp               the server's snapshot timestamp, or {@code null}
+         * @param expectedTimestamp       the server's expected timestamp, or {@code null}
+         * @param fromHandleOmittedResult whether this result came from the omitted code path
          * @throws NullPointerException if {@code userJid} is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WAWebHandleAdvOmittedResultApi",
@@ -317,11 +297,9 @@ public sealed interface DeviceListResult {
         /**
          * Returns the server-reported snapshot timestamp from the USync slot.
          *
-         * @apiNote
-         * Used to seed the cached device list's {@code timestamp} on the
-         * synthetic HOSTED-to-E2EE transition; the genuine omitted path leaves the
-         * cached snapshot timestamp alone and only refreshes the expected-timestamp
-         * tracking fields.
+         * <p>This seeds the cached device list's {@code timestamp} on the synthetic
+         * HOSTED-to-E2EE transition; the genuine omitted path leaves the cached snapshot timestamp
+         * alone and only refreshes the expected-timestamp tracking fields.
          *
          * @return the timestamp, or empty when not present
          */
@@ -335,10 +313,9 @@ public sealed interface DeviceListResult {
         /**
          * Returns the server-reported expected timestamp from the USync slot.
          *
-         * @apiNote
-         * Fed into {@code WAWebAdvExpectedTsApi.computeExpectedTsForDeviceRecord} so
-         * the cached device list can recompute when the next ADV check job needs to
-         * fetch the user's devices again.
+         * <p>This feeds {@code WAWebAdvExpectedTsApi.computeExpectedTsForDeviceRecord} so the cached
+         * device list can recompute when the next ADV check job needs to fetch the user's devices
+         * again.
          *
          * @return the expected timestamp, or empty when not present
          */
@@ -350,13 +327,12 @@ public sealed interface DeviceListResult {
         }
 
         /**
-         * Returns whether this result came from the omitted-result code path rather
-         * than a synthetic HOSTED-to-E2EE coexistence transition.
+         * Returns whether this result came from the omitted-result code path rather than a synthetic
+         * HOSTED-to-E2EE coexistence transition.
          *
-         * @apiNote
-         * Mirrors WA Web's {@code fromHandleOmittedResult} discriminator that the
-         * device-list applier inspects to decide whether to flip the cached
-         * {@code advAccountType} from HOSTED back to E2EE.
+         * <p>This mirrors WA Web's {@code fromHandleOmittedResult} discriminator that the
+         * device-list applier inspects to decide whether to flip the cached {@code advAccountType}
+         * from HOSTED back to E2EE.
          *
          * @return {@code true} when the result is a genuine omitted response
          */
@@ -380,48 +356,42 @@ public sealed interface DeviceListResult {
     }
 
     /**
-     * Error variant emitted when the server refused to answer a USync slot.
+     * Models the error emitted when the server refused to answer a USync slot.
      *
-     * @apiNote
-     * Per-user errors (the {@code <error>} child of a single {@code <user>}) carry
-     * the addressed user JID and let the batch continue with the remaining users.
-     * Batch-fatal errors (the {@code error} attribute on the outer USync result)
-     * carry a {@code null} user JID and {@link #fatal()} {@code true}; downstream
-     * code aborts the whole batch and surfaces the failure to the caller of the
-     * USync round-trip.
+     * <p>A per-user error (the {@code <error>} child of a single {@code <user>}) carries the
+     * addressed user JID and lets the batch continue with the remaining users. A batch-fatal error
+     * (the {@code error} attribute on the outer USync result) carries a {@code null} user JID and
+     * {@link #fatal()} {@code true}; downstream code aborts the whole batch and surfaces the failure
+     * to the caller of the USync round-trip.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
     final class Error implements DeviceListResult {
         /**
-         * The user JID this error is associated with, or {@code null} for a
-         * batch-fatal global error that has no addressee.
+         * The user JID this error is associated with, or {@code null} for a batch-fatal global error
+         * that has no addressee.
          */
         private final Jid userJid;
 
         /**
-         * The error code reported by the server's {@code <error code="...">}
-         * attribute.
+         * The error code reported by the server's {@code <error code="...">} attribute.
          */
         private final int errorCode;
 
         /**
-         * The error text reported by the server's {@code <error text="...">}
-         * attribute.
+         * The error text reported by the server's {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Whether this error is batch-fatal; non-fatal errors only suppress the
-         * affected user.
+         * Whether this error is batch-fatal; a non-fatal error only suppresses the affected user.
          */
         private final boolean fatal;
 
         /**
          * Constructs a new {@link Error} result.
          *
-         * @apiNote
-         * Invoked by the USync response parser for each {@code <error>} child it
-         * encounters; tests construct one directly when stubbing failure paths.
+         * <p>The USync response parser invokes this for each {@code <error>} child it encounters;
+         * tests construct one directly when stubbing failure paths.
          *
          * @param userJid   the user JID, or {@code null} for batch-fatal errors
          * @param errorCode the error code
@@ -453,9 +423,8 @@ public sealed interface DeviceListResult {
         /**
          * Returns the error code lifted from the server's {@code <error>} attribute.
          *
-         * @apiNote
-         * Used by callers that map specific server codes onto retry or fail-loud
-         * policies; the device-list applier itself only inspects {@link #fatal()}.
+         * <p>Callers that map specific server codes onto retry or fail-loud policies use this; the
+         * device-list applier itself only inspects {@link #fatal()}.
          *
          * @return the error code
          */
@@ -467,11 +436,9 @@ public sealed interface DeviceListResult {
         }
 
         /**
-         * Returns the human-readable error text lifted from the server's
-         * {@code <error>} attribute.
+         * Returns the human-readable error text lifted from the server's {@code <error>} attribute.
          *
-         * @apiNote
-         * Surfaced in diagnostic logs and in exceptions thrown for fatal results.
+         * <p>This is surfaced in diagnostic logs and in exceptions thrown for fatal results.
          *
          * @return the error text
          */
@@ -485,10 +452,9 @@ public sealed interface DeviceListResult {
         /**
          * Returns whether this error aborts the entire USync batch.
          *
-         * @apiNote
-         * The parser sets this to {@code true} for the outer USync {@code error}
-         * attribute (batch-fatal); per-user {@code <error>} children stay
-         * non-fatal so the rest of the slots can still apply.
+         * <p>The parser sets this to {@code true} for the outer USync {@code error} attribute
+         * (batch-fatal); a per-user {@code <error>} child stays non-fatal so the rest of the slots
+         * can still apply.
          *
          * @return {@code true} for fatal errors that abort the batch
          */

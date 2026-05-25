@@ -14,29 +14,22 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * USync {@code business} protocol descriptor.
+ * Describes the USync {@code business} protocol.
  *
- * @apiNote
- * Asks the relay for each peer's signed verified-name certificate; used by
- * verified-business fetches such as
- * {@code WAWebGetOrQueryUsyncInfoContactAction.queryUsyncBusiness} and by
- * the contact-verifier flow that batches business and picture lookups
- * together (see {@code WAWebContactImportContactVerifier}).
+ * This descriptor asks the relay for each peer's signed verified-name
+ * certificate. The descriptor is stateless and carries no per-user request
+ * payload; it is paired with the {@link UsyncUser} addressing that selects
+ * the peer whose certificate is wanted.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncBusiness")
 public final class UsyncBusinessProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "business";
 
     /**
-     * Builds a default business-protocol descriptor.
-     *
-     * @apiNote
-     * The descriptor is stateless; pair it with the right
-     * {@link UsyncUser} addressing to get back the peer's verified-name
-     * certificate.
+     * Creates a business-protocol descriptor.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncBusiness",
             exports = "USyncBusinessProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -57,9 +50,8 @@ public final class UsyncBusinessProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation wraps a single empty {@code <verified_name/>}
-     * child inside the {@code <business>} element, matching the JS
-     * {@code wap("business", null, wap("verified_name", null))} shape.
+     * This implementation wraps a single empty {@code <verified_name/>} child
+     * inside the {@code <business>} element.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBusiness",
@@ -75,10 +67,8 @@ public final class UsyncBusinessProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation always returns {@link Optional#empty()} because
-     * the business protocol has no per-user payload on the request side,
-     * matching the JS {@code null} return in
-     * {@code USyncBusinessProtocol.getUserElement}.
+     * This implementation always returns {@link Optional#empty()} because the
+     * business protocol has no per-user payload on the request side.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBusiness",
@@ -91,9 +81,9 @@ public final class UsyncBusinessProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the raw {@code <verified_name>} node
-     * inside {@link BusinessResult}; the actual verified-name parsing
-     * (signature check, certificate decode) is deferred to the caller.
+     * This implementation returns the raw {@code <verified_name>} node inside
+     * {@link BusinessResult}; the verified-name parsing (signature check,
+     * certificate decode) is deferred to the caller.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBusiness",

@@ -9,55 +9,47 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <provider_info/>} sub-child carried by a coexistence
- * notification.
+ * Holds the {@code <provider_info/>} sub-child carried by a coexistence notification.
  *
- * @apiNote
- * Identifies the third-party provider behind a hosted onboarding or
- * offboarding event ({@code AI from Meta}, the
- * {@code business_platform} surface, automation providers); embedders
- * surface the logo and display name when notifying users that the
- * coexistence link has been established or torn down.
+ * <p>This projection identifies the third-party provider behind a hosted onboarding or
+ * offboarding event (for example, the {@code ai_from_meta}, {@code automation}, or
+ * {@code business_platform} surface). It exposes the provider's logo URL, display name, and
+ * stable id so consumers can disambiguate which integration the coexistence link refers to and
+ * render a logo and label when notifying the user. All three fields are optional because the
+ * relay populates only the children it has for a given provider.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceProviderInfoMixin")
 public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
-     * The optional logo-URL bytes for the provider.
+     * Holds the optional logo-URL bytes for the provider.
      *
-     * @apiNote
-     * Empty when the relay did not include the {@code <logo_url/>}
-     * child; otherwise the raw bytes of the URL the embedder loads
-     * into the notification.
+     * <p>Is {@code null} when the relay did not include the {@code <logo_url/>} child; otherwise
+     * the raw bytes of the URL a consumer loads into the notification.
      */
     private final byte[] logoUrl;
 
     /**
-     * The optional human-readable name bytes for the provider.
+     * Holds the optional human-readable name bytes for the provider.
      *
-     * @apiNote
-     * Empty when the relay omitted the {@code <name/>} child;
-     * otherwise the raw bytes of the provider's display name.
+     * <p>Is {@code null} when the relay omitted the {@code <name/>} child; otherwise the raw bytes
+     * of the provider's display name.
      */
     private final byte[] name;
 
     /**
-     * The optional provider id.
+     * Holds the optional provider id.
      *
-     * @apiNote
-     * Empty when the relay omitted the {@code <id/>} child or when the
-     * content cannot be parsed as a base-10 integer; embedders use the
-     * value as a stable provider key when cross-referencing the
-     * coexistence link with their own records.
+     * <p>Is {@code null} when the relay omitted the {@code <id/>} child or when its content cannot
+     * be parsed as a base-10 integer. The value acts as a stable provider key when
+     * cross-referencing the coexistence link against external records.
      */
     private final Integer id;
 
     /**
      * Constructs a new provider-info projection.
      *
-     * @apiNote
-     * Built by {@link #of(Node)} from the parsed children of the
-     * {@code <provider_info/>} node; embedders rarely instantiate this
-     * class directly outside tests.
+     * <p>Invoked by {@link #of(Node)} from the parsed children of the {@code <provider_info/>}
+     * node. Each argument may be {@code null}, reflecting the corresponding child being absent.
      *
      * @param logoUrl the optional logo-URL bytes; may be {@code null}
      * @param name    the optional name bytes; may be {@code null}
@@ -72,11 +64,10 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
      * Returns the optional logo-URL bytes.
      *
-     * @apiNote
-     * Returns the underlying mutable buffer; callers must not mutate
-     * it.
+     * <p>The returned {@link Optional} is empty when no {@code <logo_url/>} child was present. When
+     * present, it wraps the underlying mutable buffer; callers must not mutate it.
      *
-     * @return an {@link Optional} carrying the bytes
+     * @return an {@link Optional} carrying the logo-URL bytes
      */
     public Optional<byte[]> logoUrl() {
         return Optional.ofNullable(logoUrl);
@@ -85,11 +76,10 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
      * Returns the optional name bytes.
      *
-     * @apiNote
-     * Returns the underlying mutable buffer; callers must not mutate
-     * it.
+     * <p>The returned {@link Optional} is empty when no {@code <name/>} child was present. When
+     * present, it wraps the underlying mutable buffer; callers must not mutate it.
      *
-     * @return an {@link Optional} carrying the bytes
+     * @return an {@link Optional} carrying the name bytes
      */
     public Optional<byte[]> name() {
         return Optional.ofNullable(name);
@@ -98,9 +88,8 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
      * Returns the optional provider id.
      *
-     * @apiNote
-     * Empty when the relay omitted it or when the content failed the
-     * base-10 integer check.
+     * <p>The returned {@link Optional} is empty when the relay omitted the {@code <id/>} child or
+     * when its content failed the base-10 integer parse.
      *
      * @return an {@link Optional} carrying the id
      */
@@ -109,27 +98,24 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     }
 
     /**
-     * Tries to parse a {@code <provider_info/>} sub-child from the
-     * given parent node.
+     * Parses a {@code <provider_info/>} sub-child from the given parent node.
      *
-     * @apiNote
-     * Mirrors {@code WASmaxInCoexistenceProviderInfoMixin.parseProviderInfoMixin}
-     * composed with the per-child accessors; consumed by
-     * {@link SmaxCoexistenceOffboardingNotificationResponse#of(Node)}
-     * and
-     * {@link SmaxCoexistenceOnboardingStatusNotificationResponse#of(Node)}
-     * to lift the nested provider block.
+     * <p>Resolves the {@code <provider_info/>} child of {@code parent} via
+     * {@link Node#getChild(String)} and, when present, lifts its {@code <logo_url/>} and
+     * {@code <name/>} contents through {@link Node#toContentBytes()} and its {@code <id/>} content
+     * through {@link Node#toContentString()}. Returns {@link Optional#empty()} when no
+     * {@code <provider_info/>} child exists. Consumed by
+     * {@link SmaxCoexistenceOffboardingNotificationResponse#of(Node)} and
+     * {@link SmaxCoexistenceOnboardingStatusNotificationResponse#of(Node)} to lift the nested
+     * provider block.
      *
      * @implNote
-     * This implementation collapses a malformed {@code <id/>} content
-     * (non-numeric or out-of-range for {@code int}) to
-     * {@link Optional#empty()}, matching the {@code contentInt} parser
-     * in {@code WASmaxParseUtils} which signals a parse error on
-     * {@code NaN}; WA Web propagates the underlying error envelope
+     * This implementation collapses a malformed {@code <id/>} content (non-numeric or out of range
+     * for {@code int}) to {@link Optional#empty()}, matching the {@code contentInt} parser which
+     * signals a parse error on a non-numeric value; WA Web propagates the underlying error envelope
      * instead.
      *
-     * @param parent the node carrying the {@code <provider_info/>}
-     *               child; never {@code null}
+     * @param parent the node carrying the {@code <provider_info/>} child; never {@code null}
      * @return an {@link Optional} carrying the projection
      * @throws NullPointerException if {@code parent} is {@code null}
      */
@@ -167,6 +153,15 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
         return Optional.of(new SmaxCoexistenceOffboardingNotificationProviderInfo(logoUrl, name, id));
     }
 
+    /**
+     * Compares this projection with another for value equality.
+     *
+     * <p>Two projections are equal when their logo-URL bytes, name bytes, and provider ids are
+     * pairwise equal; the byte arrays are compared by content via {@link Arrays#equals(byte[], byte[])}.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} if {@code obj} is an equal projection
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -181,6 +176,14 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
                 && Objects.equals(this.id, that.id);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * <p>Combines the content hashes of the logo-URL and name byte arrays with the hash of the
+     * provider id.
+     *
+     * @return the hash code for this projection
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(id);
@@ -189,6 +192,14 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
         return result;
     }
 
+    /**
+     * Returns a debug string describing this projection.
+     *
+     * <p>Renders the logo-URL and name byte arrays element by element via
+     * {@link Arrays#toString(byte[])} together with the provider id.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxCoexistenceOffboardingNotificationProviderInfo[logoUrl=" + Arrays.toString(logoUrl)

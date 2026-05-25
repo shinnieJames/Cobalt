@@ -5,18 +5,21 @@ import com.github.auties00.cobalt.model.jid.Jid;
 /**
  * Thrown when a string cannot be parsed as a WhatsApp {@link Jid}.
  *
+ * JIDs follow a {@code user@server} shape where the server suffix selects
+ * the entity kind ({@code s.whatsapp.net} for a contact, {@code g.us} for
+ * a group, {@code newsletter} for a newsletter, and so on). This exception
+ * is raised when the input is missing the separator, has an empty
+ * component, contains forbidden characters, or names an unknown server
+ * suffix.
+ *
  * @apiNote
- * JIDs follow a {@code user@server} shape where the server suffix
- * selects the entity kind ({@code s.whatsapp.net} for a contact,
- * {@code g.us} for a group, {@code newsletter} for a newsletter, and so
- * on). This exception is raised when the input is missing the separator,
- * has an empty component, contains forbidden characters, or names an
- * unknown server suffix. Catch it locally to reject user-supplied JID
- * strings without bringing down the rest of the operation.
+ * Raised against caller-supplied JID strings; catch it locally to reject
+ * bad input without affecting the rest of the operation, since only the
+ * offending value is rejected.
  *
  * @implNote
- * This implementation always reports the failure as non-fatal: only the
- * offending value is rejected and the rest of the session is unaffected.
+ * This implementation always reports the failure as non-fatal: it
+ * invalidates only the operation that produced the bad value.
  *
  * @see Jid
  */

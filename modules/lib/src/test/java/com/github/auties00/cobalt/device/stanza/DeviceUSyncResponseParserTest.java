@@ -16,70 +16,36 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Fixture-driven tests for {@link DeviceUSyncResponseParser}.
+ * Fixture-driven tests for {@link DeviceUSyncResponseParser}, replaying captured
+ * USync IQ pairs from {@code fixtures/device/usync-*.jsonl} through the parser
+ * and asserting the {@link DeviceListResult} classification each observed wire
+ * shape produces: self lookup, other-contact lookup, nonexistent number, bot DM,
+ * hosted-business PN-side, hosted-business LID-side, and group lookups of various
+ * sizes.
  *
- * @apiNote
- * Exercises the wire-format-handling contract of WA Web's {@code usyncParser}
- * by replaying captured USync IQ pairs from
- * {@code fixtures/device/usync-*.jsonl} through the Cobalt parser. Each
- * test asserts the classification ({@link DeviceListResult.Full},
- * {@link DeviceListResult.Omitted}, {@link DeviceListResult.Error}) the
- * parser produces for one of the six observed wire shapes (self lookup,
- * other-contact lookup, nonexistent number, bot DM, hosted-business
- * PN-side, hosted-business LID-side, plus group lookups of various sizes).
- *
- * @implNote
- * This implementation deliberately avoids verifying the
- * {@link DeviceListResult.Full} payload contents: signature verification on
- * the captured {@code <key-index-list>} requires the test store to hold
- * the original primary identity key, which is not available in the public
- * fixture corpus. The matching positive-path assertion lives in
- * {@code DeviceADVValidatorTest}; here we only assert that the parser
- * walked the captured shape without exceptions and produced the right
- * Cobalt-side classification.
+ * <p>The {@link DeviceListResult.Full} payload contents are intentionally not
+ * verified: signature verification on the captured {@code <key-index-list>}
+ * needs the original primary identity key, which the public fixture corpus does
+ * not ship; that positive-path assertion lives in {@code DeviceADVValidatorTest}.
+ * These tests only assert that the parser walks the captured shape without
+ * exceptions and produces the right classification. A new parser is built per
+ * test so accumulator state inside {@link DeviceADVValidator} does not leak
+ * between cases.
  */
 @DisplayName("DeviceUSyncResponseParser")
 class DeviceUSyncResponseParserTest {
-    /**
-     * Captured-session self phone-number JID (matches the
-     * {@code business} VoIP capture session).
-     */
+    // Matches the business VoIP capture session; SELF_LID is its paired LID.
     private static final Jid SELF_PN = Jid.of("19254863482@s.whatsapp.net");
 
-    /**
-     * Captured-session self LID (paired with {@link #SELF_PN}).
-     */
     private static final Jid SELF_LID = Jid.of("83116928594056@lid");
 
-    /**
-     * Constructs a fresh parser wired to a temporary store seeded with the
-     * captured-session identity pair.
-     *
-     * @apiNote
-     * Returns a new parser per test so accumulator state inside
-     * {@link DeviceADVValidator} does not leak between cases.
-     *
-     * @return the parser under test
-     */
     private static DeviceUSyncResponseParser newParser() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         var props = TestABPropsService.builder().build();
         return new DeviceUSyncResponseParser(new DeviceADVValidator(store, props));
     }
 
-    /**
-     * Loads the inbound USync response {@link Node} for the given fixture
-     * topic.
-     *
-     * @apiNote
-     * Walks the captured event stream and returns the first entry tagged
-     * {@code direction = "in"}; the outbound (query) entry is discarded
-     * because the parser only consumes responses.
-     *
-     * @param topic the fixture slug (for example {@code "usync-self"})
-     * @return the inbound response {@link Node}
-     * @throws AssertionError if the fixture has no inbound entry
-     */
+    // Returns the first direction="in" entry; the outbound query entry is discarded since the parser only consumes responses.
     private static Node loadResponseNode(String topic) {
         for (var event : DeviceFixtures.loadEvents(topic)) {
             if ("in".equals(event.getString("direction"))) {
@@ -89,17 +55,8 @@ class DeviceUSyncResponseParserTest {
         throw new AssertionError("no inbound event in fixture " + topic);
     }
 
-    /**
-     * Self-lookup capture lands on the Full path and emits no error
-     * results.
-     *
-     * @implNote
-     * Without the original primary identity key, the parser's
-     * {@code parseFullResult} returns an empty stream after signature
-     * verification fails; the contract under test is the absence of
-     * {@link DeviceListResult.Error} entries, not a populated
-     * {@link DeviceListResult.Full} payload.
-     */
+    // Without the original primary identity key, parseFullResult yields an empty stream; the contract under
+    // test is the absence of Error entries, not a populated Full payload.
     @Test
     @DisplayName("self USync response carries a signed-key-index; parser routes through parseFullResult")
     void selfRoutesToFullPath() {
@@ -110,10 +67,6 @@ class DeviceUSyncResponseParserTest {
         assertEquals(0, errors, "self USync response carries no <error> children");
     }
 
-    /**
-     * Other-contact lookup capture follows the same Full-path classification
-     * as the self lookup.
-     */
     @Test
     @DisplayName("other-contact USync response: same Full-path routing as self")
     void otherRoutesToFullPath() {
@@ -124,14 +77,6 @@ class DeviceUSyncResponseParserTest {
         assertEquals(0, errors, "other-contact USync response carries no <error> children");
     }
 
-    /**
-     * Nonexistent-number capture classifies as Omitted because the response
-     * carries an empty {@code <device-list/>} and no signed key index.
-     *
-     * @apiNote
-     * Downstream Cobalt treats Omitted entries as "primary device only" in
-     * the device-fanout step, matching WA Web's behaviour.
-     */
     @Test
     @DisplayName("nonexistent-user USync: empty <device-list/> routes through parseOmittedResult")
     void nonexistentRoutesToOmittedPath() {
@@ -144,15 +89,6 @@ class DeviceUSyncResponseParserTest {
                         + results.getFirst().getClass().getSimpleName());
     }
 
-    /**
-     * None of the captured USync responses surface a fatal global
-     * {@link DeviceListResult.Error}.
-     *
-     * @implNote
-     * Iterates the full fixture catalogue to catch a regression where a
-     * single capture stops parsing because of a schema drift; the per-shape
-     * tests above cover the positive classification.
-     */
     @Test
     @DisplayName("none of the captured responses produce a fatal global error")
     void noFatalGlobalError() {
@@ -167,14 +103,6 @@ class DeviceUSyncResponseParserTest {
         }
     }
 
-    /**
-     * Bot-DM USync returns an empty {@code <list/>} and the parser yields
-     * zero per-user results.
-     *
-     * @apiNote
-     * Bots are not standard WhatsApp users; the server's empty list shape
-     * is intentional and must not be misclassified as an error.
-     */
     @Test
     @DisplayName("bot DM USync: server returns empty <list/>; parser yields no results")
     void botUSyncReturnsEmpty() {
@@ -184,10 +112,6 @@ class DeviceUSyncResponseParserTest {
                 "bot USync produces no DeviceListResult entries (empty <list/>)");
     }
 
-    /**
-     * Hosted-business coex USync over the PN server returns one Omitted
-     * entry for the single primary device.
-     */
     @Test
     @DisplayName("hosted-business coex USync (PN-server): single primary device, Omitted path")
     void hostedPnUSync() {
@@ -200,10 +124,6 @@ class DeviceUSyncResponseParserTest {
                         + results.getFirst().getClass().getSimpleName());
     }
 
-    /**
-     * Hosted-business coex USync over the LID server yields the same Omitted
-     * classification as the PN-side capture.
-     */
     @Test
     @DisplayName("hosted-business coex USync (LID-server): single primary device, Omitted path")
     void hostedLidUSync() {
@@ -215,15 +135,6 @@ class DeviceUSyncResponseParserTest {
                         + results.getFirst().getClass().getSimpleName());
     }
 
-    /**
-     * Group USync captures of varying sizes (2, 10, 205 users) parse
-     * without producing a fatal global error.
-     *
-     * @implNote
-     * The per-user result count depends on signature-verification success
-     * (covered by {@code DeviceADVValidatorTest}); this assertion only
-     * pins the wire-format-handling contract.
-     */
     @Test
     @DisplayName("group USyncs: small (2), medium (10), and large (205) all parse without exceptions")
     void groupUSyncShapes() {

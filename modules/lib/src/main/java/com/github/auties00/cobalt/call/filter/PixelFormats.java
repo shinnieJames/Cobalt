@@ -5,64 +5,94 @@ import com.github.auties00.cobalt.call.frame.video.VideoFrame;
 import java.util.Objects;
 
 /**
- * Pure-Java pixel-format converters for video frames — turns the
- * various RGB / BGR / NV12 layouts cameras and screen-capture
- * sources commonly produce into the I420 layout the call's video
- * pipelines expect.
+ * Converts common camera and screen-capture pixel layouts into the I420 layout the call video
+ * pipeline expects.
  *
- * <p>Performance notes:
+ * <p>Sources such as webcams and desktop capture commonly deliver RGBA, packed RGB, packed BGR, or
+ * NV12 buffers, whereas the encoder consumes {@link VideoFrame} instances in I420 (YUV 4:2:0 planar)
+ * layout. Each public method takes one such buffer plus its dimensions and a presentation timestamp
+ * and returns a freshly allocated I420 {@link VideoFrame}. The RGB-family conversions apply a colour
+ * matrix; the NV12 conversion only deinterleaves the chroma plane, since NV12 and I420 already share
+ * the same luma plane and 4:2:0 subsampling. All methods reject buffers whose length does not match
+ * the declared dimensions and reject odd dimensions.
  *
- * <ul>
- *   <li>BT.601 conversion matrix; matches what FFmpeg uses by
- *       default for 8-bit-per-channel YUV ↔ RGB.</li>
- *   <li>720×480 @ 30 fps is ~10 megapixels/s — trivial CPU.
- *       Higher resolutions (1080p @ 30) become non-trivial.</li>
- * </ul>
+ * <p>The class is final, stateless, and not instantiable; every method is static.
  *
- * <p>This class is final and stateless; every method is static.
+ * @implNote This implementation uses the BT.601 colour matrix with 8-bit fixed-point coefficients,
+ * matching FFmpeg's default for 8-bit-per-channel YUV/RGB conversion. At 720x480 and 30 fps the
+ * per-pixel work is roughly 10 megapixels per second and negligible on a modern CPU; at 1080p and
+ * 30 fps it becomes measurable.
  */
 public final class PixelFormats {
     /**
-     * BT.601 RGB → Y coefficients, fixed-point 8-bit-shifted.
+     * BT.601 red coefficient for the luma (Y) channel, in 8-bit fixed point.
      */
     private static final int CY_R = 66;
+
+    /**
+     * BT.601 green coefficient for the luma (Y) channel, in 8-bit fixed point.
+     */
     private static final int CY_G = 129;
+
+    /**
+     * BT.601 blue coefficient for the luma (Y) channel, in 8-bit fixed point.
+     */
     private static final int CY_B = 25;
 
     /**
-     * BT.601 RGB → U coefficients.
+     * BT.601 red coefficient for the blue-difference chroma (U) channel, in 8-bit fixed point.
      */
     private static final int CU_R = -38;
+
+    /**
+     * BT.601 green coefficient for the blue-difference chroma (U) channel, in 8-bit fixed point.
+     */
     private static final int CU_G = -74;
+
+    /**
+     * BT.601 blue coefficient for the blue-difference chroma (U) channel, in 8-bit fixed point.
+     */
     private static final int CU_B = 112;
 
     /**
-     * BT.601 RGB → V coefficients.
+     * BT.601 red coefficient for the red-difference chroma (V) channel, in 8-bit fixed point.
      */
     private static final int CV_R = 112;
+
+    /**
+     * BT.601 green coefficient for the red-difference chroma (V) channel, in 8-bit fixed point.
+     */
     private static final int CV_G = -94;
+
+    /**
+     * BT.601 blue coefficient for the red-difference chroma (V) channel, in 8-bit fixed point.
+     */
     private static final int CV_B = -18;
 
     /**
-     * Prevents instantiation.
+     * Prevents instantiation of this static-only utility class.
+     *
+     * @throws AssertionError always
      */
     private PixelFormats() {
         throw new AssertionError("PixelFormats is not instantiable");
     }
 
     /**
-     * Converts an RGBA byte buffer ({@code [R G B A]} per pixel,
-     * row-major top-down) into a fresh I420 {@link VideoFrame}.
+     * Converts a row-major top-down RGBA buffer into a fresh I420 {@link VideoFrame}.
      *
-     * @param rgba   the source pixels; length must be
-     *               {@code width * height * 4}
-     * @param width  frame width in pixels (even)
-     * @param height frame height in pixels (even)
-     * @param ptsMs  the timestamp to stamp on the output frame
-     * @return the converted frame
-     * @throws IllegalArgumentException if {@code rgba.length} is
-     *                                  wrong, or dimensions
-     *                                  aren't even
+     * <p>The source holds four bytes per pixel in {@code [R, G, B, A]} order; the alpha channel is
+     * ignored. The buffer length must equal {@code width * height * 4} and both dimensions must be
+     * even.
+     *
+     * @param rgba   the source pixels in {@code [R, G, B, A]} order; never {@code null}
+     * @param width  the frame width in pixels; even and at least {@code 2}
+     * @param height the frame height in pixels; even and at least {@code 2}
+     * @param ptsMs  the presentation timestamp to stamp on the output frame
+     * @return the converted I420 frame
+     * @throws NullPointerException     if {@code rgba} is {@code null}
+     * @throws IllegalArgumentException if {@code rgba.length} is not {@code width * height * 4}, or a
+     *                                  dimension is odd or less than {@code 2}
      */
     public static VideoFrame rgbaToI420(byte[] rgba, int width, int height, long ptsMs) {
         Objects.requireNonNull(rgba, "rgba cannot be null");
@@ -76,16 +106,20 @@ public final class PixelFormats {
     }
 
     /**
-     * Converts a packed BGR byte buffer ({@code [B G R]} per
-     * pixel) into a fresh I420 {@link VideoFrame}. {@code BGR24}
-     * is what most v4l2 cameras produce.
+     * Converts a packed BGR24 buffer into a fresh I420 {@link VideoFrame}.
      *
-     * @param bgr    the source pixels; length must be
-     *               {@code width * height * 3}
-     * @param width  frame width in pixels (even)
-     * @param height frame height in pixels (even)
-     * @param ptsMs  the timestamp to stamp on the output frame
-     * @return the converted frame
+     * <p>The source holds three bytes per pixel in {@code [B, G, R]} order, the layout most v4l2
+     * cameras produce. The buffer length must equal {@code width * height * 3} and both dimensions
+     * must be even.
+     *
+     * @param bgr    the source pixels in {@code [B, G, R]} order; never {@code null}
+     * @param width  the frame width in pixels; even and at least {@code 2}
+     * @param height the frame height in pixels; even and at least {@code 2}
+     * @param ptsMs  the presentation timestamp to stamp on the output frame
+     * @return the converted I420 frame
+     * @throws NullPointerException     if {@code bgr} is {@code null}
+     * @throws IllegalArgumentException if {@code bgr.length} is not {@code width * height * 3}, or a
+     *                                  dimension is odd or less than {@code 2}
      */
     public static VideoFrame bgr24ToI420(byte[] bgr, int width, int height, long ptsMs) {
         Objects.requireNonNull(bgr, "bgr cannot be null");
@@ -99,14 +133,19 @@ public final class PixelFormats {
     }
 
     /**
-     * Converts a packed RGB byte buffer ({@code [R G B]} per
-     * pixel) into a fresh I420 {@link VideoFrame}.
+     * Converts a packed RGB24 buffer into a fresh I420 {@link VideoFrame}.
      *
-     * @param rgb    the source pixels
-     * @param width  frame width in pixels (even)
-     * @param height frame height in pixels (even)
-     * @param ptsMs  the timestamp to stamp on the output frame
-     * @return the converted frame
+     * <p>The source holds three bytes per pixel in {@code [R, G, B]} order. The buffer length must
+     * equal {@code width * height * 3} and both dimensions must be even.
+     *
+     * @param rgb    the source pixels in {@code [R, G, B]} order; never {@code null}
+     * @param width  the frame width in pixels; even and at least {@code 2}
+     * @param height the frame height in pixels; even and at least {@code 2}
+     * @param ptsMs  the presentation timestamp to stamp on the output frame
+     * @return the converted I420 frame
+     * @throws NullPointerException     if {@code rgb} is {@code null}
+     * @throws IllegalArgumentException if {@code rgb.length} is not {@code width * height * 3}, or a
+     *                                  dimension is odd or less than {@code 2}
      */
     public static VideoFrame rgb24ToI420(byte[] rgb, int width, int height, long ptsMs) {
         Objects.requireNonNull(rgb, "rgb cannot be null");
@@ -120,16 +159,23 @@ public final class PixelFormats {
     }
 
     /**
-     * Converts an NV12 buffer (Y plane followed by interleaved
-     * UV plane — what most macOS / Windows hardware capture
-     * pipelines produce) into a fresh I420 {@link VideoFrame}.
+     * Converts an NV12 buffer into a fresh I420 {@link VideoFrame}.
      *
-     * @param nv12   the source bytes; length must be
-     *               {@code width*height + 2*(width/2)*(height/2)}
-     * @param width  frame width in pixels (even)
-     * @param height frame height in pixels (even)
-     * @param ptsMs  the timestamp
-     * @return the converted frame
+     * <p>NV12 stores the full-resolution luma (Y) plane followed by a single chroma plane of
+     * interleaved {@code U, V} pairs at half resolution in each dimension; it is the layout most
+     * macOS and Windows hardware capture pipelines produce. The luma plane is copied unchanged and
+     * the interleaved chroma is split into the separate U and V planes I420 requires. The buffer
+     * length must equal {@code width * height + 2 * (width / 2) * (height / 2)} and both dimensions
+     * must be even.
+     *
+     * @param nv12   the source NV12 bytes; never {@code null}
+     * @param width  the frame width in pixels; even and at least {@code 2}
+     * @param height the frame height in pixels; even and at least {@code 2}
+     * @param ptsMs  the presentation timestamp to stamp on the output frame
+     * @return the converted I420 frame
+     * @throws NullPointerException     if {@code nv12} is {@code null}
+     * @throws IllegalArgumentException if {@code nv12.length} does not match the expected NV12 size,
+     *                                  or a dimension is odd or less than {@code 2}
      */
     public static VideoFrame nv12ToI420(byte[] nv12, int width, int height, long ptsMs) {
         Objects.requireNonNull(nv12, "nv12 cannot be null");
@@ -153,18 +199,27 @@ public final class PixelFormats {
     }
 
     /**
-     * Convert a generic interleaved RGB-ish buffer at
-     * {@code stride} bytes per pixel into I420, picking the
-     * channel indices via the supplied offsets.
+     * Converts a generic interleaved RGB-style buffer into a fresh I420 {@link VideoFrame}.
      *
-     * @param src    interleaved source
-     * @param width  width
-     * @param height height
-     * @param ptsMs  timestamp to stamp on the output
-     * @param stride bytes per pixel
-     * @param rOff   R-channel byte offset within a pixel
-     * @param gOff   G-channel byte offset
-     * @param bOff   B-channel byte offset
+     * <p>The per-pixel channels are located through {@code stride}, {@code rOff}, {@code gOff}, and
+     * {@code bOff}, which lets the RGBA, RGB24, and BGR24 entry points share one conversion loop.
+     * Each output luma sample is computed from one source pixel; each output chroma sample is the
+     * average of the four source pixels in a 2x2 block, matching 4:2:0 subsampling.
+     *
+     * @implNote This implementation evaluates the BT.601 matrix in 8-bit fixed point. Luma adds the
+     * {@code 128} rounding bias before the {@code >> 8} shift and offsets the result by {@code 16}
+     * to the studio-swing floor; chroma applies the same rounding bias and shift and offsets by
+     * {@code 128} to centre the signed difference. All three outputs are clamped to {@code [0, 255]}
+     * via {@link #clamp(int)}.
+     *
+     * @param src    the interleaved source bytes
+     * @param width  the frame width in pixels
+     * @param height the frame height in pixels
+     * @param ptsMs  the presentation timestamp to stamp on the output frame
+     * @param stride the number of bytes per pixel
+     * @param rOff   the red-channel byte offset within a pixel
+     * @param gOff   the green-channel byte offset within a pixel
+     * @param bOff   the blue-channel byte offset within a pixel
      * @return the converted I420 frame
      */
     private static VideoFrame convertInterleaved(byte[] src, int width, int height, long ptsMs,
@@ -221,10 +276,11 @@ public final class PixelFormats {
     }
 
     /**
-     * Clamps an int to {@code [0, 255]}.
+     * Clamps an integer to the inclusive range {@code [0, 255]}.
      *
-     * @param v the value
-     * @return the clamped value
+     * @param v the value to clamp
+     * @return {@code 0} if {@code v} is negative, {@code 255} if {@code v} exceeds {@code 255},
+     *         otherwise {@code v}
      */
     private static int clamp(int v) {
         if (v < 0) return 0;
@@ -233,17 +289,18 @@ public final class PixelFormats {
     }
 
     /**
-     * Validates that both dimensions are positive even integers.
+     * Validates that both dimensions are even and at least {@code 2}.
      *
-     * @param width  width
-     * @param height height
+     * @param width  the frame width in pixels
+     * @param height the frame height in pixels
+     * @throws IllegalArgumentException if either dimension is odd or less than {@code 2}
      */
     private static void validateDimensions(int width, int height) {
         if (width < 2 || width % 2 != 0) {
-            throw new IllegalArgumentException("width must be even and ≥ 2, got " + width);
+            throw new IllegalArgumentException("width must be even and >= 2, got " + width);
         }
         if (height < 2 || height % 2 != 0) {
-            throw new IllegalArgumentException("height must be even and ≥ 2, got " + height);
+            throw new IllegalArgumentException("height must be even and >= 2, got " + height);
         }
     }
 }

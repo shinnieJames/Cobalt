@@ -30,29 +30,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link MerchantPaymentPartnerHandler} adapter for
- * {@code WAWebMerchantPaymentPartnerSync}.
+ * Covers {@link MerchantPaymentPartnerHandler}: metadata, the SMB platform gating
+ * ({@link ClientPlatformType#IOS_BUSINESS} / {@link ClientPlatformType#ANDROID_BUSINESS}), the
+ * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} gating, the SET happy path that
+ * persists the action via
+ * {@link WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}, the malformed-value
+ * branch, the REMOVE rejection and the inherited timestamp-based conflict resolution.
  *
- * @apiNote
- * Verifies parity with WA Web for the
- * {@code merchant_payment_partner} app-state sync action across
- * metadata, the SMB platform gating
- * ({@link ClientPlatformType#IOS_BUSINESS} /
- * {@link ClientPlatformType#ANDROID_BUSINESS}), the
- * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}
- * gating, the SET happy path that persists the action via
- * {@link WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)},
- * the malformed-value branch, the REMOVE rejection and the
- * inherited timestamp-based conflict resolution. No outbound
- * builder is exposed.
- *
- * @implNote
- * This implementation builds the handler with a stubbed
- * {@link TestABPropsService} so the gating prop can be flipped per
- * test, and exercises it against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#merchantPaymentPartner()} read-back can be
+ * <p>The handler is built with a stubbed {@link TestABPropsService} so the gating prop can be
+ * flipped per test, and runs against an in-memory {@link DeviceFixtures#temporaryStore} via
+ * {@link TestWhatsAppClient} so the {@link WhatsAppStore#merchantPaymentPartner()} read-back can be
  * asserted directly.
  */
 @DisplayName("MerchantPaymentPartnerHandler")
@@ -71,23 +58,8 @@ class MerchantPaymentPartnerHandlerTest {
         handler = new MerchantPaymentPartnerHandler(props);
     }
 
-    /**
-     * Builds a {@link DecryptedMutation.Trusted} carrying the given
-     * merchant action under the canonical
-     * {@code ["merchant_payment_partner"]} index.
-     *
-     * @apiNote
-     * Used by every test to centralise mutation construction. The
-     * {@code action} parameter is nullable so the malformed-value
-     * path can be exercised without re-implementing the envelope.
-     *
-     * @param action    the merchant action payload, may be
-     *                  {@code null}
-     * @param operation the {@link SyncdOperation} to wrap
-     * @param ts        the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} with the requested
-     *         shape
-     */
+    // A nullable action lets the malformed-value path be exercised without re-implementing
+    // the envelope.
     private DecryptedMutation.Trusted buildMutation(MerchantPaymentPartnerAction action,
                                                     SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);

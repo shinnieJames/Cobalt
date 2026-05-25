@@ -7,93 +7,92 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * SRTP/SRTCP endpoint that protects outbound RTP/RTCP packets and
- * unprotects inbound ones, keyed on master key+salt material exported
- * from a completed DTLS-SRTP handshake (RFC 5764).
+ * Protects outbound RTP and RTCP packets and unprotects inbound ones for one DTLS-SRTP
+ * association.
  *
- * <p>WhatsApp's wasm engine uses the WebRTC default SRTP profile —
- * {@code SRTP_AES128_CM_HMAC_SHA1_80} — so this endpoint hard-codes
- * that profile. The 60-byte exported keying material is split per
- * RFC 5764 §4.2:
+ * <p>The endpoint is keyed on the master key and salt material exported from a completed DTLS-SRTP
+ * handshake (RFC 5764). It hard-codes the {@code SRTP_AES128_CM_HMAC_SHA1_80} profile, which is the
+ * WebRTC default that WhatsApp's wasm engine negotiates. The 60-byte exported keying material is
+ * split per RFC 5764 section 4.2 into a client and a server master key followed by a client and a
+ * server master salt:
  *
- * <pre>{@code
+ * {@snippet :
  *   bytes[0  .. 16]  = client_write_SRTP_master_key   (16)
  *   bytes[16 .. 32]  = server_write_SRTP_master_key   (16)
  *   bytes[32 .. 46]  = client_write_SRTP_master_salt  (14)
  *   bytes[46 .. 60]  = server_write_SRTP_master_salt  (14)
- * }</pre>
+ * }
  *
- * <p>Each direction (outbound, inbound) gets its own
- * {@link SrtpDirection} carrying the derived session keys; per-SSRC
- * {@link SrtpRtpContext} and {@link SrtpRtcpContext} instances are
- * created lazily on first use of an SSRC and cached in
- * {@link ConcurrentHashMap} maps. Thread-safe.
+ * <p>Each direction (outbound and inbound) owns its own {@link SrtpDirection} carrying the derived
+ * session keys. Per-SSRC {@link SrtpRtpContext} and {@link SrtpRtcpContext} instances are created
+ * lazily on first use of an SSRC and cached in {@link ConcurrentHashMap} maps, so the endpoint is
+ * safe to use from multiple threads.
  *
- * <p>Pure-Java implementation built on the JDK's AES-CTR and
- * HMAC-SHA1 primitives — no third-party SRTP library or BouncyCastle
- * required for SRTP packet protection.
+ * @implNote This implementation is pure Java, building only on the JDK's AES-CTR and HMAC-SHA1
+ *           primitives, so SRTP packet protection requires no third-party SRTP library or
+ *           BouncyCastle.
  */
 public final class SrtpEndpoint implements AutoCloseable {
     /**
-     * Length, in bytes, of an SRTP master key (AES-128).
+     * Holds the length, in bytes, of an SRTP master key (AES-128).
      */
     private static final int MASTER_KEY_LENGTH = 16;
 
     /**
-     * Length, in bytes, of an SRTP master salt.
+     * Holds the length, in bytes, of an SRTP master salt.
      */
     private static final int MASTER_SALT_LENGTH = 14;
 
     /**
-     * Total length of the DTLS-SRTP exported keying material:
+     * Holds the total length of the DTLS-SRTP exported keying material, which is
      * {@code 2 * (MASTER_KEY_LENGTH + MASTER_SALT_LENGTH)}.
      */
     public static final int KEYING_MATERIAL_LENGTH =
             2 * (MASTER_KEY_LENGTH + MASTER_SALT_LENGTH);
 
     /**
-     * Minimum size of a valid SRTP packet: 12-byte fixed RTP header
-     * plus 10-byte auth tag.
+     * Holds the minimum size of a valid SRTP packet, which is the 12-byte fixed RTP header plus the
+     * 10-byte authentication tag.
      */
     private static final int MIN_SRTP_LENGTH = 22;
 
     /**
-     * Minimum size of a valid RTP packet: the 12-byte fixed header.
+     * Holds the minimum size of a valid RTP packet, which is the 12-byte fixed header.
      */
     private static final int MIN_RTP_LENGTH = 12;
 
     /**
-     * Outbound (sender-side) derived session keys.
+     * Holds the outbound (sender-side) derived session keys.
      */
     private final SrtpDirection outbound;
 
     /**
-     * Inbound (receiver-side) derived session keys.
+     * Holds the inbound (receiver-side) derived session keys.
      */
     private final SrtpDirection inbound;
 
     /**
-     * Per-SSRC outbound RTP contexts, derived lazily.
+     * Caches the per-SSRC outbound RTP contexts, created lazily on first use of each SSRC.
      */
     private final ConcurrentHashMap<Integer, SrtpRtpContext> outboundRtp = new ConcurrentHashMap<>();
 
     /**
-     * Per-SSRC inbound RTP contexts, derived lazily.
+     * Caches the per-SSRC inbound RTP contexts, created lazily on first use of each SSRC.
      */
     private final ConcurrentHashMap<Integer, SrtpRtpContext> inboundRtp = new ConcurrentHashMap<>();
 
     /**
-     * Per-SSRC outbound RTCP contexts, derived lazily.
+     * Caches the per-SSRC outbound RTCP contexts, created lazily on first use of each SSRC.
      */
     private final ConcurrentHashMap<Integer, SrtpRtcpContext> outboundRtcp = new ConcurrentHashMap<>();
 
     /**
-     * Per-SSRC inbound RTCP contexts, derived lazily.
+     * Caches the per-SSRC inbound RTCP contexts, created lazily on first use of each SSRC.
      */
     private final ConcurrentHashMap<Integer, SrtpRtcpContext> inboundRtcp = new ConcurrentHashMap<>();
 
     /**
-     * Constructs a new endpoint from already-split keys.
+     * Constructs an endpoint from the already-split outbound and inbound master keys and salts.
      *
      * @param outboundKey  the outbound 16-byte master key
      * @param outboundSalt the outbound 14-byte master salt
@@ -107,23 +106,22 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Builds an endpoint from the 60-byte DTLS-SRTP exported keying
-     * material, splitting it according to {@code role} per RFC 5764
-     * §4.2.
+     * Builds an endpoint from the 60-byte DTLS-SRTP exported keying material, assigning the
+     * outbound and inbound halves according to the local DTLS role.
      *
-     * @param keyingMaterial the 60-byte block exported from the DTLS
-     *                       session via the
+     * <p>The material is split per RFC 5764 section 4.2 into the client and server master keys and
+     * salts. When {@code role} is {@link SrtpRole#CLIENT}, the {@code client_write} pair becomes the
+     * outbound direction and the {@code server_write} pair the inbound direction; the assignment is
+     * reversed for {@link SrtpRole#SERVER}.
+     *
+     * @param keyingMaterial the 60-byte block exported from the DTLS session via the
      *                       {@code "EXTRACTOR-dtls_srtp"} label
-     * @param role           our DTLS role (client or server) —
-     *                       determines which half of
-     *                       {@code keyingMaterial} is outbound vs
-     *                       inbound
-     * @return a fresh endpoint
-     * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if {@code keyingMaterial} is
-     *                                  not exactly
-     *                                  {@link #KEYING_MATERIAL_LENGTH}
-     *                                  bytes long
+     * @param role           the local DTLS role, which determines which half of
+     *                       {@code keyingMaterial} is outbound and which is inbound
+     * @return a fresh endpoint keyed on the derived session material
+     * @throws NullPointerException     if {@code keyingMaterial} or {@code role} is {@code null}
+     * @throws IllegalArgumentException if {@code keyingMaterial} is not exactly
+     *                                  {@link #KEYING_MATERIAL_LENGTH} bytes long
      */
     public static SrtpEndpoint fromDtlsKeyingMaterial(byte[] keyingMaterial, SrtpRole role) {
         Objects.requireNonNull(keyingMaterial, "keyingMaterial cannot be null");
@@ -144,17 +142,18 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Encrypts and authenticates an outbound RTP packet, returning a
-     * fresh byte array containing the SRTP packet (longer by the
-     * 10-byte auth tag).
+     * Encrypts and authenticates an outbound RTP packet.
+     *
+     * <p>The SSRC is read from bytes 8 through 11 of the packet, the matching outbound
+     * {@link SrtpRtpContext} is created if needed, and the context transforms the packet. The
+     * returned array is a fresh copy that is longer than the input by the 10-byte authentication
+     * tag.
      *
      * @param rtpPacket the plaintext RTP packet
-     * @return the SRTP packet ({@code rtpPacket.length + 10} bytes)
-     * @throws NullPointerException     if {@code rtpPacket} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if the packet is shorter than
-     *                                  the 12-byte RTP header
-     * @throws WhatsAppCallException.Srtp            if SRTP transformation fails
+     * @return the SRTP packet, of length {@code rtpPacket.length + 10}
+     * @throws NullPointerException       if {@code rtpPacket} is {@code null}
+     * @throws IllegalArgumentException   if the packet is shorter than the 12-byte RTP header
+     * @throws WhatsAppCallException.Srtp if the SRTP transformation fails
      */
     public byte[] protectRtp(byte[] rtpPacket) {
         Objects.requireNonNull(rtpPacket, "rtpPacket cannot be null");
@@ -169,19 +168,19 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Authenticates and decrypts an inbound SRTP packet, returning a
-     * fresh byte array containing the plaintext RTP packet (shorter
-     * by the 10-byte auth tag).
+     * Authenticates and decrypts an inbound SRTP packet.
+     *
+     * <p>The SSRC is read from bytes 8 through 11 of the packet, the matching inbound
+     * {@link SrtpRtpContext} is created if needed, and the context validates and decrypts the
+     * packet. The returned array is a fresh copy that is shorter than the input by the 10-byte
+     * authentication tag.
      *
      * @param srtpPacket the SRTP packet
      * @return the plaintext RTP packet
-     * @throws NullPointerException     if {@code srtpPacket} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if the packet is shorter than
-     *                                  the 12-byte RTP header + 10-byte
-     *                                  auth tag
-     * @throws WhatsAppCallException.Srtp            if authentication fails or a
-     *                                  replay is detected
+     * @throws NullPointerException       if {@code srtpPacket} is {@code null}
+     * @throws IllegalArgumentException   if the packet is shorter than the 12-byte RTP header plus
+     *                                    the 10-byte authentication tag
+     * @throws WhatsAppCallException.Srtp if authentication fails or a replay is detected
      */
     public byte[] unprotectRtp(byte[] srtpPacket) {
         Objects.requireNonNull(srtpPacket, "srtpPacket cannot be null");
@@ -196,16 +195,17 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Encrypts and authenticates an outbound RTCP packet, returning a
-     * fresh byte array containing the SRTCP packet (longer by the
-     * 4-byte SRTCP index + 10-byte auth tag).
+     * Encrypts and authenticates an outbound RTCP packet for the given sender SSRC.
+     *
+     * <p>The matching outbound {@link SrtpRtcpContext} is created if needed, and the context
+     * transforms the packet. The returned array is a fresh copy that is longer than the input by
+     * the 4-byte SRTCP index field plus the 10-byte authentication tag.
      *
      * @param rtcpPacket the plaintext RTCP packet
-     * @param ssrc       the sender SSRC for which to derive the
-     *                   per-SSRC SRTCP context
+     * @param ssrc       the sender SSRC whose per-SSRC SRTCP context is used
      * @return the SRTCP packet
-     * @throws NullPointerException if {@code rtcpPacket} is {@code null}
-     * @throws WhatsAppCallException.Srtp        if SRTCP transformation fails
+     * @throws NullPointerException       if {@code rtcpPacket} is {@code null}
+     * @throws WhatsAppCallException.Srtp if the SRTCP transformation fails
      */
     public byte[] protectRtcp(byte[] rtcpPacket, int ssrc) {
         Objects.requireNonNull(rtcpPacket, "rtcpPacket cannot be null");
@@ -215,16 +215,17 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Authenticates and decrypts an inbound SRTCP packet, returning a
-     * fresh byte array containing the plaintext RTCP packet.
+     * Authenticates and decrypts an inbound SRTCP packet for the given sender SSRC.
+     *
+     * <p>The matching inbound {@link SrtpRtcpContext} is created if needed, and the context
+     * validates and decrypts the packet. The returned array is a fresh copy holding the plaintext
+     * RTCP packet.
      *
      * @param srtcpPacket the SRTCP packet
-     * @param ssrc        the sender SSRC for which to derive the
-     *                    per-SSRC SRTCP context
+     * @param ssrc        the sender SSRC whose per-SSRC SRTCP context is used
      * @return the plaintext RTCP packet
-     * @throws NullPointerException if {@code srtcpPacket} is {@code null}
-     * @throws WhatsAppCallException.Srtp        if authentication fails or a
-     *                              replay is detected
+     * @throws NullPointerException       if {@code srtcpPacket} is {@code null}
+     * @throws WhatsAppCallException.Srtp if authentication fails or a replay is detected
      */
     public byte[] unprotectRtcp(byte[] srtcpPacket, int ssrc) {
         Objects.requireNonNull(srtcpPacket, "srtcpPacket cannot be null");
@@ -234,10 +235,11 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Closes the endpoint, zeroing the cached session keys held by
-     * each direction. Per-SSRC contexts retain references to their
-     * direction's keys, so subsequent calls will fail to produce
-     * meaningful output.
+     * Closes the endpoint, zeroing the cached session keys held by each direction.
+     *
+     * <p>Per-SSRC contexts retain references to their direction's key arrays, so after this call
+     * any further protect or unprotect through an existing context operates on zeroed key material
+     * and no longer produces meaningful output.
      */
     @Override
     public void close() {
@@ -246,11 +248,10 @@ public final class SrtpEndpoint implements AutoCloseable {
     }
 
     /**
-     * Reads a big-endian 32-bit integer from the byte array at the
-     * given offset.
+     * Reads a big-endian 32-bit integer from the byte array at the given offset.
      *
      * @param b      the source bytes
-     * @param offset the byte offset to read from
+     * @param offset the byte offset at which the integer begins
      * @return the parsed {@code int}
      */
     private static int readInt(byte[] b, int offset) {

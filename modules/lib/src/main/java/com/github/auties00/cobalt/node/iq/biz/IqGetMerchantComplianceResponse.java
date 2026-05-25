@@ -14,10 +14,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed sealed family of inbound reply variants produced by the relay in response to an {@link IqGetMerchantComplianceRequest}.
+ * Models the sealed family of inbound reply variants produced by the relay in response to an {@link IqGetMerchantComplianceRequest}.
  *
- * @apiNote
- * Use this type to switch over the three documented outcomes of a merchant-compliance fetch: {@link Success} carries the decoded compliance bundles per merchant, {@link ClientError} surfaces a relay validation rejection, and {@link ServerError} reports a transport or backend failure. The dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node} into the right variant before handing it to the caller.
+ * <p>The three documented outcomes of a merchant-compliance fetch are {@link Success}, which
+ * carries the decoded compliance bundles per merchant, {@link ClientError}, which surfaces a relay
+ * validation rejection, and {@link ServerError}, which reports a transport or backend failure. The
+ * dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node} into the right variant.
  */
 @WhatsAppWebModule(moduleName = "WAWebMerchantComplianceJob")
 public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Response
@@ -26,12 +28,12 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
     /**
      * Tries each {@link IqGetMerchantComplianceResponse} variant in priority order.
      *
-     * @apiNote
-     * Call this entry from the dispatcher to fan the inbound stanza into the matching sealed variant; the success path is tried first, then the client-error envelope, then the server-error envelope. Returns empty only when none of the three documented shapes apply.
+     * <p>The success path is tried first, then the client-error envelope, then the server-error
+     * envelope. The result is empty only when none of the three documented shapes apply.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     static Optional<? extends IqGetMerchantComplianceResponse> of(Node node, Node request) {
@@ -49,54 +51,60 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant carrying the typed merchant-compliance bundles.
+     * Carries the typed merchant-compliance bundles for a successful fetch.
      *
-     * @apiNote
-     * Use this variant to read the per-merchant compliance bundles; the India e-commerce compliance surfaces consume the {@link MerchantInfo} entries to render the entity-name row, the entity-type row, the registered flag, the customer-care contact triple and the grievance-officer block.
+     * <p>The India e-commerce compliance surfaces consume the {@link MerchantInfo} entries to
+     * render the entity-name row, the entity-type row, the registered flag, the customer-care
+     * contact triple and the grievance-officer block.
      */
     final class Success implements IqGetMerchantComplianceResponse {
         /**
-         * One typed merchant-info entry decoded from a {@code <merchant_info/>} child of the inbound IQ.
+         * Models one merchant's compliance bundle decoded from a {@code <merchant_info/>} child of the inbound IQ.
          *
-         * @apiNote
-         * Use this class to model one merchant's compliance bundle; the entity-name and entity-type fields drive the headline rows, the registered flag drives the registered-merchant badge, and the customer-care and grievance-officer blocks drive the contact tables.
+         * <p>The entity-name and entity-type fields drive the headline rows, the registered flag
+         * drives the registered-merchant badge, and the customer-care and grievance-officer blocks
+         * drive the contact tables.
          */
         public static final class MerchantInfo {
             /**
-             * The legal entity name lifted from {@code <merchant_info><entity_name/></merchant_info>}; empty when the relay returned no entity name.
+             * Holds the legal entity name lifted from {@code <merchant_info><entity_name/></merchant_info>}.
+             *
+             * <p>Empty when the relay returned no entity name.
              */
             private final String entityName;
 
             /**
-             * The entity-type identifier (for example {@code "LIMITED_LIABILITY_PARTNERSHIP"}, {@code "PRIVATE_COMPANY"}); empty when the relay returned no entity type.
+             * Holds the entity-type identifier (for example {@code "LIMITED_LIABILITY_PARTNERSHIP"} or {@code "PRIVATE_COMPANY"}).
+             *
+             * <p>Empty when the relay returned no entity type.
              */
             private final String entityType;
 
             /**
-             * The registered-merchant flag lifted from the {@code is_registered} attribute.
+             * Holds the registered-merchant flag lifted from the {@code is_registered} attribute.
              */
             private final boolean registered;
 
             /**
-             * The optional custom entity-type free-text label rendered when {@code entityType} is {@code "OTHER"}.
+             * Holds the optional custom entity-type free-text label rendered when {@link #entityType} is {@code "OTHER"}.
              */
             private final String entityTypeCustom;
 
             /**
-             * The customer-care contact triple decoded from {@code <merchant_info><customer_care_details/></merchant_info>}.
+             * Holds the customer-care contact triple decoded from {@code <merchant_info><customer_care_details/></merchant_info>}.
              */
             private final BusinessContactDetails customerCareDetails;
 
             /**
-             * The grievance-officer block decoded from {@code <merchant_info><grievance_officer_details/></merchant_info>}.
+             * Holds the grievance-officer block decoded from {@code <merchant_info><grievance_officer_details/></merchant_info>}.
              */
             private final BusinessGrievanceOfficerDetails grievanceOfficerDetails;
 
             /**
-             * Constructs a typed merchant-info entry.
+             * Constructs a typed merchant-info entry from a decoded {@code <merchant_info/>} child.
              *
-             * @apiNote
-             * Call this constructor when projecting a {@code <merchant_info/>} child into the typed model; pass {@code null} for {@code entityTypeCustom} when the wire shape omitted the custom-type label.
+             * <p>A {@code null} {@code entityTypeCustom} marks a wire shape that omitted the
+             * custom-type label.
              *
              * @param entityName              the legal entity name; never {@code null}
              * @param entityType              the entity-type identifier; never {@code null}
@@ -123,10 +131,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the legal entity name.
-             *
-             * @apiNote
-             * Use this getter to render the headline entity-name row of the compliance surface.
+             * Returns the legal entity name that drives the headline entity-name row of the compliance surface.
              *
              * @return the name; never {@code null}
              */
@@ -137,8 +142,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             /**
              * Returns the entity-type identifier.
              *
-             * @apiNote
-             * Use this getter to read back the entity-type identifier; consumers map the value through a localised lookup to render the entity-type row.
+             * <p>Consumers map the value through a localised lookup to render the entity-type row.
              *
              * @return the identifier; never {@code null}
              */
@@ -147,10 +151,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the registered-merchant flag.
-             *
-             * @apiNote
-             * Use this getter to drive the registered-merchant badge in the compliance surface.
+             * Returns the registered-merchant flag that drives the registered-merchant badge.
              *
              * @return {@code true} when the merchant is registered
              */
@@ -159,10 +160,10 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the custom entity-type label.
+             * Returns the merchant-supplied custom entity-type label.
              *
-             * @apiNote
-             * Use this getter to render the merchant-supplied custom entity-type label when {@link #entityType()} is the catch-all {@code "OTHER"} bucket.
+             * <p>Rendered when {@link #entityType()} is the catch-all {@code "OTHER"} bucket; empty
+             * otherwise.
              *
              * @return an {@link Optional} carrying the label
              */
@@ -171,10 +172,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the customer-care contact triple.
-             *
-             * @apiNote
-             * Use this getter to render the customer-care row of the compliance surface.
+             * Returns the customer-care contact triple that drives the customer-care row of the compliance surface.
              *
              * @return the contact triple; never {@code null}
              */
@@ -183,10 +181,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the grievance-officer block.
-             *
-             * @apiNote
-             * Use this getter to render the grievance-officer row of the compliance surface.
+             * Returns the grievance-officer block that drives the grievance-officer row of the compliance surface.
              *
              * @return the block; never {@code null}
              */
@@ -226,32 +221,32 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * The customer-care contact triple decoded from the {@code <customer_care_details/>} block.
+         * Models the customer-care contact triple decoded from the {@code <customer_care_details/>} block.
          *
-         * @apiNote
-         * Use this class to render the customer-care row in the compliance surface; each field defaults to the empty string when the wire shape omitted the corresponding child, matching the WA Web parser's default.
+         * <p>Each field defaults to the empty string when the wire shape omitted the corresponding
+         * child, matching the WA Web parser's default.
          */
         public static final class BusinessContactDetails {
             /**
-             * The contact email lifted from {@code <customer_care_details><email/></customer_care_details>}.
+             * Holds the contact email lifted from {@code <customer_care_details><email/></customer_care_details>}.
              */
             private final String email;
 
             /**
-             * The landline phone number lifted from {@code <customer_care_details><landline_number/></customer_care_details>}.
+             * Holds the landline phone number lifted from {@code <customer_care_details><landline_number/></customer_care_details>}.
              */
             private final String landlineNumber;
 
             /**
-             * The mobile phone number lifted from {@code <customer_care_details><mobile_number/></customer_care_details>}.
+             * Holds the mobile phone number lifted from {@code <customer_care_details><mobile_number/></customer_care_details>}.
              */
             private final String mobileNumber;
 
             /**
-             * Constructs a typed contact triple.
+             * Constructs a typed contact triple from a decoded customer-care or grievance-officer contact block.
              *
-             * @apiNote
-             * Call this constructor when projecting a customer-care or grievance-officer contact block into the typed model; pass an empty string for any field that the wire shape omitted to keep the WA Web parser's defaults.
+             * <p>Any field that the wire shape omitted is passed as an empty string to keep the WA
+             * Web parser's defaults.
              *
              * @param email          the contact email; never {@code null}
              * @param landlineNumber the landline number; never {@code null}
@@ -265,10 +260,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the contact email.
-             *
-             * @apiNote
-             * Use this getter to render the contact-email cell of the customer-care row.
+             * Returns the contact email that drives the contact-email cell of the customer-care row.
              *
              * @return the email; never {@code null}
              */
@@ -277,10 +269,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the landline phone number.
-             *
-             * @apiNote
-             * Use this getter to render the landline-number cell of the customer-care row.
+             * Returns the landline phone number that drives the landline-number cell of the customer-care row.
              *
              * @return the number; never {@code null}
              */
@@ -289,10 +278,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the mobile phone number.
-             *
-             * @apiNote
-             * Use this getter to render the mobile-number cell of the customer-care row.
+             * Returns the mobile phone number that drives the mobile-number cell of the customer-care row.
              *
              * @return the number; never {@code null}
              */
@@ -328,37 +314,38 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * The grievance-officer block decoded from the {@code <grievance_officer_details/>} child; extends the customer-care triple with an officer name.
+         * Models the grievance-officer block decoded from the {@code <grievance_officer_details/>} child.
          *
-         * @apiNote
-         * Use this class to render the grievance-officer row in the compliance surface; each field defaults to the empty string when the wire shape omitted the corresponding child, matching the WA Web parser's default.
+         * <p>Extends the customer-care triple with an officer name. Each field defaults to the
+         * empty string when the wire shape omitted the corresponding child, matching the WA Web
+         * parser's default.
          */
         public static final class BusinessGrievanceOfficerDetails {
             /**
-             * The officer's full name lifted from {@code <grievance_officer_details><name/></grievance_officer_details>}.
+             * Holds the officer's full name lifted from {@code <grievance_officer_details><name/></grievance_officer_details>}.
              */
             private final String name;
 
             /**
-             * The officer's email lifted from {@code <grievance_officer_details><email/></grievance_officer_details>}.
+             * Holds the officer's email lifted from {@code <grievance_officer_details><email/></grievance_officer_details>}.
              */
             private final String email;
 
             /**
-             * The officer's landline phone number lifted from {@code <grievance_officer_details><landline_number/></grievance_officer_details>}.
+             * Holds the officer's landline phone number lifted from {@code <grievance_officer_details><landline_number/></grievance_officer_details>}.
              */
             private final String landlineNumber;
 
             /**
-             * The officer's mobile phone number lifted from {@code <grievance_officer_details><mobile_number/></grievance_officer_details>}.
+             * Holds the officer's mobile phone number lifted from {@code <grievance_officer_details><mobile_number/></grievance_officer_details>}.
              */
             private final String mobileNumber;
 
             /**
-             * Constructs a typed block.
+             * Constructs a typed grievance-officer block from a decoded {@code <grievance_officer_details/>} child.
              *
-             * @apiNote
-             * Call this constructor when projecting a {@code <grievance_officer_details/>} child into the typed model; pass an empty string for any field that the wire shape omitted to keep the WA Web parser's defaults.
+             * <p>Any field that the wire shape omitted is passed as an empty string to keep the WA
+             * Web parser's defaults.
              *
              * @param name           the officer's full name; never {@code null}
              * @param email          the officer's email; never {@code null}
@@ -375,10 +362,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the officer's full name.
-             *
-             * @apiNote
-             * Use this getter to render the name cell of the grievance-officer row.
+             * Returns the officer's full name that drives the name cell of the grievance-officer row.
              *
              * @return the name; never {@code null}
              */
@@ -387,10 +371,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the officer's email.
-             *
-             * @apiNote
-             * Use this getter to render the email cell of the grievance-officer row.
+             * Returns the officer's email that drives the email cell of the grievance-officer row.
              *
              * @return the email; never {@code null}
              */
@@ -399,10 +380,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the officer's landline phone number.
-             *
-             * @apiNote
-             * Use this getter to render the landline-number cell of the grievance-officer row.
+             * Returns the officer's landline phone number that drives the landline-number cell of the grievance-officer row.
              *
              * @return the number; never {@code null}
              */
@@ -411,10 +389,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
             }
 
             /**
-             * Returns the officer's mobile phone number.
-             *
-             * @apiNote
-             * Use this getter to render the mobile-number cell of the grievance-officer row.
+             * Returns the officer's mobile phone number that drives the mobile-number cell of the grievance-officer row.
              *
              * @return the number; never {@code null}
              */
@@ -450,15 +425,14 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * The decoded merchant-compliance entries in wire order.
+         * Holds the decoded merchant-compliance entries in wire order.
          */
         private final List<MerchantInfo> entries;
 
         /**
-         * Constructs a typed success reply.
+         * Constructs a typed success reply from the decoded {@code result} envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting the inbound {@code result} envelope into the typed model; pass an empty list when the relay returned no {@code <merchant_info/>} children.
+         * <p>An empty list marks a relay reply that carried no {@code <merchant_info/>} children.
          *
          * @param entries the compliance entries; never {@code null}
          * @throws NullPointerException if {@code entries} is {@code null}
@@ -471,8 +445,8 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Returns the merchant-compliance entries.
          *
-         * @apiNote
-         * Use this getter to iterate the per-merchant compliance bundles when rendering the compliance surface; the list preserves the wire order, which mirrors the order of the merchant JIDs supplied to the request.
+         * <p>The list preserves the wire order, which mirrors the order of the merchant JIDs
+         * supplied to the request.
          *
          * @return an unmodifiable list; never {@code null}
          */
@@ -483,11 +457,16 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqGetMerchantComplianceResponse#of(Node, Node)} or directly when only the success branch is interesting; returns empty when the stanza does not carry a {@code result} envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a {@code result} envelope matching
+         * the original request.
          *
          * @implNote
-         * This implementation mirrors the deprecated WAP parser inside {@code WAWebMerchantComplianceJob.merchantComplianceResponse}: each {@code <merchant_info/>} child contributes a {@link MerchantInfo} where the entity-name, entity-type and entity-type-custom fields default to the empty string when omitted, the registered flag is decoded from the {@code is_registered="true"} attribute string, and the customer-care and grievance-officer blocks default to all-empty-string when the carrier child is absent.
+         * This implementation mirrors the deprecated WAP parser inside {@code WAWebMerchantComplianceJob.merchantComplianceResponse}:
+         * each {@code <merchant_info/>} child contributes a {@link MerchantInfo} where the
+         * entity-name, entity-type and entity-type-custom fields default to the empty string when
+         * omitted, the registered flag is decoded from the {@code is_registered="true"} attribute
+         * string, and the customer-care and grievance-officer blocks default to all-empty-string
+         * when the carrier child is absent.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
@@ -537,11 +516,13 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Decodes a contact-details carrier node into a {@link BusinessContactDetails} triple.
          *
-         * @apiNote
-         * Used internally by {@link #of(Node, Node)} to fold a {@code <customer_care_details/>} or any other carrier of {@code <email>}, {@code <landline_number>} and {@code <mobile_number>} children into the typed model.
+         * <p>Folds a {@code <customer_care_details/>} or any other carrier of {@code <email>},
+         * {@code <landline_number>} and {@code <mobile_number>} children into the typed model.
          *
          * @implNote
-         * This implementation defaults each missing field to the empty string per the WA Web parser; a {@code null} carrier produces an all-empty-string triple rather than a {@code null} result, so the merchant-info row always has a non-{@code null} contact block.
+         * This implementation defaults each missing field to the empty string per the WA Web
+         * parser; a {@code null} carrier produces an all-empty-string triple rather than a
+         * {@code null} result, so the merchant-info row always has a non-{@code null} contact block.
          *
          * @param contactNode the carrier node; may be {@code null}
          * @return the typed triple; never {@code null}
@@ -583,27 +564,26 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant surfacing a client-side rejection.
+     * Surfaces a client-side rejection of a merchant-compliance fetch.
      *
-     * @apiNote
-     * Use this variant to react to a refused merchant-compliance fetch; typical examples include the relay returning a code-451 sanctions block or a validation rejection on a malformed merchant JID.
+     * <p>Typical examples include the relay returning a code-451 sanctions block or a validation
+     * rejection on a malformed merchant JID.
      */
     final class ClientError implements IqGetMerchantComplianceResponse {
         /**
-         * The numeric error code lifted from the SMAX error envelope.
+         * Holds the numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text lifted from the SMAX error envelope.
+         * Holds the optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a typed client-error reply.
+         * Constructs a typed client-error reply from a decoded client-error envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting a client-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
+         * <p>A {@code null} {@code errorText} marks a wire shape that omitted the text field.
          *
          * @param errorCode the numeric error code
          * @param errorText the human-readable error text; may be {@code null}
@@ -614,10 +594,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
+         * Returns the SMAX error code the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -626,10 +603,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * Returns the human-readable error text, when supplied.
-         *
-         * @apiNote
-         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         * Returns the relay-supplied error explanation, when present.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -640,8 +614,8 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqGetMerchantComplianceResponse#of(Node, Node)} or directly when only the client-error branch is interesting; returns empty when the stanza does not carry a client-error envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a client-error envelope matching
+         * the original request.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
@@ -680,27 +654,26 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant surfacing a server-side failure.
+     * Surfaces a server-side failure that did not produce typed compliance bundles.
      *
-     * @apiNote
-     * Use this variant to react to a backend failure that did not produce typed compliance bundles; WA Web's {@code WAWebMerchantComplianceJob.getMerchantCompliance} surfaces this as a {@code ServerStatusCodeError} carrying the relay-supplied status.
+     * <p>WA Web's {@code WAWebMerchantComplianceJob.getMerchantCompliance} surfaces this as a
+     * {@code ServerStatusCodeError} carrying the relay-supplied status.
      */
     final class ServerError implements IqGetMerchantComplianceResponse {
         /**
-         * The numeric error code lifted from the SMAX error envelope.
+         * Holds the numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text lifted from the SMAX error envelope.
+         * Holds the optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a typed server-error reply.
+         * Constructs a typed server-error reply from a decoded server-error envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting a server-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
+         * <p>A {@code null} {@code errorText} marks a wire shape that omitted the text field.
          *
          * @param errorCode the numeric error code
          * @param errorText the human-readable error text; may be {@code null}
@@ -711,10 +684,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
+         * Returns the SMAX error code the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -723,10 +693,7 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         }
 
         /**
-         * Returns the human-readable error text, when supplied.
-         *
-         * @apiNote
-         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         * Returns the relay-supplied error explanation, when present.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -737,8 +704,8 @@ public sealed interface IqGetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqGetMerchantComplianceResponse#of(Node, Node)} or directly when only the server-error branch is interesting; returns empty when the stanza does not carry a server-error envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a server-error envelope matching
+         * the original request.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}

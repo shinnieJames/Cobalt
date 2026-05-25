@@ -8,29 +8,20 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.iq.IqOperation;
 
 /**
- * Outbound {@code <iq xmlns="disappearing_mode" type="get">} stanza that fetches the user's
- * current default disappearing-mode duration.
+ * Builds the outbound {@code <iq xmlns="disappearing_mode" type="get">} stanza that fetches the
+ * account's current default disappearing-mode duration.
  *
- * @apiNote
- * Use this to drive WA Web's "default disappearing message duration" Setting and to
- * back the account-sync warmup that propagates the duration into the per-contact
- * disappearing-mode override store via
- * {@code WAWebUpdateDisappearingModeForContact.updateDisappearingModeForContact}. The
- * relay reply is parsed by {@link IqQueryDisappearingModeResponse}.
- *
- * @implNote
- * This implementation emits a bare envelope; WA Web's
- * {@code WAWebQueryDisappearingModeJob.queryDisappearingMode} similarly attaches no
- * payload.
+ * <p>The duration returned by the relay is the timer applied to newly-created chats; it backs the
+ * "default message timer" privacy setting. The request carries no parameters because the relay
+ * infers the bound user from the authenticated session, addressing the stanza to
+ * {@link JidServer#user()}. The matching reply is parsed by {@link IqQueryDisappearingModeResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryDisappearingModeJob")
 public final class IqQueryDisappearingModeRequest implements IqOperation.Request {
     /**
-     * Constructs a new query-disappearing-mode request.
+     * Constructs a query-disappearing-mode request.
      *
-     * @apiNote
-     * The request carries no parameters; the relay infers the bound user from the
-     * authenticated session.
+     * <p>The request is stateless; the relay infers the bound user from the authenticated session.
      */
     public IqQueryDisappearingModeRequest() {
     }
@@ -38,9 +29,8 @@ public final class IqQueryDisappearingModeRequest implements IqOperation.Request
     /**
      * Builds the outbound {@code <iq>} stanza wrapping the bare query envelope.
      *
-     * @apiNote
-     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
-     * attribute, which the dispatch layer assigns.
+     * <p>The returned {@link NodeBuilder} is wire-ready except for the IQ {@code id} attribute,
+     * which the dispatch layer assigns. The stanza carries no child payload.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -56,6 +46,15 @@ public final class IqQueryDisappearingModeRequest implements IqOperation.Request
                 .attribute("type", "get");
     }
 
+    /**
+     * Compares this request to another object for equality.
+     *
+     * <p>Two query-disappearing-mode requests are equal when they share the same runtime class;
+     * the type carries no state to distinguish instances.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a query-disappearing-mode request of the same class
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -64,11 +63,23 @@ public final class IqQueryDisappearingModeRequest implements IqOperation.Request
         return obj != null && obj.getClass() == this.getClass();
     }
 
+    /**
+     * Returns a hash code for this request.
+     *
+     * <p>The hash is derived from the runtime class since the type is stateless.
+     *
+     * @return the class-derived hash code
+     */
     @Override
     public int hashCode() {
         return IqQueryDisappearingModeRequest.class.hashCode();
     }
 
+    /**
+     * Returns a debug string for this request.
+     *
+     * @return a parameterless string representation
+     */
     @Override
     public String toString() {
         return "IqQueryDisappearingModeRequest[]";

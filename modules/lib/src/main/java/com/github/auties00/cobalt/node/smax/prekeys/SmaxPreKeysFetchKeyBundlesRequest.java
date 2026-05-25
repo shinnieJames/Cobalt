@@ -17,42 +17,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="encrypt" type="get">} stanza that asks the
- * relay for one or more user pre-key bundles.
+ * Builds the outbound {@code <iq xmlns="encrypt" type="get">} stanza that asks the relay for one or more user pre-key bundles.
  *
- * @apiNote
- * Built by Cobalt's Signal key-fetch path, the counterpart of WA Web's
- * {@code WAWebFetchPrekeysJob.fetchPrekeys}. The relay returns the
- * registration id, identity key, signed pre-key, and an optional unsigned
- * pre-key per user; with these the caller can seed a Signal session for
- * an outbound message. Setting {@code hasUserReasonIdentity=true} also
- * asks the relay to attach the device-identity attestation so the caller
- * can verify the pre-key bundle belongs to the claimed account.
+ * <p>The relay returns the registration id, identity key, signed pre-key, and an optional
+ * unsigned pre-key per user; with these the Signal key-fetch path can seed an outbound session
+ * for a chat fan-out. Setting {@link UserKeyRequest#hasUserReasonIdentity()} to {@code true} for a
+ * user also asks the relay to attach the device-identity attestation so the bundle can be verified
+ * against the claimed account.
  *
  * @implNote
- * This implementation collapses the {@code WASmaxOutPreKeysClientRequestMixin}
- * envelope shaping (xmlns/to/type wiring) and the per-user
- * {@code <user jid reason?/>} child construction into a single
- * {@link #toNode()} pass; the JS layer routes the same data through three
- * separate mixin functions.
+ * This implementation collapses the {@code WASmaxOutPreKeysClientRequestMixin} envelope shaping
+ * (xmlns/to/type wiring) and the per-user {@code <user jid reason?/>} child construction into a
+ * single {@link #toNode()} pass; the JS layer routes the same data through three separate mixin
+ * functions.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPreKeysFetchKeyBundlesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPreKeysClientRequestMixin")
 public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Request {
     /**
-     * The per-user fetch entries that will appear as
-     * {@code <user>} children of the request.
+     * Holds the per-user fetch entries that appear as {@code <user>} children of the request.
      */
     private final List<UserKeyRequest> users;
 
     /**
      * Constructs a request for the given list of users.
      *
-     * @apiNote
-     * Used directly by Cobalt's send path when a chat fan-out requires
-     * fetching the pre-key bundles of the addressee devices. The relay
-     * rejects empty requests, so the constructor refuses an empty list
-     * early.
+     * <p>The relay rejects empty requests, so an empty list is refused early. The list is
+     * defensively copied so the constructed value is immutable.
      *
      * @param users the per-user fetch entries
      * @throws NullPointerException     if {@code users} is {@code null}
@@ -69,9 +60,7 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
     /**
      * Returns the list of users carried by this request.
      *
-     * @apiNote
-     * Exposed for test and audit code. The returned list is unmodifiable
-     * so callers cannot mutate it after construction.
+     * <p>The returned list is unmodifiable so callers cannot mutate it after construction.
      *
      * @return an unmodifiable {@link List} of {@link UserKeyRequest}
      */
@@ -83,11 +72,10 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation hard-codes {@code xmlns="encrypt"},
-     * {@code type="get"}, and {@code to=s.whatsapp.net} per the
-     * {@code WASmaxOutPreKeysFetchKeyBundlesRequest.makeFetchKeyBundlesRequest}
-     * fixture, then nests one {@code <user jid reason?/>} per entry under
-     * a single {@code <key>} child.
+     * This implementation hard-codes {@code xmlns="encrypt"}, {@code type="get"}, and
+     * {@code to=s.whatsapp.net} per the
+     * {@code WASmaxOutPreKeysFetchKeyBundlesRequest.makeFetchKeyBundlesRequest} fixture, then nests
+     * one {@code <user jid reason?/>} per entry under a single {@code <key>} child.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPreKeysFetchKeyBundlesRequest",
@@ -118,9 +106,7 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation compares the carried {@link #users} list; two
-     * requests are equal when their users lists are equal.
+     * <p>Two requests are equal when their {@link #users} lists are equal.
      */
     @Override
     public boolean equals(Object obj) {
@@ -137,9 +123,7 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation hashes the carried {@link #users} list to stay
-     * consistent with {@link #equals(Object)}.
+     * <p>Hashes the carried {@link #users} list to stay consistent with {@link #equals(Object)}.
      */
     @Override
     public int hashCode() {
@@ -148,10 +132,6 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
 
     /**
      * {@inheritDoc}
-     *
-     * @implNote
-     * This implementation mirrors the record-like rendering used across
-     * the {@code Smax*} stanza family.
      */
     @Override
     public String toString() {
@@ -159,40 +139,33 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
     }
 
     /**
-     * Per-user entry in the outbound {@code <key>} payload.
+     * Models a per-user entry in the outbound {@code <key>} payload.
      *
-     * @apiNote
-     * Pairs a target user {@link Jid} with the optional
-     * {@code reason="identity"} hint. When the hint is set, the relay
-     * attaches the device-identity attestation so callers can verify the
-     * pre-key bundle's authenticity.
+     * <p>Pairs a target user {@link Jid} with the optional {@code reason="identity"} hint. When the
+     * hint is set, the relay attaches the device-identity attestation so the resulting pre-key
+     * bundle can be verified for authenticity.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutPreKeysFetchKeyBundlesRequest")
     public static final class UserKeyRequest {
         /**
-         * The target user {@link Jid} whose pre-key bundle is being
-         * requested.
+         * Holds the target user {@link Jid} whose pre-key bundle is being requested.
          */
         private final Jid userJid;
 
         /**
-         * Whether to set {@code reason="identity"} on the
-         * {@code <user>} child.
+         * Records whether {@code reason="identity"} is set on the {@code <user>} child.
          */
         private final boolean hasUserReasonIdentity;
 
         /**
          * Constructs a per-user request entry.
          *
-         * @apiNote
-         * Callers should set {@code hasUserReasonIdentity=true} when
-         * they need the relay to include the device-identity attestation
-         * (typically for first contact with a previously unknown device);
-         * for normal re-keying it can stay {@code false}.
+         * <p>Set {@code hasUserReasonIdentity} to {@code true} when the relay must include the
+         * device-identity attestation, typically for first contact with a previously unknown
+         * device; for normal re-keying it can stay {@code false}.
          *
          * @param userJid               the target user {@link Jid}
-         * @param hasUserReasonIdentity whether to set the identity-reason
-         *                              hint
+         * @param hasUserReasonIdentity whether to set the identity-reason hint
          * @throws NullPointerException if {@code userJid} is {@code null}
          */
         public UserKeyRequest(Jid userJid, boolean hasUserReasonIdentity) {
@@ -203,10 +176,8 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
         /**
          * Returns the target user {@link Jid}.
          *
-         * @apiNote
-         * Used by {@link SmaxPreKeysFetchKeyBundlesRequest#toNode()} to
-         * populate the {@code jid} attribute of each {@code <user>}
-         * child.
+         * <p>Populates the {@code jid} attribute of the corresponding {@code <user>} child in
+         * {@link SmaxPreKeysFetchKeyBundlesRequest#toNode()}.
          *
          * @return the user {@link Jid}
          */
@@ -217,10 +188,8 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
         /**
          * Returns whether the identity-reason hint is set.
          *
-         * @apiNote
-         * Used by {@link SmaxPreKeysFetchKeyBundlesRequest#toNode()} to
-         * decide whether to emit the {@code reason="identity"}
-         * attribute.
+         * <p>Decides whether {@link SmaxPreKeysFetchKeyBundlesRequest#toNode()} emits the
+         * {@code reason="identity"} attribute on the {@code <user>} child.
          *
          * @return {@code true} when the hint is set
          */
@@ -231,9 +200,8 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation compares both the {@link #userJid} and the
-         * {@link #hasUserReasonIdentity} flag.
+         * <p>Two entries are equal when both their {@link #userJid} and their
+         * {@link #hasUserReasonIdentity} flag are equal.
          */
         @Override
         public boolean equals(Object obj) {
@@ -251,9 +219,7 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation hashes both fields to stay consistent with
-         * {@link #equals(Object)}.
+         * <p>Hashes both fields to stay consistent with {@link #equals(Object)}.
          */
         @Override
         public int hashCode() {
@@ -262,10 +228,6 @@ public final class SmaxPreKeysFetchKeyBundlesRequest implements SmaxOperation.Re
 
         /**
          * {@inheritDoc}
-         *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} stanza family.
          */
         @Override
         public String toString() {

@@ -9,26 +9,28 @@ import java.lang.foreign.MemorySegment;
  * audio and video codecs, the RTP/SRTP packetisation layer, and the
  * WebRTC transports (ICE, DTLS, SCTP, DataChannel) underneath.
  *
- * @apiNote
  * A WhatsApp voice or video call lives on a separate set of connections
  * from the messaging WebSocket. The flow gathers ICE candidates,
  * negotiates a DTLS-SRTP session over the winning candidate pair,
- * exchanges media as encrypted RTP packets, and optionally carries
- * control traffic on a DataChannel layered over SCTP. Each step can fail
+ * exchanges media as encrypted RTP packets, and optionally carries control
+ * traffic on a DataChannel layered over SCTP. Each step can fail
  * independently, and each failure surfaces through one of the nested
- * subtypes; native codec failures (libopus, libvpx, openh264,
- * libspeexdsp) follow the same pattern. Catch this base type to react to
- * every call-layer failure mode at once.
+ * subtypes; native codec failures (libopus, libvpx, openh264, libspeexdsp)
+ * follow the same pattern. The permits list is closed, so a {@code switch}
+ * over a {@code WhatsAppCallException} can be exhaustive.
+ *
+ * @apiNote
+ * Catch this base type to react to every call-layer failure mode at once.
+ * Because every subtype is non-fatal, the configured error handler can
+ * retry, fall back to a different transport, or surface the failure to the
+ * user without tearing the messaging session down.
  *
  * @implNote
  * This implementation always reports the failure as non-fatal: a failed
- * call, a corrupt frame, or a stuck handshake is scoped to a single call
- * and the messaging session keeps running. The configurable error handler
- * decides whether to retry, fall back to a different transport, or
- * surface the failure to the user. The call subsystem is Cobalt-native;
- * WA Web routes the equivalent failures through its WASM-loaded
- * {@code libwebrtc} build rather than through a public exception
- * hierarchy.
+ * call, a corrupt frame, or a stuck handshake is scoped to a single call.
+ * The call subsystem is Cobalt-native; WA Web routes the equivalent
+ * failures through its WASM-loaded {@code libwebrtc} build rather than
+ * through a public exception hierarchy.
  *
  * @see Opus
  * @see SpeexDsp
@@ -89,12 +91,14 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when libopus encode or decode fails.
      *
+     * Reports either a non-zero {@code OPUS_*} error code or a Java-side
+     * invariant violation surfaced by the Foreign Function and Memory
+     * downcall.
+     *
      * @apiNote
-     * Wraps a non-zero {@code OPUS_*} error code or a Java-side invariant
-     * violation surfaced by the FFM downcall. Callers that already hold a
-     * libopus error code can use {@link #fromErr(String, int)} to build a
-     * message that includes libopus's own textual description from
-     * {@code opus_strerror}.
+     * Callers that already hold a libopus error code can use
+     * {@link #fromErr(String, int)} to build a message that includes
+     * libopus's own textual description from {@code opus_strerror}.
      */
     public static final class Opus extends WhatsAppCallException {
         /**
@@ -161,11 +165,11 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when a libspeexdsp call fails or returns an error code.
      *
-     * @apiNote
-     * Wraps {@link Throwable}s thrown by FFM downcalls so callers do not
-     * have to catch {@code Throwable} themselves. The libspeexdsp surface
-     * Cobalt uses today is acoustic-echo cancellation and noise
-     * suppression on the capture path.
+     * Wraps the {@link Throwable}s thrown by Foreign Function and Memory
+     * downcalls so callers do not have to catch {@link Throwable}
+     * themselves. The libspeexdsp surface Cobalt uses today is
+     * acoustic-echo cancellation and noise suppression on the capture
+     * path.
      */
     public static final class SpeexDsp extends WhatsAppCallException {
         /**
@@ -192,8 +196,7 @@ public sealed abstract class WhatsAppCallException
      * Thrown when RTP packet encode/decode, jitter-buffer ordering, or
      * SRTP protect/unprotect fails at the RTP layer.
      *
-     * @apiNote
-     * Wraps both protocol-level errors (truncated header, wrong version,
+     * Covers both protocol-level errors (truncated header, wrong version,
      * SSRC mismatch) and Java-side invariant violations from the
      * packetiser.
      */
@@ -221,11 +224,10 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when SRTP/SRTCP packet protection or unprotection fails.
      *
-     * @apiNote
      * Wraps the underlying {@link java.security.GeneralSecurityException}
      * (cipher or HMAC initialisation or transformation errors), or stands
-     * on its own to report packet-format violations, replay detection,
-     * and authentication-tag mismatches.
+     * on its own to report packet-format violations, replay detection, and
+     * authentication-tag mismatches.
      */
     public static final class Srtp extends WhatsAppCallException {
         /**
@@ -251,10 +253,9 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when the DTLS-SRTP handshake fails.
      *
-     * @apiNote
-     * Triggered by peer fingerprint mismatch, unsupported SRTP profile,
-     * alert received from the peer, or any other handshake-layer fault
-     * that prevents the SRTP keys from being derived.
+     * Triggered by peer fingerprint mismatch, unsupported SRTP profile, an
+     * alert received from the peer, or any other handshake-layer fault that
+     * prevents the SRTP keys from being derived.
      */
     public static final class DtlsHandshake extends WhatsAppCallException {
         /**
@@ -281,10 +282,9 @@ public sealed abstract class WhatsAppCallException
      * Thrown when ICE candidate gathering, connectivity checks, or
      * candidate-pair nomination fail.
      *
-     * @apiNote
-     * Wraps both protocol-level errors (malformed STUN response, missing
-     * {@code MESSAGE-INTEGRITY}) and Java-side invariant violations from
-     * the candidate-pair state machine.
+     * Covers both protocol-level errors (malformed STUN response, missing
+     * {@code MESSAGE-INTEGRITY}) and Java-side invariant violations from the
+     * candidate-pair state machine.
      */
     public static final class Ice extends WhatsAppCallException {
         /**
@@ -310,11 +310,10 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when a WebRTC DataChannel operation fails.
      *
-     * @apiNote
-     * Covers malformed DCEP message on the wire, attempts to use a
+     * Covers a malformed DCEP message on the wire, attempts to use a
      * channel in the wrong state, stream-id collisions, and unsupported
-     * channel types. Wraps usrsctp-level failures from the underlying
-     * SCTP association by chaining a {@link Sctp} exception as the cause.
+     * channel types. Failures from the underlying SCTP association are
+     * chained as a {@link Sctp} cause.
      */
     public static final class DataChannel extends WhatsAppCallException {
         /**
@@ -340,8 +339,7 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when a usrsctp operation fails.
      *
-     * @apiNote
-     * Wraps either a non-zero return code from the C library or a
+     * Reports either a non-zero return code from the C library or a
      * Java-side invariant violation (closed socket, wrong-sized buffer,
      * association in an unexpected state).
      */
@@ -369,10 +367,9 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when an openh264 operation fails.
      *
-     * @apiNote
-     * Wraps a non-zero return code from a vtable method
-     * ({@code Initialize}, {@code EncodeFrame}, {@code DecodeFrame2}) or
-     * a Java-side invariant violation (closed codec, wrong frame size).
+     * Reports a non-zero return code from a vtable method
+     * ({@code Initialize}, {@code EncodeFrame}, {@code DecodeFrame2}) or a
+     * Java-side invariant violation (closed codec, wrong frame size).
      */
     public static final class H264 extends WhatsAppCallException {
         /**
@@ -398,13 +395,13 @@ public sealed abstract class WhatsAppCallException
     /**
      * Thrown when a libvpx operation fails.
      *
+     * Reports a non-zero {@code vpx_codec_err_t} return code or a Java-side
+     * invariant violation (closed codec, wrong frame dimensions).
+     *
      * @apiNote
-     * Wraps a non-zero {@code vpx_codec_err_t} return code or a Java-side
-     * invariant violation (closed codec, wrong frame dimensions). Callers
-     * holding a {@code vpx_codec_err_t} value can use
+     * Callers holding a {@code vpx_codec_err_t} value can use
      * {@link #fromErr(String, int)} to build a message that includes
-     * libvpx's own textual description from
-     * {@code vpx_codec_err_to_string}.
+     * libvpx's own textual description from {@code vpx_codec_err_to_string}.
      */
     public static final class Vpx extends WhatsAppCallException {
         /**

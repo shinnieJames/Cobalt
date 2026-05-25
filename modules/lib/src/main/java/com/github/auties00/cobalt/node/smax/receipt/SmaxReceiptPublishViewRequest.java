@@ -13,16 +13,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <receipt type="view">} stanza publishing a batch
- * of newsletter or status view-receipts to the relay.
+ * Models the outbound {@code <receipt type="view">} stanza that publishes a
+ * batch of newsletter or status view-receipts to the relay.
  *
- * @apiNote
- * Backs the newsletter and status view-counters: WA Web sends this
- * request from {@code WAWebNewsletterSendViewReceiptJob} (regular
- * newsletter views) and {@code WAWebNewsletterStatusViewReceiptUtils}
- * (status broadcasts), batching up to 255 message server-ids per
- * stanza so the relay can increment the per-message view counter
- * server-side. The reply is parsed by
+ * <p>This request backs the newsletter and status view-counters. A single
+ * stanza batches up to {@code 255} message server-ids so the relay can
+ * increment the per-message view counter server-side. Setting
+ * {@link #hasStatusClass()} selects between a regular newsletter view receipt
+ * and a status-broadcast view receipt, the latter being marked with
+ * {@code class="status"}. The reply is parsed by
  * {@link SmaxReceiptPublishViewResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutReceiptPublishViewRequest")
@@ -32,54 +31,54 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutReceiptStatusClassMixin")
 public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Request {
     /**
-     * The opaque stanza id used as the receipt's {@code id} attribute.
+     * Holds the opaque stanza id emitted as the receipt's {@code id} attribute.
      *
      * @implNote
-     * This implementation accepts an opaque {@link String} rather than
-     * deriving the id from {@code WAWap.generateId}; WA Web's
-     * {@code WAWebNewsletterSendViewReceiptJob} stamps a fresh stanza
-     * id at the job-call site so the typed request can stay
-     * caller-supplied.
+     * This implementation accepts a caller-supplied {@link String} rather than
+     * deriving the id from {@code WAWap.generateId}; the stanza id is stamped at
+     * the job-call site so the typed request can stay caller-supplied.
      */
     private final String receiptId;
 
     /**
-     * The recipient JID of the acknowledgement; typically a newsletter
-     * or status JID.
+     * Holds the recipient JID of the acknowledgement, typically a newsletter or
+     * status JID.
      */
     private final Jid receiptTo;
 
     /**
-     * Whether the receipt carries {@code class="status"}, marking the
-     * ack as a status-broadcast view receipt rather than a regular
-     * newsletter view receipt.
+     * Holds whether the receipt carries {@code class="status"}, marking the ack
+     * as a status-broadcast view receipt rather than a regular newsletter view
+     * receipt.
      */
     private final boolean hasStatusClass;
 
     /**
-     * The list of {@code <item server_id=INT/>} entries; between
-     * {@code 0} and {@code 255} entries.
+     * Holds the {@code <item server_id=INT/>} entries, between {@code 0} and
+     * {@code 255} of them.
      */
     private final List<Integer> itemServerIds;
 
     /**
      * Constructs a new view-receipt request.
      *
-     * @apiNote
-     * Pass {@code hasStatusClass=true} when sending a status-broadcast
-     * view receipt and {@code false} for a regular newsletter view
-     * receipt; the 255-entry batch ceiling matches the limit the relay
-     * enforces server-side.
+     * <p>Pass {@code hasStatusClass} as {@code true} when sending a
+     * status-broadcast view receipt and {@code false} for a regular newsletter
+     * view receipt. The list is defensively copied, so later mutation of the
+     * supplied collection does not affect this request.
+     *
+     * @implNote
+     * This implementation rejects batches larger than {@code 255} entries; the
+     * ceiling matches the limit the relay enforces server-side.
      *
      * @param receiptId the stanza id; never {@code null}
      * @param receiptTo the recipient JID; never {@code null}
      * @param hasStatusClass whether to emit {@code class="status"}
-     * @param itemServerIds the list of server ids; never {@code null};
-     *                      at most 255 entries
-     * @throws NullPointerException if any required argument is
-     *                              {@code null}
-     * @throws IllegalArgumentException if {@code itemServerIds} carries
-     *                                  more than 255 entries
+     * @param itemServerIds the list of server ids; never {@code null}; at most
+     *                      {@code 255} entries
+     * @throws NullPointerException if any required argument is {@code null}
+     * @throws IllegalArgumentException if {@code itemServerIds} carries more
+     *                                  than {@code 255} entries
      */
     public SmaxReceiptPublishViewRequest(String receiptId, Jid receiptTo, boolean hasStatusClass,
                    List<Integer> itemServerIds) {
@@ -95,7 +94,7 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Returns the stanza id used as the receipt's {@code id}.
+     * Returns the stanza id emitted as the receipt's {@code id} attribute.
      *
      * @return the id; never {@code null}
      */
@@ -104,7 +103,7 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Returns the recipient JID.
+     * Returns the recipient JID of the acknowledgement.
      *
      * @return the JID; never {@code null}
      */
@@ -115,15 +114,14 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     /**
      * Returns whether the receipt carries {@code class="status"}.
      *
-     * @return {@code true} when the {@code class="status"} attribute
-     *         is set
+     * @return {@code true} when the {@code class="status"} attribute is set
      */
     public boolean hasStatusClass() {
         return hasStatusClass;
     }
 
     /**
-     * Returns the list of {@code <item server_id/>} ids.
+     * Returns the {@code <item server_id/>} ids carried by this request.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -134,15 +132,20 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     /**
      * Builds the outbound {@code <receipt>} stanza ready for dispatch.
      *
-     * @apiNote
-     * Produces
-     * {@code <receipt id to type="view" class?="status">
-     *   <list><item server_id="N"/>...</list></receipt>};
-     * the {@code class="status"} attribute is emitted only when
+     * <p>The produced envelope has the shape
+     * {@snippet lang="xml" :
+     * <receipt id="..." to="..." type="view" class="status">
+     *   <list>
+     *     <item server_id="N"/>
+     *     <!-- ... -->
+     *   </list>
+     * </receipt>
+     * }
+     * where the {@code class="status"} attribute is emitted only when
      * {@link #hasStatusClass()} returns {@code true}.
      *
-     * @return a {@link NodeBuilder} carrying the receipt envelope and
-     *         the {@code <list>} payload
+     * @return a {@link NodeBuilder} carrying the receipt envelope and the
+     *         {@code <list>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutReceiptPublishViewRequest",
@@ -171,8 +174,10 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxReceiptPublishViewRequest} with equal echoed
+     * Compares this request to the given object for equality.
+     *
+     * <p>Two requests are equal when they are both
+     * {@link SmaxReceiptPublishViewRequest} instances with equal echoed
      * attributes and item list.
      *
      * @param obj the candidate; may be {@code null}

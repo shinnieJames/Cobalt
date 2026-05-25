@@ -16,37 +16,37 @@ import java.lang.invoke.MethodType;
 import java.nio.channels.SeekableByteChannel;
 
 /**
- * AVIO bridge that lets libavformat read from a {@link SeekableByteChannel}
- * via zero-copy Java upcalls.
+ * Bridges libavformat reads onto a {@link SeekableByteChannel} through native upcalls.
  *
- * @apiNote
- * Shared by every transcoder pipeline that demuxes through libavformat.
- * Each instance owns one {@link Ffmpeg#av_malloc} buffer (handed to
- * {@code avio_alloc_context} so libavformat may grow or replace it at
- * runtime) and two upcall stubs ({@code read_packet} and {@code seek})
- * confined to the constructor's {@link Arena}. Implements
- * {@link AutoCloseable} so the owning pipeline can release the AVIO
- * context via try-with-resources; the underlying {@link SeekableByteChannel}
- * is the caller's to close.
+ * <p>Each instance owns one native AVIO buffer (allocated via {@code av_malloc} and handed to
+ * {@code avio_alloc_context}, which may grow or replace it at runtime) and two upcall stubs,
+ * {@code read_packet} and {@code seek}, confined to the constructor's {@link Arena}. libavformat
+ * invokes those stubs whenever it needs more input or repositions the stream; the bridge forwards
+ * each call to the backing channel. The bridge implements {@link AutoCloseable} so the owning
+ * pipeline can release the AVIO context with try-with-resources, while the backing
+ * {@link SeekableByteChannel} remains the caller's to close.
  *
- * @implNote
- * The {@code read_packet} upcall wraps the native AVIO buffer slice as a
- * direct {@link java.nio.ByteBuffer} via {@link MemorySegment#asByteBuffer()}
- * and hands it straight to {@link SeekableByteChannel#read}, so disk bytes
- * land in FFmpeg's native buffer with one syscall and zero Java-heap
- * intermediation. The {@code seek} upcall delegates to
- * {@link SeekableByteChannel#position} and {@link SeekableByteChannel#size},
- * supporting {@code SEEK_SET}, {@code SEEK_CUR}, {@code SEEK_END}, and the
- * {@code AVSEEK_SIZE} flag. {@link IOException}s thrown from the channel
- * are stashed in {@link #lastError()} and surfaced as {@code AVERROR_EOF};
- * the owning pipeline checks {@link #lastError()} after the FFmpeg call
+ * <p>The upcalls cannot propagate exceptions across the native boundary, so a channel-level
+ * {@link IOException} is reported to libavformat as {@code AVERROR_EOF} and stashed in
+ * {@link #lastError()}. The owning pipeline inspects {@link #lastError()} after the FFmpeg call
  * returns and converts a stashed error into a
  * {@link com.github.auties00.cobalt.exception.WhatsAppMediaException.Processing}.
+ *
+ * @implNote This implementation wraps the native AVIO buffer slice as a direct
+ * {@link java.nio.ByteBuffer} via {@link MemorySegment#asByteBuffer()} and hands it straight to
+ * {@link SeekableByteChannel#read(java.nio.ByteBuffer)}, so disk bytes land in FFmpeg's native
+ * buffer with one syscall and no Java-heap intermediation. The seek upcall delegates to
+ * {@link SeekableByteChannel#position(long)} and {@link SeekableByteChannel#size()} and supports
+ * the POSIX whences {@link #SEEK_SET}, {@link #SEEK_CUR}, {@link #SEEK_END} plus the
+ * {@link #AVSEEK_SIZE} flag from {@code libavformat/avio.h}.
  */
 public final class AvioReadBuffer implements AutoCloseable {
     /**
-     * Layout descriptor for the {@code read_packet} upcall:
-     * {@code int (*)(void *opaque, uint8_t *buf, int buf_size)}.
+     * Describes the {@code read_packet} upcall signature {@code int (*)(void *opaque, uint8_t *buf, int buf_size)}.
+     *
+     * <p>Returns a {@code JAVA_INT} byte count and takes the opaque pointer, the destination buffer
+     * pointer, and the buffer size, matching the function-pointer slot {@code avio_alloc_context}
+     * expects for reads.
      */
     private static final FunctionDescriptor READ_PACKET_DESCRIPTOR = FunctionDescriptor.of(
             ValueLayout.JAVA_INT,
@@ -55,8 +55,11 @@ public final class AvioReadBuffer implements AutoCloseable {
             ValueLayout.JAVA_INT);
 
     /**
-     * Layout descriptor for the {@code seek} upcall:
-     * {@code int64_t (*)(void *opaque, int64_t offset, int whence)}.
+     * Describes the {@code seek} upcall signature {@code int64_t (*)(void *opaque, int64_t offset, int whence)}.
+     *
+     * <p>Returns a {@code JAVA_LONG} position and takes the opaque pointer, the target offset, and
+     * the whence selector, matching the function-pointer slot {@code avio_alloc_context} expects for
+     * seeks.
      */
     private static final FunctionDescriptor SEEK_DESCRIPTOR = FunctionDescriptor.of(
             ValueLayout.JAVA_LONG,
@@ -65,77 +68,86 @@ public final class AvioReadBuffer implements AutoCloseable {
             ValueLayout.JAVA_INT);
 
     /**
-     * {@code SEEK_SET} (POSIX): set the position to {@code offset}.
+     * Holds the POSIX {@code SEEK_SET} whence, which sets the position to {@code offset}.
      */
     private static final int SEEK_SET = 0;
 
     /**
-     * {@code SEEK_CUR} (POSIX): add {@code offset} to the current
-     * position.
+     * Holds the POSIX {@code SEEK_CUR} whence, which adds {@code offset} to the current position.
      */
     private static final int SEEK_CUR = 1;
 
     /**
-     * {@code SEEK_END} (POSIX): set the position to
-     * {@code size + offset}.
+     * Holds the POSIX {@code SEEK_END} whence, which sets the position to {@code size + offset}.
      */
     private static final int SEEK_END = 2;
 
     /**
-     * {@code AVSEEK_SIZE} flag from {@code libavformat/avio.h}: report
-     * the underlying size rather than performing an actual seek.
+     * Holds the {@code AVSEEK_SIZE} flag, which requests the underlying size instead of a seek.
+     *
+     * @implNote This implementation uses {@code 0x10000}, the value defined for {@code AVSEEK_SIZE}
+     * in {@code libavformat/avio.h}. libavformat ORs the flag into the whence word, so the seek
+     * upcall masks the low byte off before matching a POSIX whence.
      */
     private static final int AVSEEK_SIZE = 0x10000;
 
     /**
-     * Default size in bytes of the AVIO read buffer. Matches FFmpeg's own
-     * example value.
+     * Holds the default AVIO read buffer size in bytes.
+     *
+     * @implNote This implementation uses {@code 4096}, the buffer size FFmpeg's own custom-IO
+     * example programs allocate.
      */
     public static final int DEFAULT_BUFFER_SIZE = 4096;
 
     /**
-     * Source channel; read/seek delegate to this instance.
+     * Holds the source channel that the read and seek upcalls delegate to.
      */
     private final SeekableByteChannel channel;
 
     /**
-     * Native buffer handed to {@code avio_alloc_context}.
+     * Holds the native buffer handed to {@code avio_alloc_context} as the AVIO read buffer.
      */
     private final MemorySegment avioBuffer;
 
     /**
-     * AVIOContext pointer; set on the owning {@code AVFormatContext} via
-     * {@code AVFormatContext.pb}.
+     * Holds the AVIOContext pointer, which the owning pipeline installs on its {@code AVFormatContext}
+     * through the {@code AVFormatContext.pb} field.
      */
     private final MemorySegment ioContext;
 
     /**
-     * Last {@link IOException} thrown from the channel, if any; surfaced
-     * to the owning pipeline after the FFmpeg call returns.
+     * Holds the last {@link IOException} thrown from the channel, or {@code null} when none occurred.
+     *
+     * <p>Declared {@code volatile} because the upcall stub may run on whichever thread libavformat
+     * drives the demuxer from, while the owning pipeline reads the field after the FFmpeg call
+     * returns.
      */
     private volatile IOException lastError;
 
     /**
-     * Guards against double-close.
+     * Guards against a second {@link #close()} freeing the AVIO context twice.
      */
     private boolean closed;
 
     /**
-     * Constructs a fresh read bridge backed by the given channel.
+     * Constructs a read bridge backed by the given channel using {@link #DEFAULT_BUFFER_SIZE}.
      *
      * @param arena   the arena confining the upcall stubs
-     * @param channel the source channel; not closed by this bridge
+     * @param channel the source channel, which this bridge does not close
      */
     public AvioReadBuffer(Arena arena, SeekableByteChannel channel) {
         this(arena, channel, DEFAULT_BUFFER_SIZE);
     }
 
     /**
-     * Constructs a fresh read bridge with an explicit buffer size.
+     * Constructs a read bridge backed by the given channel with an explicit buffer size.
+     *
+     * <p>Allocates the native AVIO buffer, binds the {@link #readPacket} and {@link #seek} upcall
+     * stubs to {@code this} within {@code arena}, and creates the AVIOContext in read-only mode.
      *
      * @param arena      the arena confining the upcall stubs
-     * @param channel    the source channel; not closed by this bridge
-     * @param bufferSize the AVIO buffer size in bytes; must be positive
+     * @param channel    the source channel, which this bridge does not close
+     * @param bufferSize the AVIO buffer size in bytes, which must be positive
      */
     public AvioReadBuffer(Arena arena, SeekableByteChannel channel, int bufferSize) {
         this.channel = channel;
@@ -170,36 +182,33 @@ public final class AvioReadBuffer implements AutoCloseable {
     }
 
     /**
-     * Returns the last {@link IOException} thrown from the underlying
-     * channel, if any.
+     * Returns the last {@link IOException} thrown from the underlying channel, or {@code null}.
      *
-     * @apiNote
-     * The {@code read_packet} and {@code seek} upcalls cannot throw across
-     * the native boundary, so a channel-level I/O error is reported to
-     * FFmpeg as {@code AVERROR_EOF} and stashed here. Pipelines must
-     * inspect this value after FFmpeg returns and convert a non-null
-     * result into a
+     * <p>Because the read and seek upcalls cannot throw across the native boundary, a channel-level
+     * I/O error is reported to libavformat as {@code AVERROR_EOF} and stashed here. The owning
+     * pipeline inspects this value after FFmpeg returns and converts a non-null result into a
      * {@link com.github.auties00.cobalt.exception.WhatsAppMediaException.Processing}.
      *
-     * @return the last channel exception, or {@code null} if none
+     * @return the last channel exception, or {@code null} if none occurred
      */
     public IOException lastError() {
         return lastError;
     }
 
     /**
-     * libavformat read upcall.
+     * Reads up to {@code bufSize} bytes from the channel into the libavformat-supplied buffer.
      *
-     * @apiNote
-     * Invoked by libavformat through the upcall stub installed in the AVIO
-     * context. Hands the native AVIO buffer slice straight to the channel
-     * as a direct {@link java.nio.ByteBuffer} so disk bytes land in
-     * FFmpeg's buffer with no Java-heap copy.
+     * <p>libavformat invokes this through the {@code read_packet} upcall stub installed in the AVIO
+     * context whenever it needs more input. The method reinterprets {@code buf} as the native AVIO
+     * buffer slice, exposes it as a direct {@link java.nio.ByteBuffer}, and reads straight into it
+     * so disk bytes land in FFmpeg's buffer with no Java-heap copy. A non-positive channel read is
+     * reported as end-of-input. An {@link IOException} is stashed in {@link #lastError()} and also
+     * reported to libavformat as end-of-input.
      *
-     * @param opaque  unused; the bridge captures {@code this}
-     * @param buf     destination buffer libavformat provided
-     * @param bufSize maximum bytes to copy
-     * @return the number of bytes copied, or {@link Ffmpeg#AVERROR_EOF()}
+     * @param opaque  the opaque pointer, unused because the bridge captures {@code this}
+     * @param buf     the destination buffer libavformat provided
+     * @param bufSize the maximum number of bytes to copy
+     * @return the number of bytes read, or {@code AVERROR_EOF} on end-of-input or I/O error
      */
     @SuppressWarnings("unused")
     int readPacket(MemorySegment opaque, MemorySegment buf, int bufSize) {
@@ -215,22 +224,24 @@ public final class AvioReadBuffer implements AutoCloseable {
     }
 
     /**
-     * libavformat seek upcall.
+     * Repositions the channel or reports its size in response to a libavformat seek.
      *
-     * @apiNote
-     * Handles {@code SEEK_SET}, {@code SEEK_CUR}, and {@code SEEK_END} by
-     * delegating to {@link SeekableByteChannel#position} and reports the
-     * channel size when {@link #AVSEEK_SIZE} is set. Required for demuxers
-     * (including MP4 / M4A) that seek back to a trailing metadata atom
-     * during {@code avformat_open_input}.
+     * <p>libavformat invokes this through the {@code seek} upcall stub. When the {@link #AVSEEK_SIZE}
+     * flag is set, the method returns the channel size without moving the position; this supports
+     * demuxers (including MP4 and M4A) that probe the stream length and seek back to a trailing
+     * metadata atom during {@code avformat_open_input}. Otherwise it masks the low byte of
+     * {@code whence}, resolves the target absolute position against {@link #SEEK_SET},
+     * {@link #SEEK_CUR}, or {@link #SEEK_END}, rejects an out-of-bounds or unrecognised request by
+     * returning {@code -1}, and applies the position through
+     * {@link SeekableByteChannel#position(long)}. An {@link IOException} is stashed in
+     * {@link #lastError()} and reported as {@code -1}.
      *
-     * @param opaque unused
-     * @param offset target offset; interpretation depends on {@code whence}
-     * @param whence one of {@link #SEEK_SET}, {@link #SEEK_CUR},
-     *               {@link #SEEK_END}, or a flag word containing
-     *               {@link #AVSEEK_SIZE}
-     * @return the new absolute position, the channel size when
-     *         {@link #AVSEEK_SIZE} is set, or {@code -1} on error
+     * @param opaque the opaque pointer, unused
+     * @param offset the target offset, whose interpretation depends on {@code whence}
+     * @param whence one of {@link #SEEK_SET}, {@link #SEEK_CUR}, {@link #SEEK_END}, or a word
+     *               containing the {@link #AVSEEK_SIZE} flag
+     * @return the new absolute position, the channel size when {@link #AVSEEK_SIZE} is set, or
+     *         {@code -1} on an out-of-bounds, unrecognised, or failed seek
      */
     @SuppressWarnings("unused")
     long seek(MemorySegment opaque, long offset, int whence) {
@@ -257,8 +268,12 @@ public final class AvioReadBuffer implements AutoCloseable {
     }
 
     /**
-     * Releases the AVIO context and frees the backing buffer. The
-     * underlying channel is not closed.
+     * Releases the AVIO context and frees the backing native buffer.
+     *
+     * <p>Frees the AVIO buffer pointer through {@code av_freep} and the AVIO context through
+     * {@code avio_context_free}, reading the live buffer pointer back from the context because
+     * libavformat may have grown or replaced the original allocation. The call is idempotent and a
+     * no-op once the context has already been released. The underlying channel is not closed.
      */
     @Override
     public void close() {

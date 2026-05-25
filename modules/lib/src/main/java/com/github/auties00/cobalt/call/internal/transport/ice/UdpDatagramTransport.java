@@ -12,69 +12,68 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Concrete {@link DatagramTransport} backed by an NIO
- * {@link DatagramChannel} connected to one remote peer.
+ * Implements {@link DatagramTransport} over an NIO {@link DatagramChannel} connected to a single
+ * remote peer.
  *
- * <p>Created by {@link com.github.auties00.cobalt.call.internal.transport.relay.WaRelayConnector}
- * after a successful Allocate handshake — the channel is bound to the
- * ephemeral source port used during the handshake and connected to the
- * elected WA relay endpoint, so every subsequent
- * {@link #send(byte[]) send} and inbound datagram flows over the same
- * NAT pinhole.
- *
- * <p>A dedicated virtual thread services the channel's receive side
- * and dispatches synchronously to the registered
- * {@link InboundListener}. The receive thread shuts down when
- * {@link #close()} is called or when the channel closes underneath it.
+ * <p>The channel is bound to an ephemeral local port and connected to the elected WA relay
+ * endpoint, so every {@link #send(byte[]) send} and every inbound datagram flows over the same NAT
+ * pinhole; {@link com.github.auties00.cobalt.call.internal.transport.relay.WaRelayConnector}
+ * constructs an instance after a successful relay Allocate handshake. A dedicated virtual thread
+ * services the channel's receive side and dispatches each datagram synchronously to the registered
+ * {@link InboundListener}, exiting when {@link #close()} is called or when the channel closes
+ * underneath it.
  */
 public final class UdpDatagramTransport implements DatagramTransport {
     /**
-     * Receive buffer size — large enough for a maximal SCTP-over-DTLS
-     * record (the WebRTC maxMessageSize is 16 KB, plus DTLS and SCTP
-     * overhead).
+     * The receive-buffer size in bytes.
+     *
+     * @implNote This implementation uses {@code 64 KiB}, sized to hold a maximal SCTP-over-DTLS
+     * record: the WebRTC {@code maxMessageSize} is 16 KiB, and the value leaves headroom for DTLS
+     * and SCTP framing overhead on top of it.
      */
     private static final int RECV_BUFFER_BYTES = 64 * 1024;
 
     /**
-     * The underlying channel.
+     * The underlying connected datagram channel.
      */
     private final DatagramChannel channel;
 
     /**
-     * The local-side bound address.
+     * The local-side bound transport address.
      */
     private final InetSocketAddress local;
 
     /**
-     * The remote-side connected address.
+     * The remote-side connected transport address.
      */
     private final InetSocketAddress remote;
 
     /**
-     * The receive-side virtual thread.
+     * The virtual thread running the receive loop.
      */
     private final Thread receiver;
 
     /**
-     * Application listener for inbound datagrams.
+     * The currently registered inbound listener, or {@code null} when none is registered.
      */
     private final AtomicReference<InboundListener> listener = new AtomicReference<>();
 
     /**
-     * Set when {@link #close()} has been invoked; the receiver loop
-     * uses it as the exit signal.
+     * Whether {@link #close()} has been invoked, used by the receive loop as its exit signal.
      */
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
-     * Constructs and starts the transport on a fresh
-     * {@link DatagramChannel} bound to an ephemeral local port and
-     * connected to {@code remoteAddress}.
+     * Opens a datagram channel bound to an ephemeral local port and connected to
+     * {@code remoteAddress}, then starts the receive thread.
      *
-     * @param remoteAddress the relay endpoint
-     * @throws WhatsAppCallException.Ice if the channel cannot be opened, bound,
-     *                                   or connected
-     * @throws NullPointerException      if {@code remoteAddress} is null
+     * <p>The channel is configured blocking with address reuse enabled, and the resolved local and
+     * remote addresses are captured for {@link #localAddress()} and {@link #remoteAddress()}. The
+     * receive thread is a daemon virtual thread named after the local port.
+     *
+     * @param remoteAddress the relay endpoint to connect to
+     * @throws WhatsAppCallException.Ice if the channel cannot be opened, bound, or connected
+     * @throws NullPointerException      if {@code remoteAddress} is {@code null}
      */
     public UdpDatagramTransport(InetSocketAddress remoteAddress) {
         Objects.requireNonNull(remoteAddress, "remoteAddress cannot be null");
@@ -129,15 +128,20 @@ public final class UdpDatagramTransport implements DatagramTransport {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
-        try { channel.close(); } catch (IOException _) { /* swallow */ }
+        try {
+            channel.close();
+        } catch (IOException _) {
+        }
         receiver.interrupt();
     }
 
     /**
-     * Body of the receive thread. Blocks on {@link DatagramChannel#read}
-     * until the channel closes or the thread is interrupted, dispatching
-     * each datagram synchronously to the current
-     * {@link InboundListener}.
+     * Runs the receive loop, blocking on {@link DatagramChannel#read(ByteBuffer)} and dispatching
+     * each datagram synchronously to the current {@link InboundListener}.
+     *
+     * <p>The loop runs until the transport is closed or the thread is interrupted, and exits on a
+     * read error or an end-of-stream read. A zero-length read is ignored. An exception thrown by
+     * the listener is swallowed so that one bad datagram does not stop reception.
      */
     private void receiveLoop() {
         var buffer = ByteBuffer.allocate(RECV_BUFFER_BYTES);
@@ -160,7 +164,10 @@ public final class UdpDatagramTransport implements DatagramTransport {
             buffer.get(bytes);
             var l = listener.get();
             if (l != null) {
-                try { l.onDatagram(bytes); } catch (RuntimeException _) { /* keep looping */ }
+                try {
+                    l.onDatagram(bytes);
+                } catch (RuntimeException _) {
+                }
             }
         }
     }

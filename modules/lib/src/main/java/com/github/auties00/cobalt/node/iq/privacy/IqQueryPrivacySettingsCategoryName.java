@@ -5,15 +5,14 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import java.util.Optional;
 
 /**
- * Closed set of privacy-category names recognised by the relay's legacy {@code <iq xmlns="privacy">}
- * surface.
- *
- * @apiNote
+ * Closed set of privacy-category names recognised by the relay's legacy
+ * {@code <iq xmlns="privacy">} surface.
+ * <p>
  * Each constant names one row of the WhatsApp privacy-settings screen (last seen, online presence,
  * profile picture, about text, read receipts, group-add permission, call-add permission, message
- * acceptance, defense-mode toggle). Use the constant when constructing an
- * {@link IqSetPrivacyRequest} for a specific row, and to key into the
- * {@link IqQueryPrivacySettingsResponse.Success#categories()} map returned by
+ * acceptance, defense-mode toggle). The constant identifies the row when constructing an
+ * {@link IqSetPrivacyRequest} for a specific row, and keys into the
+ * {@link IqQueryPrivacySettingsResponse.Success#categories()} map returned for an
  * {@link IqQueryPrivacySettingsRequest}.
  *
  * @implNote
@@ -21,15 +20,14 @@ import java.util.Optional;
  * {@code WAWebQueryPrivacySettingsJob} parser recognises and routes into a typed shape; six
  * additional names ({@code pix}, {@code linked_profiles}, {@code stickers},
  * {@code dependentaccountmessages}, {@code cover_photo}, {@code dependent_account_calling},
- * {@code groupcreation}) are silently skipped by WA Web's parser and are intentionally not
- * modelled here.
+ * {@code groupcreation}) are silently skipped by WA Web's parser and are intentionally not modelled
+ * here.
  */
 @WhatsAppWebModule(moduleName = "WAWebPrivacySettings")
 public enum IqQueryPrivacySettingsCategoryName {
     /**
      * The {@code last} row.
-     *
-     * @apiNote
+     * <p>
      * Selects the audience that may see the user's last-seen timestamp; legal values are
      * {@link IqQueryPrivacySettingsVisibility#ALL}, {@link IqQueryPrivacySettingsVisibility#CONTACTS},
      * {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST}, and
@@ -39,8 +37,7 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * The {@code online} row.
-     *
-     * @apiNote
+     * <p>
      * Selects the audience that may see the user's live online indicator; legal values are
      * {@link IqQueryPrivacySettingsVisibility#ALL} and
      * {@link IqQueryPrivacySettingsVisibility#MATCH_LAST_SEEN} (the second mirrors whatever
@@ -50,8 +47,7 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * The {@code profile} row.
-     *
-     * @apiNote
+     * <p>
      * Selects the audience that may see the user's profile picture; uses the
      * {@link IqQueryPrivacySettingsVisibility#ALL} / {@link IqQueryPrivacySettingsVisibility#CONTACTS}
      * / {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST} /
@@ -61,35 +57,28 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * The {@code status} row.
-     *
-     * @apiNote
-     * Selects the audience that may see the user's about text (not the Status story feed; that lives
-     * in a separate sync action). Uses the
-     * {@link IqQueryPrivacySettingsVisibility#ALL} / {@link IqQueryPrivacySettingsVisibility#CONTACTS}
-     * / {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST} /
+     * <p>
+     * Selects the audience that may see the user's about text (not the Status story feed, which
+     * lives in a separate sync action). Uses the {@link IqQueryPrivacySettingsVisibility#ALL} /
+     * {@link IqQueryPrivacySettingsVisibility#CONTACTS} /
+     * {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST} /
      * {@link IqQueryPrivacySettingsVisibility#NONE} set.
      */
     ABOUT("status"),
 
     /**
      * The {@code readreceipts} row.
-     *
-     * @apiNote
+     * <p>
      * Toggles whether the user's read receipts are shipped to peers; legal values are
-     * {@link IqQueryPrivacySettingsVisibility#ALL} and
-     * {@link IqQueryPrivacySettingsVisibility#NONE}.
-     *
-     * @implNote
-     * This implementation keeps the row exposed via the typed setter
-     * {@link IqSetReadReceiptRequest}; WA Web has a dedicated job that always targets this
-     * category, separate from the multi-row {@link IqSetPrivacyRequest}.
+     * {@link IqQueryPrivacySettingsVisibility#ALL} and {@link IqQueryPrivacySettingsVisibility#NONE}.
+     * The row is mutated through the dedicated typed setter {@link IqSetReadReceiptRequest} rather
+     * than the multi-row {@link IqSetPrivacyRequest}.
      */
     READ_RECEIPTS("readreceipts"),
 
     /**
      * The {@code groupadd} row.
-     *
-     * @apiNote
+     * <p>
      * Selects the audience that may add the user to groups without an invite link; uses the
      * {@link IqQueryPrivacySettingsVisibility#ALL} / {@link IqQueryPrivacySettingsVisibility#CONTACTS}
      * / {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST} /
@@ -99,8 +88,7 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * The {@code calladd} row.
-     *
-     * @apiNote
+     * <p>
      * Selects the audience that may add the user to group calls; legal values are
      * {@link IqQueryPrivacySettingsVisibility#ALL}, {@link IqQueryPrivacySettingsVisibility#KNOWN},
      * and {@link IqQueryPrivacySettingsVisibility#CONTACTS}.
@@ -109,8 +97,7 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * The {@code messages} row.
-     *
-     * @apiNote
+     * <p>
      * Selects who may message the user without a prior conversation; legal values are
      * {@link IqQueryPrivacySettingsVisibility#ALL} and
      * {@link IqQueryPrivacySettingsVisibility#CONTACTS}.
@@ -119,8 +106,7 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * The {@code defense} row.
-     *
-     * @apiNote
+     * <p>
      * Toggles the server-side defense-mode quarantine pipeline; legal values are
      * {@link IqQueryPrivacySettingsVisibility#OFF} and
      * {@link IqQueryPrivacySettingsVisibility#ON_STANDARD}.
@@ -135,9 +121,6 @@ public enum IqQueryPrivacySettingsCategoryName {
     /**
      * Constructs a category constant from its wire token.
      *
-     * @apiNote
-     * Constructor is package-private as enum constants are the only producers.
-     *
      * @param wire the wire token; never {@code null}
      */
     IqQueryPrivacySettingsCategoryName(String wire) {
@@ -146,10 +129,9 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * Returns the wire token for this category.
-     *
-     * @apiNote
-     * Use when serialising a {@code <category name=...>} attribute. Consumers should not pattern
-     * match on the string; prefer comparing the enum value.
+     * <p>
+     * Used when serialising a {@code <category name=...>} attribute. Consumers compare the enum
+     * value rather than pattern matching on the string.
      *
      * @return the wire token; never {@code null}
      */
@@ -159,11 +141,11 @@ public enum IqQueryPrivacySettingsCategoryName {
 
     /**
      * Resolves the constant whose {@link #wire()} equals the supplied token.
-     *
-     * @apiNote
-     * Used by {@link IqQueryPrivacySettingsResponse.Success#of} and
-     * {@link IqSetPrivacyResponse.Success#of} when projecting inbound stanza attributes back into
-     * the typed model.
+     * <p>
+     * Projects an inbound {@code <category>} name attribute back into the typed model; used by
+     * {@link IqQueryPrivacySettingsResponse.Success#of(com.github.auties00.cobalt.node.Node, com.github.auties00.cobalt.node.Node)}
+     * and
+     * {@link IqSetPrivacyResponse.Success#of(com.github.auties00.cobalt.node.Node, com.github.auties00.cobalt.node.Node)}.
      *
      * @implNote
      * This implementation walks {@link #values()} linearly; the enum is small (nine constants) so

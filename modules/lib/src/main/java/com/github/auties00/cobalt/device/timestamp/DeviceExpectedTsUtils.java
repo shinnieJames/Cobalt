@@ -10,39 +10,32 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Stateless helpers that implement the expected-timestamp staleness logic of
- * the ADV device-info job.
+ * Implements the expected-timestamp staleness logic of the ADV device-info job.
  *
- * @apiNote
- * Used by {@link com.github.auties00.cobalt.device.DeviceService} when
- * folding a USync response into the local {@link DeviceList} record, and by
- * {@link com.github.auties00.cobalt.device.adv.DeviceADVChecker} when the
- * daily ADV scheduler decides whether to re-query a user's device list. The
- * three "expected-timestamp" fields tracked on each {@link DeviceList} let
- * Cobalt detect a device list whose dhash still matches the server's but is
- * known by the server to be obsolete.
+ * <p>This utility holds the stateless predicates that track the three
+ * expected-timestamp fields stamped onto each {@link DeviceList}: the next
+ * expected version, the timestamp of the last ADV device-info job that
+ * observed it, and the instant at which it was last modified. Together these
+ * let Cobalt detect a device list whose dhash still matches the server's but
+ * is known by the server to be obsolete, so the daily ADV scheduler can decide
+ * whether to re-query a user's device list and the USync handling path can keep
+ * the cached expectation consistent with the latest server signal.
  *
- * @implNote
- * This implementation mirrors the JS predicates in
- * {@code WAWebAdvExpectedTsApi} and the staleness branches inside
- * {@code WAWebAdvDeviceInfoCheckJob.runAdvDeviceInfoCheck}; the 25-hour
- * threshold is duplicated here because Cobalt has no equivalent of the
- * {@code WATimeUtils.HOUR_SECONDS} constant import the JS module reuses.
+ * @implNote This implementation duplicates the 25-hour threshold inline because
+ *           Cobalt has no equivalent of the {@code WATimeUtils.HOUR_SECONDS}
+ *           constant the JS module reuses.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvExpectedTsApi")
 @WhatsAppWebModule(moduleName = "WAWebAdvDeviceInfoCheckJob")
 public final class DeviceExpectedTsUtils {
 
     /**
-     * Twenty-five hour grace window that the daily ADV job allows before it
-     * treats an expected-timestamp record as stale.
+     * Holds the twenty-five hour grace window the daily ADV job allows before
+     * it treats an expected-timestamp record as stale.
      *
-     * @apiNote
-     * Read by {@link #isDeviceListStale(DeviceList, Instant, Duration, Instant)};
-     * matches WA Web's {@code m = 25 * HOUR_SECONDS} constant in
-     * {@code WAWebAdvDeviceInfoCheckJob}. One hour of slack is added on top
-     * of the nominal 24-hour scheduler tick so a slightly delayed job run
-     * does not flag every record as stale.
+     * <p>One hour of slack is added on top of the nominal 24-hour scheduler
+     * tick so a slightly delayed job run does not flag every record as stale.
+     * Read by {@link #isDeviceListStale(DeviceList, Instant, Duration, Instant)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "runAdvDeviceInfoCheck",
@@ -62,24 +55,20 @@ public final class DeviceExpectedTsUtils {
      * Decides whether to clear the cached expected-timestamp triple after
      * folding in a USync response.
      *
-     * @apiNote
-     * Called from the USync handling path to keep the locally cached
-     * {@link DeviceList#expectedTimestamp()} consistent with the latest
-     * server signal. Returns {@code true} either when the new server
-     * timestamp has caught up to the cached expectation (so the expectation
-     * is no longer interesting), or when the incoming expectation matches
-     * the cached one but a newer ADV job has run since the cached observation
-     * (so the expectation is now redundant). Returns {@code false} otherwise.
+     * <p>Returns {@code true} either when the new server timestamp has caught
+     * up to the cached expectation (so the expectation is no longer
+     * interesting), or when the incoming expectation matches the cached one but
+     * a newer ADV job has run since the cached observation (so the expectation
+     * is now redundant); returns {@code false} otherwise. A {@code null} cached
+     * list, a deleted cached list, or a cached list with no
+     * {@link DeviceList#expectedTimestamp()} short-circuits to {@code false}. A
+     * {@code null} {@code lastADVCheckTime} is treated as older than any cached
+     * last-job timestamp.
      *
-     * @implNote
-     * This implementation mirrors the three-branch predicate of WA Web's
-     * {@code WAWebAdvExpectedTsApi.shouldClearExpectedTs}: a {@code null}
-     * or deleted cached list short-circuits to {@code false}, and the
-     * ADV-check comparison treats a {@code null}
-     * {@code expectedTsLastDeviceJobTs} as "older than any timestamp"
-     * matching the JS {@code ==null || r > n.expectedTsLastDeviceJobTs}
-     * check.
-     *
+     * @implNote This implementation treats a {@code null}
+     *           {@code expectedTsLastDeviceJobTs} as "older than any timestamp"
+     *           to match the JS {@code ==null || r > n.expectedTsLastDeviceJobTs}
+     *           comparison.
      * @param incomingTimestamp         the {@code ts} attribute from the
      *                                  server response
      * @param incomingExpectedTimestamp the {@code expected_ts} attribute from
@@ -122,10 +111,8 @@ public final class DeviceExpectedTsUtils {
      * Compares two expected-timestamp {@link Instant} values with
      * {@code null}-tolerant equality.
      *
-     * @apiNote
-     * Convenience helper for call sites that need to know whether two
-     * snapshots of an expected timestamp would round-trip the same value;
-     * both {@code null} counts as unchanged, a {@code null} paired with a
+     * <p>Returns {@code true} when the two values differ. Two {@code null}
+     * values count as unchanged, and a {@code null} paired with a
      * non-{@code null} counts as changed.
      *
      * @param oldExpectedTimestamp the previous expected timestamp, or
@@ -147,21 +134,16 @@ public final class DeviceExpectedTsUtils {
     }
 
     /**
-     * Drives {@link #computeNewExpectedTimestamp} from a cached {@link DeviceList}.
+     * Computes the updated expected-timestamp triple from a cached
+     * {@link DeviceList}.
      *
-     * @apiNote
-     * Reads the current expected-timestamp triple from the cached list (when
-     * non-deleted) and forwards it to
+     * <p>Reads the current expected-timestamp triple from the cached list when
+     * it is present and not deleted, then forwards those values to
      * {@link #computeNewExpectedTimestamp(Instant, Instant, Instant, Instant, Instant, Instant)}.
-     * Returned to callers that fold a fresh USync response into the cache
-     * before persisting the device record.
-     *
-     * @implNote
-     * This implementation reproduces WA Web's
-     * {@code computeExpectedTsForDeviceRecord}: a {@code null} cached list
-     * or a cached list missing a {@code timestamp} short-circuits to a blank
-     * tuple, and a deleted cached record contributes nothing to the carry
-     * forward.
+     * A {@code null} cached list or a cached list missing a {@code timestamp}
+     * short-circuits to a blank tuple, and a deleted cached record contributes
+     * nothing to the carry forward. Callers fold a fresh USync response into
+     * the cache through this helper before persisting the device record.
      *
      * @param incomingTimestamp the {@code ts} attribute from the server
      *                          response
@@ -208,23 +190,17 @@ public final class DeviceExpectedTsUtils {
     }
 
     /**
-     * Core staleness arithmetic over the six expected-timestamp inputs.
+     * Computes the updated expected-timestamp triple from the six raw inputs.
      *
-     * @apiNote
-     * Public for direct testing and reuse; production callers normally go
-     * through
-     * {@link #computeExpectedTimestampForDeviceRecord(Instant, DeviceList, Instant)}
-     * which marshals the inputs from a cached {@link DeviceList}.
-     *
-     * @implNote
-     * This implementation mirrors the JS {@code computeNewExpectedTs}: when
-     * neither the current timestamp nor the current expectation has fallen
-     * behind the incoming timestamp the cached triple is returned unchanged;
-     * otherwise the expectation moves to the incoming timestamp, the
+     * <p>When neither the current timestamp nor the current expectation has
+     * fallen behind the incoming timestamp the cached triple is returned
+     * unchanged. Otherwise the expectation moves to the incoming timestamp, the
      * last-job timestamp moves to {@code lastADVCheckTime}, and the
      * update-instant refreshes to {@link Instant#now()} only when a new
-     * expectation target is set (not when the existing target is
-     * reaffirmed).
+     * expectation target is set, not when the existing target is reaffirmed.
+     * Production callers normally reach this through
+     * {@link #computeExpectedTimestampForDeviceRecord(Instant, DeviceList, Instant)},
+     * which marshals the inputs from a cached {@link DeviceList}.
      *
      * @param incomingTimestamp                              the {@code ts}
      *                                                       attribute from
@@ -286,22 +262,21 @@ public final class DeviceExpectedTsUtils {
      * Tests whether a cached {@link DeviceList} has aged out and must be
      * re-queried.
      *
-     * @apiNote
-     * Invoked by the daily ADV device-info scheduler to identify users whose
-     * device lists are considered expired. The first branch matches the JS
-     * {@code S(e, t, n, r)} predicate (raw age beats the configured
-     * {@code num_days_key_index_list_expiration} threshold). The second
-     * branch matches the {@code expectedTsUpdateTs}-based fallback that
-     * triggers a re-query when the expected-timestamp tracking record is
-     * over 25 hours old and a new ADV check has run in between.
+     * <p>Returns {@code true} when the raw age of the list beats the configured
+     * expiry threshold, or when the expected-timestamp tracking record is older
+     * than the 25-hour grace window held in
+     * {@code EXPECTED_TIMESTAMP_UPDATE_THRESHOLD} and a new ADV check has run
+     * since the cached observation. A {@code null}
+     * {@link DeviceList#expectedTimestampUpdateTimestamp()} short-circuits the
+     * second branch to {@code false}. Invoked by the daily ADV device-info
+     * scheduler to identify users whose device lists are considered expired.
      *
-     * @implNote
-     * This implementation collapses the JS {@code !=r} job-comparison into
-     * {@link Objects#equals(Object, Object)} so a {@code null}
-     * {@code lastADVCheckTime} compared against a {@code null}
-     * {@code expectedTsLastDeviceJobTs} reports "matching" rather than
-     * "diverging", matching the JS truthiness semantics of {@code !==}.
-     *
+     * @implNote This implementation collapses the JS {@code !=r} job-comparison
+     *           into {@link Objects#equals(Object, Object)} so a {@code null}
+     *           {@code lastADVCheckTime} compared against a {@code null}
+     *           {@code expectedTsLastDeviceJobTs} reports "matching" rather
+     *           than "diverging", matching the JS truthiness semantics of
+     *           {@code !==}.
      * @param deviceList       the device list to check
      * @param currentTime      the current wall-clock time
      * @param expiryThreshold  the {@code num_days_key_index_list_expiration}
@@ -343,19 +318,16 @@ public final class DeviceExpectedTsUtils {
      * Tests whether a cached {@link DeviceList} is close enough to expiring
      * to warrant a pre-emptive refresh.
      *
-     * @apiNote
-     * Companion to {@link #isDeviceListStale(DeviceList, Instant, Duration, Instant)}
-     * used by the daily ADV scheduler to populate the
-     * {@code usersCloseToExpiration} bucket. Returns {@code true} when the
-     * raw age exceeds the warning budget, or when the server has signalled
-     * a newer device list exists via an {@code expectedTs} that sits ahead
-     * of the cached {@code ts}.
+     * <p>Returns {@code true} when the raw age of the list exceeds the warning
+     * budget, or when the server has signalled that a newer device list exists
+     * via an {@link DeviceList#expectedTimestamp()} that sits ahead of the
+     * cached {@link DeviceList#timestamp()}. Companion to
+     * {@link #isDeviceListStale(DeviceList, Instant, Duration, Instant)} used by
+     * the daily ADV scheduler to populate its close-to-expiration bucket.
      *
-     * @implNote
-     * This implementation mirrors WA Web's {@code R(e, t, n)} predicate;
-     * the warning budget is supplied by callers (Cobalt currently passes
-     * {@code expiryThreshold - num_days_before_device_expiry_check}).
-     *
+     * @implNote The warning budget is supplied by callers; Cobalt currently
+     *           passes the expiry threshold minus the
+     *           {@code num_days_before_device_expiry_check} margin.
      * @param deviceList       the device list to check
      * @param currentTime      the current wall-clock time
      * @param warningThreshold the budget after which a warning should fire

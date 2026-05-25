@@ -17,45 +17,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Exercises the LT-Hash accumulator in {@link MutationLTHash} against the
- * algebraic contract WA Web relies on for anti-tampering.
- *
- * @apiNote
- * Covers {@link MutationLTHash}, which wraps {@code WACryptoLtHash.LtHash16}.
- * The matrix pins down four algebraic properties (commutativity, associativity,
- * group inverse, determinism) plus the wire-level invariants (empty hash is
- * 128 zero bytes, HKDF expansion uses the captured info string, hash buffers
- * are always 128 bytes).
- *
- * @implNote
- * Three synthetic value MACs ({@link #A}, {@link #B}, {@link #C}) drive the
- * algebraic tests; the parity test additionally consumes WA-Web-captured
- * value MACs from {@code crypto/lt-hash.expected} when the fixture is
- * present.
+ * algebraic contract WA Web relies on for anti-tampering: four algebraic
+ * properties (commutativity, associativity, group inverse, determinism), the
+ * batched {@code subtractThenAdd} operation, defensive {@code copy}, tamper
+ * detection, and the wire-level invariants (empty hash is 128 zero bytes, hash
+ * buffers are always 128 bytes). Three synthetic value MACs ({@code A},
+ * {@code B}, {@code C}) drive the algebraic tests; the parity test additionally
+ * consumes WA-Web-captured value MACs from {@code crypto/lt-hash.expected} when
+ * the fixture is present.
  */
 @DisplayName("MutationLTHash")
 class MutationLTHashTest {
-    /**
-     * The first synthetic value MAC used in algebraic property tests.
-     */
     private static final byte[] A = filled(32, 0x11);
 
-    /**
-     * The second synthetic value MAC used in algebraic property tests.
-     */
     private static final byte[] B = filled(32, 0x22);
 
-    /**
-     * The third synthetic value MAC used in algebraic property tests.
-     */
     private static final byte[] C = filled(32, 0x33);
 
-    /**
-     * Builds a byte array filled with a single byte value.
-     *
-     * @param length the array length
-     * @param value  the fill value, truncated to a byte
-     * @return a freshly allocated array
-     */
     private static byte[] filled(int length, int value) {
         var out = new byte[length];
         for (var i = 0; i < length; i++) out[i] = (byte) value;

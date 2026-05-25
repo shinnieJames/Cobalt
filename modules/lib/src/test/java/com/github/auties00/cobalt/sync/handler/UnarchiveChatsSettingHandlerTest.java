@@ -27,25 +27,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link UnarchiveChatsSettingHandler}'s parity with
- * {@code WAWebArchiveSettingSync.applyMutations} and its side-effect
- * helpers.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * updates the {@code unarchiveChats} store flag and runs the matching
- * unarchive/re-archive side-effect over the stored archive sync
- * actions, the last-mutation-wins batch semantics, the
- * malformed/unsupported branches, and the default conflict-resolution
- * tiebreaker.
- *
- * @implNote
- * Tests seed the {@link com.github.auties00.cobalt.store.WhatsAppStore}
- * sync-action entries directly to drive the side-effect helpers; the
- * production helpers iterate
- * {@code WhatsAppStore.getSyncActionEntries(REGULAR_LOW)} so the
- * fixture only needs to insert {@code ArchiveChatAction} entries
- * matching the desired branch.
+ * Verifies {@link UnarchiveChatsSettingHandler}: applying an incoming
+ * mutation and asserting the {@code unarchiveChats} store flag plus the
+ * matching unarchive/re-archive side-effect, including the
+ * last-mutation-wins batch semantics. Tests seed the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} sync-action
+ * entries directly to drive the side-effect helpers.
  */
 @DisplayName("UnarchiveChatsSettingHandler")
 class UnarchiveChatsSettingHandlerTest {
@@ -54,36 +41,13 @@ class UnarchiveChatsSettingHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
-     * {@code unarchiveChats} flag and the archive sync-action entries
-     * start empty.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given setting value and operation into a trusted
-     * mutation under the canonical {@code ["setting_unarchiveChats"]}
-     * index.
-     *
-     * @apiNote
-     * The boxed {@link Boolean} {@code value} lets tests pass
-     * {@code null} to exercise the nullable-boolean-coalesces-to-false
-     * convention.
-     *
-     * @param value the new {@code unarchiveChats} flag, or {@code null} to omit
-     * @param op    the mutation operation
-     * @param ts    the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null value exercises the nullable-boolean-coalesces-to-false convention.
     private static DecryptedMutation.Trusted unarchiveMutation(Boolean value, SyncdOperation op, Instant ts) {
         var builder = new UnarchiveChatsSettingBuilder();
         if (value != null) builder.unarchiveChats(value);
@@ -241,7 +205,6 @@ class UnarchiveChatsSettingHandlerTest {
         @Test
         @DisplayName("only the last mutation is applied; earlier ones are reported as SKIPPED")
         void onlyLastIsApplied() {
-            // First mutation pushes true; second mutation pushes false; only the second should be applied.
             var results = new UnarchiveChatsSettingHandler().applyMutationBatch(client, List.of(
                     unarchiveMutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000)),
                     unarchiveMutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000))

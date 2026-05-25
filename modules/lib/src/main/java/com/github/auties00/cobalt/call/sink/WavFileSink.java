@@ -18,76 +18,75 @@ import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
 /**
- * {@link AudioSink} that writes incoming {@link AudioFrame}s to
- * a WAV file. WAV is implemented in pure Java (no FFmpeg
- * dependency) — the call wire format is already 16 kHz mono
- * signed-16-bit PCM, which maps 1:1 to a WAVE PCM payload.
+ * Writes call audio to a WAV file.
  *
- * <p>Behaviour:
- * <ul>
- *   <li>The 44-byte RIFF/WAVE header is written up-front with
- *       placeholder size fields.</li>
- *   <li>{@link #write} appends the frame's samples little-endian
- *       to the output stream.</li>
- *   <li>{@link #close} seeks back and patches the placeholder
- *       size fields with the final byte counts, then closes the
- *       file.</li>
- * </ul>
+ * <p>This sink records incoming frames as a canonical RIFF/WAVE PCM file. The 44-byte header is
+ * emitted up front with its two size fields zeroed; each {@link #write(AudioFrame)} appends the
+ * frame's samples little-endian to the body; and {@link #close()} seeks back to patch the size fields
+ * with the final byte counts and closes the file. Because the call wire format is already 16 kHz mono
+ * signed 16-bit PCM, the samples map one-to-one onto the WAVE payload and no FFmpeg dependency or
+ * re-encoding is involved. Writing after close throws.
  *
- * <p>For non-WAV outputs use
- * {@link CallRecorder}.
+ * @apiNote Wire this in to capture a call as an uncompressed WAV with no native dependency. The header
+ * is finalised only on {@link #close()}, so a recording whose process is killed before close leaves
+ * the size fields zeroed and most players treat the file as empty; for a compressed container or for
+ * video use {@link CallRecorder} instead.
  */
 public final class WavFileSink implements AudioSink, AutoCloseable {
     /**
-     * Sample rate the call wire uses (16 kHz).
+     * Names the sample rate written into the WAV header, matching the call wire rate of 16 kHz.
      */
     private static final int SAMPLE_RATE = 16_000;
 
     /**
-     * Channel count the call wire uses (mono).
+     * Names the channel count written into the WAV header, matching the call wire layout of mono.
      */
     private static final int CHANNELS = 1;
 
     /**
-     * Bit depth (S16).
+     * Names the bit depth written into the WAV header, matching the signed 16-bit call wire samples.
      */
     private static final int BITS_PER_SAMPLE = 16;
 
     /**
-     * Underlying file — kept as {@link RandomAccessFile} so we can
-     * seek back to patch the WAV header sizes on close.
+     * Holds the underlying file as a {@link RandomAccessFile} so the header size fields can be
+     * patched by seeking back on close.
      */
     private final RandomAccessFile raf;
 
     /**
-     * Buffered + writable view of {@link #raf}'s channel.
+     * Holds the writable channel view of {@link #raf}.
      */
     private final WritableByteChannel channel;
 
     /**
-     * Buffered output stream wrapping the channel, used for the
-     * sample writes (bulks small writes into 8 KB blocks).
+     * Holds a buffered stream over {@link #channel} used for the sample appends.
+     *
+     * @implNote This implementation wraps the channel in a {@link BufferedOutputStream} so the many
+     * small per-frame writes coalesce into larger block writes.
      */
     private final OutputStream out;
 
     /**
-     * Cumulative count of audio sample bytes written — used to
-     * compute the final WAV header sizes on close.
+     * Counts the audio sample bytes written so far, used to compute the final WAV size fields on
+     * close.
      */
     private long sampleBytes;
 
     /**
-     * Whether {@link #close} has run.
+     * Records whether {@link #close()} has run.
      */
     private boolean closed;
 
     /**
-     * Opens {@code path} for writing and emits the WAV header
-     * with placeholder size fields.
+     * Opens the given path for writing and emits the WAV header with placeholder size fields.
      *
-     * @param path the output file path
-     * @throws NullPointerException if {@code path} is null
-     * @throws UncheckedIOException if the file can't be opened
+     * <p>Truncates any existing file at the path, opens it for read-write so the header can later be
+     * patched, and writes the 44-byte header with its size fields zeroed.
+     *
+     * @param path the output file path; never {@code null}
+     * @throws NullPointerException if {@code path} is {@code null}
+     * @throws UncheckedIOException if the file cannot be opened or the header cannot be written
      */
     public WavFileSink(Path path) {
         Objects.requireNonNull(path, "path cannot be null");
@@ -106,11 +105,13 @@ public final class WavFileSink implements AudioSink, AutoCloseable {
     }
 
     /**
-     * Appends one frame of PCM samples to the WAV body.
+     * {@inheritDoc}
      *
-     * @param frame the frame to write
-     * @throws NullPointerException if {@code frame} is null
-     * @throws UncheckedIOException if the underlying write fails
+     * <p>Appends the frame's samples little-endian to the WAV body and advances the running byte
+     * count used to finalise the header on close.
+     *
+     * @throws IllegalStateException if the sink has already been closed
+     * @throws UncheckedIOException  if the underlying write fails
      */
     @Override
     public void write(AudioFrame frame) {
@@ -132,9 +133,13 @@ public final class WavFileSink implements AudioSink, AutoCloseable {
     }
 
     /**
-     * Flushes pending samples, patches the WAV header's
-     * placeholder sizes with the final byte counts, and closes
-     * the file. Idempotent.
+     * Flushes pending samples, patches the header size fields, and closes the file.
+     *
+     * <p>Flushes the buffered body, rewrites the two placeholder size fields with the final byte
+     * counts, and closes the file even if the patch fails. Calling this more than once does nothing
+     * after the first time, so it is idempotent.
+     *
+     * @throws UncheckedIOException if flushing or patching the header fails
      */
     @Override
     public void close() {
@@ -156,11 +161,14 @@ public final class WavFileSink implements AudioSink, AutoCloseable {
     }
 
     /**
-     * Writes the canonical 44-byte RIFF/WAVE PCM header with
-     * size fields zero'd — patched in {@link #patchHeaderSizes}
-     * on close.
+     * Writes the 44-byte RIFF/WAVE PCM header with its size fields zeroed.
      *
-     * @throws IOException if writing fails
+     * <p>Emits the {@code RIFF} chunk, the {@code WAVE} form type, the 16-byte {@code fmt } chunk
+     * carrying PCM format code 1 with the configured channel count, sample rate, byte rate, block
+     * align, and bit depth, and the {@code data} chunk header. The RIFF size and {@code data} size
+     * fields are left zero and are filled in by {@link #patchHeaderSizes()} on close.
+     *
+     * @throws IOException if writing the header fails
      */
     private void writeHeaderPlaceholder() throws IOException {
         var header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
@@ -181,8 +189,11 @@ public final class WavFileSink implements AudioSink, AutoCloseable {
     }
 
     /**
-     * Seeks back to the placeholder offsets and writes the final
-     * byte counts.
+     * Patches the header's two size fields with the final byte counts.
+     *
+     * <p>Seeks to offset 4 and writes the RIFF chunk size, the total sample byte count plus the
+     * 36 bytes of header that follow that field, then seeks to offset 40 and writes the {@code data}
+     * chunk size, the total sample byte count. Both values are stored little-endian.
      *
      * @throws IOException if seeking or writing fails
      */

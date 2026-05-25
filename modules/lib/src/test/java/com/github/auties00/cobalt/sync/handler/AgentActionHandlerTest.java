@@ -28,15 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link AgentActionHandler} - Cobalt's adapter for
- * {@code WAWebAgentSync}.
- *
- * <p>The handler maintains the business-account agent roster. SET mutations
- * merge the {@link AgentAction} payload into the store (even when the
- * {@code isDeleted} flag is set - the action is stored as-is). REMOVE
- * mutations drop the agent from the store. These tests pin the wire
- * metadata, the SET/REMOVE behaviour, the malformed-input fallbacks, and
- * the default timestamp-based conflict resolution.
+ * Covers {@link AgentActionHandler}, which maintains the business-account agent roster: SET merges
+ * the {@link AgentAction} payload into the store (the deleted flag is stored as-is), REMOVE drops
+ * the agent. Each test applies one trusted mutation built against an empty store seeded with a self
+ * phone-number and LID pair.
  */
 @DisplayName("AgentActionHandler")
 class AgentActionHandlerTest {
@@ -54,15 +49,6 @@ class AgentActionHandlerTest {
         handler = new AgentActionHandler();
     }
 
-    /**
-     * Builds a trusted mutation whose value carries the given agent action.
-     *
-     * @param indexId   the agent id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action    the agent action payload, may be {@code null}
-     * @param operation the sync operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted buildMutation(String indexId, AgentAction action, SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {
@@ -123,8 +109,7 @@ class AgentActionHandlerTest {
         @Test
         @DisplayName("a SET with isDeleted=true still upserts the agent - store as-is")
         void deletedFlagStored() {
-            // Per WA Web, the handler merges the agent regardless of the deleted flag; the
-            // tombstone is preserved so other devices can converge on the same state.
+            // The tombstone is preserved so other devices can converge on the same deleted state.
             var action = new AgentActionBuilder()
                     .name("Bob")
                     .deviceID(7)
@@ -146,8 +131,7 @@ class AgentActionHandlerTest {
         @Test
         @DisplayName("SET on an unknown agent id is the upsert path, not an orphan")
         void unknownIdUpserts() {
-            // Per WAWebAgentSync.applyMutations, the SET path is unconditional upsert. There is
-            // no prior-entity lookup that could produce an orphan outcome.
+            // SET is an unconditional upsert; there is no prior-entity lookup that could orphan.
             var action = new AgentActionBuilder().name("New").deviceID(0).isDeleted(false).build();
             var result = handler.applyMutation(client,
                     buildMutation("brand-new", action, SyncdOperation.SET, Instant.now()));
@@ -270,9 +254,7 @@ class AgentActionHandlerTest {
         @Test
         @DisplayName("AgentActionHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
-            // AgentActionHandler is an inbound-only handler in Cobalt. The outbound path is
-            // handled elsewhere (Cobalt does not currently emit deviceAgent mutations from this
-            // handler). Confirm the handler instantiates cleanly with no outbound surface.
+            // AgentActionHandler is inbound-only; it exposes no outbound mutation builder.
             assertNotNull(new AgentActionHandler(),
                     "AgentActionHandler has a public no-arg constructor and exposes no builder method");
         }

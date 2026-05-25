@@ -17,66 +17,55 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Drives the WA-relay Allocate handshake against a single te2
- * endpoint and returns a connected {@link UdpDatagramTransport} on
- * success.
+ * Drives the WhatsApp relay Allocate handshake against a single {@code te2} endpoint and returns a
+ * connected {@link UdpDatagramTransport} on success.
  *
- * <p>Phase 3 of the call-runtime buildout. The byte-level packet
- * building reuses the existing {@link WaRelayAllocateRequestBuilder}
- * (parity-tested against captured wasm output) and
- * {@link WaRelayMessageIntegrity}; this class adds:
- * <ul>
- *   <li>UDP socket lifecycle (one socket per allocate attempt);</li>
- *   <li>retry policy (3 attempts at 200 ms RTO);</li>
- *   <li>Allocate-Response parsing — extracts the
- *       {@link WaRelayAttributeType#XOR_RELAYED_ADDRESS} attribute and
- *       verifies the {@link WaRelayAttributeType#MESSAGE_INTEGRITY}
- *       MAC against the offer's
- *       {@link OfferTransportSpec#callKey() call key};</li>
- *   <li>response-side surface — returns an
- *       {@link UdpDatagramTransport} bound to the source port that
- *       received the response, ready to carry the next layer's
- *       traffic (Phase 4 DTLS-SRTP).</li>
- * </ul>
+ * <p>Each {@link #connect(OfferTransportSpec, int)} call resolves the chosen endpoint, builds an
+ * {@link WaRelayMessageType#ALLOCATE_REQUEST} via {@link WaRelayAllocateRequestBuilder} keyed on the
+ * offer's {@link OfferTransportSpec#callKey() call key}, and sends it over a fresh UDP socket. The
+ * Allocate Success Response is matched on transaction id, integrity-checked via
+ * {@link WaRelayMessageIntegrity}, and mined for its {@link WaRelayAttributeType#XOR_RELAYED_ADDRESS}
+ * attribute. The request is retried up to {@link #MAX_ATTEMPTS} times at the
+ * {@link #RECV_TIMEOUT_MILLIS}-millisecond retransmit timeout, and on success the result is an
+ * {@link UdpDatagramTransport} ready for the next layer's traffic.
  *
- * <p>The {@code <key>} content in WA's offer is the BASE64 TEXT of
- * the relay key — the HMAC-SHA1 input is those ASCII bytes
- * (padding included), <em>not</em> the base64-decoded binary form
- * (per {@link WaRelayMessageIntegrity}'s javadoc).
+ * @implNote This implementation feeds the offer's call key directly to the HMAC stamp: the
+ * {@code <key>} content in WhatsApp's offer is the base64 text of the relay key, and
+ * {@link WaRelayMessageIntegrity} keys the HMAC-SHA1 on those ASCII bytes (padding included) rather
+ * than the base64-decoded binary form.
  */
 public final class WaRelayConnector {
     /**
-     * STUN transaction-id length in bytes (RFC 5389 §6).
+     * Holds the STUN transaction-id length in bytes (RFC 5389 section 6).
      */
     private static final int TRANSACTION_ID_LENGTH = 12;
 
     /**
-     * Receive-timeout per attempt, in milliseconds. Tuned to the
-     * 200 ms RTO that WA's wasm engine empirically uses for the first
-     * retransmit.
+     * Holds the per-attempt receive timeout in milliseconds.
+     *
+     * @implNote This implementation uses 200 milliseconds to match the first-retransmit timeout that
+     * WhatsApp's wasm engine empirically applies.
      */
     private static final int RECV_TIMEOUT_MILLIS = 200;
 
     /**
-     * Total number of allocate attempts before giving up.
+     * Holds the total number of Allocate attempts before the handshake gives up.
      */
     private static final int MAX_ATTEMPTS = 3;
 
     /**
-     * Random source for transaction ids.
+     * Provides random transaction ids, fresh per attempt.
      */
     private final SecureRandom random = new SecureRandom();
 
     /**
-     * Result of a successful Allocate handshake.
+     * Carries the outcome of a successful Allocate handshake.
      *
-     * @param transport         the connected {@link UdpDatagramTransport}
-     *                          bound to the source port that received
-     *                          the response; ready for the next layer
-     * @param relayedAddress    the {@code XOR-RELAYED-ADDRESS} the
-     *                          server allocated for this client
-     * @param transactionId     the 12-byte transaction id used by the
-     *                          request — useful for keepalive correlation
+     * @param transport      the connected {@link UdpDatagramTransport} bound to the source port that
+     *                       received the response, ready for the next layer
+     * @param relayedAddress the {@code XOR-RELAYED-ADDRESS} the server allocated for this client
+     * @param transactionId  the 12-byte transaction id used by the request, useful for keepalive
+     *                       correlation
      */
     public record Allocation(
             UdpDatagramTransport transport,
@@ -86,22 +75,23 @@ public final class WaRelayConnector {
     }
 
     /**
-     * Performs the Allocate handshake against the te2 endpoint at the
-     * given index of {@code spec.te2Endpoints()}.
+     * Performs the Allocate handshake against the {@code te2} endpoint at the given index of the
+     * spec's endpoint list.
      *
-     * @param spec       the parsed offer transport spec — supplies
-     *                   tokens, auth tokens, key, and te2 endpoints
-     * @param te2Index   the index into {@code spec.te2Endpoints()} of
-     *                   the endpoint to try
+     * <p>Resolves the relay and auth tokens the endpoint references, resolves the endpoint's domain
+     * name to an address, builds a single-entry IPv4 {@link WaRelayCallInfo}, and retransmits the
+     * request up to {@link #MAX_ATTEMPTS} times, parsing the first valid Allocate Success Response.
+     *
+     * @param spec     the parsed offer transport spec supplying tokens, auth tokens, key, and
+     *                 {@code te2} endpoints
+     * @param te2Index the index into the spec's endpoint list of the endpoint to try
      * @return the allocation result
-     * @throws WhatsAppCallException.Ice if the handshake fails after
-     *                                   {@link #MAX_ATTEMPTS} attempts,
-     *                                   if DNS resolution fails, or if
-     *                                   the response is malformed /
-     *                                   integrity-check rejected
-     * @throws IllegalArgumentException  if {@code te2Index} is out of
-     *                                   range or required tokens are
-     *                                   missing from {@code spec}
+     * @throws NullPointerException      if {@code spec} is {@code null}
+     * @throws WhatsAppCallException.Ice if DNS resolution fails, the handshake times out after
+     *                                   {@link #MAX_ATTEMPTS} attempts, or the response is malformed,
+     *                                   mismatched, or integrity-check rejected
+     * @throws IllegalArgumentException  if {@code te2Index} is out of range or the spec is missing a
+     *                                   token or auth token the endpoint references
      */
     public Allocation connect(OfferTransportSpec spec, int te2Index) {
         Objects.requireNonNull(spec, "spec cannot be null");
@@ -123,8 +113,7 @@ public final class WaRelayConnector {
         } catch (Exception e) {
             throw new WhatsAppCallException.Ice("DNS lookup failed for " + te2.domainName(), e);
         }
-        // WA's te2 endpoints listen on port 3478 (standard TURN port) —
-        // verified against the relay-list-updates capture.
+        // 3478 is the standard TURN port; verified against the relay-list-updates capture.
         var relayPort = 3478;
         var remote = new InetSocketAddress(address, relayPort);
 
@@ -144,8 +133,6 @@ public final class WaRelayConnector {
             var request = WaRelayAllocateRequestBuilder.build(
                     transactionId, relayToken.bytes(), callInfo,
                     address, relayPort, callKey);
-            // Open a fresh DatagramSocket per attempt so the receive
-            // timeout doesn't accumulate state.
             try (var socket = new DatagramSocket()) {
                 socket.setSoTimeout(RECV_TIMEOUT_MILLIS);
                 socket.connect(remote);
@@ -157,9 +144,6 @@ public final class WaRelayConnector {
                 System.arraycopy(buffer, 0, responseBytes, 0, response.getLength());
                 var allocation = parseAllocateResponse(
                         responseBytes, transactionId, callKey, remote);
-                // The temporary socket is closed at the end of the
-                // try-with-resources — open a fresh UdpDatagramTransport
-                // on a new socket for the higher layers to use.
                 var transport = new UdpDatagramTransport(remote);
                 return new Allocation(transport, allocation, transactionId);
             } catch (SocketTimeoutException _) {
@@ -169,28 +153,30 @@ public final class WaRelayConnector {
                                     + MAX_ATTEMPTS + " attempts against "
                                     + te2.domainName());
                 }
-                // continue to next attempt
             } catch (IOException e) {
                 throw new WhatsAppCallException.Ice(
                         "allocate I/O failed against " + te2.domainName(), e);
             }
         }
-        // Unreachable — the loop either returns or throws.
         throw new WhatsAppCallException.Ice("allocate fell through retry loop");
     }
 
     /**
-     * Parses an Allocate Success Response payload, verifies its
-     * integrity, and extracts the relayed address.
+     * Parses an Allocate Success Response, verifies its integrity, and extracts the relayed address.
+     *
+     * <p>Decodes the packet, asserts the message type is {@link WaRelayMessageType#ALLOCATE_SUCCESS}
+     * and the transaction id matches the request, verifies the {@code MESSAGE-INTEGRITY} attribute via
+     * {@link WaRelayMessageIntegrity#verify(byte[], byte[])}, and decodes the
+     * {@link WaRelayAttributeType#XOR_RELAYED_ADDRESS} attribute into an {@link InetSocketAddress}.
      *
      * @param responseBytes the response packet bytes
-     * @param transactionId the request's transaction id (used to verify
-     *                      the response is a match)
+     * @param transactionId the request's transaction id, used to confirm the response is a match
      * @param relayKey      the HMAC-SHA1 key
-     * @param relayRemote   the te2 endpoint we sent to (for error
-     *                      messages)
-     * @return the {@code XOR-RELAYED-ADDRESS} attribute decoded as a
-     *         standard {@link InetSocketAddress}
+     * @param relayRemote   the {@code te2} endpoint that was sent to, used in error messages
+     * @return the {@code XOR-RELAYED-ADDRESS} attribute decoded as an {@link InetSocketAddress}
+     * @throws WhatsAppCallException.Ice if the message type is unexpected, the transaction id does not
+     *                                   match, the MAC verification fails, or no
+     *                                   {@code XOR-RELAYED-ADDRESS} attribute is present
      */
     private static InetSocketAddress parseAllocateResponse(
             byte[] responseBytes, byte[] transactionId, byte[] relayKey,
@@ -222,8 +208,11 @@ public final class WaRelayConnector {
     }
 
     /**
-     * Looks up the {@link OfferTransportSpec.RelayToken} with the
-     * given wire id.
+     * Looks up the {@link OfferTransportSpec.RelayToken} with the given wire id.
+     *
+     * @param tokens the candidate relay tokens
+     * @param id     the wire id to match
+     * @return the matching token, or {@link Optional#empty()} when none has that id
      */
     private static Optional<OfferTransportSpec.RelayToken> findToken(
             List<OfferTransportSpec.RelayToken> tokens, int id) {
@@ -234,8 +223,11 @@ public final class WaRelayConnector {
     }
 
     /**
-     * Looks up the {@link OfferTransportSpec.AuthToken} with the
-     * given wire id.
+     * Looks up the {@link OfferTransportSpec.AuthToken} with the given wire id.
+     *
+     * @param authTokens the candidate auth tokens
+     * @param id         the wire id to match
+     * @return the matching auth token, or {@link Optional#empty()} when none has that id
      */
     private static Optional<OfferTransportSpec.AuthToken> findAuthToken(
             List<OfferTransportSpec.AuthToken> authTokens, int id) {

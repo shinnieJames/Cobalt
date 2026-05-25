@@ -14,9 +14,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsSetSubjectRequest}.
+ * Models the sealed reply family for a {@link SmaxGroupsSetSubjectRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsSetSubjectRPC}.
+ * <p>The three permitted variants are {@link Success}, {@link ClientError}, and {@link ServerError}.
  * {@link Success} carries no payload because the relay's acknowledgement is empty; the actual subject change is
  * broadcast back to participants via a separate notification path.
  */
@@ -27,11 +27,11 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
      * Dispatches the inbound IQ across each {@link SmaxGroupsSetSubjectResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsSetSubjectRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the caller so
+     * it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsSetSubjectRequest} stanza, used to validate echoed
@@ -56,10 +56,10 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
     }
 
     /**
-     * The reply variant emitted when the relay accepted the subject mutation.
+     * Represents the reply variant emitted when the relay accepted the subject mutation.
      *
-     * @apiNote The payload is empty by design: the relay returns a bare {@code type="result"} envelope and the
-     * actual subject change is broadcast back to participants via a separate notification path.
+     * <p>The variant carries no fields: the relay returns a bare {@code type="result"} envelope and the actual
+     * subject change is broadcast back to participants via a separate notification path.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetSubjectResponseSuccess")
     final class Success implements SmaxGroupsSetSubjectResponse {
@@ -72,8 +72,8 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseSetSubjectResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request. No further fields are extracted.
+         * <p>The IQ must be a valid {@code type="result"} echo of {@code request}, validated through
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}; no further fields are extracted.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -125,8 +125,8 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
-     * referencing a non-existent group.
+     * Represents the reply variant emitted when the relay rejected the request envelope as malformed,
+     * unauthorised, or referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetSubjectResponseClientError")
     final class ClientError implements SmaxGroupsSetSubjectResponse {
@@ -172,8 +172,9 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -231,7 +232,7 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Represents the reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetSubjectResponseServerError")
     final class ServerError implements SmaxGroupsSetSubjectResponse {
@@ -277,8 +278,9 @@ public sealed interface SmaxGroupsSetSubjectResponse extends SmaxOperation.Respo
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

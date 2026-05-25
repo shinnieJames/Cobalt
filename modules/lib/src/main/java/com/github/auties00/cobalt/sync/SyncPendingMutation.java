@@ -11,21 +11,19 @@ import java.util.UUID;
  * has been produced by Cobalt and is waiting to be uploaded on the next
  * syncd round-trip.
  *
- * @apiNote Mirrors the shape carried by WhatsApp Web's
- * {@code WAWebPendingMutationStore} IndexedDB rows
- * ({@code WAWebSchemaPendingMutations.convertToPendingMutationFromRow})
- * with one Cobalt-specific addition: an {@code attemptCount} field that
- * lets the syncd retry loop count attempts per row without consulting the
- * collection-level {@code WAWebSyncdCollectionsStateMachine}. End users
- * never construct these directly; they are produced by the per-handler
- * {@code <Name>MutationFactory} classes and persisted by
- * {@link WebAppStateService}.
+ * <p>Rows are produced by the per-handler {@code <Name>MutationFactory}
+ * classes and persisted by {@link WebAppStateService}; they are not
+ * constructed by embedders. Each row carries the trusted decrypted mutation,
+ * the number of upload attempts already made for it, and a generated
+ * identifier that correlates the upload IQ stanza with the server-side
+ * acknowledgement that follows.
  *
- * @implNote This implementation has no IndexedDB-backed primary-key column;
- * instead the {@code mutationId} field is a {@link UUID#randomUUID()}
- * string created at construction time, which serves the same role for
- * correlating an upload IQ stanza with the server-side acknowledgement
- * that follows.
+ * @implNote This implementation adds an {@link #attemptCount()} field beyond
+ * the shape of WhatsApp Web's pending-mutation IndexedDB rows so the syncd
+ * retry loop can count attempts per row without consulting the
+ * collection-level state machine. There is no IndexedDB-backed primary-key
+ * column; the {@code mutationId} field is a {@link UUID#randomUUID()} string
+ * created at construction time, which serves the same correlation role.
  */
 @WhatsAppWebModule(moduleName = "WAWebPendingMutationStore")
 public final class SyncPendingMutation {
@@ -49,14 +47,12 @@ public final class SyncPendingMutation {
      * Builds a fresh pending-mutation row with a generated identifier and
      * the given attempt count.
      *
-     * @apiNote Called from the {@code *MutationFactory} classes when a new
-     * outgoing mutation is enqueued for the next sync round-trip; the
-     * generated id is what {@link WebAppStateService} later uses to
+     * <p>The generated id is what {@link WebAppStateService} later uses to
      * correlate the server acknowledgement.
      *
      * @param mutation     the trusted decrypted mutation to enqueue
-     * @param attemptCount the initial attempt count, typically {@code 0}
-     *                     for a freshly enqueued row
+     * @param attemptCount the initial attempt count, typically {@code 0} for
+     *                     a freshly enqueued row
      */
     public SyncPendingMutation(DecryptedMutation.Trusted mutation, int attemptCount) {
         this(UUID.randomUUID().toString(), mutation, attemptCount);
@@ -65,9 +61,8 @@ public final class SyncPendingMutation {
     /**
      * Builds a pending-mutation row with an explicit identifier.
      *
-     * @apiNote Used by {@link #incrementAttempt()} to preserve the original
-     * identifier across retry attempts and by tests that need a
-     * deterministic id.
+     * <p>Used by {@link #incrementAttempt()} to preserve the original
+     * identifier across retry attempts.
      *
      * @param mutationId   the identifier to bind to the new row
      * @param mutation     the trusted decrypted mutation to enqueue
@@ -83,10 +78,9 @@ public final class SyncPendingMutation {
      * Returns a new row that carries the same identifier and mutation as
      * this one but with {@code attemptCount + 1}.
      *
-     * @apiNote Called by the syncd retry path after a failed upload, before
+     * <p>Called by the syncd retry path after a failed upload, before
      * re-enqueuing the row for the next attempt. The original instance is
-     * left untouched, matching the immutable-record style of the rest of
-     * the sync package.
+     * left untouched.
      *
      * @return a new {@link SyncPendingMutation} instance with the bumped
      *         {@link #attemptCount()}
@@ -96,14 +90,11 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * Returns the opaque identifier bound to this row at construction
-     * time.
+     * Returns the opaque identifier bound to this row at construction time.
      *
-     * @apiNote The id is the only stable handle through which the upload
-     * IQ can be correlated with the server acknowledgement that closes
-     * the round-trip; downstream consumers like
-     * {@code WAWebSyncdRequestBuilderBuild._generateMutationsToUpload}
-     * key their per-mutation bookkeeping on this value.
+     * <p>The id is the only stable handle through which the upload IQ can be
+     * correlated with the server acknowledgement that closes the
+     * round-trip.
      *
      * @return the identifier supplied at construction
      */
@@ -114,9 +105,8 @@ public final class SyncPendingMutation {
     /**
      * Returns the trusted decrypted mutation wrapped by this row.
      *
-     * @apiNote Used by the upload path to read the underlying
-     * {@link DecryptedMutation.Trusted} payload that will be re-encrypted
-     * and serialised into the syncd patch IQ.
+     * <p>The upload path reads this payload to re-encrypt and serialise it
+     * into the syncd patch IQ.
      *
      * @return the wrapped {@link DecryptedMutation.Trusted}
      */
@@ -125,11 +115,11 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * Returns the number of upload attempts that have already been made
-     * for this row.
+     * Returns the number of upload attempts that have already been made for
+     * this row.
      *
-     * @apiNote Read by the syncd retry loop to gate per-row backoff
-     * decisions independently of the collection-level state machine.
+     * <p>The syncd retry loop reads this to gate per-row backoff decisions
+     * independently of the collection-level state machine.
      *
      * @return the current attempt count, monotonically increased by
      *         {@link #incrementAttempt()}
@@ -139,13 +129,16 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * {@inheritDoc}
+     * Indicates whether the given object is equal to this row.
      *
-     * @implNote This implementation compares every field
-     * ({@link #mutationId()}, {@link #mutation()},
-     * {@link #attemptCount()}) so that two rows with the same payload but
-     * different identifiers, or the same identifier but different attempt
-     * counts, are considered distinct.
+     * <p>Two rows are equal when they share the same {@link #mutationId()},
+     * {@link #mutation()}, and {@link #attemptCount()}, so that two rows with
+     * the same payload but different identifiers, or the same identifier but
+     * different attempt counts, are considered distinct.
+     *
+     * @param o the object to compare against
+     * @return {@code true} if {@code o} is a {@link SyncPendingMutation} with
+     *         the same three fields
      */
     @Override
     public boolean equals(Object o) {
@@ -156,10 +149,12 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
      *
-     * @implNote This implementation hashes the same triple of fields as
-     * {@link #equals(Object)} to keep the contract consistent.
+     * <p>The hash combines the same triple of fields that
+     * {@link #equals(Object)} compares.
+     *
+     * @return the hash code for this row
      */
     @Override
     public int hashCode() {
@@ -167,11 +162,13 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a single-line, comma-separated rendering of this row with
+     * every field labeled.
      *
-     * @implNote This implementation emits a single-line, comma-separated
-     * record-style rendering with every field labeled, intended for log
-     * lines rather than user-facing display.
+     * <p>The output is intended for log lines rather than user-facing
+     * display.
+     *
+     * @return the string rendering of this row
      */
     @Override
     public String toString() {

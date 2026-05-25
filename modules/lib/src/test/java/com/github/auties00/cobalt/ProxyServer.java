@@ -30,48 +30,28 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * A minimal local proxy server for integration testing.
- *
- * <p>Implementations support HTTP {@code CONNECT} (plaintext or TLS).
- * Each proxy runs on a random ephemeral port and can be converted to
- * the corresponding {@link WhatsAppProxy} via {@link #toProxy()}.
- *
- * <p>Call {@link #close()} to shut down the server and release the port.
+ * Test-harness proxy server that lets integration tests route a {@link WhatsAppProxy} through a
+ * minimal local HTTP {@code CONNECT} (plaintext or TLS), SOCKS4/4a, or SOCKS5/5h endpoint. Each
+ * proxy binds a random ephemeral port, exposes itself as a {@link WhatsAppProxy} via
+ * {@link #toProxy()}, and releases the port on {@link #close()}.
  */
 public sealed abstract class ProxyServer implements Closeable {
-    /**
-     * The executor for handling client connections.
-     */
     protected final ExecutorService executor;
 
-    /**
-     * The bound server socket.
-     */
     protected final ServerSocket serverSocket;
 
-    /**
-     * Creates and starts a proxy server.
-     *
-     * @param serverSocket the bound server socket
-     */
     protected ProxyServer(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         executor.submit(this::acceptLoop);
     }
 
-    /**
-     * Returns the local port this proxy is listening on.
-     *
-     * @return the port number
-     */
     public int port() {
         return serverSocket.getLocalPort();
     }
 
     /**
-     * Returns the {@link WhatsAppProxy} configuration pointing
-     * at this local server.
+     * Returns the {@link WhatsAppProxy} configuration pointing at this local server.
      *
      * @return the proxy configuration
      */
@@ -83,9 +63,6 @@ public sealed abstract class ProxyServer implements Closeable {
         serverSocket.close();
     }
 
-    /**
-     * Accepts connections in a loop until the server socket is closed.
-     */
     private void acceptLoop() {
         try {
             while (!serverSocket.isClosed()) {
@@ -116,7 +93,7 @@ public sealed abstract class ProxyServer implements Closeable {
     protected abstract void handleClient(Socket client) throws IOException;
 
     /**
-     * Relays bytes between two sockets until one side closes.
+     * Relays bytes in both directions between two sockets until either side closes.
      *
      * @param a the first socket
      * @param b the second socket
@@ -128,9 +105,6 @@ public sealed abstract class ProxyServer implements Closeable {
         }
     }
 
-    /**
-     * Pipes bytes from source to destination until EOF.
-     */
     private static void pipe(Socket source, Socket destination) {
         try {
             var buf = new byte[8192];
@@ -318,9 +292,6 @@ public sealed abstract class ProxyServer implements Closeable {
         }
     }
 
-    /**
-     * Reads an ASCII line terminated by CRLF or LF.
-     */
     private static String readLine(InputStream in) throws IOException {
         var sb = new StringBuilder();
         int b;
@@ -333,9 +304,6 @@ public sealed abstract class ProxyServer implements Closeable {
         return sb.isEmpty() ? null : sb.toString().stripTrailing();
     }
 
-    /**
-     * Parses "CONNECT host:port HTTP/1.x" into host and port.
-     */
     private static InetSocketAddress parseConnectTarget(String line) {
         var parts = line.split("\\s+");
         if (parts.length < 2) {

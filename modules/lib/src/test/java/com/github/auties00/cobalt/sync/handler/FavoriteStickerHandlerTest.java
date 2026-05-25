@@ -28,28 +28,18 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link FavoriteStickerHandler} adapter for
- * {@code WAWebStickersFavoriteSyncAction}.
+ * Covers the {@link FavoriteStickerHandler} for the {@code favoriteSticker}
+ * app-state sync action: metadata, the SET happy path (feature-enabled add and
+ * remove), the orphan branch when the {@code favorite_sticker} primary feature
+ * is absent, the malformed-value and malformed-index branches, the REMOVE
+ * rejection, timestamp-based conflict resolution, the per-item batch dispatch
+ * and the {@link FavoriteStickerMutationFactory} builder.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code favoriteSticker}
- * app-state sync action across metadata, the SET happy path
- * (feature-enabled add and remove), the orphan branch when the
- * {@code favorite_sticker} primary feature is absent, the
- * malformed-value and malformed-index branches, the REMOVE
- * rejection, the inherited timestamp-based conflict resolution,
- * the per-item batch dispatch and the static
- * {@code getFavoriteStickerMutation} builder.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#findFavouriteSticker(String)}
- * read-back can be asserted directly. The
- * {@code "favorite_sticker"} primary feature flag is toggled by
- * mutating the store's primary-features set so the gating branch is
- * deterministic.
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the
+ * {@link WhatsAppStore#findFavouriteSticker(String)} read-back can be asserted
+ * directly. The {@code "favorite_sticker"} primary feature flag is toggled via
+ * the store's primary-features set so the gating branch is deterministic.
  */
 @DisplayName("FavoriteStickerHandler")
 class FavoriteStickerHandlerTest {
@@ -61,33 +51,12 @@ class FavoriteStickerHandlerTest {
     private WhatsAppStore store;
     private TestWhatsAppClient client;
 
-    /**
-     * Resets the in-memory test harness before each test.
-     *
-     * @apiNote
-     * Each test owns a fresh {@link DeviceFixtures#temporaryStore} so
-     * mutations from a previous test cannot leak into the next.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Builds a {@link SyncdOperation#SET} {@link DecryptedMutation.Trusted}
-     * carrying the given sticker action and pre-built index string.
-     *
-     * @apiNote
-     * Used by every SET-path test to keep the mutation construction
-     * boilerplate out of the test bodies and to lock the timestamp
-     * across the suite.
-     *
-     * @param action the {@link StickerAction} payload
-     * @param index  the JSON-encoded mutation index
-     * @return a {@link DecryptedMutation.Trusted} with the wire-shaped
-     *         envelope
-     */
     private static DecryptedMutation.Trusted setMutation(StickerAction action, String index) {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
         var value = new SyncActionValueBuilder()
@@ -97,19 +66,6 @@ class FavoriteStickerHandlerTest {
         return new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, StickerAction.ACTION_VERSION);
     }
 
-    /**
-     * Builds a {@link SyncdOperation#REMOVE}
-     * {@link DecryptedMutation.Trusted} for the canonical sticker hash.
-     *
-     * @apiNote
-     * Used by the REMOVE-rejection branch to verify that the handler
-     * short-circuits with
-     * {@link MutationApplicationResult#unsupported()}
-     * regardless of the action payload.
-     *
-     * @return a {@link DecryptedMutation.Trusted} with operation
-     *         {@link SyncdOperation#REMOVE}
-     */
     private static DecryptedMutation.Trusted removeMutation() {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
         var value = new SyncActionValueBuilder()

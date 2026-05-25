@@ -15,36 +15,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="tos" type="get">} stanza that asks the
- * relay for the user-facing legal disclosures the account must
- * acknowledge.
+ * Builds the outbound {@code <iq xmlns="tos" type="get">} stanza that asks the relay for the
+ * user-facing legal disclosures the account must acknowledge.
  *
- * @apiNote
- * Built by Cobalt's TOS-prompt path, the counterpart of WA Web's
- * {@code WAWebGetUserDisclosuresQueryJob.queryAllUserDisclosures}. The
- * relay returns one {@code <notice>} per outstanding disclosure
- * (terms-of-service updates, regional privacy notices, biz-broadcast
- * opt-in prompts, etc.); embedders surface these to their UI so the user
- * can read and accept.
+ * <p>The relay answers with one {@code <notice>} per outstanding disclosure (terms-of-service
+ * updates, regional privacy notices, biz-broadcast opt-in prompts, and similar prompts), parsed
+ * by {@link SmaxUserNoticeGetDisclosuresResponse}. The reply lets a client render the prompts so
+ * the user can read and accept them. The single {@code getUserDisclosuresT} field carries the
+ * client-side fetch timestamp the relay uses to decide which disclosures to surface.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutUserNoticeGetDisclosuresRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutUserNoticeBaseIQGetRequestMixin")
 public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.Request {
     /**
-     * The client-side fetch timestamp (seconds since the UNIX epoch) the
-     * relay uses to decide which disclosures to return.
+     * Holds the client-side fetch timestamp, in seconds since the UNIX epoch, that the relay uses
+     * to decide which disclosures to return.
      */
     private final long getUserDisclosuresT;
 
     /**
-     * Constructs a request.
+     * Constructs a request carrying the given fetch timestamp.
      *
-     * @apiNote
-     * Pass the current wall-clock time in seconds (WA Web uses
-     * {@code WATimeUtils.unixTime()}); the relay uses the timestamp to
-     * decide which disclosures to surface.
+     * <p>The timestamp is the current wall-clock time in seconds; the relay uses it to decide
+     * which disclosures to surface.
      *
-     * @param getUserDisclosuresT the fetch timestamp in seconds
+     * @param getUserDisclosuresT the fetch timestamp in seconds since the UNIX epoch
      */
     public SmaxUserNoticeGetDisclosuresRequest(long getUserDisclosuresT) {
         this.getUserDisclosuresT = getUserDisclosuresT;
@@ -53,11 +48,10 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     /**
      * Returns the client-side fetch timestamp.
      *
-     * @apiNote
-     * Used by {@link #toNode()} to populate the {@code t} attribute on
-     * the {@code <get_user_disclosures>} child.
+     * <p>The value is stamped onto the {@code t} attribute of the {@code <get_user_disclosures>}
+     * child by {@link #toNode()}.
      *
-     * @return the timestamp in seconds
+     * @return the fetch timestamp in seconds since the UNIX epoch
      */
     public long getUserDisclosuresT() {
         return getUserDisclosuresT;
@@ -66,12 +60,13 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     /**
      * {@inheritDoc}
      *
+     * <p>Produces the {@code <iq xmlns="tos" type="get" to="s.whatsapp.net">} envelope wrapping a
+     * single {@code <get_user_disclosures t="..."/>} child carrying the fetch timestamp.
+     *
      * @implNote
-     * This implementation hard-codes {@code xmlns="tos"},
-     * {@code type="get"}, and {@code to=s.whatsapp.net} per the
-     * {@code WASmaxOutUserNoticeGetDisclosuresRequest.makeGetDisclosuresRequest}
-     * fixture, then nests a single {@code <get_user_disclosures t="..."/>}
-     * child carrying the timestamp.
+     * This implementation addresses the envelope to {@link JidServer#user()} and hard-codes the
+     * {@code tos} namespace and {@code get} type, matching the wire shape of the polled relay
+     * endpoint.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutUserNoticeGetDisclosuresRequest",
@@ -92,8 +87,7 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation compares the fetch timestamp.
+     * <p>Two requests are equal when they carry the same fetch timestamp.
      */
     @Override
     public boolean equals(Object obj) {
@@ -110,8 +104,7 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation hashes the fetch timestamp.
+     * <p>The hash is derived from the fetch timestamp.
      */
     @Override
     public int hashCode() {
@@ -121,9 +114,8 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation mirrors the record-like rendering used across
-     * the {@code Smax*} stanza family.
+     * <p>Renders the type name and the fetch timestamp in the record-like form shared across the
+     * {@code Smax} stanza family.
      */
     @Override
     public String toString() {

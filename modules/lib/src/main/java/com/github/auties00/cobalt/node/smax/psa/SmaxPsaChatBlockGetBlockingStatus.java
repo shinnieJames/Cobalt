@@ -13,36 +13,35 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The two documented values of the {@code <blocking status="...">}
- * attribute on a PSA chat-block IQ result.
+ * Enumerates the two documented values of the {@code status} attribute on a
+ * {@code <blocking>} child of a PSA chat-block IQ result.
  *
- * @apiNote
- * Surfaces the boolean
- * {@code WAWebQueryBlockListJob.getBlockingStatusForPSAUser} return value:
- * {@code true} when {@link #BLOCKED} is returned, {@code false} when
- * {@link #UNBLOCKED} is returned. The WA Web validator
- * {@code WASmaxInPsaEnums.ENUM_BLOCKED_UNBLOCKED} accepts only these two
- * literals; anything else fails the parse.
+ * <p>The two constants project the boolean PSA-mute flag carried over the
+ * wire: {@link #BLOCKED} stands for the muted state and {@link #UNBLOCKED}
+ * for the delivering state. The wire only ever carries the literals
+ * {@code "blocked"} and {@code "unblocked"}; any other token fails to
+ * resolve through {@link #ofWire(String)}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInPsaEnums")
 public enum SmaxPsaChatBlockGetBlockingStatus {
     /**
-     * The PSA broadcast channel is currently muted server-side for this
-     * user.
+     * Denotes that the PSA broadcast channel is currently muted server-side
+     * for this user.
      */
     BLOCKED("blocked"),
     /**
-     * The PSA broadcast channel is currently delivering to this user.
+     * Denotes that the PSA broadcast channel is currently delivering to this
+     * user.
      */
     UNBLOCKED("unblocked");
 
     /**
-     * The wire-level literal carried by the {@code status} attribute.
+     * Holds the wire-level literal carried by the {@code status} attribute.
      */
     private final String wireValue;
 
     /**
-     * Constructs an enum constant.
+     * Constructs an enum constant bound to its wire-level literal.
      *
      * @param wireValue the wire-level literal; never {@code null}
      */
@@ -51,7 +50,7 @@ public enum SmaxPsaChatBlockGetBlockingStatus {
     }
 
     /**
-     * Returns the wire-level literal.
+     * Returns the wire-level literal carried by the {@code status} attribute.
      *
      * @return the wire-level literal; never {@code null}
      */
@@ -62,11 +61,10 @@ public enum SmaxPsaChatBlockGetBlockingStatus {
     /**
      * Resolves a constant from its wire-level literal.
      *
-     * @apiNote
-     * Mirrors the {@code ENUM_BLOCKED_UNBLOCKED} admit set used by
-     * {@code WASmaxInPsaChatBlockGetResponseSuccess.parseChatBlockGetResponseSuccess}
-     * and the {@code Set} sibling. An unknown literal returns
-     * {@link Optional#empty()}, which the caller maps to a parse miss.
+     * <p>Returns {@link Optional#empty()} when the supplied literal is
+     * {@code null} or is not one of the two documented values, which lets a
+     * caller treat the unknown token as a parse miss rather than a thrown
+     * failure.
      *
      * @param wireValue the wire-level literal; may be {@code null}
      * @return an {@link Optional} carrying the resolved enum constant, or

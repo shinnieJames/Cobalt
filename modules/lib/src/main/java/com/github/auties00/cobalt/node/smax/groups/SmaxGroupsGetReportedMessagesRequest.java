@@ -17,10 +17,10 @@ import java.util.Optional;
 /**
  * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that asks the relay for the group's pending
  * "Report to admin" moderation queue.
- *
- * @apiNote Drives the {@code WAWebReportToAdminJob.getReportedMsgs} flow that powers the admin moderation drawer:
- * the relay returns every message that participants have flagged for admin review, along with the reporters who
- * flagged it. Dispatch through the matching {@link SmaxGroupsGetReportedMessagesResponse} parser.
+ * <p>
+ * The relay returns every message that participants have flagged for admin review along with the reporters who flagged
+ * it. The caller must be a group admin; the relay rejects non-admin queries as a client error. Replies are parsed
+ * through {@link SmaxGroupsGetReportedMessagesResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetReportedMessagesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -33,8 +33,6 @@ public final class SmaxGroupsGetReportedMessagesRequest implements SmaxOperation
 
     /**
      * Constructs a request for the given group.
-     *
-     * @apiNote The caller must be a group admin; the relay rejects non-admin queries as a client error.
      *
      * @param groupJid the group {@link Jid}; never {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
@@ -54,8 +52,8 @@ public final class SmaxGroupsGetReportedMessagesRequest implements SmaxOperation
 
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
-     *
-     * @apiNote The resulting envelope is
+     * <p>
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="get">
      *         <reports/>

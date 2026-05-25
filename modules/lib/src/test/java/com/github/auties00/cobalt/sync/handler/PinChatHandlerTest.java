@@ -29,24 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link PinChatHandler} against the
- * {@code WAWebPinChatSync.applyMutation} per-mutation flow.
- *
- * @apiNote
- * Verifies the pin / unpin happy paths, the
- * {@code MAX_PINNED_CHATS}/{@code MAX_PINNED_NEWSLETTERS} caps,
- * the oldest-vs-incoming kick-out logic, the unpin-then-queue path
- * when the cap is saturated and the incoming pin loses to the oldest,
- * the orphan classification when the chat or newsletter is unknown
- * to the store, and the malformed classification when
- * {@code indexParts[1]} lacks an {@code @} server.
- *
- * @implNote
- * This implementation builds mutations directly via the local
- * {@code pinMutation} helper and uses
- * {@link DefaultWamService} as the
- * WAM dependency so cap-eviction emissions are observable in the
- * shared test client.
+ * Covers {@link PinChatHandler}: the pin and unpin happy paths, the pinned-chat cap and
+ * its oldest-vs-incoming kick-out logic (including the unpin-then-queue path when the cap
+ * is saturated and the incoming pin loses to the oldest), the orphan classification when
+ * the chat is unknown to the store, the malformed classification when the index JID is
+ * empty or unparseable, and the {@link PinChatMutationFactory} builder helpers. Mutations
+ * are built via the local {@code pinMutation} helper and the handler is wired to a
+ * {@link DefaultWamService} so cap-eviction emissions are observable on the test client.
  */
 @DisplayName("PinChatHandler")
 class PinChatHandlerTest {

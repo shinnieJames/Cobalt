@@ -5,80 +5,83 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * One candidate pair — a {@code (local, remote)} tuple representing a
- * possible path. The agent runs a STUN binding-request connectivity
- * check on each pair; the highest-priority pair that succeeds is
- * nominated as the call's transport path.
+ * Represents one ICE candidate pair, the {@code (local, remote)} tuple modeling a possible network
+ * path between the two endpoints.
  *
- * <p>{@link #priority()} is the RFC 8445 §6.1.2.3 formula:
+ * <p>{@link IceAgent} runs a STUN binding-request connectivity check on each pair and tracks the
+ * outcome through this pair's {@link IceCheckState}; the highest-priority pair that succeeds is
+ * nominated as the call's transport path. The pair caches its RFC 8445 section 6.1.2.3 priority at
+ * construction and exposes mutable check-state, in-flight transaction, and nomination bookkeeping
+ * the agent updates as checks run.
  *
- * <pre>{@code
+ * <p>The pair priority is the RFC 8445 section 6.1.2.3 formula:
+ *
+ * {@snippet :
  *   pair_priority = (2^32 * MIN(G, D))
  *                 + (2    * MAX(G, D))
- *                 + (G > D ? 1 : 0)
- * }</pre>
+ *                 + (G > D ? 1 : 0);
+ * }
  *
- * <p>where G is the controlling agent's candidate priority and D is
- * the controlled agent's. The {@code controlling} flag at
- * construction picks which is which.
+ * <p>where {@code G} is the controlling agent's candidate priority and {@code D} is the controlled
+ * agent's. The {@code controlling} flag supplied at construction decides which of the local and
+ * remote candidate priorities plays each role.
  */
 public final class IceCandidatePair {
     /**
-     * The local-side candidate.
+     * The local-side candidate of the pair.
      */
     private final IceCandidate local;
 
     /**
-     * The remote-side candidate.
+     * The remote-side candidate of the pair.
      */
     private final IceCandidate remote;
 
     /**
-     * RFC 8445 §6.1.2.3 priority — cached at construction since the
-     * inputs are immutable.
+     * The RFC 8445 section 6.1.2.3 pair priority, cached at construction because the candidate
+     * priorities and the controlling role are immutable.
      */
     private final long priority;
 
     /**
-     * Whether the local agent is in the controlling role (picks the
-     * nominated pair) per RFC 8445 §6.1.1.
+     * Whether the local agent holds the controlling role and therefore chooses the nominated pair,
+     * per RFC 8445 section 6.1.1.
      */
     private final boolean controlling;
 
     /**
-     * Connectivity-check state — mutates as the agent fires checks.
+     * The connectivity-check state, mutated atomically as the agent fires and resolves checks.
      */
     private final AtomicReference<IceCheckState> state;
 
     /**
-     * The transaction id of the in-flight STUN binding request when
-     * {@code state == IN_PROGRESS}; {@code null} otherwise.
+     * The transaction id of the in-flight STUN binding request while the state is
+     * {@link IceCheckState#IN_PROGRESS}, or {@code null} when no check is in flight.
      */
     private volatile byte[] inFlightTxId;
 
     /**
-     * Wall-clock time the in-flight check was sent; used by the
-     * agent to time out checks.
+     * The wall-clock timestamp the in-flight check was sent at, which the agent compares against
+     * the per-check timeout, or {@code null} when no check is in flight.
      */
     private volatile Instant lastCheckSent;
 
     /**
-     * Whether the pair has been nominated by the controlling agent
-     * per RFC 8445 §8.1.
+     * Whether the controlling agent has nominated this pair, per RFC 8445 section 8.1.
      */
     private volatile boolean nominated;
 
     /**
-     * Constructs a new pair.
+     * Constructs a pair from a local and remote candidate and caches its priority.
+     *
+     * <p>The pair starts in {@link IceCheckState#FROZEN}. Both candidates must address the same
+     * {@link IceComponent}, since ICE pairs candidates component by component.
      *
      * @param local       the local-side candidate
      * @param remote      the remote-side candidate
-     * @param controlling whether the local agent is in the
-     *                    controlling role
-     * @throws NullPointerException     if either candidate is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if the candidates address
-     *                                  different components
+     * @param controlling whether the local agent holds the controlling role
+     * @throws NullPointerException     if either candidate is {@code null}
+     * @throws IllegalArgumentException if the two candidates address different components
      */
     public IceCandidatePair(IceCandidate local, IceCandidate remote, boolean controlling) {
         this.local = Objects.requireNonNull(local, "local cannot be null");
@@ -112,7 +115,7 @@ public final class IceCandidatePair {
     }
 
     /**
-     * Returns the pair priority per RFC 8445 §6.1.2.3.
+     * Returns the pair priority computed per RFC 8445 section 6.1.2.3.
      *
      * @return the pair priority
      */
@@ -121,9 +124,9 @@ public final class IceCandidatePair {
     }
 
     /**
-     * Returns whether the local agent is in the controlling role.
+     * Returns whether the local agent holds the controlling role for this pair.
      *
-     * @return {@code true} for controlling
+     * @return {@code true} if the local agent is controlling
      */
     public boolean controlling() {
         return controlling;
@@ -132,62 +135,65 @@ public final class IceCandidatePair {
     /**
      * Returns the current connectivity-check state.
      *
-     * @return the state
+     * @return the current state
      */
     public IceCheckState state() {
         return state.get();
     }
 
     /**
-     * Atomically transitions the pair from {@code expected} to
-     * {@code next} — used by the agent when scheduling and
-     * completing checks. Falls through silently when the actual
-     * state has moved on.
+     * Atomically transitions the pair from {@code expected} to {@code next}.
      *
-     * @param expected the expected current state
-     * @param next     the target state
-     * @return {@code true} if the transition occurred
+     * <p>The agent uses this to schedule and complete checks without losing a concurrent update;
+     * the transition is a no-op when the current state has already moved past {@code expected}.
+     *
+     * @param expected the state the pair must currently be in for the transition to apply
+     * @param next     the state to move to
+     * @return {@code true} if the pair was in {@code expected} and moved to {@code next}
      */
     public boolean transition(IceCheckState expected, IceCheckState next) {
         return state.compareAndSet(expected, next);
     }
 
     /**
-     * Sets the state unconditionally. Used for hard transitions like
-     * "STUN error class 4xx received".
+     * Sets the connectivity-check state unconditionally, regardless of the current state.
      *
-     * @param next the target state
+     * <p>The agent uses this for a hard transition such as moving a pair to
+     * {@link IceCheckState#FAILED} on timeout or on a STUN error response.
+     *
+     * @param next the state to set
      */
     public void forceState(IceCheckState next) {
         state.set(next);
     }
 
     /**
-     * Returns the in-flight STUN transaction id, or {@code null} if
-     * no check is in flight.
+     * Returns the in-flight STUN transaction id.
      *
-     * @return the transaction id, or {@code null}
+     * @return the transaction id of the in-flight check, or {@code null} if no check is in flight
      */
     public byte[] inFlightTxId() {
         return inFlightTxId;
     }
 
     /**
-     * Returns the timestamp at which the in-flight check was sent,
-     * or {@code null} if no check is in flight.
+     * Returns the wall-clock timestamp the in-flight check was sent at.
      *
-     * @return the timestamp, or {@code null}
+     * @return the send timestamp, or {@code null} if no check is in flight
      */
     public Instant lastCheckSent() {
         return lastCheckSent;
     }
 
     /**
-     * Records the start of a new in-flight check. The agent calls
-     * this immediately after sending the binding request.
+     * Records the start of a new in-flight check, storing a defensive copy of the transaction id
+     * and the send timestamp.
      *
-     * @param txId the transaction id of the request
-     * @param at   the wall-clock timestamp the request was sent
+     * <p>The agent calls this immediately after sending the binding request so that the inbound
+     * response can be matched and the timeout can be measured.
+     *
+     * @param txId the transaction id of the binding request
+     * @param at   the wall-clock timestamp the request was sent at
      */
     public void markInFlight(byte[] txId, Instant at) {
         this.inFlightTxId = txId.clone();
@@ -195,8 +201,8 @@ public final class IceCandidatePair {
     }
 
     /**
-     * Clears the in-flight bookkeeping after a check completes
-     * (succeeds or fails).
+     * Clears the in-flight transaction id and send timestamp after a check completes, whether it
+     * succeeded or failed.
      */
     public void clearInFlight() {
         this.inFlightTxId = null;
@@ -204,27 +210,28 @@ public final class IceCandidatePair {
     }
 
     /**
-     * Returns whether this pair has been nominated by the
-     * controlling agent.
+     * Returns whether the controlling agent has nominated this pair.
      *
-     * @return {@code true} if nominated
+     * @return {@code true} if the pair has been nominated
      */
     public boolean nominated() {
         return nominated;
     }
 
     /**
-     * Marks the pair as nominated.
+     * Marks the pair as nominated by the controlling agent.
      */
     public void nominate() {
         this.nominated = true;
     }
 
     /**
-     * Computes the RFC 8445 §6.1.2.3 pair priority.
+     * Computes the RFC 8445 section 6.1.2.3 pair priority from the two candidate priorities and the
+     * controlling role.
      *
-     * @param controlling   whether the local agent is controlling
-     * @param localPriority the local candidate's priority
+     * @param controlling    whether the local agent is controlling, which selects the {@code G}
+     *                       and {@code D} terms of the formula
+     * @param localPriority  the local candidate's priority
      * @param remotePriority the remote candidate's priority
      * @return the pair priority
      */
@@ -237,6 +244,13 @@ public final class IceCandidatePair {
         return (min << 32) + (2L * max) + extra;
     }
 
+    /**
+     * Indicates whether another object is a pair with the same local candidate, remote candidate,
+     * and controlling role.
+     *
+     * @param o the object to compare against
+     * @return {@code true} if {@code o} is an equal {@link IceCandidatePair}
+     */
     @Override
     public boolean equals(Object o) {
         return o instanceof IceCandidatePair p
@@ -244,11 +258,23 @@ public final class IceCandidatePair {
                 && controlling == p.controlling;
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}, derived from the local
+     * candidate, remote candidate, and controlling role.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(local, remote, controlling);
     }
 
+    /**
+     * Returns a diagnostic string showing the pair's transport addresses, priority, current state,
+     * and nomination flag.
+     *
+     * @return a human-readable description of the pair
+     */
     @Override
     public String toString() {
         return "IceCandidatePair[" + local.transportAddress() + " ↔ " + remote.transportAddress()

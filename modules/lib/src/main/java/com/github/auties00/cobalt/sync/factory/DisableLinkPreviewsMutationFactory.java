@@ -16,22 +16,16 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that toggle the global "disable link previews" privacy setting.
  *
- * @apiNote
- * Drives the privacy-pane "disable link previews" switch:
- * {@code WAWebDisableLinkPreviewsSync.sendMutation} pushes the result of
- * this factory through {@code WAWebSyncdCoreApi.lockForSync} so every
- * linked device updates
- * {@code WAWebDisableLinkPreviewsAction.setDisableLinkPreviewsToUserPrefs}.
- * The factory is the outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.DisableLinkPreviewsHandler}.
+ * Drives the privacy-pane "disable link previews" switch: the result of this factory is pushed so
+ * every linked device updates its stored preference. This factory is the outgoing-mutation
+ * counterpart of {@link com.github.auties00.cobalt.sync.handler.DisableLinkPreviewsHandler}.
  */
 public final class DisableLinkPreviewsMutationFactory {
     /**
      * Creates an instance with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public DisableLinkPreviewsMutationFactory() {
 
@@ -40,21 +34,18 @@ public final class DisableLinkPreviewsMutationFactory {
     /**
      * Returns a SET mutation that toggles the global link-preview privacy setting.
      *
-     * @apiNote
      * The mutation index follows
      * {@snippet :
      *     ["setting_disableLinkPreviews"]
      * }
      * with no per-row segment because the setting is account-wide; the
-     * {@link PrivacySettingDisableLinkPreviewsAction} sub-message carries
-     * the {@code isPreviewsDisabled} flag.
+     * {@link PrivacySettingDisableLinkPreviewsAction} sub-message carries the {@code isPreviewsDisabled}
+     * flag.
      *
      * @implNote
      * This implementation takes the timestamp from the caller, mirroring the
-     * {@code WAWebDisableLinkPreviewsSync.getMutation(timestamp, value)}
-     * shape; the sister WA Web export {@code sendMutation} captures
-     * {@code WATimeUtils.unixTimeMs()} inline and then calls
-     * {@code getMutation} the same way.
+     * {@code getMutation(timestamp, value)} shape; the sister WA Web export {@code sendMutation}
+     * captures {@code WATimeUtils.unixTimeMs()} inline and then calls {@code getMutation} the same way.
      *
      * @param timestamp          the mutation timestamp
      * @param isPreviewsDisabled {@code true} to disable link previews account-wide, {@code false} to re-enable them

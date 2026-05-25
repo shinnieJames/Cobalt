@@ -7,15 +7,13 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Objects;
 
 /**
- * Carrier returned by {@link ReportingToken#generate}: a reporting-token
- * version paired with its 16-byte truncated HMAC tag.
+ * Pairs a reporting-token version with its 16-byte truncated HMAC tag.
  *
- * @apiNote
- * Consumed by the stanza writer that builds the outbound {@code <reporting>}
- * child: the {@link #version()} is written as the {@code v} attribute on the
- * inner {@code <reporting_token>} element and the {@link #token()} bytes are
- * its value. Mirrors WA Web's {@code {version, reportingToken}} return shape
- * from {@code genReportingToken}.
+ * <p>Returned by {@link ReportingToken#generate} and consumed by the stanza
+ * writer that builds the outbound {@code <reporting>} child: the
+ * {@link #version()} is written as the {@code v} attribute on the inner
+ * {@code <reporting_token>} element and the {@link #token()} bytes are its
+ * value.
  *
  * @see ReportingToken
  */
@@ -34,12 +32,6 @@ public final class ReportingTokenResult {
     /**
      * Constructs a reporting-token result.
      *
-     * @apiNote
-     * Called by {@link ReportingToken#generate} once it has both the
-     * effective sender version and the HMAC bytes; embedders that consume
-     * received reporting tokens (and not generate them) build instances of
-     * this type only when round-tripping through their own send pipeline.
-     *
      * @param version the reporting-token version
      * @param token   the 16-byte token bytes
      * @throws NullPointerException if {@code token} is {@code null}
@@ -54,10 +46,9 @@ public final class ReportingTokenResult {
     /**
      * Returns the reporting-token version.
      *
-     * @apiNote
-     * Maps to the {@code v} attribute on the outbound
-     * {@code <reporting_token>} element; the server tolerates differing
-     * versions and selects validation behaviour from this field.
+     * <p>Maps to the {@code v} attribute on the outbound
+     * {@code <reporting_token>} element, from which the server selects its
+     * validation behaviour.
      *
      * @return the version
      */
@@ -70,8 +61,7 @@ public final class ReportingTokenResult {
     /**
      * Returns the 16-byte truncated HMAC tag.
      *
-     * @apiNote
-     * The returned array is the verbatim element value the stanza writer
+     * <p>The returned array is the verbatim element value the stanza writer
      * places inside the {@code <reporting_token>} element; callers must not
      * mutate it.
      *
@@ -86,10 +76,9 @@ public final class ReportingTokenResult {
     /**
      * Returns a string representation of this reporting-token result.
      *
-     * @apiNote
-     * The reporting-token bytes are intentionally not included so logging at
-     * info level does not leak the franking tag; only the version and the
-     * tag length are surfaced.
+     * @implNote
+     * This implementation omits the token bytes and surfaces only the version
+     * and the tag length so that logging does not leak the franking tag.
      *
      * @return a string containing the version and the token length
      */

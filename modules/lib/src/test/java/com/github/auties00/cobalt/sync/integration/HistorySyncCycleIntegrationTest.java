@@ -24,21 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Integration cycle for the history-sync pipeline.
- *
- * <p>End-to-end flow: companion receives a {@link HistorySyncNotification}
- * peer message → {@link WebHistorySyncService} schedules an async chunk
- * processor → downloads the encrypted blob via the media connection (or
- * uses the inline payload) → AES-CBC decrypts, validates HMAC, inflates the
- * gzip stream → decodes a {@link com.github.auties00.cobalt.model.sync.history.HistorySync}
- * payload → fans the chunk out to {@link com.github.auties00.cobalt.client.WhatsAppClientListener}
- * callbacks and the {@link LidMigrationService}.
- *
- * <p>WA Web emits seven {@link HistorySyncType} flavours
- * ({@code INITIAL_BOOTSTRAP}, {@code INITIAL_STATUS_V3}, {@code RECENT},
- * {@code FULL}, {@code PUSH_NAME}, {@code NON_BLOCKING_DATA},
- * {@code ON_DEMAND}); each has a dedicated fixture under
- * {@code integration/history-sync-cycle/}.
+ * Exercises the history-sync cycle end to end: a {@link HistorySyncNotification}
+ * peer message drives {@link WebHistorySyncService} to fetch (or read the inline)
+ * encrypted blob, AES-CBC decrypt it, validate the HMAC, inflate the gzip stream,
+ * decode a {@link com.github.auties00.cobalt.model.sync.history.HistorySync}
+ * payload, and fan the chunk out to
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener} callbacks and
+ * the {@link LidMigrationService}. The pipeline is wired in-process via
+ * {@link TestWhatsAppClient} with no network IO. The synthetic group asserts
+ * null and empty inputs are non-fatal across every {@link HistorySyncType}; the
+ * captured group is parameterized per chunk type and gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so it skips cleanly until the
+ * recorded corpus is committed.
  */
 @DisplayName("HistorySyncCycle integration")
 class HistorySyncCycleIntegrationTest {
@@ -59,7 +56,7 @@ class HistorySyncCycleIntegrationTest {
                 .withAbPropsService(props);
         var wam = new DefaultWamService(client, props);
         var lidMigration = new LidMigrationService(client, props, wam);
-        service = new WebHistorySyncService(client, lidMigration, props, wam, TestMediaConnectionService.create());
+        service = new WebHistorySyncService(client, lidMigration, wam, TestMediaConnectionService.create());
     }
 
     @Nested
@@ -89,13 +86,9 @@ class HistorySyncCycleIntegrationTest {
         void perChunkType(HistorySyncType syncType) {
             var topic = "integration/history-sync-cycle/" + syncType.name().toLowerCase().replace('_', '-');
             if (!SyncFixtures.isOracleAvailable(topic)) return;
-            // The fixture exposes:
-            //   - the captured peer-message notification (mediaSha256, mediaSize,
-            //     mediaKey, directPath, syncType, ...)
-            //   - the captured plaintext bytes (post-decrypt, post-inflate)
-            //   - the expected post-apply store state (chats injected, contacts
-            //     push-name updated, messages decoded into MessageContainer)
-            // Reserved for the Phase 10 corpus.
+            // Fixture exposes the captured peer-message notification, the plaintext
+            // bytes (post-decrypt, post-inflate), and the expected post-apply store
+            // state for this chunk type.
             assertNotNull(SyncFixtures.loadOracle(topic));
         }
 

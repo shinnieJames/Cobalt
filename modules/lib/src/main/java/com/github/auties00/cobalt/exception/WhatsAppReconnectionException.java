@@ -4,19 +4,20 @@ package com.github.auties00.cobalt.exception;
  * Thrown when an attempt to re-establish a previously open WhatsApp
  * session fails.
  *
- * @apiNote
- * After a session is dropped (network blip, server cycling the
- * connection, or a {@link WhatsAppSessionException} being raised),
- * Cobalt schedules a reconnect attempt with backoff. This exception
- * carries the count of attempts made so far via {@link #attempts()} so
- * the caller can decide how long to wait before trying again or whether
- * to give up. Distinct from {@link WhatsAppConnectionException}, which
- * fires on the very first connection.
+ * <p>After a session is dropped (a network blip, the server cycling the
+ * connection, or a {@link WhatsAppSessionException} being raised), Cobalt
+ * schedules a reconnect attempt with backoff; this exception reports that
+ * such an attempt did not complete. It is distinct from
+ * {@link WhatsAppConnectionException}, which covers the very first
+ * connection, before any session has existed.
  *
- * @implNote
- * This implementation always reports the failure as fatal: there is no
- * usable session to keep working on. Whether to schedule a further
- * attempt is up to the configurable error handler.
+ * @apiNote
+ * Raised after a reconnect attempt fails; {@link #attempts()} carries the
+ * number of attempts made so far so the caller can bound retries or
+ * compute a backoff. {@link #isFatal()} reports {@code true} because no
+ * live session remains, but whether a configured
+ * {@code WhatsAppClientErrorHandler} schedules a further attempt is its
+ * own decision.
  *
  * @see WhatsAppConnectionException
  */

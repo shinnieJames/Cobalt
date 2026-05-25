@@ -11,54 +11,54 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Identity Change Detection Consistency data derived from a single user's
- * device list.
+ * Holds the Identity Change Detection Consistency data derived from a single
+ * user's device list.
  *
- * @apiNote
- * Produced by {@link IcdcComputer#compute(com.github.auties00.cobalt.model.jid.Jid)}
- * and consumed by the outbound message encoder to populate the
+ * <p>An instance is produced by
+ * {@link IcdcComputer#compute(com.github.auties00.cobalt.model.jid.Jid)} and
+ * consumed by the outbound message encoder to populate the
  * {@code deviceListMetadata} field of {@code messageContextInfo} on every
- * outgoing multi-device message. Carries the four fields the recipient compares
- * against its own view: the truncated SHA-256 hash of companion identity keys,
- * the device-list snapshot timestamp, the indexes of devices included in the
- * hash (omitted when every device was included), and the hosted account type
- * when applicable.
+ * outgoing multi-device message. It carries the four values the recipient
+ * compares against its own view of the participant's device list: the truncated
+ * SHA-256 hash of companion identity keys ({@link #keyHash()}), the device-list
+ * snapshot timestamp ({@link #timestamp()}), the indexes of the devices included
+ * in the hash ({@link #keyIndexes()}, omitted when every device was included),
+ * and the hosted account type when applicable ({@link #accountType()}).
  */
 @WhatsAppWebModule(moduleName = "WAWebIdentityIcdcApi")
 public final class IcdcResult {
 
     /**
-     * The truncated SHA-256 hash of the sorted, concatenated identity keys, or
-     * {@code null} when the user has no companion devices.
+     * Holds the truncated SHA-256 hash of the sorted, concatenated identity
+     * keys, or {@code null} when the user has no companion devices.
      */
     private final byte[] keyHash;
 
     /**
-     * The device-list snapshot timestamp, or {@code null} when the user has no
-     * companion devices and the timestamp is older than
+     * Holds the device-list snapshot timestamp, or {@code null} when the user
+     * has no companion devices and the timestamp is older than
      * {@link IcdcComputer}'s recent threshold.
      */
     private final Instant timestamp;
 
     /**
-     * The indexes of devices whose identity keys were successfully retrieved,
-     * or {@code null} when every device was included.
+     * Holds the indexes of devices whose identity keys were successfully
+     * retrieved, or {@code null} when every device was included.
      */
     private final List<Integer> keyIndexes;
 
     /**
-     * The hosted account encryption type, or {@code null} for non-hosted
+     * Holds the hosted account encryption type, or {@code null} for non-hosted
      * accounts.
      */
     private final ADVEncryptionType accountType;
 
     /**
-     * Constructs a new ICDC result.
+     * Constructs a new ICDC result from the supplied components.
      *
-     * @apiNote
-     * Package-private constructor invoked only by
+     * <p>This constructor is package-private and is invoked only by
      * {@link IcdcComputer#computeFromDeviceList} and, on the test classpath, by
-     * {@link com.github.auties00.cobalt.device.icdc.TestIcdcResults}.
+     * {@code TestIcdcResults}.
      *
      * @param keyHash     the truncated identity key hash, or {@code null}
      * @param timestamp   the device-list snapshot timestamp, or {@code null}
@@ -83,11 +83,10 @@ public final class IcdcResult {
     /**
      * Returns the truncated SHA-256 hash of the participant's identity keys.
      *
-     * @apiNote
-     * Empty when the user has no companion devices (no identity keys to hash).
-     * Present otherwise, even when only a subset of identity keys could be
-     * resolved locally (the {@link #keyIndexes()} field then signals which
-     * subset).
+     * <p>The result is empty when the user has no companion devices, since
+     * there are no identity keys to hash. It is present otherwise, even when
+     * only a subset of identity keys could be resolved locally; in that case
+     * {@link #keyIndexes()} signals which subset contributed to the hash.
      *
      * @return the key hash, or empty when no companion devices were found
      */
@@ -101,10 +100,9 @@ public final class IcdcResult {
     /**
      * Returns the device-list snapshot timestamp.
      *
-     * @apiNote
-     * Present when the user has companion devices, or when the timestamp is
-     * within {@link IcdcComputer}'s 720-hour recent window. Empty for a
-     * primary-only list whose snapshot timestamp is stale.
+     * <p>The result is present when the user has companion devices, or when the
+     * timestamp falls within {@link IcdcComputer}'s 720-hour recent window. It
+     * is empty for a primary-only list whose snapshot timestamp is stale.
      *
      * @return the timestamp, or empty when stale and no companion devices
      */
@@ -119,13 +117,13 @@ public final class IcdcResult {
      * Returns the indexes of devices whose identity keys were included in the
      * hash.
      *
-     * @apiNote
-     * Empty when every device in the device list was included (so the indexes
-     * do not need to be transmitted); populated when some companion devices
-     * had no locally-cached identity key and were omitted from the hash.
+     * <p>The list is empty when every device in the device list was included,
+     * so the indexes do not need to be transmitted. It is populated when some
+     * companion devices had no locally-cached identity key and were omitted
+     * from the hash.
      *
-     * @return an unmodifiable list of key indexes, or empty when every device
-     *         was included
+     * @return an unmodifiable list of key indexes, or an empty list when every
+     *         device was included
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
             exports = "getICDCMetaFromDeviceRecord",
@@ -139,12 +137,13 @@ public final class IcdcResult {
     /**
      * Returns the hosted account encryption type for this participant.
      *
-     * @apiNote
-     * Cobalt collapses WA Web's {@code senderAccountType} and
-     * {@code receiverAccountType} pair onto a single field; the caller decides
-     * which role this result represents based on which side of the message it
-     * is encoding for. Empty for non-hosted accounts and whenever the
+     * <p>The result is empty for non-hosted accounts and whenever the
      * {@code adv_accept_hosted_devices} AB prop is off.
+     *
+     * @implNote This implementation collapses WhatsApp Web's
+     * {@code senderAccountType} and {@code receiverAccountType} pair onto a
+     * single field; the caller decides which role this result represents based
+     * on which side of the message it is encoding for.
      *
      * @return the account type, or empty when the account is not hosted
      */
@@ -158,9 +157,13 @@ public final class IcdcResult {
     /**
      * Returns a diagnostic string representation suitable for logs.
      *
-     * @apiNote
-     * The hash is summarised by length to keep log lines short and to avoid
-     * leaking the bytes to any log sink that might persist them.
+     * <p>The representation lists the timestamp, key indexes, and account type
+     * directly, and summarises the hash by its byte length rather than its
+     * contents.
+     *
+     * @implNote This implementation reports only the hash length, never the
+     * hash bytes, to keep log lines short and to avoid leaking the bytes to any
+     * log sink that might persist them.
      *
      * @return the diagnostic string
      */

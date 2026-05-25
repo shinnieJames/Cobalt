@@ -17,12 +17,10 @@ import java.time.Instant;
  * Inbound receiver that turns a plaintext newsletter {@code <message>} stanza into a
  * fully populated {@link NewsletterMessageInfo}.
  *
- * @apiNote
- * Selected by {@link MessageReceivingService#process(Node)} whenever the {@code from}
- * JID belongs to the {@code @newsletter} server; the Channels feature exposes these
- * posts so the recipient can read them in the Channels tab. Newsletter messages are
- * not Signal-encrypted so the receiver skips the entire decryption pipeline used by
- * {@link ChatMessageReceiver}.
+ * <p>Selected by {@link MessageReceivingService#process(Node)} whenever the {@code from}
+ * JID belongs to the {@code @newsletter} server; the resulting posts back the Channels
+ * feature. Newsletter messages are not Signal-encrypted, so this receiver skips the
+ * entire decryption pipeline used by {@link ChatMessageReceiver}.
  *
  * @implNote
  * This implementation collapses WhatsApp Web's
@@ -43,9 +41,6 @@ final class NewsletterMessageReceiver extends MessageReceiver<NewsletterMessageI
     /**
      * Constructs a newsletter receiver bound to the given store.
      *
-     * @apiNote
-     * Invoked by {@link MessageReceivingService}; never called by embedders directly.
-     *
      * @param store the session store used by the parent {@link MessageReceiver}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleNewsletterMsg", exports = "default",
@@ -57,12 +52,11 @@ final class NewsletterMessageReceiver extends MessageReceiver<NewsletterMessageI
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Reads {@code id}, {@code t} (seconds since epoch), {@code server_id}, and the
+     * <p>Reads {@code id}, {@code t} (seconds since epoch), {@code server_id}, and the
      * optional {@code is_sender} attribute from the stanza, then decodes the protobuf
      * carried inside the {@code <plaintext>} child. Returns {@code null} when the
-     * {@code <plaintext>} child is missing or empty; the orchestrator treats this as
-     * a silent drop.
+     * {@code <plaintext>} child is missing or empty; the orchestrator treats this as a
+     * silent drop.
      *
      * @implNote
      * This implementation always stamps the resulting

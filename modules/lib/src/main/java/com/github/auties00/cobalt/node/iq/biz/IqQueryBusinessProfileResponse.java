@@ -15,16 +15,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants the relay produces in response
- * to an {@link IqQueryBusinessProfileRequest}.
+ * Models the sealed family of inbound reply variants the relay produces in response to an {@link IqQueryBusinessProfileRequest}.
  *
- * @apiNote
- * Pattern-match the returned variant to drive merchant-profile
- * rendering: {@link Success} carries one {@link Success.Profile} entry
- * per echoed merchant (with the cart UI, contact details, business
- * hours, linked accounts, direct-connection block, bot prompts and
- * commands all already decoded), {@link ClientError} surfaces a
- * rejected request and {@link ServerError} surfaces a transient
+ * <p>The matched variant drives merchant-profile rendering: {@link Success} carries one
+ * {@link Success.Profile} entry per echoed merchant (with the cart UI, contact details, business
+ * hours, linked accounts, direct-connection block, bot prompts and commands already decoded),
+ * {@link ClientError} surfaces a rejected request and {@link ServerError} surfaces a transient
  * internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryBusinessProfileJob")
@@ -34,16 +30,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
     /**
      * Tries each variant in priority order until one matches.
      *
-     * @apiNote
-     * Use this entry point on every IQ stanza tagged with the
-     * {@code <business_profile/>} payload; the order is
-     * {@link Success}, then {@link ClientError}, then
-     * {@link ServerError}.
+     * <p>The order is {@link Success}, then {@link ClientError}, then {@link ServerError}.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty
-     *         when no documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     static Optional<? extends IqQueryBusinessProfileResponse> of(Node node, Node request) {
@@ -61,268 +52,217 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code Success} variant carrying one {@link Profile} entry
-     * per echoed {@code <profile/>} child.
+     * Carries one {@link Profile} entry per echoed {@code <profile/>} child for a successful fetch.
      *
-     * @apiNote
-     * Use {@link #profiles()} to refresh the
-     * business-profile collection; the entries preserve the wire
-     * order, which matches the caller-supplied entry order on the
-     * {@link IqQueryBusinessProfileRequest}.
+     * <p>The entries from {@link #profiles()} refresh the business-profile collection in wire
+     * order, which matches the caller-supplied entry order on the {@link IqQueryBusinessProfileRequest}.
      */
     final class Success implements IqQueryBusinessProfileResponse {
         /**
-         * One typed business-profile entry fully decoded from a
-         * {@code <profile/>} child of the {@code <business_profile/>}
-         * payload.
+         * Models one business-profile entry fully decoded from a {@code <profile/>} child of the {@code <business_profile/>} payload.
          *
-         * @apiNote
-         * Use this projection to drive every merchant-rendering
-         * surface: the chat opener uses {@link #description()} and
-         * {@link #email()}, the merchant directory uses
-         * {@link #categories()} and {@link #coverPhoto()}, the cart
-         * UI uses {@link #profileOptions()} and
-         * {@link #directConnection()}, and the bot interaction
-         * surface uses {@link #prompts()} and {@link #commands()}.
+         * <p>The projection drives every merchant-rendering surface: the chat opener uses
+         * {@link #description()} and {@link #email()}, the merchant directory uses
+         * {@link #categories()} and {@link #coverPhoto()}, the cart UI uses {@link #profileOptions()}
+         * and {@link #directConnection()}, and the bot interaction surface uses {@link #prompts()}
+         * and {@link #commands()}.
          */
         public static final class Profile {
             /**
-             * The business JID this entry belongs to.
+             * Holds the business JID this entry belongs to.
              */
             private final Jid businessJid;
 
             /**
-             * The version tag echoed by the relay; callers cache
-             * profile bodies and re-query with the same tag for
-             * conditional fetches.
+             * Holds the version tag echoed by the relay.
+             *
+             * <p>Callers cache profile bodies and re-query with the same tag for conditional fetches.
              */
             private final String tag;
 
             /**
-             * The optional postal address (free text).
+             * Holds the optional postal address (free text).
              */
             private final String address;
 
             /**
-             * The optional self-description body.
+             * Holds the optional self-description body.
              */
             private final String description;
 
             /**
-             * The optional contact email address.
+             * Holds the optional contact email address.
              */
             private final String email;
 
             /**
-             * The optional latitude of the merchant's pinned location.
+             * Holds the optional latitude of the merchant's pinned location.
              */
             private final Double latitude;
 
             /**
-             * The optional longitude of the merchant's pinned location.
+             * Holds the optional longitude of the merchant's pinned location.
              */
             private final Double longitude;
 
             /**
-             * The list of website URLs (zero, one, or two entries on
-             * the wire).
+             * Holds the website URLs (zero, one, or two entries on the wire).
              */
             private final List<String> websites;
 
             /**
-             * The list of category entries (id + display name).
+             * Holds the category entries (id plus display name).
              */
             private final List<Category> categories;
 
             /**
-             * The optional business-hours schedule.
+             * Holds the optional business-hours schedule.
              */
             private final BusinessHours businessHours;
 
             /**
-             * The optional catalog status (e.g. {@code "PENDING"},
-             * {@code "APPROVED"}).
+             * Holds the optional catalog status (for example {@code "PENDING"} or {@code "APPROVED"}).
              */
             private final String catalogStatus;
 
             /**
-             * The optional profile-options block (commerce experience,
-             * cart-enabled flag, shop URL, ...).
+             * Holds the optional profile-options block (commerce experience, cart-enabled flag, shop URL, and similar markers).
              */
             private final ProfileOptions profileOptions;
 
             /**
-             * The optional Facebook page link block.
+             * Holds the optional Facebook page link block.
              */
             private final FacebookPage facebookPage;
 
             /**
-             * The optional Instagram-professional block.
+             * Holds the optional Instagram-professional block.
              */
             private final InstagramProfessional instagramProfessional;
 
             /**
-             * Whether the merchant has any linked-account block at all
-             * (FB or IG).
+             * Holds whether the merchant has any linked-account block at all (Facebook or Instagram).
              */
             private final boolean profileIsLinked;
 
             /**
-             * The optional direct-connection block (enabled flag and
-             * default postcode).
+             * Holds the optional direct-connection block (enabled flag and default postcode).
              */
             private final DirectConnection directConnection;
 
             /**
-             * The list of service-area entries (radius + center).
+             * Holds the service-area entries (radius plus center).
              */
             private final List<ServiceArea> serviceAreas;
 
             /**
-             * The list of offering categories.
+             * Holds the offering categories.
              */
             private final List<OfferingCategory> offerings;
 
             /**
-             * The optional cover photo (id + URL).
+             * Holds the optional cover photo (id plus URL).
              */
             private final CoverPhoto coverPhoto;
 
             /**
-             * The optional custom merchant URL.
+             * Holds the optional custom merchant URL.
              */
             private final String customUrl;
 
             /**
-             * The optional bot welcome prompts.
+             * Holds the optional bot welcome prompts.
              */
             private final List<Prompt> prompts;
 
             /**
-             * The optional bot commands list.
+             * Holds the optional bot commands list.
              */
             private final List<Command> commands;
 
             /**
-             * The optional commands-section description text.
+             * Holds the optional commands-section description text.
              */
             private final String commandsDescription;
 
             /**
-             * The optional automated-bot type marker.
+             * Holds the optional automated-bot type marker.
              */
             private final String automatedType;
 
             /**
-             * The optional welcome-message protocol-mode marker.
+             * Holds the optional welcome-message protocol-mode marker.
              */
             private final String welcomeMessageProtocolMode;
 
             /**
-             * The optional "merchant since" display text.
+             * Holds the optional "merchant since" display text.
              */
             private final String memberSinceText;
 
             /**
-             * The optional price-tier id.
+             * Holds the optional price-tier id.
              */
             private final String priceTierId;
 
             /**
-             * Whether this profile is an authorised agent (only
-             * populated when the gating flag is on).
+             * Holds whether this profile is an authorised agent (only populated when the gating flag is on).
              */
             private final Boolean isAuthorizedAgent;
 
             /**
-             * The optional parent company name (authorised agent only).
+             * Holds the optional parent company name (authorised agent only).
              */
             private final String parentCompanyName;
 
             /**
-             * The optional parent company logo URL (authorised agent
-             * only).
+             * Holds the optional parent company logo URL (authorised agent only).
              */
             private final String parentCompanyLogoUrl;
 
             /**
-             * The optional OBA phone number (authorised agent only).
+             * Holds the optional official-business-account phone number (authorised agent only).
              */
             private final String obaPhoneNumber;
 
             /**
-             * Constructs a profile entry.
+             * Constructs a profile entry from the decoded {@code <profile/>} child.
              *
-             * @apiNote
-             * Use this constructor only from the response parser; the
-             * field-by-field optional shape matches the wire echo so
-             * the business-profile collection can render the entry
-             * without further normalisation.
+             * <p>The field-by-field optional shape matches the wire echo so the business-profile
+             * collection can render the entry without further normalisation.
              *
-             * @param businessJid                 see
-             *                                    {@link #businessJid()}
-             * @param tag                         see {@link #tag()}
-             * @param address                     see {@link #address()}
-             * @param description                 see
-             *                                    {@link #description()}
-             * @param email                       see {@link #email()}
-             * @param latitude                    see
-             *                                    {@link #latitude()}
-             * @param longitude                   see
-             *                                    {@link #longitude()}
-             * @param websites                    see
-             *                                    {@link #websites()}
-             * @param categories                  see
-             *                                    {@link #categories()}
-             * @param businessHours               see
-             *                                    {@link #businessHours()}
-             * @param catalogStatus               see
-             *                                    {@link #catalogStatus()}
-             * @param profileOptions              see
-             *                                    {@link #profileOptions()}
-             * @param facebookPage                see
-             *                                    {@link #facebookPage()}
-             * @param instagramProfessional       see
-             *                                    {@link #instagramProfessional()}
-             * @param profileIsLinked             see
-             *                                    {@link #profileIsLinked()}
-             * @param directConnection            see
-             *                                    {@link #directConnection()}
-             * @param serviceAreas                see
-             *                                    {@link #serviceAreas()}
-             * @param offerings                   see
-             *                                    {@link #offerings()}
-             * @param coverPhoto                  see
-             *                                    {@link #coverPhoto()}
-             * @param customUrl                   see {@link #customUrl()}
-             * @param prompts                     see {@link #prompts()}
-             * @param commands                    see {@link #commands()}
-             * @param commandsDescription         see
-             *                                    {@link #commandsDescription()}
-             * @param automatedType               see
-             *                                    {@link #automatedType()}
-             * @param welcomeMessageProtocolMode  see
-             *                                    {@link #welcomeMessageProtocolMode()}
-             * @param memberSinceText             see
-             *                                    {@link #memberSinceText()}
-             * @param priceTierId                 see
-             *                                    {@link #priceTierId()}
-             * @param isAuthorizedAgent           see
-             *                                    {@link #isAuthorizedAgent()}
-             * @param parentCompanyName           see
-             *                                    {@link #parentCompanyName()}
-             * @param parentCompanyLogoUrl        see
-             *                                    {@link #parentCompanyLogoUrl()}
-             * @param obaPhoneNumber              see
-             *                                    {@link #obaPhoneNumber()}
-             * @throws NullPointerException if {@code businessJid},
-             *                              {@code websites},
-             *                              {@code categories},
-             *                              {@code serviceAreas},
-             *                              {@code offerings},
-             *                              {@code prompts}, or
-             *                              {@code commands} is
-             *                              {@code null}
+             * @param businessJid                the business JID; never {@code null}
+             * @param tag                        the version tag; may be {@code null}
+             * @param address                    the postal address; may be {@code null}
+             * @param description                the self-description body; may be {@code null}
+             * @param email                      the contact email; may be {@code null}
+             * @param latitude                   the pinned-location latitude; may be {@code null}
+             * @param longitude                  the pinned-location longitude; may be {@code null}
+             * @param websites                   the website URLs; never {@code null}
+             * @param categories                 the category entries; never {@code null}
+             * @param businessHours              the business-hours schedule; may be {@code null}
+             * @param catalogStatus              the catalog status; may be {@code null}
+             * @param profileOptions             the profile-options block; may be {@code null}
+             * @param facebookPage               the Facebook page link block; may be {@code null}
+             * @param instagramProfessional      the Instagram-professional block; may be {@code null}
+             * @param profileIsLinked            whether any linked-account block is present
+             * @param directConnection           the direct-connection block; may be {@code null}
+             * @param serviceAreas               the service-area entries; never {@code null}
+             * @param offerings                  the offering categories; never {@code null}
+             * @param coverPhoto                 the cover photo; may be {@code null}
+             * @param customUrl                  the custom merchant URL; may be {@code null}
+             * @param prompts                    the bot welcome prompts; never {@code null}
+             * @param commands                   the bot commands; never {@code null}
+             * @param commandsDescription        the commands-section description; may be {@code null}
+             * @param automatedType              the automated-bot type marker; may be {@code null}
+             * @param welcomeMessageProtocolMode the welcome-message protocol mode; may be {@code null}
+             * @param memberSinceText            the "merchant since" display text; may be {@code null}
+             * @param priceTierId                the price-tier id; may be {@code null}
+             * @param isAuthorizedAgent          the authorised-agent flag; may be {@code null}
+             * @param parentCompanyName          the parent company name; may be {@code null}
+             * @param parentCompanyLogoUrl       the parent company logo URL; may be {@code null}
+             * @param obaPhoneNumber             the official-business-account phone number; may be {@code null}
+             * @throws NullPointerException if {@code businessJid}, {@code websites}, {@code categories}, {@code serviceAreas}, {@code offerings}, {@code prompts}, or {@code commands} is {@code null}
              */
             public Profile(Jid businessJid,
                            String tag,
@@ -395,12 +335,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the merchant JID.
+             * Returns the merchant JID used as the business-profile collection key.
              *
-             * @apiNote
-             * Use this getter as the business-profile collection key;
-             * the value is taken verbatim from the {@code jid}
-             * attribute of the {@code <profile/>} child.
+             * <p>The value is taken verbatim from the {@code jid} attribute of the
+             * {@code <profile/>} child.
              *
              * @return the JID; never {@code null}
              */
@@ -411,11 +349,8 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             /**
              * Returns the version tag, when supplied.
              *
-             * @apiNote
-             * Use this getter to cache the profile body and replay
-             * the tag on a future conditional fetch; an empty
-             * optional means the relay returned the full body
-             * unconditionally.
+             * <p>Callers cache the profile body and replay the tag on a future conditional fetch;
+             * an empty optional means the relay returned the full body unconditionally.
              *
              * @return an {@link Optional} carrying the tag
              */
@@ -424,12 +359,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the postal address.
+             * Returns the postal address that drives the address line of the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the address line of the
-             * merchant profile sheet; the relay echoes the
-             * merchant-supplied free-text address verbatim.
+             * <p>The relay echoes the merchant-supplied free-text address verbatim.
              *
              * @return an {@link Optional} carrying the address
              */
@@ -438,11 +370,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the self-description body.
-             *
-             * @apiNote
-             * Use this getter to render the merchant description
-             * line of the chat opener and merchant directory.
+             * Returns the self-description body that drives the merchant description line of the chat opener and merchant directory.
              *
              * @return an {@link Optional} carrying the description
              */
@@ -451,12 +379,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the contact email.
-             *
-             * @apiNote
-             * Use this getter to render the email line of the
-             * merchant profile sheet and surface a mailto: link in
-             * the chat opener.
+             * Returns the contact email that drives the email line of the merchant profile sheet.
              *
              * @return an {@link Optional} carrying the email
              */
@@ -465,11 +388,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the pinned-location latitude.
-             *
-             * @apiNote
-             * Use this getter together with {@link #longitude()} to
-             * drop a pin on the merchant location surface.
+             * Returns the pinned-location latitude that, with {@link #longitude()}, drops a pin on the merchant location surface.
              *
              * @return an {@link Optional} carrying the latitude
              */
@@ -478,11 +397,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the pinned-location longitude.
-             *
-             * @apiNote
-             * Use this getter together with {@link #latitude()} to
-             * drop a pin on the merchant location surface.
+             * Returns the pinned-location longitude that, with {@link #latitude()}, drops a pin on the merchant location surface.
              *
              * @return an {@link Optional} carrying the longitude
              */
@@ -491,12 +406,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the list of website URLs.
+             * Returns the website URLs that drive the website links on the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the website links on the
-             * merchant profile sheet; the relay echoes zero, one or
-             * two entries in wire order.
+             * <p>The relay echoes zero, one or two entries in wire order.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -505,12 +417,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the list of category entries.
+             * Returns the category entries that drive the category chips on the chat opener and merchant directory.
              *
-             * @apiNote
-             * Use this getter to render the category chips on the
-             * chat opener and merchant directory; each entry pairs
-             * an opaque id with a localised display name.
+             * <p>Each entry pairs an opaque id with a localised display name.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -519,12 +428,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the business-hours schedule.
+             * Returns the business-hours schedule that drives the opening hours block on the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the opening hours block on
-             * the merchant profile sheet; an empty optional means
-             * the merchant has not configured hours.
+             * <p>An empty optional means the merchant has not configured hours.
              *
              * @return an {@link Optional} carrying the schedule
              */
@@ -533,13 +439,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the catalog status string.
+             * Returns the catalog status used to dispatch on the catalog approval state.
              *
-             * @apiNote
-             * Use this getter to dispatch on the catalog approval
-             * state (e.g. {@code "PENDING"}, {@code "APPROVED"});
-             * the value is read from the {@code status} attribute
-             * of the {@code <catalog_status/>} grandchild.
+             * <p>The value (for example {@code "PENDING"} or {@code "APPROVED"}) is read from the
+             * {@code status} attribute of the {@code <catalog_status/>} grandchild.
              *
              * @return an {@link Optional} carrying the status
              */
@@ -548,13 +451,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the profile-options block.
+             * Returns the profile-options block carrying the cart-enabled flag, shop URL and other catalog-related markers.
              *
-             * @apiNote
-             * Use this getter to read the cart-enabled flag, shop
-             * URL and other catalog-related markers in one place;
-             * an empty optional means the relay omitted the
-             * {@code <profile_options/>} grandchild.
+             * <p>An empty optional means the relay omitted the {@code <profile_options/>}
+             * grandchild.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -563,11 +463,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the Facebook page link block.
-             *
-             * @apiNote
-             * Use this getter to render the FB-page surface of the
-             * linked-accounts panel.
+             * Returns the Facebook page link block that drives the FB-page surface of the linked-accounts panel.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -576,11 +472,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the Instagram-professional link block.
-             *
-             * @apiNote
-             * Use this getter to render the IG-professional surface
-             * of the linked-accounts panel.
+             * Returns the Instagram-professional link block that drives the IG-professional surface of the linked-accounts panel.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -589,15 +481,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns whether the profile carries any linked-account
-             * block at all (Facebook or Instagram).
+             * Returns whether the profile carries any linked-account block at all (Facebook or Instagram).
              *
-             * @apiNote
-             * Use this flag to gate the visibility of the
-             * linked-accounts panel before reading the per-platform
-             * blocks; a {@code true} value means at least one of
-             * {@link #facebookPage()} or
-             * {@link #instagramProfessional()} is populated.
+             * <p>This flag gates the visibility of the linked-accounts panel before reading the
+             * per-platform blocks; a {@code true} value means at least one of {@link #facebookPage()}
+             * or {@link #instagramProfessional()} is populated.
              *
              * @return {@code true} when at least one linkage is present
              */
@@ -606,12 +494,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the direct-connection block.
+             * Returns the direct-connection block that drives the cart-postcode entry surface.
              *
-             * @apiNote
-             * Use this getter to drive the cart-postcode entry
-             * surface; an empty optional means the merchant has not
-             * enrolled in the buyer-side direct-connection flow.
+             * <p>An empty optional means the merchant has not enrolled in the buyer-side
+             * direct-connection flow.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -620,12 +506,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the service-area entries.
+             * Returns the service-area entries that drive the merchant's service-area map.
              *
-             * @apiNote
-             * Use this getter to render the merchant's service-area
-             * map; each entry pairs a center lat/long with a radius
-             * in meters and a free-text description.
+             * <p>Each entry pairs a center latitude/longitude with a radius in meters and a
+             * free-text description.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -634,12 +518,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the offering categories.
+             * Returns the offering categories that drive the merchant's offering grid.
              *
-             * @apiNote
-             * Use this getter to render the merchant's offering
-             * grid; each category groups one or more typed
-             * {@link Offering} entries.
+             * <p>Each category groups one or more typed {@link Offering} entries.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -648,12 +529,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the cover photo.
+             * Returns the cover photo that drives the banner of the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the banner of the merchant
-             * profile sheet; an empty optional means the merchant
-             * has not uploaded a cover photo.
+             * <p>An empty optional means the merchant has not uploaded a cover photo.
              *
              * @return an {@link Optional} carrying the cover photo
              */
@@ -662,12 +540,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the custom merchant URL.
+             * Returns the custom merchant URL that drives the wa.me-style shareable link on the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the wa.me-style shareable
-             * link on the merchant profile sheet; an empty optional
-             * means the merchant has not configured a custom URL.
+             * <p>An empty optional means the merchant has not configured a custom URL.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -676,12 +551,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the bot welcome prompts.
+             * Returns the bot welcome prompts that drive the welcome-prompts surface the bot-enabled merchant uses to seed the conversation.
              *
-             * @apiNote
-             * Use this getter to render the welcome-prompts surface
-             * the bot-enabled merchant uses to seed the conversation;
-             * each entry pairs an emoji with a body text.
+             * <p>Each entry pairs an emoji with a body text.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -690,12 +562,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the bot commands.
+             * Returns the bot commands that drive the slash-command palette the bot-enabled merchant exposes.
              *
-             * @apiNote
-             * Use this getter to render the slash-command palette
-             * the bot-enabled merchant exposes; each entry pairs a
-             * command name with a description.
+             * <p>Each entry pairs a command name with a description.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -704,11 +573,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the commands-section description.
-             *
-             * @apiNote
-             * Use this getter to render the header text above the
-             * slash-command palette.
+             * Returns the commands-section description that drives the header text above the slash-command palette.
              *
              * @return an {@link Optional} carrying the description
              */
@@ -717,13 +582,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the automated-bot type marker.
+             * Returns the automated-bot type marker used to dispatch on the bot's automation type.
              *
-             * @apiNote
-             * Use this getter to dispatch on the bot's automation
-             * type marker (consumed by
-             * {@code WAWebBotTypes.BizBotAutomatedType.cast});
-             * an empty optional means the merchant is not a bot.
+             * <p>The value is consumed by {@code WAWebBotTypes.BizBotAutomatedType.cast}; an empty
+             * optional means the merchant is not a bot.
              *
              * @return an {@link Optional} carrying the type marker
              */
@@ -732,13 +594,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the welcome-message protocol mode.
+             * Returns the welcome-message protocol mode the merchant has enrolled in.
              *
-             * @apiNote
-             * Use this getter to dispatch on the welcome-message
-             * protocol mode the merchant has enrolled in; bots use
-             * the mode to decide whether to surface the welcome
-             * message as a system stanza or a normal chat message.
+             * <p>Bots use the mode to decide whether to surface the welcome message as a system
+             * stanza or a normal chat message.
              *
              * @return an {@link Optional} carrying the mode marker
              */
@@ -747,12 +606,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the "merchant since" display text.
+             * Returns the "merchant since" display text that drives the merchant-tenure line on the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the merchant-tenure line
-             * on the merchant profile sheet; the relay echoes a
-             * pre-localised string.
+             * <p>The relay echoes a pre-localised string.
              *
              * @return an {@link Optional} carrying the text
              */
@@ -761,13 +617,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the price-tier id.
+             * Returns the price-tier id that drives the price-tier symbol on the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the price-tier symbol on
-             * the merchant profile sheet; the id keys into
-             * {@code WAWebBizGetPriceTiersQuery.getCachedPriceTierById}
-             * to resolve the symbol and description.
+             * <p>The id keys into {@code WAWebBizGetPriceTiersQuery.getCachedPriceTierById} to
+             * resolve the symbol and description.
              *
              * @return an {@link Optional} carrying the id
              */
@@ -776,13 +629,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the authorised-agent flag.
+             * Returns the authorised-agent flag that gates the rendering of the parent-company block.
              *
-             * @apiNote
-             * Use this getter to gate the rendering of the
-             * parent-company block; an empty optional means the
-             * relay did not include the
-             * {@code <authorized_agent/>} grandchild.
+             * <p>An empty optional means the relay did not include the {@code <authorized_agent/>}
+             * grandchild.
              *
              * @return an {@link Optional} carrying the flag
              */
@@ -791,12 +641,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the parent company name.
+             * Returns the parent company name that, with {@link #parentCompanyLogoUrl()}, drives the parent-company block.
              *
-             * @apiNote
-             * Use this getter together with {@link #parentCompanyLogoUrl()}
-             * to render the parent-company block; only populated
-             * when {@link #isAuthorizedAgent()} resolves to true.
+             * <p>Only populated when {@link #isAuthorizedAgent()} resolves to {@code true}.
              *
              * @return an {@link Optional} carrying the name
              */
@@ -805,12 +652,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the parent company logo URL.
+             * Returns the parent company logo URL that, with {@link #parentCompanyName()}, drives the parent-company block.
              *
-             * @apiNote
-             * Use this getter together with {@link #parentCompanyName()}
-             * to render the parent-company block; only populated
-             * when {@link #isAuthorizedAgent()} resolves to true.
+             * <p>Only populated when {@link #isAuthorizedAgent()} resolves to {@code true}.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -819,13 +663,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the official-business-account phone number.
+             * Returns the official-business-account phone number shown in the OBA disclosure line.
              *
-             * @apiNote
-             * Use this getter to display the OBA disclosure line
-             * when {@link #isAuthorizedAgent()} resolves to true;
-             * the value is the underlying business's contact
-             * number.
+             * <p>Surfaced when {@link #isAuthorizedAgent()} resolves to {@code true}; the value is
+             * the underlying business's contact number.
              *
              * @return an {@link Optional} carrying the number
              */
@@ -833,9 +674,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return Optional.ofNullable(obaPhoneNumber);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -878,9 +716,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.obaPhoneNumber, that.obaPhoneNumber);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 var h = Objects.hash(businessJid, tag, address, description, email,
@@ -894,9 +729,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         parentCompanyLogoUrl, obaPhoneNumber);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.Profile[businessJid=" + businessJid
@@ -907,38 +739,29 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One business category entry: opaque id plus localised
-         * display name.
+         * Models one business category entry: opaque id plus localised display name.
          *
-         * @apiNote
-         * Use this entry to render the category chips on the chat
-         * opener and merchant directory; the same id is also used as
-         * the lookup key against the
-         * {@link IqQueryBusinessCategoriesResponse} cache when the
-         * merchant directory needs the parent / sibling chain.
+         * <p>The entry drives the category chips on the chat opener and merchant directory; the
+         * same id is also used as the lookup key against the {@link IqQueryBusinessCategoriesResponse}
+         * cache when the merchant directory needs the parent or sibling chain.
          */
         public static final class Category {
             /**
-             * The opaque category id.
+             * Holds the opaque category id.
              */
             private final String id;
 
             /**
-             * The localised display name.
+             * Holds the localised display name.
              */
             private final String localizedDisplayName;
 
             /**
-             * Constructs a category.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a category from the decoded {@code <category/>} child.
              *
              * @param id                   the id; never {@code null}
-             * @param localizedDisplayName the display name; never
-             *                             {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @param localizedDisplayName the display name; never {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public Category(String id, String localizedDisplayName) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -947,11 +770,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the opaque category id.
-             *
-             * @apiNote
-             * Use this getter to dispatch on the category id; the
-             * same id keys into the business-categories cache.
+             * Returns the opaque category id, which also keys into the business-categories cache.
              *
              * @return the id; never {@code null}
              */
@@ -960,11 +779,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the localised display name.
+             * Returns the localised display name that drives the category chip label.
              *
-             * @apiNote
-             * Use this getter to render the category chip label;
-             * the relay echoes a pre-localised string.
+             * <p>The relay echoes a pre-localised string.
              *
              * @return the display name; never {@code null}
              */
@@ -972,9 +789,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return localizedDisplayName;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -988,17 +802,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.localizedDisplayName, that.localizedDisplayName);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(id, localizedDisplayName);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.Category[id=" + id
@@ -1007,35 +815,29 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The merchant's business-hours schedule.
+         * Models the merchant's business-hours schedule.
          *
-         * @apiNote
-         * Use this block to render the opening-hours surface on the
-         * merchant profile sheet; the timezone is the merchant's
-         * configured IANA zone and the config list carries one
-         * window per (day of week, mode) tuple.
+         * <p>The schedule drives the opening-hours surface on the merchant profile sheet; the
+         * timezone is the merchant's configured IANA zone and the config list carries one window
+         * per (day of week, mode) tuple.
          */
         public static final class BusinessHours {
             /**
-             * The optional IANA timezone identifier.
+             * Holds the optional IANA timezone identifier.
              */
             private final String timezone;
 
             /**
-             * The per-(day-of-week) opening windows.
+             * Holds the per-(day-of-week) opening windows.
              */
             private final List<BusinessHoursConfig> config;
 
             /**
-             * Constructs a schedule.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a schedule from the decoded {@code <business_hours/>} grandchild.
              *
              * @param timezone the optional timezone; may be {@code null}
              * @param config   the per-day windows; never {@code null}
-             * @throws NullPointerException if {@code config} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code config} is {@code null}
              */
             public BusinessHours(String timezone, List<BusinessHoursConfig> config) {
                 this.timezone = timezone;
@@ -1044,12 +846,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the IANA timezone identifier.
+             * Returns the IANA timezone identifier used to render the opening-hours surface in the merchant's local time.
              *
-             * @apiNote
-             * Use this getter to render the opening-hours surface
-             * in the merchant's local time; an empty optional means
-             * the relay omitted the timezone attribute.
+             * <p>An empty optional means the relay omitted the timezone attribute.
              *
              * @return an {@link Optional} carrying the timezone
              */
@@ -1058,13 +857,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the per-day opening windows.
+             * Returns the per-day opening windows that drive the daily opening-hours rows.
              *
-             * @apiNote
-             * Use this getter to render the daily opening-hours
-             * rows; the list may contain multiple entries for the
-             * same day when the merchant configures multiple
-             * windows (e.g. lunch break).
+             * <p>The list may contain multiple entries for the same day when the merchant configures
+             * multiple windows (for example a lunch break).
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -1072,9 +868,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return config;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1088,17 +881,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.config, that.config);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(timezone, config);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.BusinessHours[timezone="
@@ -1107,48 +894,40 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One business-hours window on a {@link BusinessHours}:
-         * day of week, mode, optional open and close times.
+         * Models one business-hours window on a {@link BusinessHours}: day of week, mode, optional open and close times.
          *
-         * @apiNote
-         * Use this row to drive one line of the opening-hours
-         * surface; the mode dispatches the rendering (specific
-         * hours, appointment only, closed).
+         * <p>The row drives one line of the opening-hours surface; the mode dispatches the
+         * rendering (specific hours, appointment only, closed).
          */
         public static final class BusinessHoursConfig {
             /**
-             * The day of week (e.g. {@code "mon"}).
+             * Holds the day of week (for example {@code "mon"}).
              */
             private final String dayOfWeek;
 
             /**
-             * The mode (e.g. {@code "open_specific_hours"},
-             * {@code "appointment_only"}, {@code "closed"}).
+             * Holds the mode (for example {@code "open_specific_hours"}, {@code "appointment_only"}, or {@code "closed"}).
              */
             private final String mode;
 
             /**
-             * The opening time in minutes since midnight.
+             * Holds the opening time in minutes since midnight.
              */
             private final int openTime;
 
             /**
-             * The closing time in minutes since midnight.
+             * Holds the closing time in minutes since midnight.
              */
             private final int closeTime;
 
             /**
-             * Constructs a window.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a window from the decoded {@code <business_hours_config/>} child.
              *
              * @param dayOfWeek the day of week; never {@code null}
              * @param mode      the mode; never {@code null}
-             * @param openTime  the opening time
-             * @param closeTime the closing time
-             * @throws NullPointerException if either string is
-             *                              {@code null}
+             * @param openTime  the opening time in minutes since midnight
+             * @param closeTime the closing time in minutes since midnight
+             * @throws NullPointerException if either string is {@code null}
              */
             public BusinessHoursConfig(String dayOfWeek, String mode, int openTime, int closeTime) {
                 this.dayOfWeek = Objects.requireNonNull(dayOfWeek, "dayOfWeek cannot be null");
@@ -1158,11 +937,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the day of week.
+             * Returns the day of week used as the row label.
              *
-             * @apiNote
-             * Use this getter as the row label; the relay echoes a
-             * short day name (e.g. {@code "mon"}, {@code "tue"}).
+             * <p>The relay echoes a short day name (for example {@code "mon"} or {@code "tue"}).
              *
              * @return the day of week; never {@code null}
              */
@@ -1171,13 +948,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the rendering mode.
+             * Returns the rendering mode used to dispatch on the row.
              *
-             * @apiNote
-             * Use this getter to dispatch on the row mode (e.g.
-             * {@code "open_specific_hours"} gates rendering of the
-             * open / close times; {@code "appointment_only"} and
-             * {@code "closed"} short-circuit the row).
+             * <p>{@code "open_specific_hours"} gates rendering of the open and close times;
+             * {@code "appointment_only"} and {@code "closed"} short-circuit the row.
              *
              * @return the mode; never {@code null}
              */
@@ -1188,10 +962,8 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             /**
              * Returns the opening time in minutes since midnight.
              *
-             * @apiNote
-             * Use this getter together with {@link #closeTime()} to
-             * render the open window; meaningful only when
-             * {@link #mode()} is {@code "open_specific_hours"}.
+             * <p>Meaningful only when {@link #mode()} is {@code "open_specific_hours"}; renders the
+             * open window together with {@link #closeTime()}.
              *
              * @return the opening time
              */
@@ -1202,10 +974,8 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             /**
              * Returns the closing time in minutes since midnight.
              *
-             * @apiNote
-             * Use this getter together with {@link #openTime()} to
-             * render the open window; meaningful only when
-             * {@link #mode()} is {@code "open_specific_hours"}.
+             * <p>Meaningful only when {@link #mode()} is {@code "open_specific_hours"}; renders the
+             * open window together with {@link #openTime()}.
              *
              * @return the closing time
              */
@@ -1213,9 +983,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return closeTime;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1231,17 +998,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.mode, that.mode);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(dayOfWeek, mode, openTime, closeTime);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.BusinessHoursConfig[dayOfWeek="
@@ -1251,73 +1012,62 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The catalog and cart options block on a {@link Profile}:
-         * commerce experience marker, cart-enabled flag, shop URL,
-         * commerce-manager URL, banned and direct-connection markers,
-         * profile-edit lock.
+         * Models the catalog and cart options block on a {@link Profile}.
          *
-         * @apiNote
-         * Use this block to drive the catalog-grid affordance,
-         * commerce-manager deep link and ban-state badge on the
-         * merchant profile sheet; every field is optional and an
-         * empty optional means the relay omitted the corresponding
-         * grandchild.
+         * <p>The block carries the commerce experience marker, cart-enabled flag, shop URL,
+         * commerce-manager URL, banned and direct-connection markers and the profile-edit lock; it
+         * drives the catalog-grid affordance, commerce-manager deep link and ban-state badge on the
+         * merchant profile sheet. Every field is optional, and an empty optional means the relay
+         * omitted the corresponding grandchild.
          */
         public static final class ProfileOptions {
             /**
-             * The commerce experience marker (e.g. {@code "NONE"},
-             * {@code "PURPLE_MOON"}).
+             * Holds the commerce experience marker (for example {@code "NONE"} or {@code "PURPLE_MOON"}).
              */
             private final String commerceExperience;
 
             /**
-             * Whether the cart is enabled.
+             * Holds whether the cart is enabled.
              */
             private final Boolean cartEnabled;
 
             /**
-             * The optional shop URL.
+             * Holds the optional shop URL.
              */
             private final String shopUrl;
 
             /**
-             * The optional commerce-manager URL.
+             * Holds the optional commerce-manager URL.
              */
             private final String commerceManagerUrl;
 
             /**
-             * Whether the merchant has been banned.
+             * Holds whether the merchant has been banned.
              */
             private final Boolean banned;
 
             /**
-             * Whether direct-connection is enabled.
+             * Holds whether direct-connection is enabled.
              */
             private final Boolean directConnection;
 
             /**
-             * Whether profile editing is disabled.
+             * Holds whether profile editing is disabled.
              */
             private final Boolean profileEditDisabled;
 
             /**
-             * Constructs an options block.
+             * Constructs an options block from the decoded {@code <profile_options/>} grandchild.
              *
-             * @apiNote
-             * Use this constructor only from the response parser;
-             * each field is independently optional on the wire.
+             * <p>Each field is independently optional on the wire.
              *
-             * @param commerceExperience  see
-             *                            {@link #commerceExperience()}
-             * @param cartEnabled         see {@link #cartEnabled()}
-             * @param shopUrl             see {@link #shopUrl()}
-             * @param commerceManagerUrl  see
-             *                            {@link #commerceManagerUrl()}
-             * @param banned              see {@link #banned()}
-             * @param directConnection    see
-             *                            {@link #directConnection()}
-             * @param profileEditDisabled see
-             *                            {@link #profileEditDisabled()}
+             * @param commerceExperience  the commerce experience marker; may be {@code null}
+             * @param cartEnabled         the cart-enabled flag; may be {@code null}
+             * @param shopUrl             the shop URL; may be {@code null}
+             * @param commerceManagerUrl  the commerce-manager URL; may be {@code null}
+             * @param banned              the banned flag; may be {@code null}
+             * @param directConnection    the direct-connection flag; may be {@code null}
+             * @param profileEditDisabled the profile-edit-disabled flag; may be {@code null}
              */
             public ProfileOptions(String commerceExperience,
                                   Boolean cartEnabled,
@@ -1336,13 +1086,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the commerce experience marker.
+             * Returns the commerce experience marker used to dispatch on the commerce-experience track.
              *
-             * @apiNote
-             * Use this getter to dispatch on the commerce-experience
-             * track the merchant is enrolled in (e.g. {@code "NONE"},
-             * {@code "PURPLE_MOON"}); the value gates which catalog
-             * surface the cart UI surfaces.
+             * <p>The value (for example {@code "NONE"} or {@code "PURPLE_MOON"}) gates which catalog
+             * surface the cart UI presents.
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -1351,13 +1098,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the cart-enabled flag.
+             * Returns the cart-enabled flag that gates the "add to cart" affordance on the catalog card.
              *
-             * @apiNote
-             * Use this getter to gate the "add to cart" affordance
-             * on the catalog card; an empty optional means the
-             * relay omitted the flag and the caller should default
-             * to disabled.
+             * <p>An empty optional means the relay omitted the flag and the caller should default to
+             * disabled.
              *
              * @return an {@link Optional} carrying the flag
              */
@@ -1366,11 +1110,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the shop URL.
-             *
-             * @apiNote
-             * Use this getter to drive the "open shop" CTA on the
-             * merchant profile sheet.
+             * Returns the shop URL that drives the "open shop" CTA on the merchant profile sheet.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -1379,12 +1119,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the commerce-manager URL.
-             *
-             * @apiNote
-             * Use this getter to drive the deep link to Meta's
-             * commerce-manager surface when the calling user owns
-             * the merchant.
+             * Returns the commerce-manager URL that drives the deep link to Meta's commerce-manager surface when the calling user owns the merchant.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -1393,12 +1128,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the banned flag.
+             * Returns the banned flag that drives the ban-state badge on the merchant profile sheet.
              *
-             * @apiNote
-             * Use this getter to render the ban-state badge on the
-             * merchant profile sheet; an empty optional means the
-             * relay omitted the flag.
+             * <p>An empty optional means the relay omitted the flag.
              *
              * @return an {@link Optional} carrying the flag
              */
@@ -1407,12 +1139,10 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the direct-connection flag.
+             * Returns the direct-connection flag that gates the cart-postcode entry surface.
              *
-             * @apiNote
-             * Use this getter to gate the cart-postcode entry
-             * surface; an empty optional means the relay omitted
-             * the flag and the caller should default to disabled.
+             * <p>An empty optional means the relay omitted the flag and the caller should default to
+             * disabled.
              *
              * @return an {@link Optional} carrying the flag
              */
@@ -1421,12 +1151,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the profile-edit-disabled flag.
+             * Returns the profile-edit-disabled flag that gates write affordances on the merchant-profile edit surface.
              *
-             * @apiNote
-             * Use this getter to gate write affordances on the
-             * merchant-profile edit surface; the relay sets the
-             * flag when the merchant has lost edit capability.
+             * <p>The relay sets the flag when the merchant has lost edit capability.
              *
              * @return an {@link Optional} carrying the flag
              */
@@ -1434,9 +1161,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return Optional.ofNullable(profileEditDisabled);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1455,18 +1179,12 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.profileEditDisabled, that.profileEditDisabled);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(commerceExperience, cartEnabled, shopUrl,
                         commerceManagerUrl, banned, directConnection, profileEditDisabled);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.ProfileOptions[commerceExperience="
@@ -1476,35 +1194,29 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The Facebook page link block on a {@link Profile}.
+         * Models the Facebook page link block on a {@link Profile}.
          *
-         * @apiNote
-         * Use this block to render the FB-page row of the
-         * linked-accounts panel; every field is optional and an
-         * empty optional means the relay omitted the corresponding
-         * grandchild.
+         * <p>The block drives the FB-page row of the linked-accounts panel; every field is optional,
+         * and an empty optional means the relay omitted the corresponding grandchild.
          */
         public static final class FacebookPage {
             /**
-             * The optional FB page id.
+             * Holds the optional FB page id.
              */
             private final String id;
 
             /**
-             * The optional display name.
+             * Holds the optional display name.
              */
             private final String displayName;
 
             /**
-             * The optional page-likes count.
+             * Holds the optional page-likes count.
              */
             private final Integer likes;
 
             /**
-             * Constructs a block.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a block from the decoded {@code <fb_page/>} child.
              *
              * @param id          the id; may be {@code null}
              * @param displayName the display name; may be {@code null}
@@ -1517,11 +1229,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the FB page id.
-             *
-             * @apiNote
-             * Use this getter to drive the deep link from the
-             * linked-accounts panel into the Facebook app.
+             * Returns the FB page id that drives the deep link from the linked-accounts panel into the Facebook app.
              *
              * @return an {@link Optional} carrying the id
              */
@@ -1530,11 +1238,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the display name.
-             *
-             * @apiNote
-             * Use this getter to render the FB-page label of the
-             * linked-accounts panel.
+             * Returns the display name that drives the FB-page label of the linked-accounts panel.
              *
              * @return an {@link Optional} carrying the name
              */
@@ -1543,11 +1247,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the page-likes count.
-             *
-             * @apiNote
-             * Use this getter to render the like-count badge of
-             * the linked-accounts panel.
+             * Returns the page-likes count that drives the like-count badge of the linked-accounts panel.
              *
              * @return an {@link Optional} carrying the count
              */
@@ -1555,9 +1255,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return Optional.ofNullable(likes);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1572,17 +1269,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.likes, that.likes);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(id, displayName, likes);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.FacebookPage[id=" + id
@@ -1591,28 +1282,23 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The Instagram-professional link block on a {@link Profile}.
+         * Models the Instagram-professional link block on a {@link Profile}.
          *
-         * @apiNote
-         * Use this block to render the IG-professional row of the
-         * linked-accounts panel.
+         * <p>The block drives the IG-professional row of the linked-accounts panel.
          */
         public static final class InstagramProfessional {
             /**
-             * The optional IG handle.
+             * Holds the optional IG handle.
              */
             private final String igHandle;
 
             /**
-             * The optional follower count.
+             * Holds the optional follower count.
              */
             private final Integer followers;
 
             /**
-             * Constructs a block.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a block from the decoded {@code <ig_professional/>} child.
              *
              * @param igHandle  the IG handle; may be {@code null}
              * @param followers the follower count; may be {@code null}
@@ -1623,12 +1309,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the IG handle.
-             *
-             * @apiNote
-             * Use this getter to render the IG-professional label
-             * of the linked-accounts panel and drive the deep link
-             * into the Instagram app.
+             * Returns the IG handle that drives the IG-professional label of the linked-accounts panel and the deep link into the Instagram app.
              *
              * @return an {@link Optional} carrying the handle
              */
@@ -1637,11 +1318,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the follower count.
-             *
-             * @apiNote
-             * Use this getter to render the follower-count badge of
-             * the linked-accounts panel.
+             * Returns the follower count that drives the follower-count badge of the linked-accounts panel.
              *
              * @return an {@link Optional} carrying the count
              */
@@ -1649,9 +1326,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return Optional.ofNullable(followers);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1665,17 +1339,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.followers, that.followers);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(igHandle, followers);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.InstagramProfessional[igHandle="
@@ -1684,35 +1352,28 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The direct-connection block on a {@link Profile}: enabled
-         * flag plus the optional default-postcode echo.
+         * Models the direct-connection block on a {@link Profile}: enabled flag plus the optional default-postcode echo.
          *
-         * @apiNote
-         * Use this block to drive the cart-postcode entry surface;
-         * the default postcode is the address the buyer previously
-         * verified against the merchant, so the surface can
-         * pre-populate the chip.
+         * <p>The block drives the cart-postcode entry surface; the default postcode is the address
+         * the buyer previously verified against the merchant, so the surface can pre-populate the
+         * chip.
          */
         public static final class DirectConnection {
             /**
-             * Whether direct-connection is enabled.
+             * Holds whether direct-connection is enabled.
              */
             private final boolean enabled;
 
             /**
-             * The optional default-postcode echo.
+             * Holds the optional default-postcode echo.
              */
             private final DefaultPostcode defaultPostcode;
 
             /**
-             * Constructs a block.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a block from the decoded {@code <direct_connection/>} child.
              *
              * @param enabled         the enabled flag
-             * @param defaultPostcode the default postcode; may be
-             *                        {@code null}
+             * @param defaultPostcode the default postcode; may be {@code null}
              */
             public DirectConnection(boolean enabled, DefaultPostcode defaultPostcode) {
                 this.enabled = enabled;
@@ -1720,12 +1381,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the enabled flag.
+             * Returns the enabled flag that gates the cart-postcode entry surface.
              *
-             * @apiNote
-             * Use this getter to gate the cart-postcode entry
-             * surface; a {@code true} value unlocks the surface for
-             * the merchant.
+             * <p>A {@code true} value unlocks the surface for the merchant.
              *
              * @return {@code true} when direct-connection is enabled
              */
@@ -1734,13 +1392,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the default-postcode echo.
+             * Returns the default-postcode echo used to pre-populate the postcode chip on the cart-postcode entry surface.
              *
-             * @apiNote
-             * Use this getter to pre-populate the postcode chip on
-             * the cart-postcode entry surface; an empty optional
-             * means the buyer has not yet verified an address with
-             * the merchant.
+             * <p>An empty optional means the buyer has not yet verified an address with the merchant.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -1748,9 +1402,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return Optional.ofNullable(defaultPostcode);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1764,17 +1415,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.defaultPostcode, that.defaultPostcode);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(enabled, defaultPostcode);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.DirectConnection[enabled="
@@ -1783,35 +1428,28 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The default-postcode block on a {@link DirectConnection}:
-         * postcode value plus the location-name label.
+         * Models the default-postcode block on a {@link DirectConnection}: postcode value plus the location-name label.
          *
-         * @apiNote
-         * Use this block to pre-populate the postcode chip on the
-         * cart-postcode entry surface; the location-name label is
-         * the resolved address the UI surfaces above the chip.
+         * <p>The block pre-populates the postcode chip on the cart-postcode entry surface; the
+         * location-name label is the resolved address the UI surfaces above the chip.
          */
         public static final class DefaultPostcode {
             /**
-             * The postcode value.
+             * Holds the postcode value.
              */
             private final String code;
 
             /**
-             * The location-name label resolved from the postcode.
+             * Holds the location-name label resolved from the postcode.
              */
             private final String locationName;
 
             /**
-             * Constructs a block.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a block from the decoded {@code <default_postcode/>} child.
              *
              * @param code         the postcode; never {@code null}
              * @param locationName the location label; never {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public DefaultPostcode(String code, String locationName) {
                 this.code = Objects.requireNonNull(code, "code cannot be null");
@@ -1819,10 +1457,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the postcode value.
-             *
-             * @apiNote
-             * Use this getter to pre-populate the postcode chip.
+             * Returns the postcode value used to pre-populate the postcode chip.
              *
              * @return the postcode; never {@code null}
              */
@@ -1831,11 +1466,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the location-name label.
-             *
-             * @apiNote
-             * Use this getter to render the resolved address line
-             * above the postcode chip.
+             * Returns the location-name label rendered as the resolved address line above the postcode chip.
              *
              * @return the label; never {@code null}
              */
@@ -1843,9 +1474,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return locationName;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -1859,17 +1487,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.locationName, that.locationName);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(code, locationName);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.DefaultPostcode[code=" + code
@@ -1878,48 +1500,39 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One service-area entry on a {@link Profile}: radius in
-         * meters around a fixed lat/long center plus a free-text
-         * description.
+         * Models one service-area entry on a {@link Profile}: radius in meters around a fixed latitude/longitude center plus a free-text description.
          *
-         * @apiNote
-         * Use this entry to render one circle on the merchant's
-         * service-area map.
+         * <p>The entry renders one circle on the merchant's service-area map.
          */
         public static final class ServiceArea {
             /**
-             * The service radius in meters.
+             * Holds the service radius in meters.
              */
             private final double radius;
 
             /**
-             * The center latitude.
+             * Holds the center latitude.
              */
             private final double latitude;
 
             /**
-             * The center longitude.
+             * Holds the center longitude.
              */
             private final double longitude;
 
             /**
-             * The free-text description.
+             * Holds the free-text description.
              */
             private final String areaDescription;
 
             /**
-             * Constructs an entry.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs an entry from the decoded {@code <service_area/>} child.
              *
              * @param radius          the radius in meters
              * @param latitude        the center latitude
              * @param longitude       the center longitude
-             * @param areaDescription the free-text description;
-             *                        never {@code null}
-             * @throws NullPointerException if {@code areaDescription} is
-             *                              {@code null}
+             * @param areaDescription the free-text description; never {@code null}
+             * @throws NullPointerException if {@code areaDescription} is {@code null}
              */
             public ServiceArea(double radius, double latitude, double longitude, String areaDescription) {
                 this.radius = radius;
@@ -1930,11 +1543,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the service radius in meters.
-             *
-             * @apiNote
-             * Use this getter to size the rendered circle on the
-             * service-area map.
+             * Returns the service radius in meters used to size the rendered circle on the service-area map.
              *
              * @return the radius
              */
@@ -1943,11 +1552,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the center latitude.
-             *
-             * @apiNote
-             * Use this getter together with {@link #longitude()} to
-             * place the rendered circle on the service-area map.
+             * Returns the center latitude that, with {@link #longitude()}, places the rendered circle on the service-area map.
              *
              * @return the latitude
              */
@@ -1956,11 +1561,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the center longitude.
-             *
-             * @apiNote
-             * Use this getter together with {@link #latitude()} to
-             * place the rendered circle on the service-area map.
+             * Returns the center longitude that, with {@link #latitude()}, places the rendered circle on the service-area map.
              *
              * @return the longitude
              */
@@ -1969,12 +1570,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the free-text description.
-             *
-             * @apiNote
-             * Use this getter to render the merchant-supplied label
-             * next to the rendered circle (e.g.
-             * {@code "Greater Mumbai"}).
+             * Returns the free-text description rendered as the merchant-supplied label next to the rendered circle (for example {@code "Greater Mumbai"}).
              *
              * @return the description; never {@code null}
              */
@@ -1982,9 +1578,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return areaDescription;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -2000,17 +1593,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.areaDescription, that.areaDescription);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(radius, latitude, longitude, areaDescription);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.ServiceArea[radius=" + radius
@@ -2020,41 +1607,34 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One offering category on a {@link Profile}: id, name and
-         * list of typed offering entries.
+         * Models one offering category on a {@link Profile}: id, name and list of typed offering entries.
          *
-         * @apiNote
-         * Use this category to render one section of the merchant's
-         * offering grid; each section groups one or more
-         * {@link Offering} entries.
+         * <p>The category renders one section of the merchant's offering grid; each section groups
+         * one or more {@link Offering} entries.
          */
         public static final class OfferingCategory {
             /**
-             * The category id.
+             * Holds the category id.
              */
             private final String id;
 
             /**
-             * The category name.
+             * Holds the category name.
              */
             private final String name;
 
             /**
-             * The list of offerings.
+             * Holds the list of offerings.
              */
             private final List<Offering> offerings;
 
             /**
-             * Constructs a category.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a category from the decoded {@code <category/>} child of {@code <offerings/>}.
              *
              * @param id        the id; never {@code null}
              * @param name      the name; never {@code null}
              * @param offerings the offerings; never {@code null}
-             * @throws NullPointerException if any argument is
-             *                              {@code null}
+             * @throws NullPointerException if any argument is {@code null}
              */
             public OfferingCategory(String id, String name, List<Offering> offerings) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -2064,11 +1644,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the category id.
-             *
-             * @apiNote
-             * Use this getter as a stable key for the offering-grid
-             * section.
+             * Returns the category id used as a stable key for the offering-grid section.
              *
              * @return the id; never {@code null}
              */
@@ -2077,10 +1653,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the category name.
-             *
-             * @apiNote
-             * Use this getter as the offering-grid section header.
+             * Returns the category name used as the offering-grid section header.
              *
              * @return the name; never {@code null}
              */
@@ -2089,11 +1662,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the typed offerings.
-             *
-             * @apiNote
-             * Use this getter to render the offering-grid rows
-             * inside the section.
+             * Returns the typed offerings rendered as the offering-grid rows inside the section.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -2101,9 +1670,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return offerings;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -2118,17 +1684,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.offerings, that.offerings);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(id, name, offerings);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.OfferingCategory[id=" + id
@@ -2137,40 +1697,34 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One typed offering entry on an {@link OfferingCategory}.
+         * Models one typed offering entry on an {@link OfferingCategory}.
          *
-         * @apiNote
-         * Use this entry to render one row of the offering grid;
-         * the offered flag dispatches between an active row and a
-         * dimmed "not currently offered" row.
+         * <p>The entry renders one row of the offering grid; the offered flag dispatches between an
+         * active row and a dimmed "not currently offered" row.
          */
         public static final class Offering {
             /**
-             * The offering id.
+             * Holds the offering id.
              */
             private final String id;
 
             /**
-             * The localised display name.
+             * Holds the localised display name.
              */
             private final String localizedDisplayName;
 
             /**
-             * Whether the offering is currently offered.
+             * Holds whether the offering is currently offered.
              */
             private final boolean offered;
 
             /**
-             * Constructs an offering.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs an offering from the decoded {@code <offering/>} child.
              *
              * @param id                   the id; never {@code null}
              * @param localizedDisplayName the name; never {@code null}
              * @param offered              the offered flag
-             * @throws NullPointerException if either string is
-             *                              {@code null}
+             * @throws NullPointerException if either string is {@code null}
              */
             public Offering(String id, String localizedDisplayName, boolean offered) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -2180,11 +1734,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the offering id.
-             *
-             * @apiNote
-             * Use this getter as a stable key for the offering-grid
-             * row.
+             * Returns the offering id used as a stable key for the offering-grid row.
              *
              * @return the id; never {@code null}
              */
@@ -2193,11 +1743,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the localised display name.
+             * Returns the localised display name rendered as the row label.
              *
-             * @apiNote
-             * Use this getter to render the row label; the relay
-             * echoes a pre-localised string.
+             * <p>The relay echoes a pre-localised string.
              *
              * @return the name; never {@code null}
              */
@@ -2206,11 +1754,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the offered flag.
-             *
-             * @apiNote
-             * Use this getter to dispatch between an active row and
-             * a dimmed "not currently offered" row.
+             * Returns the offered flag that dispatches between an active row and a dimmed "not currently offered" row.
              *
              * @return {@code true} when currently offered
              */
@@ -2218,9 +1762,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return offered;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -2235,17 +1776,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.localizedDisplayName, that.localizedDisplayName);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(id, localizedDisplayName, offered);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.Offering[id=" + id
@@ -2255,33 +1790,28 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The cover photo block on a {@link Profile}: id plus URL.
+         * Models the cover photo block on a {@link Profile}: id plus URL.
          *
-         * @apiNote
-         * Use this block to render the banner of the merchant
-         * profile sheet; the URL is signed and short-lived.
+         * <p>The block renders the banner of the merchant profile sheet; the URL is signed and
+         * short-lived.
          */
         public static final class CoverPhoto {
             /**
-             * The cover photo id.
+             * Holds the cover photo id.
              */
             private final String id;
 
             /**
-             * The signed cover photo URL.
+             * Holds the signed cover photo URL.
              */
             private final String url;
 
             /**
-             * Constructs a block.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a block from the decoded {@code <cover_photo/>} child.
              *
              * @param id  the id; never {@code null}
              * @param url the URL; never {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public CoverPhoto(String id, String url) {
                 this.id = Objects.requireNonNull(id, "id cannot be null");
@@ -2289,12 +1819,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the cover photo id.
+             * Returns the cover photo id used as the upload-artefact id when deleting or refreshing the cover photo.
              *
-             * @apiNote
-             * Use this getter as the upload-artefact id when
-             * deleting or refreshing the cover photo via
-             * {@link IqDeleteCoverPhotoRequest} or
+             * <p>The id keys the cover-photo lifecycle via {@link IqDeleteCoverPhotoRequest} and
              * {@link IqSendCoverPhotoRequest}.
              *
              * @return the id; never {@code null}
@@ -2304,11 +1831,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the signed cover photo URL.
-             *
-             * @apiNote
-             * Use this getter to render the banner of the merchant
-             * profile sheet.
+             * Returns the signed cover photo URL rendered as the banner of the merchant profile sheet.
              *
              * @return the URL; never {@code null}
              */
@@ -2316,9 +1839,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return url;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -2332,17 +1852,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.url, that.url);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(id, url);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.CoverPhoto[id=" + id
@@ -2351,38 +1865,30 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One bot welcome prompt on a {@link Profile}: emoji plus
-         * body text.
+         * Models one bot welcome prompt on a {@link Profile}: emoji plus body text.
          *
-         * @apiNote
-         * Use this entry to render one tappable prompt on the
-         * welcome-prompts surface; the emoji is rendered as a small
-         * badge next to the body text.
+         * <p>The entry renders one tappable prompt on the welcome-prompts surface; the emoji is
+         * rendered as a small badge next to the body text.
          */
         public static final class Prompt {
             /**
-             * The emoji glyph (empty when the merchant omitted it).
+             * Holds the emoji glyph (empty when the merchant omitted it).
              */
             private final String emoji;
 
             /**
-             * The body text.
+             * Holds the body text.
              */
             private final String text;
 
             /**
-             * Constructs a prompt.
+             * Constructs a prompt from the decoded {@code <prompt/>} child.
              *
-             * @apiNote
-             * Use this constructor only from the response parser;
-             * the emoji defaults to an empty string when the
-             * merchant did not supply one.
+             * <p>The emoji is an empty string when the merchant did not supply one.
              *
-             * @param emoji the emoji; never {@code null} (empty when
-             *              omitted)
+             * @param emoji the emoji; never {@code null}, empty when omitted
              * @param text  the body; never {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public Prompt(String emoji, String text) {
                 this.emoji = Objects.requireNonNull(emoji, "emoji cannot be null");
@@ -2390,12 +1896,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the emoji glyph.
+             * Returns the emoji glyph rendered as the small badge next to the prompt body.
              *
-             * @apiNote
-             * Use this getter to render the small badge next to the
-             * prompt body; an empty string means the merchant
-             * omitted the emoji.
+             * <p>An empty string means the merchant omitted the emoji.
              *
              * @return the emoji; never {@code null}
              */
@@ -2404,11 +1907,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the body text.
-             *
-             * @apiNote
-             * Use this getter to render the prompt label on the
-             * welcome-prompts surface.
+             * Returns the body text rendered as the prompt label on the welcome-prompts surface.
              *
              * @return the body; never {@code null}
              */
@@ -2416,9 +1915,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return text;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -2432,17 +1928,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.text, that.text);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(emoji, text);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.Prompt[emoji=" + emoji
@@ -2451,33 +1941,28 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * One bot command on a {@link Profile}: name plus description.
+         * Models one bot command on a {@link Profile}: name plus description.
          *
-         * @apiNote
-         * Use this entry to render one row of the slash-command
-         * palette the bot-enabled merchant exposes.
+         * <p>The entry renders one row of the slash-command palette the bot-enabled merchant
+         * exposes.
          */
         public static final class Command {
             /**
-             * The command name.
+             * Holds the command name.
              */
             private final String name;
 
             /**
-             * The command description.
+             * Holds the command description.
              */
             private final String description;
 
             /**
-             * Constructs a command.
-             *
-             * @apiNote
-             * Use this constructor only from the response parser.
+             * Constructs a command from the decoded {@code <command/>} child.
              *
              * @param name        the name; never {@code null}
              * @param description the description; never {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public Command(String name, String description) {
                 this.name = Objects.requireNonNull(name, "name cannot be null");
@@ -2485,11 +1970,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the command name.
-             *
-             * @apiNote
-             * Use this getter to render the slash-command label
-             * (e.g. {@code "menu"}, {@code "order"}).
+             * Returns the command name rendered as the slash-command label (for example {@code "menu"} or {@code "order"}).
              *
              * @return the name; never {@code null}
              */
@@ -2498,11 +1979,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             }
 
             /**
-             * Returns the command description.
-             *
-             * @apiNote
-             * Use this getter to render the slash-command help text
-             * next to the label.
+             * Returns the command description rendered as the slash-command help text next to the label.
              *
              * @return the description; never {@code null}
              */
@@ -2510,9 +1987,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                 return description;
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -2526,17 +2000,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                         && Objects.equals(this.description, that.description);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public int hashCode() {
                 return Objects.hash(name, description);
             }
 
-            /**
-             * {@inheritDoc}
-             */
             @Override
             public String toString() {
                 return "IqQueryBusinessProfileResponse.Success.Command[name=" + name
@@ -2545,21 +2013,18 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * The list of typed profile entries in wire order.
+         * Holds the typed profile entries in wire order.
          */
         private final List<Profile> profiles;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a successful reply from the decoded profile entries.
          *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)};
-         * the supplied list is defensively copied so the caller
-         * may mutate the source freely after construction.
+         * <p>The supplied list is defensively copied so the caller may mutate the source freely
+         * after construction.
          *
          * @param profiles the profile entries; never {@code null}
-         * @throws NullPointerException if {@code profiles} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code profiles} is {@code null}
          */
         public Success(List<Profile> profiles) {
             Objects.requireNonNull(profiles, "profiles cannot be null");
@@ -2567,12 +2032,9 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Returns the typed profile entries.
+         * Returns the typed profile entries used to refresh the business-profile collection.
          *
-         * @apiNote
-         * Use this getter to refresh the business-profile
-         * collection; the order matches the wire order, which
-         * matches the caller-supplied entry order on the
+         * <p>The order matches the wire order, which matches the caller-supplied entry order on the
          * {@link IqQueryBusinessProfileRequest}.
          *
          * @return an unmodifiable list; never {@code null}
@@ -2582,30 +2044,22 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method
-         * validates the {@code <iq type="result">} envelope and
-         * iterates over every {@code <profile/>} child of the
-         * {@code <business_profile/>} payload, dispatching to
-         * {@link #parseProfile(Node, Jid, String)} for each entry
-         * whose {@code jid} attribute resolves.
+         * <p>The method validates the {@code <iq type="result">} envelope and iterates over every
+         * {@code <profile/>} child of the {@code <business_profile/>} payload, dispatching to
+         * {@link #parseProfile(Node, Jid, String)} for each entry whose {@code jid} attribute
+         * resolves.
          *
          * @implNote
-         * This implementation matches the
-         * {@code WAWebQueryBusinessProfileJob} default export and
-         * its parser dispatch through
-         * {@code WAWebCommonParsersParseBusinessProfile.default};
-         * entries with missing or unparseable {@code jid}
-         * attributes are silently skipped, matching the WA Web
-         * behaviour.
+         * This implementation matches the {@code WAWebQueryBusinessProfileJob} default export and
+         * its parser dispatch through {@code WAWebCommonParsersParseBusinessProfile.default};
+         * entries with missing or unparseable {@code jid} attributes are silently skipped, matching
+         * the WA Web behaviour.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryBusinessProfileJob",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -2630,24 +2084,19 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Decodes a single {@code <profile/>} child into the typed
-         * {@link Profile} projection.
+         * Decodes a single {@code <profile/>} child into the typed {@link Profile} projection.
          *
-         * @apiNote
-         * Helper for {@link #of(Node, Node)}; reads every supported
-         * grandchild and attribute of the profile node and
-         * assembles a fully populated entry.
+         * <p>Reads every supported grandchild and attribute of the profile node and assembles a
+         * fully populated entry.
          *
          * @implNote
-         * This implementation mirrors
-         * {@code WAWebCommonParsersParseBusinessProfile.default};
-         * fields the relay omits resolve to {@link Optional#empty()}
-         * or an empty list rather than throwing, matching the WA
-         * Web behaviour.
+         * This implementation mirrors {@code WAWebCommonParsersParseBusinessProfile.default};
+         * fields the relay omits resolve to {@link Optional#empty()} or an empty list rather than
+         * throwing, matching the WA Web behaviour.
          *
          * @param profileNode the {@code <profile/>} child
          * @param jid         the parsed JID
-         * @param tag         the parsed tag
+         * @param tag         the parsed tag; may be {@code null}
          * @return the decoded profile entry; never {@code null}
          */
         private static Profile parseProfile(Node profileNode, Jid jid, String tag) {
@@ -2858,9 +2307,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
                     parentCompanyLogoUrl, obaPhoneNumber);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -2873,17 +2319,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             return Objects.equals(this.profiles, that.profiles);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public int hashCode() {
             return Objects.hash(profiles);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public String toString() {
             return "IqQueryBusinessProfileResponse.Success[profiles=" + profiles + ']';
@@ -2891,36 +2331,27 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code ClientError} variant emitted when the relay rejects
-     * the request as malformed or referencing an unknown merchant.
+     * Surfaces a relay rejection of the request as malformed or referencing an unknown merchant.
      *
-     * @apiNote
-     * Use this variant to surface a user-facing 4xx-class error to
-     * the merchant-profile rendering surface.
+     * <p>This variant carries a user-facing 4xx-class error for the merchant-profile rendering
+     * surface.
      */
     final class ClientError implements IqQueryBusinessProfileResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a client-error reply from the relay's {@code <error/>} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -2928,12 +2359,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to dispatch on the relay-side error code
-         * when surfacing a localised message to the merchant-profile
-         * rendering surface.
+         * Returns the numeric error code used to dispatch a localised message to the merchant-profile rendering surface.
          *
          * @return the error code
          */
@@ -2944,9 +2370,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging; the text is server-localised
-         * and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -2955,18 +2379,14 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to extract
+         * the (code, text) envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -2976,9 +2396,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -2991,17 +2408,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public String toString() {
             return "IqQueryBusinessProfileResponse.ClientError[errorCode=" + errorCode
@@ -3010,39 +2421,27 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code ServerError} variant emitted when the relay returns
-     * a transient internal-failure status while processing the
-     * request.
+     * Surfaces a transient internal-failure status the relay returns while processing the request.
      *
-     * @apiNote
-     * Use this variant to drive a backoff-and-retry path in the
-     * merchant-profile rendering surface; the relay returns this
-     * shape when the business-profile backend is temporarily
-     * unavailable.
+     * <p>This variant drives a backoff-and-retry path in the merchant-profile rendering surface;
+     * the relay returns this shape when the business-profile backend is temporarily unavailable.
      */
     final class ServerError implements IqQueryBusinessProfileResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a server-error reply from the relay's {@code <error/>} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -3050,11 +2449,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to log the relay-side error code; a
-         * 5xx-class value is the canonical retry trigger.
+         * Returns the numeric error code; a 5xx-class value is the canonical retry trigger.
          *
          * @return the error code
          */
@@ -3065,9 +2460,7 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging only; the text is
-         * server-localised and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -3076,18 +2469,14 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to extract
+         * the (code, text) envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -3097,9 +2486,6 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -3112,17 +2498,11 @@ public sealed interface IqQueryBusinessProfileResponse extends IqOperation.Respo
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public String toString() {
             return "IqQueryBusinessProfileResponse.ServerError[errorCode=" + errorCode

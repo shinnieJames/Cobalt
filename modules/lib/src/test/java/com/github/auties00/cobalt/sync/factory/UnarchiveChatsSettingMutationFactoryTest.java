@@ -11,30 +11,14 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises the outgoing-mutation wire shape produced by
- * {@link UnarchiveChatsSettingMutationFactory}.
- *
- * @apiNote
- * Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.UnarchiveChatsSettingHandler}
- * whose incoming-side coverage lives in
- * {@code UnarchiveChatsSettingHandlerTest}; the production class has no
- * dedicated WA Web outgoing helper, so the parity target is the generic
- * {@code WAWebSyncdActionUtils.buildPendingMutation} pathway used by
- * every other {@code AccountSyncdActionBase} setter.
- *
- * @implNote
- * This implementation calls the factory directly with the
- * {@code unarchiveChats == true} branch at a pinned timestamp; the
- * disabled branch differs only by the inner boolean and is covered by
- * the handler tests.
+ * Covers the outgoing-mutation wire shape of {@link UnarchiveChatsSettingMutationFactory}
+ * by re-encoding a {@link SyncActionValueSpec} and comparing it byte-for-byte against
+ * the captured WhatsApp Web oracle. The factory is driven with the
+ * {@code unarchiveChats == true} branch at a pinned timestamp; the disabled branch
+ * differs only by the inner boolean. The test returns early when its fixture is absent.
  */
 @DisplayName("UnarchiveChatsSettingMutationFactory")
 class UnarchiveChatsSettingMutationFactoryTest {
-    /**
-     * Verifies that the encoded {@link SyncActionValueSpec} bytes match
-     * the captured WA Web oracle when the fixture is present.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
     void byteEqualityWithOracle() {

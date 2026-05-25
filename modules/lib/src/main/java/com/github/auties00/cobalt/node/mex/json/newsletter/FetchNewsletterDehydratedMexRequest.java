@@ -21,66 +21,54 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Builds the MEX request that fetches a dehydrated representation of a
- * newsletter.
+ * Builds the MEX request that fetches a dehydrated representation of a newsletter.
  *
- * @apiNote
- * Drives the lightweight newsletter lookup WA Web runs to verify
- * subscription count, WAMo subscription state and verification status
- * without triggering a full metadata hydration. The {@code key} may be a
- * newsletter Jid or an invite token; this implementation derives the
- * {@code type} discriminator from {@link Jid#hasNewsletterServer()}
- * mirroring WA Web's {@code WAWebWid.isNewsletter} check.
+ * <p>This query is the lightweight newsletter lookup used to verify subscription count, paid
+ * subscription state and verification status without triggering a full metadata hydration. The
+ * {@code key} may be a newsletter Jid or an invite token; the {@code type} discriminator is derived
+ * from {@link Jid#hasNewsletterServer()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDehydratedJob")
 public final class FetchNewsletterDehydratedMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexFetchNewsletterDehydratedJobQuery.graphql} on the
-     * WhatsApp relay.
+     * Holds the compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterDehydratedJobQuery.graphql} on the WhatsApp relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Sent as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "30328461880085868";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this query.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this query.
      */
     public static final String OPERATION_NAME = "mexGetNewsletterDehydrated";
 
     /**
-     * The newsletter Jid (when fetching by id) or invite token (when
-     * fetching by invite).
+     * Holds the newsletter Jid (when fetching by id) or invite token (when fetching by invite).
      */
     private final Jid key;
 
     /**
-     * The {@code view_role} GraphQL variable that selects which viewer-role
-     * fragment the relay populates.
+     * Holds the {@code view_role} GraphQL variable that selects which viewer-role fragment the relay
+     * populates.
      */
     private final String viewRole;
 
     /**
-     * Whether the response should carry the optional {@code wamo_sub}
-     * fragment selections.
+     * Indicates whether the response should carry the optional {@code wamo_sub} fragment selections.
      */
     private final boolean fetchWamoSub;
 
     /**
-     * Constructs a request for the dehydrated representation of the given
-     * newsletter key.
+     * Constructs a request for the dehydrated representation of the given newsletter key.
      *
-     * @apiNote
-     * Pass a newsletter-server Jid to look up by id (the {@code type}
-     * discriminator becomes {@code "JID"}); pass any other Jid to look up
-     * by invite token (the discriminator becomes {@code "INVITE"}).
+     * <p>Passing a newsletter-server Jid looks up by id (the {@code type} discriminator becomes
+     * {@code "JID"}); passing any other Jid looks up by invite token (the discriminator becomes
+     * {@code "INVITE"}).
      *
      * @param key          the newsletter Jid or invite identifier
      * @param viewRole     the {@code view_role} GraphQL variable
-     * @param fetchWamoSub whether to request the optional {@code wamo_sub}
-     *                     fragment selections
+     * @param fetchWamoSub whether to request the optional {@code wamo_sub} fragment selections
      * @throws NullPointerException if {@code key} is {@code null}
      */
     public FetchNewsletterDehydratedMexRequest(Jid key, String viewRole, boolean fetchWamoSub) {
@@ -92,8 +80,7 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -103,8 +90,7 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -112,22 +98,17 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the
-     * {@code {variables: {input: {key, type, view_role}, fetch_wamo_sub}}}
-     * payload; the {@code type} discriminator is derived from
-     * {@link Jid#hasNewsletterServer()} so newsletter Jids resolve to
-     * {@code "JID"} and any other Jid resolves to {@code "INVITE"}.
+     * <p>Produces the {@code {variables: {input: {key, type, view_role}, fetch_wamo_sub}}} payload;
+     * the {@code type} discriminator is derived from {@link Jid#hasNewsletterServer()} so newsletter
+     * Jids resolve to {@code "JID"} and any other Jid resolves to {@code "INVITE"}.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterDehydratedJob", exports = "mexGetNewsletterDehydrated",

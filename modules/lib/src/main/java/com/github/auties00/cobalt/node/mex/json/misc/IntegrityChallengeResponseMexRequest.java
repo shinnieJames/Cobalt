@@ -16,88 +16,69 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound MEX mutation that submits a passkey-signed integrity challenge
- * response, returning the relay's verdict on whether the assertion was
- * accepted.
+ * Submits a passkey-signed integrity challenge response and reports whether the relay accepted it.
  *
- * @apiNote Issued by WA Web's
- * {@code WAWebIntegrityPasskeyCheckpointUtils} when the user completes the
- * passkey assertion in the integrity-challenge modal: the WebAuthn
- * assertion is forwarded here, and on a {@code success} verdict the WA Web
- * caller closes the modal and removes the cached challenge from user-prefs
- * IDB; on rejection it throws and surfaces a server-rejection log entry.
- * Cobalt callers consume the verdict through
- * {@link IntegrityChallengeResponseMexResponse#success()} and apply their
- * own modal/cache logic.
+ * <p>The mutation forwards a WebAuthn assertion that answers an integrity challenge; the relay's
+ * verdict is surfaced through {@link IntegrityChallengeResponseMexResponse#success()}. On acceptance,
+ * a caller is expected to close its integrity-challenge surface and drop any cached challenge; on
+ * rejection, a caller applies its own surface and cache logic.
  *
- * @implNote This implementation base64-encodes the raw JSON-serialised
- * WebAuthn assertion using {@link Base64#getEncoder()}, mirroring WA Web's
- * {@code btoa(JSON.stringify(e))} call exactly. The
- * {@code prf_available} flag is taken from the caller because Cobalt's
- * codegen has no access to the original assertion object that WA Web
- * inspects through {@code e.prf_output != null}.
+ * @implNote This implementation base64-encodes the raw JSON-serialised WebAuthn assertion using
+ * {@link Base64#getEncoder()}, mirroring WhatsApp Web's {@code btoa(JSON.stringify(e))} call. The
+ * {@code prf_available} flag is taken from the caller because Cobalt's codegen has no access to the
+ * original assertion object that WhatsApp Web inspects through {@code e.prf_output != null}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexIntegrityChallengeResponse")
 public final class IntegrityChallengeResponseMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
+     * Holds the compiled GraphQL query identifier for the
      * {@code WAWebMexIntegrityChallengeResponseMutation} document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebMexIntegrityChallengeResponseMutation.graphql}. The relay
-     * maps the id to a server-side persisted mutation and never sees the
-     * GraphQL text on the wire.
+     * <p>The relay maps this identifier to a server-side persisted mutation and never sees the GraphQL
+     * text on the wire.
      */
     public static final String QUERY_ID = "26230331493320650";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this mutation is
-     * dispatched.
+     * Holds the GraphQL operation name carried by this mutation.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * <p>WhatsApp Web's MEX perf tracker uses the name to tag the query in latency and error metrics;
+     * Cobalt keeps it on the request for embedders mirroring that telemetry surface.
      */
     public static final String OPERATION_NAME = "mexSubmitPasskeyChallengeResponse";
 
     /**
-     * The {@code challenge_type} discriminator emitted on every request.
+     * Holds the {@code challenge_type} discriminator emitted on every request.
      *
-     * @apiNote WA Web declares {@code var s = "PASSKEY"} as a
-     * module-scoped constant and reuses it for every dispatch; no other
-     * challenge type is currently supported.
+     * <p>The value is always {@code PASSKEY}; no other challenge type is currently supported.
      */
     String CHALLENGE_TYPE = "PASSKEY";
 
     /**
-     * The raw bytes of the JSON-serialised WebAuthn assertion, base64-
-     * encoded inline during dispatch.
+     * Holds the raw bytes of the JSON-serialised WebAuthn assertion, base64-encoded inline during
+     * dispatch.
      */
     private final byte[] signedChallenge;
 
     /**
-     * Whether the assertion carries a {@code prf_output} field.
+     * Indicates whether the assertion carries a {@code prf_output} field.
      *
-     * @apiNote WA Web derives this flag inline via
-     * {@code e.prf_output != null}; Cobalt callers compute the same
-     * predicate against their own assertion object and pass the result.
+     * <p>WhatsApp Web derives this flag inline via {@code e.prf_output != null}; Cobalt callers
+     * compute the same predicate against their own assertion object and pass the result.
      */
     private final boolean prfAvailable;
 
     /**
-     * Constructs a new request submitting the given passkey-signed
-     * challenge response to the relay.
+     * Constructs a new request submitting the given passkey-signed challenge response to the relay.
      *
-     * @apiNote {@code signedChallenge} must already be the JSON-serialised
-     * form of the WebAuthn assertion (WA Web invokes
-     * {@code JSON.stringify(e)} before {@code btoa}; Cobalt callers pass
-     * the equivalent serialised bytes). {@code prfAvailable} must reflect
-     * whether the assertion carries a non-{@code null} {@code prf_output}
-     * field, matching the relay's per-assertion telemetry expectation.
+     * <p>The {@code signedChallenge} must already be the JSON-serialised form of the WebAuthn
+     * assertion; WhatsApp Web invokes {@code JSON.stringify(e)} before {@code btoa}, so callers pass
+     * the equivalent serialised bytes. The {@code prfAvailable} flag must reflect whether the
+     * assertion carries a non-{@code null} {@code prf_output} field, matching the relay's
+     * per-assertion telemetry expectation.
      *
-     * @param signedChallenge the raw bytes of the JSON-serialised WebAuthn
-     *                        assertion, must not be {@code null}
+     * @param signedChallenge the raw bytes of the JSON-serialised WebAuthn assertion, must not be
+     *                        {@code null}
      * @param prfAvailable    whether the assertion carries a {@code prf_output} field
      * @throws NullPointerException if {@code signedChallenge} is {@code null}
      */
@@ -125,10 +106,9 @@ public final class IntegrityChallengeResponseMexRequest implements MexOperation.
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation streams the GraphQL variables through
-     * fastjson2's {@link JSONWriter}, nests the {@code passkey_response}
-     * object under {@code input}, base64-encodes {@link #signedChallenge}
-     * via {@link Base64#getEncoder()}, then wraps the payload via
+     * @implNote This implementation streams the GraphQL variables through fastjson2's
+     * {@link JSONWriter}, nests the {@code passkey_response} object under {@code input}, base64-encodes
+     * {@link #signedChallenge} via {@link Base64#getEncoder()}, then wraps the payload via
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexIntegrityChallengeResponse", exports = "mexSubmitPasskeyChallengeResponse",

@@ -10,14 +10,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound "paused" state-type carried by a
+ * Represents the outbound "paused" state-type carried by a
  * {@link SmaxClientNotificationRequest}.
  *
- * @apiNote
- * Backs {@code WAWebChatStateBridge.sendChatStatePaused}, the "user stopped
- * typing" indicator. The "idle" branch of
- * {@code WASendChatStateProtocol.sendChatStateProtocol} routes to this
- * payload to clear the typing dot from the peer's chat UI.
+ * <p>This payload backs the "user stopped typing" indicator; it clears the
+ * typing dot from the peer's chat UI and carries no payload of its own.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstatePausedMixin")
 public final class SmaxClientNotificationPaused implements SmaxClientNotificationStateType {
@@ -30,9 +27,7 @@ public final class SmaxClientNotificationPaused implements SmaxClientNotificatio
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation emits a bare {@code <paused/>} child with no
-     * attributes, mirroring {@code mergePausedMixin}.
+     * <p>Emits a bare {@code <paused/>} child with no attributes.
      *
      * @return a {@link NodeBuilder} carrying the {@code <paused/>} child
      */
@@ -44,6 +39,13 @@ public final class SmaxClientNotificationPaused implements SmaxClientNotificatio
                 .description("paused");
     }
 
+    /**
+     * Returns whether the given object is also a
+     * {@link SmaxClientNotificationPaused}.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when the candidate has the same runtime type
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -52,11 +54,21 @@ public final class SmaxClientNotificationPaused implements SmaxClientNotificatio
         return obj != null && obj.getClass() == this.getClass();
     }
 
+    /**
+     * Returns the constant hash code shared by every paused state-type.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return SmaxClientNotificationPaused.class.hashCode();
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this state-type.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxClientNotificationPaused[]";

@@ -14,26 +14,17 @@ import java.util.Optional;
  * The sealed family of inbound reply variants produced by the relay
  * in response to a {@link SmaxSendAccountRecoveryNonceRequest}.
  *
- * @apiNote
- * Surfaced by the CTWA (click-to-WhatsApp) ad-account recovery flow
- * whose JS caller
- * {@code WAWebRequestAdAccountRecoveryCode.requestAdAccountRecoveryCode}
- * asks the relay to dispatch a one-time recovery email after the
- * silent-nonce path (see {@link SmaxRequestSilentNonceResponse})
- * surfaces a {@link SmaxRequestSilentNonceResponse.RecoveryRequired}
- * outcome; the three variants split the wire outcome into
- * {@link Success} (relay tried to dispatch the email; the embedded
- * {@link SmaxSendAccountRecoveryNonceStatus} indicates whether the
- * dispatch actually succeeded), {@link ClientError} (relay rejected
- * the request with a {@code 4xx} common-ad-account error) and
- * {@link ServerError} (relay returned a transient {@code 5xx}
- * failure).
+ * <p>The CTWA ad-account recovery flow asks the relay to dispatch a one-time recovery email after
+ * the silent-nonce path (see {@link SmaxRequestSilentNonceResponse}) surfaces a
+ * {@link SmaxRequestSilentNonceResponse.RecoveryRequired} outcome. The three variants split the
+ * wire outcome into {@link Success} (relay tried to dispatch the email; the embedded
+ * {@link SmaxSendAccountRecoveryNonceStatus} indicates whether the dispatch actually succeeded),
+ * {@link ClientError} (relay rejected the request with a {@code 4xx} common-ad-account error) and
+ * {@link ServerError} (relay returned a transient {@code 5xx} failure).
  *
  * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxBizCtwaAdAccountSendAccountRecoveryNonceRPC.sendSendAccountRecoveryNonceRPC}
- * by trying each variant in priority order via {@link #of} and
- * returning the first successful parse.
+ * This implementation tries each variant in priority order via {@link #of(Node, Node)} and returns
+ * the first successful parse.
  */
 public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperation.Response
         permits SmaxSendAccountRecoveryNonceResponse.Success, SmaxSendAccountRecoveryNonceResponse.ClientError, SmaxSendAccountRecoveryNonceResponse.ServerError {
@@ -42,12 +33,9 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
      * Tries each {@link SmaxSendAccountRecoveryNonceResponse} variant
      * in priority order and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxSendAccountRecoveryNonceRequest}; the priority order
-     * matches WA Web's {@code parsing} dispatch table so that a
-     * malformed {@code Success} stanza falls through to
-     * {@link ClientError} rather than masking an error.
+     * <p>Invoked by the smax reply pump after dispatching a
+     * {@link SmaxSendAccountRecoveryNonceRequest}. The priority order ensures a malformed
+     * {@link Success} stanza falls through to {@link ClientError} rather than masking an error.
      *
      * @implNote
      * This implementation invokes {@link Success#of(Node, Node)}
@@ -85,16 +73,11 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
      * The {@code Success} reply variant carrying the recovery-email
      * dispatch status.
      *
-     * @apiNote
-     * Projected by
-     * {@link SmaxSendAccountRecoveryNonceResponse#of(Node, Node)}
-     * when the relay returns the documented
-     * {@code <Result><status>} tree; the embedded
-     * {@link SmaxSendAccountRecoveryNonceStatus} is read by
-     * {@code requestAdAccountRecoveryCode} which maps
-     * {@code "Success"} to the UI {@code "success"} outcome and
-     * {@code "Fail"} to {@code "fail"} (the relay accepted the IQ
-     * but the email dispatch itself failed).
+     * <p>Projected by {@link SmaxSendAccountRecoveryNonceResponse#of(Node, Node)} when the relay
+     * returns the documented {@code <Result><status>} tree. The embedded
+     * {@link SmaxSendAccountRecoveryNonceStatus} distinguishes a dispatched email
+     * ({@link SmaxSendAccountRecoveryNonceStatus#SUCCESS}) from one the relay accepted but failed
+     * to send ({@link SmaxSendAccountRecoveryNonceStatus#FAIL}).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountSendAccountRecoveryNonceResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountSendAccountRecoveryNonceResponseMixin")
@@ -111,10 +94,8 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
         /**
          * Constructs a new successful reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code <status>} content has been validated against the
-         * {@code ENUM_FAIL_SUCCESS} dictionary.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code <status>} content has been
+         * validated against the recovery-status dictionary.
          *
          * @param status the recovery-dispatch status; never
          *               {@code null}
@@ -128,11 +109,9 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
         /**
          * Returns the recovery-dispatch status.
          *
-         * @apiNote
-         * Use to drive the recovery-code request UI:
-         * {@link SmaxSendAccountRecoveryNonceStatus#SUCCESS} means
-         * the relay accepted and dispatched the email, while
-         * {@link SmaxSendAccountRecoveryNonceStatus#FAIL} means the
+         * <p>Drives the recovery-code request UI:
+         * {@link SmaxSendAccountRecoveryNonceStatus#SUCCESS} means the relay accepted and
+         * dispatched the email, while {@link SmaxSendAccountRecoveryNonceStatus#FAIL} means the
          * relay accepted the IQ but the dispatch attempt failed.
          *
          * @return the status; never {@code null}
@@ -231,13 +210,8 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
      * The {@code ClientError} reply variant carrying a documented
      * {@code 4xx} common-ad-account rejection.
      *
-     * @apiNote
-     * Surfaced when the relay rejected the recovery-email request
-     * via one of the
-     * {@code WASmaxInBizCtwaAdAccountCommonAdAccountErrors} arms
-     * (bad-request, forbidden); WA Web's
-     * {@code requestAdAccountRecoveryCode} treats any non-Success
-     * branch as the UI {@code "error"} outcome.
+     * <p>Surfaced when the relay rejected the recovery-email request (bad-request or forbidden).
+     * The caller treats any non-success branch as a terminal error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountSendAccountRecoveryNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountCommonAdAccountErrors")
@@ -260,9 +234,7 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
         /**
          * Constructs a new client-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 4xx} envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 4xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may
@@ -368,11 +340,9 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
      * The {@code ServerError} reply variant carrying a transient
      * {@code 5xx} relay failure.
      *
-     * @apiNote
-     * Surfaced when the relay returned a transient internal failure
-     * while processing the recovery-email request (internal-server-error
-     * or service-unavailable); the caller can re-issue the request
-     * with backoff.
+     * <p>Surfaced when the relay returned a transient internal failure while processing the
+     * recovery-email request (internal-server-error or service-unavailable); the caller can
+     * re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountSendAccountRecoveryNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountCommonAdAccountErrors")
@@ -395,9 +365,7 @@ public sealed interface SmaxSendAccountRecoveryNonceResponse extends SmaxOperati
         /**
          * Constructs a new server-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 5xx} envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 5xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may

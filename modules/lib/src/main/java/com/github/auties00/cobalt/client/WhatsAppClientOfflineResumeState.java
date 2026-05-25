@@ -11,18 +11,14 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
  * @apiNote
  * Listeners that need to defer actions while the server is replaying
  * queued stanzas (chat-list re-sorts, collection flushes, immediate
- * device syncs) read this value through the client. WA Web's
- * {@code WAWebBlockingOfflineResumeManager} and
- * {@code WAWebNonBlockingOfflineResumeManager} drive the same four
- * states; Cobalt collapses both managers into a single state machine.
+ * device syncs) read this value through the client.
  *
  * @implNote
- * This implementation mirrors the four-state {@code ResumeStatus}
- * enum exported by {@code WAWebOfflineResumeConst} verbatim. The
- * companion constants exposed alongside the enum (timeouts, batch
- * limits, debounce windows) are reproduced as
- * {@code public static final} fields on this enum so consumers have a
- * single import point per WA module.
+ * This implementation collapses WhatsApp Web's separate blocking and
+ * non-blocking offline-resume managers into a single state machine and
+ * reproduces the companion timing constants (timeouts, batch limits,
+ * debounce windows) as {@code public static final} fields on this enum
+ * so consumers have a single import point.
  *
  * @see WhatsAppClient
  */
@@ -33,14 +29,12 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
         adaptation = WhatsAppAdaptation.DIRECT)
 public enum WhatsAppClientOfflineResumeState {
     /**
-     * The state of a freshly constructed client before any
-     * {@code offline_preview} info bulletin has arrived.
+     * The state of a freshly constructed client before any offline
+     * preview has arrived.
      *
      * @apiNote
-     * Initial value persisted into the client until the first
-     * post-connect IB lands. Drives
-     * {@code isResumeFromRestartInProgress} and
-     * {@code isResumeFromRestartComplete} parity checks against WA Web.
+     * Initial value held by the client until the first post-connect
+     * offline preview lands.
      */
     INIT,
 
@@ -51,8 +45,7 @@ public enum WhatsAppClientOfflineResumeState {
      * @apiNote
      * During this phase chat-sort listeners are disabled and collection
      * flushes are deferred so the in-flight replay completes
-     * deterministically. WA Web matches this on
-     * {@code ResumeStatus.RESUME_ON_RESTART}.
+     * deterministically.
      */
     RESUME_ON_RESTART,
 
@@ -62,11 +55,8 @@ public enum WhatsAppClientOfflineResumeState {
      *
      * @apiNote
      * Distinct from {@link #RESUME_ON_RESTART} because the surrounding
-     * runtime is already initialised. WA Web's
-     * {@code isResumeOnSocketDisconnectInProgress} is exactly this
-     * state on both the blocking and non-blocking offline-resume
-     * managers; on entry chat-sort listeners are disabled and a pending
-     * device sync is scheduled to run after
+     * runtime is already initialised. On entry chat-sort listeners are
+     * disabled and a pending device sync is scheduled to run after
      * {@link #OFFLINE_DEVICE_SYNC_DELAY}.
      */
     RESUME_WITH_OPEN_TAB,
@@ -75,10 +65,10 @@ public enum WhatsAppClientOfflineResumeState {
      * The replay has drained and the client is operating in real time.
      *
      * @apiNote
-     * Reached either when the server signals the {@code offline}
-     * info bulletin or when the local stale-stream watchdog fires
-     * after {@link #OFFLINE_STANZA_TIMEOUT_MS}. Pending device sync has
-     * run by this point; deferred operations may proceed.
+     * Reached either when the server signals that the offline backlog is
+     * complete or when the local stale-stream watchdog fires after
+     * {@link #OFFLINE_STANZA_TIMEOUT_MS}. Pending device sync has run by
+     * this point; deferred operations may proceed.
      */
     COMPLETE;
 
@@ -88,12 +78,10 @@ public enum WhatsAppClientOfflineResumeState {
      * current stanza count as stale and refreshing the window from the
      * server.
      *
-     * @apiNote
-     * Matches the {@code l=2e4} constant in
-     * {@code WAWebOfflineResumeConst}. WA Web schedules a
-     * {@code self.setTimeout} that fires
-     * {@code WAWebOfflineResumeUtils.refreshWindow()} once this elapses
-     * without progress; the same timeout is re-armed after every batch.
+     * @implNote
+     * This implementation arms a timeout that refreshes the offline
+     * window from the server once the interval elapses without progress;
+     * the timeout is re-armed after every batch.
      */
     @WhatsAppWebExport(
             moduleName = "WAWebOfflineResumeConst",
@@ -106,12 +94,10 @@ public enum WhatsAppClientOfflineResumeState {
      * manager processes before it logs a warning that the count exceeded
      * the announced offline window.
      *
-     * @apiNote
-     * Matches the {@code s=100} constant in
-     * {@code WAWebOfflineResumeConst}. Both blocking and non-blocking
-     * managers compare their per-resume counter against this value and
-     * call {@code WALogger.WARN} when it is exceeded; the resume itself
-     * is not aborted.
+     * @implNote
+     * This implementation compares the per-resume counter against this
+     * value and logs a warning when it is exceeded; the resume itself is
+     * not aborted.
      */
     @WhatsAppWebExport(
             moduleName = "WAWebOfflineResumeConst",
@@ -123,13 +109,10 @@ public enum WhatsAppClientOfflineResumeState {
      * Delay, in milliseconds, applied before running the pending device
      * sync once the offline backlog has drained.
      *
-     * @apiNote
-     * Matches the {@code u=2e3} constant in
-     * {@code WAWebOfflineResumeConst}. WA Web's blocking and
-     * non-blocking managers both schedule
-     * {@code WAWebApiPendingDeviceSync.doPendingDeviceSync()} after this
-     * delay on the transition into {@link #RESUME_WITH_OPEN_TAB} and on
-     * the transition into {@link #COMPLETE}.
+     * @implNote
+     * This implementation runs the pending device sync after this delay
+     * on the transition into {@link #RESUME_WITH_OPEN_TAB} and on the
+     * transition into {@link #COMPLETE}.
      */
     @WhatsAppWebExport(
             moduleName = "WAWebOfflineResumeConst",
@@ -142,11 +125,9 @@ public enum WhatsAppClientOfflineResumeState {
      * offline-resume manager forces the state to {@link #COMPLETE} and
      * logs a missed-offline-complete event.
      *
-     * @apiNote
-     * Matches the {@code c=6e4} constant in
-     * {@code WAWebOfflineResumeConst}. Each new offline stanza calls
-     * {@code ShiftTimer.onOrAfter(this)} so the watchdog slides forward
-     * with traffic; it only fires when the stream goes silent for a
+     * @implNote
+     * This implementation slides the watchdog forward with each new
+     * offline stanza so it only fires when the stream goes silent for a
      * full minute.
      */
     @WhatsAppWebExport(
@@ -156,17 +137,14 @@ public enum WhatsAppClientOfflineResumeState {
     public static final long OFFLINE_STANZA_TIMEOUT_MS = 60_000L;
 
     /**
-     * Debounce window, in milliseconds, during which a fresh
-     * {@code offline_preview} IB is treated as an update to the same
-     * resume rather than a new one.
+     * Debounce window, in milliseconds, during which a fresh offline
+     * preview is treated as an update to the same resume rather than a
+     * new one.
      *
-     * @apiNote
-     * Matches the {@code d=1e3} constant in
-     * {@code WAWebOfflineResumeConst}. When two previews arrive within
-     * the window WA Web logs an
-     * "Accept multiple offline previews" message and merges the new
-     * counts into the running resume; outside the window the second
-     * preview restarts the state machine.
+     * @implNote
+     * This implementation merges the counts of a second preview that
+     * arrives within the window into the running resume; outside the
+     * window the second preview restarts the state machine.
      */
     @WhatsAppWebExport(
             moduleName = "WAWebOfflineResumeConst",
@@ -178,11 +156,9 @@ public enum WhatsAppClientOfflineResumeState {
      * Minimum interval, in milliseconds, between offline-resume UI
      * progress updates pushed to the chat-list surface.
      *
-     * @apiNote
-     * Matches the {@code m=1e3} constant in
-     * {@code WAWebOfflineResumeConst}. WA Web throttles its progress-bar
-     * updates with a {@code ShiftTimer.onOrAfter(this)} so the UI does
-     * not redraw faster than once per second during a flood of stanzas.
+     * @implNote
+     * This implementation throttles progress updates to at most one per
+     * second during a flood of stanzas.
      */
     @WhatsAppWebExport(
             moduleName = "WAWebOfflineResumeConst",

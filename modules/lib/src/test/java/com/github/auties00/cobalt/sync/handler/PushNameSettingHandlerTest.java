@@ -32,28 +32,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link PushNameSettingHandler} against the
- * {@code WAWebPushNameSync.applyMutations} per-mutation flow.
- *
- * @apiNote
- * Verifies the
- * {@link SyncdOperation#SET}
- * happy path: a {@code presence} node is dispatched on the wire,
- * {@link WhatsAppStore#setName(String)} is updated, the self-contact's
- * {@code chosenName} is mirrored, and the
- * {@link WhatsAppClientListener#onNameChanged}
- * listener fires. A missing or empty
- * {@link PushNameSetting#name()}
- * defaults to the empty string and still returns
- * {@link SyncActionState#SUCCESS}.
- *
- * @implNote
- * This implementation captures outgoing nodes via the
- * {@code onNodeSent} listener rather than wrapping
- * {@link TestWhatsAppClient} in a
- * proxy: {@code TestWhatsAppClient.sendNodeWithNoResponse} fires the
- * listener directly, which is sufficient for asserting the
- * {@code <presence name="..."/>} stanza shape.
+ * Covers {@link PushNameSettingHandler}: on {@link SyncdOperation#SET} a
+ * {@code <presence name="..."/>} node is dispatched, {@link WhatsAppStore#setName(String)}
+ * is updated, and the {@link WhatsAppClientListener#onNameChanged} listener fires; a
+ * missing or empty {@link PushNameSetting#name()} defaults to the empty string and still
+ * returns {@link SyncActionState#SUCCESS}; {@link SyncdOperation#REMOVE} is
+ * {@link SyncActionState#UNSUPPORTED}. Outgoing nodes are captured via an
+ * {@code onNodeSent} listener on the {@link TestWhatsAppClient}, which is sufficient to
+ * assert the presence-stanza shape.
  */
 @DisplayName("PushNameSettingHandler")
 class PushNameSettingHandlerTest {

@@ -41,97 +41,79 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 /**
- * Owns the long-lived APNS courier TLS stream the {@link ApnsClient}
- * holds open after activation completes.
+ * Owns the long-lived APNS courier TLS stream the {@link ApnsClient} holds open after activation
+ * completes.
  *
  * <p>Responsibilities, in start-up order:
  * <ul>
- *   <li>fetch the courier bag and pick a replica via
- *       {@link ApnsBag};</li>
- *   <li>negotiate ALPN {@code apns-security-v3} on a TLSv1.3 socket
- *       and run the
- *       {@code CONNECT} / {@code READY} / {@code STATE} /
- *       {@code FILTER} handshake;</li>
+ *   <li>fetch the courier bag and pick a replica via {@link ApnsBag};</li>
+ *   <li>negotiate ALPN {@code apns-security-v3} on a TLSv1.3 socket and run the {@code CONNECT} /
+ *       {@code READY} / {@code STATE} / {@code FILTER} handshake;</li>
  *   <li>pump incoming frames on a virtual-thread read loop;</li>
- *   <li>send {@link ApnsPayloadTag#KEEP_ALIVE_SEND} every five
- *       seconds;</li>
- *   <li>ack delivered notifications and surface {@code regcode}
- *       payloads to {@link ApnsPushCode};</li>
- *   <li>multiplex in-flight request/response exchanges over the
- *       single socket via {@link #exchange}.</li>
+ *   <li>send {@link ApnsPayloadTag#KEEP_ALIVE_SEND} every five seconds;</li>
+ *   <li>ack delivered notifications and surface {@code regcode} payloads to
+ *       {@link ApnsPushCode};</li>
+ *   <li>multiplex in-flight request/response exchanges over the single socket via
+ *       {@link #exchange}.</li>
  * </ul>
  *
- * <p>Two virtual threads run at steady state: the read pump (started
- * once the TLS handshake completes) and the keep-alive sender
- * (started once the courier {@code READY} arrives). All outbound
- * writes route through {@link #writeLock} so frames cannot interleave
- * on the wire.
+ * <p>Two virtual threads run at steady state: the read pump (started once the TLS handshake
+ * completes) and the keep-alive sender (started once the courier {@code READY} arrives). All
+ * outbound writes route through {@link #writeLock} so frames cannot interleave on the wire.
  */
 final class ApnsCourierConnection {
     /**
-     * The shared logger.
-     *
-     * @apiNote
-     * Uses the logger name {@code cobalt.apns} so consumers can
-     * configure verbosity uniformly across the APNS client.
+     * Holds the shared logger, named {@code cobalt.apns} so consumers can configure verbosity
+     * uniformly across the APNS client.
      */
     private static final Logger LOG = System.getLogger("cobalt.apns");
 
     /**
-     * The URL of the courier bag.
+     * Holds the URL of the courier bag.
      *
-     * @apiNote
-     * The bag is the JSON-in-plist directory listing Apple uses to
-     * advertise the active courier replicas. HTTP, not HTTPS; the
-     * file is unauthenticated.
+     * <p>The bag is the JSON-in-plist directory listing Apple uses to advertise the active courier
+     * replicas. HTTP, not HTTPS; the file is unauthenticated.
      */
     private static final String BAG_URL = "http://init-p01st.push.apple.com/bag";
 
     /**
-     * The standard HTTPS port the courier replicas listen on.
+     * Holds the standard HTTPS port the courier replicas listen on.
      */
     private static final int APNS_PORT = 443;
 
     /**
-     * The keep-alive cadence in seconds.
+     * Holds the keep-alive cadence in seconds.
      *
-     * @apiNote
-     * Matches the value the native {@code apsd} uses to keep
-     * middlebox NAT entries alive on cellular networks; setting it
-     * higher risks the courier dropping the connection silently.
+     * @implNote This implementation uses five seconds to match the value the native {@code apsd} uses
+     *           to keep middlebox NAT entries alive on cellular networks; a higher value risks the
+     *           courier dropping the connection silently.
      */
     private static final long KEEP_ALIVE_INTERVAL_SECONDS = 5L;
 
     /**
-     * The wall-clock timeout in milliseconds applied to every
-     * {@link #exchange} caller.
+     * Holds the wall-clock timeout in milliseconds applied to every {@link #exchange} caller.
      *
-     * @apiNote
-     * Picked lower than the keep-alive cadence multiplied by a few
-     * iterations so a stalled request fails before the next
-     * keep-alive masks the underlying problem.
+     * @implNote This implementation picks 30 seconds, lower than the keep-alive cadence multiplied by
+     *           a few iterations, so a stalled request fails before the next keep-alive masks the
+     *           underlying problem.
      */
     private static final long REQUEST_TIMEOUT_MS = 30_000L;
 
     /**
-     * The connect and request timeout applied to the bag HTTP call.
+     * Holds the connect and request timeout applied to the bag HTTP call.
      */
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(30);
 
     /**
-     * The trust-everything {@link X509TrustManager} used for the
-     * courier socket.
+     * Holds the trust-everything {@link X509TrustManager} used for the courier socket.
      *
-     * @apiNote
-     * The APNS protocol authenticates the device with its
-     * FairPlay-signed certificate in-band rather than via the TLS
-     * PKI chain, and the courier endpoint is a moving target
-     * ({@code 1-courier...} to {@code 50-courier...}) so a single
-     * pinned certificate is not viable. Skipping host PKI
-     * verification matches the trade-off Apple's own {@code apsd}
-     * makes; the protocol is still authenticated by the ALPN string
-     * {@code apns-security-v3} and the FairPlay nonce signature on
-     * {@link ApnsPayloadTag#CONNECT}.
+     * @implNote This implementation skips host PKI verification because the APNS protocol
+     *           authenticates the device with its FairPlay-signed certificate in-band rather than via
+     *           the TLS PKI chain, and the courier endpoint is a moving target ({@code 1-courier...}
+     *           to {@code 50-courier...}) so a single pinned certificate is not viable. This matches
+     *           the trade-off Apple's own {@code apsd} makes; the protocol is still authenticated by
+     *           the ALPN string {@code apns-security-v3} and the FairPlay nonce signature on
+     *           {@link ApnsPayloadTag#CONNECT}.
      */
     private static final TrustManager[] TRUST_ALL = {
             new X509TrustManager() {
@@ -151,211 +133,180 @@ final class ApnsCourierConnection {
     };
 
     /**
-     * In a {@link ApnsPayloadTag#READY}, carries the auth token the
-     * courier has assigned to this connection.
+     * Holds the field id that, in a {@link ApnsPayloadTag#READY}, carries the auth token the courier
+     * has assigned to this connection.
      */
     private static final int FIELD_AUTH_TOKEN_READY = 0x03;
 
     /**
-     * In a {@link ApnsPayloadTag#READY}, carries a single status
-     * byte ({@code 0x00} for success).
+     * Holds the field id that, in a {@link ApnsPayloadTag#READY}, carries a single status byte
+     * ({@code 0x00} for success).
      */
     private static final int FIELD_STATUS = 0x01;
 
     /**
-     * In a {@link ApnsPayloadTag#NOTIFICATION}, carries the
-     * server-assigned id the client must echo back in the matching
-     * {@link ApnsPayloadTag#ACK}.
+     * Holds the field id that, in a {@link ApnsPayloadTag#NOTIFICATION}, carries the server-assigned
+     * id the client must echo back in the matching {@link ApnsPayloadTag#ACK}.
      */
     private static final int FIELD_NOTIFICATION_ID = 0x04;
 
     /**
-     * In a {@link ApnsPayloadTag#NOTIFICATION}, carries the
-     * application payload (typically a JSON object).
+     * Holds the field id that, in a {@link ApnsPayloadTag#NOTIFICATION}, carries the application
+     * payload (typically a JSON object).
      */
     private static final int FIELD_PAYLOAD = 0x03;
 
     /**
-     * In a {@link ApnsPayloadTag#TOKEN_RESPONSE}, carries the push
-     * token bytes.
+     * Holds the field id that, in a {@link ApnsPayloadTag#TOKEN_RESPONSE}, carries the push token
+     * bytes.
      */
     private static final int FIELD_TOKEN = 0x02;
 
     /**
-     * In a {@link ApnsPayloadTag#ACK}, carries a single status byte.
+     * Holds the field id that, in a {@link ApnsPayloadTag#ACK}, carries a single status byte.
      */
     private static final int FIELD_ACK_STATUS = 0x08;
 
     /**
-     * In a {@link ApnsPayloadTag#GET_TOKEN}, carries the connection
-     * auth token.
+     * Holds the field id that, in a {@link ApnsPayloadTag#GET_TOKEN}, carries the connection auth
+     * token.
      *
-     * @apiNote
-     * Distinct from {@link #FIELD_AUTH_TOKEN_READY} which sits at
-     * field id {@code 0x03} in the {@link ApnsPayloadTag#READY}
-     * response; field ids are scoped to the enclosing tag.
+     * <p>Distinct from {@link #FIELD_AUTH_TOKEN_READY}, which sits at field id {@code 0x03} in the
+     * {@link ApnsPayloadTag#READY} response; field ids are scoped to the enclosing tag.
      */
     private static final int FIELD_GET_TOKEN_AUTH = 0x01;
 
     /**
-     * In a {@link ApnsPayloadTag#GET_TOKEN}, carries the SHA-1 hash
-     * of the bundle id whose token is being requested.
+     * Holds the field id that, in a {@link ApnsPayloadTag#GET_TOKEN}, carries the SHA-1 hash of the
+     * bundle id whose token is being requested.
      */
     private static final int FIELD_GET_TOKEN_TOPIC = 0x02;
 
     /**
-     * In a {@link ApnsPayloadTag#GET_TOKEN}, a two-byte zero suffix
+     * Holds the field id that, in a {@link ApnsPayloadTag#GET_TOKEN}, carries a two-byte zero suffix
      * the apsd protocol expects.
      */
     private static final int FIELD_GET_TOKEN_PADDING = 0x03;
 
     /**
-     * In a {@link ApnsPayloadTag#TOKEN_RESPONSE}, the topic hash
-     * echoed back so callers can correlate the response against
-     * their original request.
+     * Holds the field id that, in a {@link ApnsPayloadTag#TOKEN_RESPONSE}, echoes the topic hash back
+     * so callers can correlate the response against their original request.
      */
     private static final int FIELD_TOKEN_RESPONSE_TOPIC = 0x03;
 
     /**
-     * The session whose keypair, device certificate and topic list
-     * drive the courier handshake.
+     * Holds the session whose keypair, device certificate and topic list drive the courier handshake.
      */
     private final ApnsSession session;
 
     /**
-     * The sink for verification codes extracted from incoming
-     * {@link ApnsPayloadTag#NOTIFICATION} payloads.
+     * Holds the sink for verification codes extracted from incoming {@link ApnsPayloadTag#NOTIFICATION}
+     * payloads.
      */
     private final ApnsPushCode pushCode;
 
     /**
-     * The HTTP client used for the single bag fetch.
+     * Holds the HTTP client used for the single bag fetch.
      *
-     * @apiNote
-     * Built once with the configured proxy and reused if
-     * {@link #start} is called more than once across reconnects.
+     * <p>Built once with the configured proxy and reused if {@link #start} is called more than once
+     * across reconnects.
      */
     private final HttpClient http;
 
     /**
-     * The source of randomness used to pick a courier replica index
-     * and seed the SSL context.
+     * Holds the source of randomness used to pick a courier replica index and seed the SSL context.
      */
     private final SecureRandom random;
 
     /**
-     * The map of pending {@link #exchange} requests awaiting a
-     * matching response frame.
+     * Holds the map of pending {@link #exchange} requests awaiting a matching response frame.
      *
-     * @apiNote
-     * Keyed by sequential id so the read pump's iteration order is
-     * deterministic.
+     * <p>Keyed by sequential id so the read pump's iteration order is deterministic.
      *
-     * @implNote
-     * This implementation uses a {@link ConcurrentHashMap} rather
-     * than a list so concurrent registrations do not require
-     * snapshot iteration.
+     * @implNote This implementation uses a {@link ConcurrentHashMap} rather than a list so concurrent
+     *           registrations do not require snapshot iteration.
      */
     private final Map<Long, Pending> pending;
 
     /**
-     * The monotonically increasing id generator for {@link #pending}
-     * keys.
+     * Holds the monotonically increasing id generator for {@link #pending} keys.
      *
-     * @apiNote
-     * An {@link AtomicLong} sidesteps the fragile
-     * {@code threadHash << 32 | random} synthetic id approach used
-     * before this refactor, which could collide under thread reuse.
+     * @implNote This implementation uses an {@link AtomicLong} to sidestep the fragile
+     *           {@code threadHash << 32 | random} synthetic id approach used before this refactor,
+     *           which could collide under thread reuse.
      */
     private final AtomicLong nextPendingId;
 
     /**
-     * The lock that serialises every outbound write on the courier
-     * socket.
+     * Holds the lock that serialises every outbound write on the courier socket.
      *
-     * @apiNote
-     * Three potential concurrent writers (the read pump's ack path,
-     * public-API threads driving {@link #requestToken}, and the
-     * keep-alive thread) need this so their frames cannot interleave
-     * on the wire.
+     * <p>Three potential concurrent writers, the read pump's ack path, public-API threads driving
+     * {@link #requestToken}, and the keep-alive thread, need this so their frames cannot interleave on
+     * the wire.
      */
     private final Object writeLock;
 
     /**
-     * The currently-attached TLS socket.
+     * Holds the currently-attached TLS socket.
      *
-     * @apiNote
-     * {@code null} between {@link #start} and the first successful
-     * handshake.
+     * <p>{@code null} between {@link #start} and the first successful handshake.
      *
-     * @implNote
-     * This implementation marks the field {@code volatile} so
-     * {@link #close} can read a fresh value from any thread.
+     * @implNote This implementation marks the field {@code volatile} so {@link #close} can read a
+     *           fresh value from any thread.
      */
     private volatile SSLSocket socket;
 
     /**
-     * The cached output stream of {@link #socket}.
+     * Holds the cached output stream of {@link #socket}.
      *
-     * @apiNote
-     * Cached so the write path does not hit the
-     * {@code SSLSocket.getOutputStream} guard on every frame.
+     * <p>Cached so the write path does not hit the {@code SSLSocket.getOutputStream} guard on every
+     * frame.
      */
     private volatile OutputStream socketOut;
 
     /**
-     * The read pump virtual thread.
+     * Holds the read pump virtual thread.
      *
-     * @apiNote
-     * Started after the TLS handshake; held {@code volatile} so
-     * {@link #close} can interrupt it from any thread.
+     * <p>Started after the TLS handshake.
+     *
+     * @implNote This implementation holds the reference {@code volatile} so {@link #close} can
+     *           interrupt it from any thread.
      */
     private volatile Thread readPumpThread;
 
     /**
-     * The keep-alive virtual thread.
+     * Holds the keep-alive virtual thread.
      *
-     * @apiNote
-     * Started after the courier {@code READY} arrives; held
-     * {@code volatile} for the same reason as
-     * {@link #readPumpThread}.
+     * <p>Started after the courier {@code READY} arrives.
+     *
+     * @implNote This implementation holds the reference {@code volatile} for the same reason as
+     *           {@link #readPumpThread}.
      */
     private volatile Thread keepAliveThread;
 
     /**
-     * The auth token assigned by the courier in
-     * {@link ApnsPayloadTag#READY}.
+     * Holds the auth token assigned by the courier in {@link ApnsPayloadTag#READY}.
      *
-     * @apiNote
-     * Echoed back in every subsequent {@link ApnsPayloadTag#FILTER}
-     * / {@link ApnsPayloadTag#GET_TOKEN} / {@link ApnsPayloadTag#ACK}
-     * so the courier can attribute the request to the right session.
+     * <p>Echoed back in every subsequent {@link ApnsPayloadTag#FILTER}, {@link ApnsPayloadTag#GET_TOKEN}
+     * and {@link ApnsPayloadTag#ACK} so the courier can attribute the request to the right session.
      */
     private volatile byte[] authToken;
 
     /**
-     * The stop flag flipped by {@link #close}.
+     * Holds the stop flag flipped by {@link #close}.
      *
-     * @apiNote
-     * Read by the read pump and the keep-alive loop so they can
-     * exit promptly.
+     * <p>Read by the read pump and the keep-alive loop so they can exit promptly.
      */
     private volatile boolean stopped;
 
     /**
-     * Constructs a courier connection bound to a session and a
-     * push-code sink.
+     * Constructs a courier connection bound to a session and a push-code sink.
      *
-     * @apiNote
-     * Does not open a socket; the caller must invoke {@link #start}
-     * after construction.
+     * <p>Does not open a socket; the caller must invoke {@link #start} after construction.
      *
-     * @param session  the session that supplies the keypair, device
-     *                 certificate and topic list
-     * @param pushCode the holder where regcodes from incoming
-     *                 notifications are delivered
-     * @param proxy    proxy URI used for the bag HTTP fetch, or
-     *                 {@code null} for direct
+     * @param session  the session that supplies the keypair, device certificate and topic list
+     * @param pushCode the holder where regcodes from incoming notifications are delivered
+     * @param proxy    proxy URI used for the bag HTTP fetch, or {@code null} for direct
      */
     ApnsCourierConnection(ApnsSession session, ApnsPushCode pushCode, URI proxy) {
         this.session = session;
@@ -368,25 +319,19 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Fetches the bag, opens the TLS socket, runs the courier
-     * handshake and spawns the steady-state threads.
+     * Fetches the bag, opens the TLS socket, runs the courier handshake and spawns the steady-state
+     * threads.
      *
-     * @apiNote
-     * Blocking until the handshake completes; throws on any step
-     * that fails. After a successful return the read pump and the
-     * keep-alive thread are running and the connection is ready to
+     * <p>Blocks until the handshake completes; throws on any step that fails. After a successful
+     * return the read pump and the keep-alive thread are running and the connection is ready to
      * service {@link #requestToken} calls.
      *
-     * @implNote
-     * This implementation negotiates TLSv1.3 with ALPN
-     * {@code apns-security-v3}, sends the
-     * {@link ApnsPayloadTag#CONNECT} packet carrying the device
-     * certificate plus the FairPlay nonce signature, validates the
-     * status byte of the matching {@link ApnsPayloadTag#READY},
-     * captures the auth token, then sends the
-     * {@link ApnsPayloadTag#STATE} and topic-list
-     * {@link ApnsPayloadTag#FILTER} packets before starting the
-     * keep-alive thread.
+     * @implNote This implementation negotiates TLSv1.3 with ALPN {@code apns-security-v3}, sends the
+     *           {@link ApnsPayloadTag#CONNECT} packet carrying the device certificate plus the
+     *           FairPlay nonce signature, validates the status byte of the matching
+     *           {@link ApnsPayloadTag#READY}, captures the auth token, then sends the
+     *           {@link ApnsPayloadTag#STATE} and topic-list {@link ApnsPayloadTag#FILTER} packets
+     *           before starting the keep-alive thread.
      *
      * @throws IOException on any HTTP, TLS, or protocol failure
      */
@@ -454,26 +399,20 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Sends a {@link ApnsPayloadTag#GET_TOKEN} for a topic and
-     * returns the hex-encoded push token.
+     * Sends a {@link ApnsPayloadTag#GET_TOKEN} for a topic and returns the hex-encoded push token.
      *
-     * @apiNote
-     * Called by {@link ApnsClient#getPushToken()} for the first
-     * topic of the bound configuration; blocks on the matching
-     * {@link ApnsPayloadTag#TOKEN_RESPONSE} until either it arrives,
-     * the request times out, or the connection is torn down.
+     * <p>Called by {@link ApnsClient#getPushToken()} for the first topic of the bound configuration;
+     * blocks on the matching {@link ApnsPayloadTag#TOKEN_RESPONSE} until either it arrives, the
+     * request times out, or the connection is torn down.
      *
-     * @implNote
-     * This implementation correlates the response by matching both
-     * the response tag and the echoed topic hash; if a second
-     * concurrent caller requests a different topic the read pump
-     * still routes each response to its matching pending entry.
+     * @implNote This implementation correlates the response by matching both the response tag and the
+     *           echoed topic hash; if a second concurrent caller requests a different topic the read
+     *           pump still routes each response to its matching pending entry.
      *
      * @param topic the bundle id whose token to fetch
      * @return the hex-encoded push token
-     * @throws IOException if the courier connection is not ready,
-     *                     the send fails, the response times out, or
-     *                     the response omits the token field
+     * @throws IOException if the courier connection is not ready, the send fails, the response times
+     *                     out, or the response omits the token field
      */
     String requestToken(String topic) throws IOException {
         var topicHash = ApnsCourierCrypto.sha1(topic);
@@ -493,13 +432,10 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Tears down the read pump, the keep-alive thread, and the TLS
-     * socket.
+     * Tears down the read pump, the keep-alive thread, and the TLS socket.
      *
-     * @apiNote
-     * Fails every still-pending request with an {@link IOException}
-     * so blocked callers unblock with a useful error rather than
-     * waiting forever. Idempotent.
+     * <p>Fails every still-pending request with an {@link IOException} so blocked callers unblock with
+     * a useful error rather than waiting forever. Idempotent.
      */
     void close() {
         if (stopped) {
@@ -529,13 +465,10 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Performs the bag GET and parses the resulting plist into the
-     * structured {@link ApnsBag} record.
+     * Performs the bag GET and parses the resulting plist into the structured {@link ApnsBag} record.
      *
-     * @apiNote
-     * Called once at the start of {@link #start}; the bag tells
-     * Cobalt which courier hostname suffix to dial and how many
-     * replicas to pick a random index from.
+     * <p>Called once at the start of {@link #start}; the bag tells Cobalt which courier hostname
+     * suffix to dial and how many replicas to pick a random index from.
      *
      * @return the parsed bag
      * @throws IOException on transport failure or malformed plist
@@ -550,15 +483,12 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Sends the topic-subscription {@link ApnsPayloadTag#FILTER}
-     * packet so the courier delivers only pushes for the configured
-     * bundle ids.
+     * Sends the topic-subscription {@link ApnsPayloadTag#FILTER} packet so the courier delivers only
+     * pushes for the configured bundle ids.
      *
-     * @apiNote
-     * Called once at the end of {@link #start}; the topic list is
-     * sourced from {@code session.config().topics()} and hashed
-     * through {@link ApnsCourierCrypto#sha1(String)} before being
-     * sent.
+     * <p>Called once at the end of {@link #start}; the topic list is sourced from
+     * {@code session.config().topics()} and hashed through {@link ApnsCourierCrypto#sha1(String)}
+     * before being sent.
      *
      * @throws IOException if the write fails
      */
@@ -576,10 +506,8 @@ final class ApnsCourierConnection {
     /**
      * Spawns the read pump virtual thread.
      *
-     * @apiNote
-     * Called once during {@link #start} after the TLS handshake;
-     * the thread terminates when {@link #close} flips the stop flag
-     * or when the socket dies.
+     * <p>Called once during {@link #start} after the TLS handshake; the thread terminates when
+     * {@link #close} flips the stop flag or when the socket dies.
      *
      * @param in the courier socket input stream
      */
@@ -588,18 +516,14 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * The read pump body.
+     * Runs the read pump body.
      *
-     * @apiNote
-     * Decodes one frame at a time and dispatches it via
-     * {@link #dispatchPacket}; on any I/O error fails every
-     * still-pending request unless the connection is closing.
+     * <p>Decodes one frame at a time and dispatches it via {@link #dispatchPacket}; on any I/O error
+     * fails every still-pending request unless the connection is closing.
      *
-     * @implNote
-     * This implementation distinguishes the close path (no logging)
-     * from the unexpected-failure path (warning log plus
-     * fail-all-pending broadcast) by inspecting the {@link #stopped}
-     * flag before reacting.
+     * @implNote This implementation distinguishes the close path (no logging) from the
+     *           unexpected-failure path (warning log plus fail-all-pending broadcast) by inspecting
+     *           the {@link #stopped} flag before reacting.
      *
      * @param in the courier socket input stream
      */
@@ -623,11 +547,9 @@ final class ApnsCourierConnection {
     /**
      * Routes one decoded packet.
      *
-     * @apiNote
-     * Notifications are auto-acked and any embedded {@code regcode}
-     * is delivered to {@link #pushCode}; the packet is then offered
-     * to every pending request in registration order and the first
-     * whose filter matches consumes it.
+     * <p>Notifications are auto-acked and any embedded {@code regcode} is delivered to
+     * {@link #pushCode}; the packet is then offered to every pending request in registration order and
+     * the first whose filter matches consumes it.
      *
      * @param packet the just-decoded packet
      */
@@ -647,14 +569,12 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Extracts the {@code regcode} string from a notification
-     * payload and hands it to {@link #pushCode}.
+     * Extracts the {@code regcode} string from a notification payload and hands it to
+     * {@link #pushCode}.
      *
-     * @apiNote
-     * Silently ignores notifications without a payload, with a
-     * non-JSON payload, or without a {@code regcode} field; those
-     * are not registration codes and are still acked by the caller
-     * for protocol correctness.
+     * <p>Silently ignores notifications without a payload, with a non-JSON payload, or without a
+     * {@code regcode} field; those are not registration codes and are still acked by the caller for
+     * protocol correctness.
      *
      * @param packet the notification packet
      */
@@ -674,18 +594,13 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Sends an {@link ApnsPayloadTag#ACK} for the given notification
-     * id.
+     * Sends an {@link ApnsPayloadTag#ACK} for the given notification id.
      *
-     * @apiNote
-     * Logs and swallows any I/O failure so the read pump can
-     * continue handling subsequent frames; ignores a {@code null}
-     * notification id because the source notification did not carry
-     * one.
+     * <p>Logs and swallows any I/O failure so the read pump can continue handling subsequent frames;
+     * ignores a {@code null} notification id because the source notification did not carry one.
      *
-     * @param notificationId the {@code FIELD_NOTIFICATION_ID} bytes
-     *                       of the notification being acked, or
-     *                       {@code null} when absent
+     * @param notificationId the {@link #FIELD_NOTIFICATION_ID} bytes of the notification being acked,
+     *                       or {@code null} when absent
      */
     private void sendAckSafe(byte[] notificationId) {
         if (notificationId == null) {
@@ -702,28 +617,21 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Sends a packet and blocks on the first incoming packet whose
-     * filter matches.
+     * Sends a packet and blocks on the first incoming packet whose filter matches.
      *
-     * @apiNote
-     * The single request/response correlation primitive used by
-     * {@link #start} and {@link #requestToken}; the filter
-     * determines which inbound packet completes the wait.
+     * <p>The single request/response correlation primitive used by {@link #start} and
+     * {@link #requestToken}; the filter determines which inbound packet completes the wait.
      *
-     * @implNote
-     * This implementation registers the pending entry before
-     * sending so a fast response that lands between the {@code put}
-     * and the {@code await} is still captured.
+     * @implNote This implementation registers the pending entry before sending so a fast response that
+     *           lands between the {@code put} and the {@code await} is still captured.
      *
      * @param tag    the tag of the outbound packet
-     * @param fields the TLV fields of the outbound packet (values
-     *               are {@code byte[]} or {@code byte[][]})
-     * @param filter the predicate used to identify the matching
-     *               response
+     * @param fields the TLV fields of the outbound packet (values are {@code byte[]} or
+     *               {@code byte[][]})
+     * @param filter the predicate used to identify the matching response
      * @return the matched response packet
-     * @throws IOException on send failure, response timeout, or if
-     *                     the connection is torn down before the
-     *                     response arrives
+     * @throws IOException on send failure, response timeout, or if the connection is torn down before
+     *                     the response arrives
      */
     private ApnsPacket exchange(ApnsPayloadTag tag, Map<Integer, ?> fields,
                                 Predicate<ApnsPacket> filter) throws IOException {
@@ -742,11 +650,9 @@ final class ApnsCourierConnection {
     /**
      * Spawns the keep-alive virtual thread.
      *
-     * @apiNote
-     * The thread emits a {@link ApnsPayloadTag#KEEP_ALIVE_SEND}
-     * every {@link #KEEP_ALIVE_INTERVAL_SECONDS} seconds; quietly
-     * returns on socket death because the read pump will surface
-     * the underlying error.
+     * <p>The thread emits a {@link ApnsPayloadTag#KEEP_ALIVE_SEND} every
+     * {@link #KEEP_ALIVE_INTERVAL_SECONDS} seconds; quietly returns on socket death because the read
+     * pump will surface the underlying error.
      */
     private void startKeepAlive() {
         keepAliveThread = Thread.startVirtualThread(() -> {
@@ -767,17 +673,13 @@ final class ApnsCourierConnection {
     /**
      * Encodes and writes one APNS frame.
      *
-     * @apiNote
-     * Frame layout: one tag byte, four big-endian length bytes, then
-     * the TLV-encoded payload. The write is performed under
-     * {@link #writeLock} so concurrent senders cannot interleave
-     * frames on the wire.
+     * <p>The frame layout is one tag byte, four big-endian length bytes, then the TLV-encoded payload.
+     * The write is performed under {@link #writeLock} so concurrent senders cannot interleave frames
+     * on the wire.
      *
      * @param tag    the frame tag
-     * @param fields the TLV fields (values are {@code byte[]} or
-     *               {@code byte[][]})
-     * @throws IOException if the socket is not connected or the
-     *                     write fails
+     * @param fields the TLV fields (values are {@code byte[]} or {@code byte[][]})
+     * @throws IOException if the socket is not connected or the write fails
      */
     private void send(ApnsPayloadTag tag, Map<Integer, ?> fields) throws IOException {
         var out = socketOut;
@@ -801,20 +703,15 @@ final class ApnsCourierConnection {
     /**
      * Encodes the TLV payload portion of an APNS frame.
      *
-     * @apiNote
-     * Each entry's value must be either a single {@code byte[]}
-     * (one TLV record) or a {@code byte[][]} (one record per
-     * element, all sharing the same field id); any other type is
+     * <p>Each entry's value must be either a single {@code byte[]} (one TLV record) or a
+     * {@code byte[][]} (one record per element, all sharing the same field id); any other type is
      * rejected with {@link IllegalArgumentException}.
      *
      * @param fields the fields to encode
      * @return the encoded payload bytes
-     * @throws IOException              if the underlying writer
-     *                                  fails (impossible for an
-     *                                  in-memory sink)
-     * @throws IllegalArgumentException if any value is neither
-     *                                  {@code byte[]} nor
-     *                                  {@code byte[][]}
+     * @throws IOException              if the underlying writer fails (impossible for an in-memory
+     *                                  sink)
+     * @throws IllegalArgumentException if any value is neither {@code byte[]} nor {@code byte[][]}
      */
     private static byte[] encodePayload(Map<Integer, ?> fields) throws IOException {
         var buf = new ByteArrayOutputStream();
@@ -846,20 +743,16 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Reads one APNS frame and decodes its payload into a
-     * {@code field-id -> bytes} map.
+     * Reads one APNS frame and decodes its payload into a {@code field-id -> bytes} map.
      *
-     * @apiNote
-     * Tags outside the {@link ApnsPayloadTag} range are logged at
-     * {@code DEBUG} and surface as a packet with {@code null} tag;
-     * downstream code never matches such packets against a pending
+     * <p>Tags outside the {@link ApnsPayloadTag} range are logged at {@code DEBUG} and surface as a
+     * packet with {@code null} tag; downstream code never matches such packets against a pending
      * filter so they are effectively dropped after logging.
      *
      * @param in the courier socket input stream
      * @return the decoded packet
-     * @throws IOException if the stream closes mid-frame, the length
-     *                     is negative, or a field length exceeds the
-     *                     remaining payload
+     * @throws IOException if the stream closes mid-frame, the length is negative, or a field length
+     *                     exceeds the remaining payload
      */
     private static ApnsPacket readPacket(InputStream in) throws IOException {
         var rawTag = readUnsignedByte(in);
@@ -898,11 +791,8 @@ final class ApnsCourierConnection {
     /**
      * Reads exactly one unsigned byte from a stream.
      *
-     * @apiNote
-     * Throws when the stream has been closed; used by the frame
-     * decoder to surface unexpected EOF as {@link IOException}
-     * rather than the silent {@code -1} {@link InputStream#read()}
-     * returns.
+     * <p>Throws when the stream has been closed; used by the frame decoder to surface unexpected EOF
+     * as {@link IOException} rather than the silent {@code -1} {@link InputStream#read()} returns.
      *
      * @param in the source stream
      * @return the unsigned byte value in {@code [0, 255]}
@@ -921,8 +811,7 @@ final class ApnsCourierConnection {
      *
      * @param in the source stream
      * @return the decoded {@code int}
-     * @throws IOException if the stream closes before all four bytes
-     *                     are read
+     * @throws IOException if the stream closes before all four bytes are read
      */
     private static int readBigEndianInt(InputStream in) throws IOException {
         var b1 = readUnsignedByte(in);
@@ -933,19 +822,14 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Sends a prepared HTTP request synchronously and returns the
-     * body bytes on success.
+     * Sends a prepared HTTP request synchronously and returns the body bytes on success.
      *
-     * @apiNote
-     * Used for the single bag fetch in {@link #fetchBag}; non-2xx
-     * responses and interruptions both surface as
-     * {@link IOException} so callers can treat them uniformly as
-     * transport failures.
+     * <p>Used for the single bag fetch in {@link #fetchBag}; non-2xx responses and interruptions both
+     * surface as {@link IOException} so callers can treat them uniformly as transport failures.
      *
      * @param request the prepared HTTP request
      * @return the raw response body bytes
-     * @throws IOException on any non-2xx status, transport failure,
-     *                     or interruption during the call
+     * @throws IOException on any non-2xx status, transport failure, or interruption during the call
      */
     private byte[] sendBytes(HttpRequest request) throws IOException {
         try {
@@ -962,13 +846,10 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * Builds an {@link HttpClient} configured with the timeout and
-     * the optional proxy.
+     * Builds an {@link HttpClient} configured with the timeout and the optional proxy.
      *
-     * @apiNote
-     * The default port for an unspecified-port proxy is
-     * {@code 8080}, matching the convention most HTTP proxies
-     * advertise.
+     * <p>When the proxy URI omits an explicit port the default {@code 8080} is used, matching the
+     * convention most HTTP proxies advertise.
      *
      * @param proxy proxy URI, or {@code null} for direct
      * @return a configured HTTP client
@@ -985,45 +866,34 @@ final class ApnsCourierConnection {
     }
 
     /**
-     * The one-shot synchronisation primitive for an {@link #exchange}
-     * caller.
+     * The one-shot synchronisation primitive for an {@link #exchange} caller.
      *
-     * @apiNote
-     * Holds the filter the read pump consults to identify the
-     * matching response, plus a single-slot mailbox the producer
-     * fills with either a delivered packet or an error.
+     * <p>Holds the filter the read pump consults to identify the matching response, plus a single-slot
+     * mailbox the producer fills with either a delivered packet or an error.
      *
-     * @implNote
-     * This implementation uses an {@link ArrayBlockingQueue} of
-     * size 1 so the dispatcher's deliver/fail methods never block
-     * waiting for the consumer to be ready, and a fast response
-     * that arrives between {@code pending.put} and the consumer's
-     * {@code poll} is buffered rather than lost.
+     * @implNote This implementation uses an {@link ArrayBlockingQueue} of size 1 so the dispatcher's
+     *           deliver/fail methods never block waiting for the consumer to be ready, and a fast
+     *           response that arrives between {@code pending.put} and the consumer's {@code poll} is
+     *           buffered rather than lost.
      */
     private static final class Pending {
         /**
-         * The predicate the read pump consults when routing each
-         * incoming frame.
+         * Holds the predicate the read pump consults when routing each incoming frame.
          *
-         * @apiNote
-         * The first pending entry whose filter matches consumes the
-         * packet.
+         * <p>The first pending entry whose filter matches consumes the packet.
          */
         final Predicate<ApnsPacket> filter;
 
         /**
-         * The single-slot mailbox.
+         * Holds the single-slot mailbox.
          *
-         * @apiNote
-         * Holds either an {@link ApnsPacket} (on delivery) or a
-         * {@link Throwable} (on failure or close); the consumer
-         * disambiguates via {@code instanceof}.
+         * <p>Carries either an {@link ApnsPacket} (on delivery) or a {@link Throwable} (on failure or
+         * close); the consumer disambiguates via {@code instanceof}.
          */
         final ArrayBlockingQueue<Object> slot = new ArrayBlockingQueue<>(1);
 
         /**
-         * Constructs a pending entry waiting for a packet matching
-         * a filter.
+         * Constructs a pending entry waiting for a packet matching a filter.
          *
          * @param filter the response-matching predicate
          */
@@ -1034,8 +904,7 @@ final class ApnsCourierConnection {
         /**
          * Delivers a successful response to the awaiting consumer.
          *
-         * @apiNote
-         * Non-blocking; subsequent calls are silently dropped.
+         * <p>Non-blocking; subsequent calls are silently dropped.
          *
          * @param packet the matched response packet
          */
@@ -1044,8 +913,8 @@ final class ApnsCourierConnection {
         }
 
         /**
-         * Delivers an error to the awaiting consumer so it surfaces
-         * via {@link #await(long)} as an {@link IOException}.
+         * Delivers an error to the awaiting consumer so it surfaces via {@link #await(long)} as an
+         * {@link IOException}.
          *
          * @param error the error to surface
          */
@@ -1054,19 +923,14 @@ final class ApnsCourierConnection {
         }
 
         /**
-         * Blocks the calling thread until either a packet, an
-         * error, or the timeout arrives.
+         * Blocks the calling thread until either a packet, an error, or the timeout arrives.
          *
-         * @apiNote
-         * Wraps a {@link TimeoutException} into the cause chain of
-         * the surfaced {@link IOException} so callers retain enough
-         * information to distinguish a timeout from a transport
-         * failure.
+         * <p>Wraps a {@link TimeoutException} into the cause chain of the surfaced {@link IOException}
+         * so callers retain enough information to distinguish a timeout from a transport failure.
          *
          * @param timeoutMs the wall-clock timeout in milliseconds
          * @return the delivered packet
-         * @throws IOException if the timeout fires, the call is
-         *                     interrupted, or {@link #fail} was
+         * @throws IOException if the timeout fires, the call is interrupted, or {@link #fail} was
          *                     invoked
          */
         ApnsPacket await(long timeoutMs) throws IOException {

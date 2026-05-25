@@ -16,24 +16,21 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The optional privacy-token sub-payload of a
- * {@link SmaxProfilePictureGetRequest}; wraps a
- * {@code <tctoken>...</tctoken>} child carrying the privacy-token
- * contents bytes inside an {@code <smax$any>} envelope.
+ * Wraps a privacy token inside an {@code <smax$any><tctoken>...</tctoken></smax$any>}
+ * child so a {@link SmaxProfilePictureGetRequest} can be authenticated against
+ * that token.
  *
- * @apiNote
- * Pass an instance to {@link SmaxProfilePictureGetRequest} when the
- * caller has a fresh privacy token from
- * {@code WAWebPrivacyTokenJob} and wants to authenticate the
- * picture-get against that token; the relay rejects the fetch if the
- * token is invalid or expired.
+ * <p>An instance is passed to {@link SmaxProfilePictureGetRequest} when the
+ * caller holds a fresh privacy token and wants to authenticate the picture-get
+ * against it; the relay rejects the fetch when the token is invalid or expired.
+ * The contents bytes are opaque to Cobalt and decoded only by the relay's
+ * privacy-token validator.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePictureTCTokenMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePicturePrivacyTokenContentsMixin")
 public final class SmaxProfilePictureGetTcTokenMixin {
     /**
-     * The optional {@code t} timestamp on the {@code <tctoken/>}
-     * element.
+     * The optional {@code t} timestamp on the {@code <tctoken/>} element.
      */
     private final Long tctokenT;
 
@@ -43,18 +40,12 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     private final byte[] anyElementValue;
 
     /**
-     * Constructs a privacy-token payload.
-     *
-     * @apiNote
-     * Use this when assembling a {@link SmaxProfilePictureGetRequest}
-     * that should be authenticated by a fresh privacy token.
+     * Constructs a privacy-token payload from the given timestamp and contents.
      *
      * @param tctokenT        the optional issuance timestamp; may be
      *                        {@code null}
-     * @param anyElementValue the privacy-token bytes; never
-     *                        {@code null}
-     * @throws NullPointerException if {@code anyElementValue} is
-     *                              {@code null}
+     * @param anyElementValue the privacy-token bytes; never {@code null}
+     * @throws NullPointerException if {@code anyElementValue} is {@code null}
      */
     public SmaxProfilePictureGetTcTokenMixin(Long tctokenT, byte[] anyElementValue) {
         this.tctokenT = tctokenT;
@@ -64,9 +55,8 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     /**
      * Returns the optional issuance timestamp.
      *
-     * @apiNote
-     * Read by {@link #toNode()} to decide whether to stamp the
-     * {@code <tctoken t=...>} attribute.
+     * <p>{@link #toNode()} reads this value to decide whether to stamp the
+     * {@code t} attribute on the {@code <tctoken>} element.
      *
      * @return an {@link Optional} carrying the timestamp, or
      *         {@link Optional#empty()} when omitted
@@ -78,9 +68,8 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     /**
      * Returns the privacy-token contents bytes.
      *
-     * @apiNote
-     * Opaque to Cobalt; the relay's privacy-token validator decodes
-     * the contents.
+     * <p>The bytes are opaque to Cobalt; the relay's privacy-token validator
+     * decodes the contents.
      *
      * @return the bytes; never {@code null}
      */
@@ -89,20 +78,15 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     }
 
     /**
-     * Builds the {@code <smax$any>} wrapper node carrying the
-     * {@code <tctoken/>} child.
+     * Builds the {@code <smax$any>} wrapper node carrying the {@code <tctoken/>}
+     * child.
      *
-     * @apiNote
-     * The node has shape
+     * <p>The node has shape
      * {@snippet lang=xml :
      * <smax$any><tctoken t="N"?>...bytes...</tctoken></smax$any>
      * }
-     *
-     * @implNote
-     * This implementation builds the {@code <tctoken/>} first then
-     * wraps it in the outer {@code <smax$any>}; the wire layout is
-     * identical to WA Web's
-     * {@code mergeTCTokenMixin} emit.
+     * where the {@code t} attribute is present only when a timestamp was
+     * supplied.
      *
      * @return the {@link Node}
      */
@@ -123,13 +107,12 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     }
 
     /**
-     * Compares this payload to another for value equality on the
-     * timestamp and contents bytes.
+     * Compares this payload to another for value equality on the timestamp and
+     * contents bytes.
      *
      * @param obj the object to compare against
      * @return {@code true} when {@code obj} is a
-     *         {@link SmaxProfilePictureGetTcTokenMixin} with
-     *         identical fields
+     *         {@link SmaxProfilePictureGetTcTokenMixin} with identical fields
      */
     @Override
     public boolean equals(Object obj) {
@@ -148,9 +131,8 @@ public final class SmaxProfilePictureGetTcTokenMixin {
      * Returns a hash code consistent with {@link #equals(Object)}.
      *
      * @implNote
-     * This implementation mixes {@link Arrays#hashCode(byte[])} of
-     * the contents into the hash so byte-array contents drive the
-     * result.
+     * This implementation mixes {@link Arrays#hashCode(byte[])} of the contents
+     * into the hash so byte-array contents drive the result.
      *
      * @return the hash code
      */
@@ -164,9 +146,7 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     /**
      * Returns a debug-friendly representation of this payload.
      *
-     * @apiNote
-     * Intended for logging; the format is not part of the public
-     * contract.
+     * <p>The format is intended for logging and is not part of the contract.
      *
      * @return the string form
      */

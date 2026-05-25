@@ -14,25 +14,23 @@ import java.util.Optional;
 
 /**
  * The sealed reply family for a {@link SmaxGroupsGetParticipatingGroupsRequest}.
- *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
- * cases: {@link Success} carries every group the caller participates in as raw {@code <group/>} subtrees, the two
- * error variants surface the relay's reason codes. The {@code WAWebGroupQueryJob.queryGroups} caller in WA Web uses
- * the same dispatch shape.
+ * <p>
+ * Exactly one of three variants matches a given inbound stanza: {@link Success} carries every group the caller
+ * participates in as raw {@code <group/>} subtrees, {@link ClientError} carries a caller-side rejection code, and
+ * {@link ServerError} carries a transient relay-side failure code.
  */
 public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOperation.Response
         permits SmaxGroupsGetParticipatingGroupsResponse.Success, SmaxGroupsGetParticipatingGroupsResponse.ClientError, SmaxGroupsGetParticipatingGroupsResponse.ServerError {
 
     /**
-     * Dispatches the inbound IQ across each {@link SmaxGroupsGetParticipatingGroupsResponse} variant in priority order
-     * and returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsGetParticipatingGroupsResponse} variant and returns the
+     * first that parses cleanly.
+     * <p>
+     * Variants are tried in priority order: {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     * The result is empty when the stanza matches none of the three variants.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsGetParticipatingGroupsRPC}:
-     * {@link Success} first, then {@link ClientError}, then {@link ServerError}.
-     *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation defers the no-match decision to the caller by returning an empty {@link Optional}
+     * rather than throwing, so the caller can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound request
@@ -57,10 +55,8 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
     /**
      * The reply variant emitted when the relay returned the caller's participating-group set.
-     *
-     * @apiNote Surfaces as the {@code GetParticipatingGroupsResponseSuccess} case in {@code WAWebGroupQueryJob};
-     * each child group node feeds the chat-list bulk loader which builds the per-group {@code WAWebChatModel} via
-     * {@code WAWebGroupsQueryApi.parseGroupSmax}.
+     * <p>
+     * {@link #groups()} holds one raw {@code <group/>} subtree per group the caller belongs to.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetParticipatingGroupsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupInfoOrTruncatedGroupInfoGroupInfoMixinGroup")
@@ -72,9 +68,8 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
         /**
          * Constructs a {@link Success} reply.
-         *
-         * @apiNote {@code null} normalises to {@link List#of()} for callers that want to construct an empty result
-         * directly.
+         * <p>
+         * A {@code null} argument normalises to {@link List#of()} so callers can construct an empty result directly.
          *
          * @param groups the {@code <group/>} sub-nodes; may be {@code null}
          */
@@ -84,9 +79,9 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
         /**
          * Returns the raw {@code <group/>} sub-nodes.
-         *
-         * @apiNote Cobalt exposes the subtrees verbatim so callers project subject, picture, owner, admin list,
-         * ephemeral expiration, and addressing mode directly without committing to the full mixin schema.
+         * <p>
+         * The subtrees are exposed verbatim so callers project subject, picture, owner, admin list, ephemeral
+         * expiration, and addressing mode directly without committing to the full mixin schema.
          *
          * @return an unmodifiable list of {@code <group/>} nodes; never {@code null}
          */
@@ -96,8 +91,8 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
-         *
-         * @apiNote Matches when the IQ is a {@code type="result"} envelope carrying a {@code <groups>} wrapper; the
+         * <p>
+         * Parsing succeeds when the IQ is a {@code type="result"} envelope carrying a {@code <groups>} wrapper; the
          * wrapper may be empty when the caller participates in no groups.
          *
          * @param node the inbound IQ stanza
@@ -162,9 +157,9 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
     /**
      * The reply variant emitted when the relay rejected the bulk query as malformed or unauthorised.
-     *
-     * @apiNote Surfaces as the {@code GetParticipatingGroupsResponseClientError} case in {@code WAWebGroupQueryJob},
-     * which logs the {@link #errorCode()} as the HTTP-style status passed back to the chat-list bulk loader.
+     * <p>
+     * The {@link #errorCode()} carries the HTTP-style status assigned by the relay and {@link #errorText()} carries
+     * the optional human-readable reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetParticipatingGroupsResponseClientError")
     final class ClientError implements SmaxGroupsGetParticipatingGroupsResponse {
@@ -174,7 +169,7 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -209,9 +204,9 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which matches only client-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -270,10 +265,10 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
     /**
      * The reply variant emitted on transient relay-side failure.
-     *
-     * @apiNote Surfaces as the {@code GetParticipatingGroupsResponseServerError} case in {@code WAWebGroupQueryJob},
-     * where it is logged at the same severity as {@link ClientError} but typically signals retry-eligible relay
-     * outages rather than caller error.
+     * <p>
+     * Unlike {@link ClientError} this code typically signals a retry-eligible relay outage rather than a malformed or
+     * unauthorised request; {@link #errorCode()} carries the server-range status and {@link #errorText()} the optional
+     * reason.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetParticipatingGroupsResponseServerError")
     final class ServerError implements SmaxGroupsGetParticipatingGroupsResponse {
@@ -283,7 +278,7 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * The optional human-readable error text echoed by the relay; {@code null} when omitted.
          */
         private final String errorText;
 
@@ -318,9 +313,9 @@ public sealed interface SmaxGroupsGetParticipatingGroupsResponse extends SmaxOpe
 
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
-         *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>
+         * The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which matches only server-range codes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

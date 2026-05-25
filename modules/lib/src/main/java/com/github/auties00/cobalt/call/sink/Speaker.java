@@ -14,53 +14,56 @@ import java.nio.ByteOrder;
 import java.util.Objects;
 
 /**
- * An {@link AudioSink} backed by the OS speaker. Plays 16-bit
- * signed PCM at 16 kHz mono by default — the Cobalt call wire
- * format. If the call decoder emits at a different rate, wrap
- * this in a
- * {@link com.github.auties00.cobalt.call.filter.ResamplingAudioSink}.
+ * Plays call audio through the operating system's speaker.
  *
- * <p>Mono only — the OS auto-spreads to whatever channels the
- * physical speaker has.
+ * <p>This sink renders signed 16-bit mono PCM through a {@link SourceDataLine}, defaulting to the
+ * 16 kHz wire rate of a Cobalt call. The line must be opened with {@link #open()} before frames are
+ * written; each {@link #write(AudioFrame)} converts the frame's samples to little-endian bytes and
+ * pushes them to the line, blocking while the line's buffer is full so playback paces the call.
+ * Closing drains and releases the line. The sink is mono only; the operating system spreads the
+ * single channel across whatever channels the physical speaker has.
+ *
+ * @apiNote Wire this in as the inbound sink of a call to hear the remote participant. If the call
+ * decoder emits at a rate other than the default, wrap this sink in a
+ * {@link com.github.auties00.cobalt.call.filter.ResamplingAudioSink} so the samples reach the line at
+ * the rate it was opened with, otherwise audio plays at the wrong pitch.
  */
 public final class Speaker implements AudioSink, AutoCloseable {
     /**
-     * Default playback sample rate matching the WhatsApp wire
-     * profile.
+     * Names the default playback sample rate, matching the WhatsApp call wire profile of 16 kHz.
      */
     public static final int DEFAULT_SAMPLE_RATE = 16_000;
 
     /**
-     * Sample rate of the underlying playback line.
+     * Holds the sample rate, in hertz, the playback line is opened at.
      */
     private final int sampleRate;
 
     /**
-     * Optional mixer override, or {@code null} for JVM default.
+     * Holds the mixer to acquire the line from, or {@code null} to use the JVM default output device.
      */
     private final Mixer.Info preferredMixer;
 
     /**
-     * The opened line — null before {@link #open()} or after
+     * Holds the opened playback line, or {@code null} before {@link #open()} and after
      * {@link #close()}.
      */
     private SourceDataLine line;
 
     /**
-     * Constructs a speaker for the WhatsApp default profile.
+     * Constructs a speaker for the WhatsApp default profile on the JVM default output device.
      */
     public Speaker() {
         this(DEFAULT_SAMPLE_RATE, null);
     }
 
     /**
-     * Constructs a speaker with explicit format and mixer.
+     * Constructs a speaker with an explicit sample rate and output device.
      *
-     * @param sampleRate     sample rate in Hz
-     * @param preferredMixer specific mixer to use, or {@code null}
-     *                       for the JVM default
-     * @throws IllegalArgumentException if {@code sampleRate} is
-     *                                  &lt; 1
+     * @param sampleRate     the playback sample rate in hertz; must be at least 1
+     * @param preferredMixer the mixer to acquire the line from, or {@code null} for the JVM default
+     *                       output device
+     * @throws IllegalArgumentException if {@code sampleRate} is less than 1
      */
     public Speaker(int sampleRate, Mixer.Info preferredMixer) {
         if (sampleRate < 1) {
@@ -71,12 +74,17 @@ public final class Speaker implements AudioSink, AutoCloseable {
     }
 
     /**
-     * Opens the underlying playback line and starts playback.
-     * Must be called before {@link #write(AudioFrame)}.
+     * Opens the playback line and starts playback.
      *
-     * @throws LineUnavailableException if no compatible line is
-     *                                  available on the running
-     *                                  platform
+     * <p>Acquires a signed 16-bit mono line at the configured sample rate, from the preferred mixer
+     * when one was supplied or the JVM default device otherwise, opens it, and starts it so written
+     * frames play immediately. Calling this when the line is already open does nothing, so repeated
+     * calls are harmless. {@link #write(AudioFrame)} requires the line to have been opened first.
+     *
+     * @throws LineUnavailableException if no compatible line is available on the running platform
+     * @implNote This implementation sizes the line buffer at one tenth of a second of samples, that
+     * is {@code sampleRate / 10} frames of two bytes each, trading a small latency floor for
+     * resilience to scheduling jitter on the writing thread.
      */
     public synchronized void open() throws LineUnavailableException {
         if (line != null) {
@@ -96,6 +104,14 @@ public final class Speaker implements AudioSink, AutoCloseable {
         this.line = acquired;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Converts the frame's samples to little-endian bytes and writes them to the playback line,
+     * blocking while the line buffer is full so playback paces the producer.
+     *
+     * @throws IllegalStateException if the line has not been opened with {@link #open()}
+     */
     @Override
     public void write(AudioFrame frame) {
         Objects.requireNonNull(frame, "frame cannot be null");
@@ -110,6 +126,13 @@ public final class Speaker implements AudioSink, AutoCloseable {
         l.write(bytes, 0, bytes.length);
     }
 
+    /**
+     * Drains pending samples, stops the line, and releases it.
+     *
+     * <p>Drains so buffered audio finishes playing, then stops and closes the line and clears the
+     * reference. Each step ignores failures so a fault in one does not leak the line. Closing when no
+     * line is open does nothing, so this is idempotent.
+     */
     @Override
     public synchronized void close() {
         var l = line;

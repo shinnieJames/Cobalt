@@ -24,25 +24,18 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Exercises {@link MessageSendingService}'s error and validation branches
- * for the {@code WAWebSendMsgJob.encryptAndSendMsg} contract.
- *
- * @apiNote
- * Covers the cross-shape rejection cells: a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
- * targeting a newsletter JID and a
+ * Covers the {@link MessageSendingService} validation and rejection branches:
+ * a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} to a
+ * newsletter JID and a
  * {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo}
- * targeting a non-newsletter JID both raise
+ * to a non-newsletter JID both raise
  * {@link WhatsAppMessageException.Send.InvalidRecipient}; a missing
- * {@code messageId} or {@code parentJid} on the key raises
+ * {@code messageId} or {@code parentJid} raises
  * {@link IllegalArgumentException};
- * {@link MessageSendingService#sendKeyDistribution(Jid, MessageKey)}
- * rejects non-group JIDs with the same {@code InvalidRecipient}; null
- * arguments raise {@link NullPointerException}.
- *
- * @implNote
- * The successful dispatch-by-sender-kind path is exercised by the
- * per-sender test families and by the live-corpus oracle; this class only
- * covers the validation cells that need a real but minimal DI graph.
+ * {@link MessageSendingService#sendKeyDistribution(Jid, MessageKey)} rejects
+ * non-group JIDs; null arguments raise {@link NullPointerException}. The
+ * successful dispatch-by-sender-kind path is left to the per-sender families
+ * and the live-corpus oracle; this suite needs only a minimal real DI graph.
  */
 @DisplayName("MessageSendingService")
 class MessageSendingServiceTest {
@@ -53,10 +46,6 @@ class MessageSendingServiceTest {
     private static final Jid GROUP = Jid.of("120363023250764418@g.us");
     private static final Jid NEWSLETTER = Jid.of("120363402045452944@newsletter");
 
-    /**
-     * Asserts that a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
-     * with a newsletter parent JID is rejected as an invalid recipient.
-     */
     @Test
     @DisplayName("send(MessageInfo): ChatMessageInfo with a newsletter parent JID -> InvalidRecipient")
     void chatMessageInfoToNewsletterFails() {
@@ -75,10 +64,6 @@ class MessageSendingServiceTest {
                 "ChatMessageInfo to a newsletter JID is an unsupported combination");
     }
 
-    /**
-     * Asserts that a {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo}
-     * with a non-newsletter parent JID is rejected as an invalid recipient.
-     */
     @Test
     @DisplayName("send(MessageInfo): NewsletterMessageInfo with a non-newsletter parent JID -> InvalidRecipient")
     void newsletterMessageInfoToChatFails() {
@@ -98,10 +83,6 @@ class MessageSendingServiceTest {
                 "NewsletterMessageInfo to a non-newsletter JID is an unsupported combination");
     }
 
-    /**
-     * Asserts that a missing message id on the key fails fast with
-     * {@link IllegalArgumentException}.
-     */
     @Test
     @DisplayName("send(MessageInfo): missing messageId on the key throws IllegalArgumentException")
     void missingMessageIdThrows() {
@@ -116,10 +97,6 @@ class MessageSendingServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.send(info));
     }
 
-    /**
-     * Asserts that a missing parent JID on the key fails fast with
-     * {@link IllegalArgumentException}.
-     */
     @Test
     @DisplayName("send(MessageInfo): missing parentJid on the key throws IllegalArgumentException")
     void missingParentJidThrows() {
@@ -134,9 +111,6 @@ class MessageSendingServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.send(info));
     }
 
-    /**
-     * Asserts that {@code sendKeyDistribution} rejects non-group JIDs.
-     */
     @Test
     @DisplayName("sendKeyDistribution: non-group JID throws InvalidRecipient")
     void sendKeyDistributionNonGroup() {
@@ -150,9 +124,6 @@ class MessageSendingServiceTest {
                 () -> service.sendKeyDistribution(PEER_PN, key));
     }
 
-    /**
-     * Asserts that {@code sendKeyDistribution} rejects a key without an id.
-     */
     @Test
     @DisplayName("sendKeyDistribution: key without id throws IllegalArgumentException")
     void sendKeyDistributionMissingId() {
@@ -165,10 +136,6 @@ class MessageSendingServiceTest {
                 () -> service.sendKeyDistribution(GROUP, key));
     }
 
-    /**
-     * Asserts that null arguments to
-     * {@code send(Jid, MessageContainer)} fail fast.
-     */
     @Test
     @DisplayName("send(Jid, MessageContainer): null arguments throw NullPointerException")
     void sendNullArgs() {
@@ -179,9 +146,6 @@ class MessageSendingServiceTest {
                 () -> service.send(PEER_PN, null));
     }
 
-    /**
-     * Asserts that a null argument to {@code send(MessageInfo)} fails fast.
-     */
     @Test
     @DisplayName("send(MessageInfo): null arg throws NullPointerException")
     void sendInfoNullArg() {
@@ -189,9 +153,6 @@ class MessageSendingServiceTest {
         assertThrows(NullPointerException.class, () -> service.send(null));
     }
 
-    /**
-     * Asserts that null arguments to {@code sendPeer} fail fast.
-     */
     @Test
     @DisplayName("sendPeer: null arguments throw NullPointerException")
     void sendPeerNullArgs() {
@@ -210,20 +171,6 @@ class MessageSendingServiceTest {
                 () -> service.sendPeer(SELF_PN, null));
     }
 
-    /**
-     * Builds a fully-wired {@link MessageSendingService} backed by stubbed
-     * dependencies.
-     *
-     * @apiNote
-     * Shared factory used by every cell; the service is wired with a
-     * temporary {@link com.github.auties00.cobalt.store.WhatsAppStore},
-     * the {@link TestWhatsAppClient}, and
-     * a {@link StubDeviceService} so the
-     * validation cells can exercise the public surface without touching
-     * the wire.
-     *
-     * @return the configured {@link MessageSendingService}
-     */
     private static MessageSendingService buildService() {
         var store = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         var client = TestWhatsAppClient.create()

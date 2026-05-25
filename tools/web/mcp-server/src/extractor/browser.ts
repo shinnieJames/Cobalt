@@ -11,30 +11,98 @@ const PAGE_LOAD_TIMEOUT = 60_000;
 const WAIT_AFTER_LOAD = 5_000;
 const LAZY_CHUNK_BATCH_SIZE = 50;
 const LAZY_CHUNK_SETTLE_WAIT = 10_000;
-const WASM_TRIGGER_TIMEOUT = 15_000;
-const WASM_SETTLE_WAIT = 5_000;
+const WASM_SETTLE_WAIT = 15_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5_000;
+const LOGIN_POLL_INTERVAL_MS = 3_000;
+const LOGIN_TIMEOUT_MS = 600_000;
 
-interface WasmTrigger {
-  name: string;
-  script: string;
-}
+const DEFINE_HOOK = `(() => {
+  if (window.__waDefineHookInstalled) return;
+  window.__waDefineHookInstalled = true;
+  window.__waDefinedModules = [];
+  const record = (name) => { try { window.__waDefinedModules.push(name); } catch (e) {} };
+  const wrap = (fn) => function (name) { record(name); return fn.apply(this, arguments); };
+  let current;
+  Object.defineProperty(window, "__d", {
+    configurable: true,
+    enumerable: true,
+    get() { return current; },
+    set(fn) { current = typeof fn === "function" ? wrap(fn) : fn; },
+  });
+})()`;
 
-const WASM_TRIGGERS: WasmTrigger[] = [
-  {
-    name: "voip",
-    script: `(async () => {
+const WASM_CAPTURE_HOOK = `(() => {
+  if (window.__waWasmCaptureInstalled) return;
+  window.__waWasmCaptureInstalled = true;
+  window.__waWasmUrls = [];
+  const add = (u) => { try { if (u && /\\.wasm/i.test(String(u))) window.__waWasmUrls.push(String(u)); } catch (e) {} };
+  const oFetch = window.fetch;
+  if (typeof oFetch === "function") {
+    window.fetch = function (input) {
+      try { add(input && input.url ? input.url : input); } catch (e) {}
+      return oFetch.apply(this, arguments);
+    };
+  }
+  for (const fn of ["instantiateStreaming", "compileStreaming"]) {
+    const orig = WebAssembly[fn];
+    if (typeof orig === "function") {
+      WebAssembly[fn] = function (src) {
+        try { Promise.resolve(src).then((r) => { if (r && r.url) add(r.url); }).catch(() => {}); } catch (e) {}
+        return orig.apply(this, arguments);
+      };
+    }
+  }
+})()`;
+
+const AGNOSTIC_WASM_TRIGGER = `(() => {
+  if (typeof require !== "function") return { fired: [], reason: "no require" };
+  const req = require;
+  const defs = Array.from(new Set(window.__waDefinedModules || []));
+  if (defs.length === 0) {
+    defs.push("WAWebVoipWebWasmVariantLoader", "WAGetKaleidoscopeWasm");
+  }
+  const fired = [];
+  const looksLikeLoaderName = (n) =>
+    /wasm/i.test(n) && !/^WASmax/.test(n) && !/Mocks/i.test(n);
+  const looksLikeLoaderExport = (k) =>
+    /wasm|^(get|load|init|preload|warm|ensure|create|build)/i.test(k);
+  for (const name of defs) {
+    if (!looksLikeLoaderName(name)) continue;
+    let m;
+    try { m = req(name); } catch (e) { continue; }
+    if (!m) continue;
+    const tryCall = (fn, label) => {
+      if (typeof fn !== "function" || fn.length > 1) return;
+      try { Promise.resolve(fn()).catch(() => {}); fired.push(label); } catch (e) {}
+    };
+    if (typeof m === "object") {
+      for (const k of Object.keys(m)) {
+        if (!looksLikeLoaderExport(k)) continue;
+        let v;
+        try { v = m[k]; } catch (e) { continue; }
+        tryCall(v, name + "." + k);
+      }
+    } else if (typeof m === "function") {
+      tryCall(m, name);
+    }
+  }
+  try {
+    const jrfi = req("JSResourceForInteraction");
+    for (const name of defs) {
+      if (!/wasm/i.test(name) || !/\\.worker$/i.test(name)) continue;
       try {
-        if (typeof require !== 'function') return;
-        const loader = require("WAWebVoipWebWasmVariantLoader");
-        if (loader && loader.loadVoipWasmVariant) {
-          await loader.loadVoipWasmVariant();
+        const handle = jrfi(name);
+        const ref = handle && handle.__setRef ? handle.__setRef("snapshot") : handle;
+        if (ref && typeof ref.load === "function") {
+          Promise.resolve(ref.load()).catch(() => {});
+          fired.push("worker:" + name);
         }
-      } catch(e) {}
-    })()`,
-  },
-];
+      } catch (e) {}
+    }
+  } catch (e) {}
+  return { fired };
+})()`;
 
 interface CapturedResponses {
   jsUrls: string[];
@@ -109,16 +177,62 @@ async function discoverBxDataWasmUrls(
   });
 }
 
-async function runWasmTriggers(bridge: PlatformBridge): Promise<void> {
-  for (const trigger of WASM_TRIGGERS) {
+const AUTH_PROBE = `(() => ({
+  loggedIn: document.querySelector("#pane-side") != null
+    || document.querySelector('[data-testid="chat-list"]') != null
+    || document.querySelector('[data-testid="conversation-panel-messages"]') != null,
+}))()`;
+
+async function ensureLoggedIn(bridge: PlatformBridge): Promise<void> {
+  const deadline = Date.now() + LOGIN_TIMEOUT_MS;
+  let announced = false;
+  for (;;) {
+    let loggedIn = false;
     try {
-      await Promise.race([
-        bridge.evaluate(trigger.script),
-        new Promise((resolve) => setTimeout(resolve, WASM_TRIGGER_TIMEOUT)),
-      ]);
+      const result = (await bridge.evaluate(AUTH_PROBE)) as { loggedIn: boolean };
+      loggedIn = Boolean(result?.loggedIn);
     } catch {
-      // Expected — triggers may fail if modules are unavailable
+      void 0;
     }
+    if (loggedIn) {
+      if (announced) log.info("login detected; continuing extraction");
+      return;
+    }
+    if (!announced) {
+      announced = true;
+      const where =
+        bridge.platform === "web"
+          ? "the browser window that just opened"
+          : "the WhatsApp Desktop window";
+      log.warn("================ ACTION REQUIRED ================");
+      log.warn("Log in to WhatsApp to capture the full WASM set.");
+      log.warn(`Scan the QR code or link with your phone number in ${where}.`);
+      log.warn(`Waiting up to ${Math.round(LOGIN_TIMEOUT_MS / 60_000)} minutes for login...`);
+      log.warn("================================================");
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out after ${Math.round(LOGIN_TIMEOUT_MS / 60_000)} minutes waiting for WhatsApp Web login.`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOGIN_POLL_INTERVAL_MS));
+  }
+}
+
+async function triggerWasmLoadersAgnostic(bridge: PlatformBridge): Promise<void> {
+  try {
+    const result = (await bridge.evaluate(AGNOSTIC_WASM_TRIGGER)) as {
+      fired?: string[];
+      reason?: string;
+    };
+    const fired = result?.fired ?? [];
+    log.info(
+      `WASM trigger pass fired ${fired.length} loader(s)${result?.reason ? ` (${result.reason})` : ""}`
+    );
+  } catch (error) {
+    log.warn(
+      `WASM trigger pass failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
   await new Promise((resolve) => setTimeout(resolve, WASM_SETTLE_WAIT));
 }
@@ -129,6 +243,15 @@ async function collectResponses(
   const jsUrls = new Set<string>();
   const wasmCaptures = new Map<string, Buffer>();
   const pendingCaptures: Promise<void>[] = [];
+
+  try {
+    await bridge.addInitScript(DEFINE_HOOK);
+    await bridge.addInitScript(WASM_CAPTURE_HOOK);
+  } catch (error) {
+    log.warn(
+      `addInitScript failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 
   // Discover already-loaded resources (relevant for desktop platforms
   // where the page is already loaded before we connect)
@@ -172,7 +295,12 @@ async function collectResponses(
       timeout: PAGE_LOAD_TIMEOUT,
     });
     await new Promise((resolve) => setTimeout(resolve, WAIT_AFTER_LOAD));
+  } else {
+    await bridge.reload({ timeout: PAGE_LOAD_TIMEOUT });
+    await new Promise((resolve) => setTimeout(resolve, WAIT_AFTER_LOAD));
   }
+
+  await ensureLoggedIn(bridge);
 
   // Force load lazy chunks
   await forceLoadAllChunks(bridge);
@@ -192,7 +320,7 @@ async function collectResponses(
   }
 
   // Trigger runtime WASM loading (voip, etc.)
-  await runWasmTriggers(bridge);
+  await triggerWasmLoadersAgnostic(bridge);
 
   await Promise.all(pendingCaptures);
   bridge.removeResponseListeners();

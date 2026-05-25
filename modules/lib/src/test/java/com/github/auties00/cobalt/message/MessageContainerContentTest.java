@@ -25,31 +25,15 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link MessageContainer#content()}, the resolver that walks the
- * union-of-fields {@code Message} protobuf and returns the innermost payload.
- *
- * @apiNote Mirrors the field-resolution order WA Web's {@code WAWebMsgGetters}
- * applies when deciding which field of a {@code Message} oneof is the actual
- * payload. The test covers the four interesting branches:
- * {@link FutureProofMessage} wrappers (viewOnce / ephemeral / edited /
- * groupMentioned) unwrap recursively to their inner content,
- * {@link DeviceSentMessage} unwraps before direct fields are consulted,
- * direct fields are scanned in protobuf field-index order, a bare
- * {@code conversation} string is promoted to an {@link ExtendedTextMessage},
- * and an empty container returns {@link EmptyMessage#INSTANCE}.
- *
- * @implNote This implementation builds containers through the generated
- * builders rather than parsing protobuf bytes, so the precedence assertions
- * reflect the in-memory resolver only; the wire-level encoder is exercised
- * separately by the spec-level tests.
+ * Covers {@link MessageContainer#content()} and {@link MessageContainer#contextualContent()},
+ * the resolvers that walk the union-of-fields {@code Message} protobuf and return the
+ * innermost payload. Containers are assembled through the generated builders rather than
+ * parsed from protobuf bytes, so the precedence assertions exercise the in-memory resolver
+ * only.
  */
 @DisplayName("MessageContainer.content")
 class MessageContainerContentTest {
 
-    /**
-     * Verifies that an empty container reports {@link EmptyMessage#INSTANCE}
-     * and tests as empty.
-     */
     @Test
     @DisplayName("empty container returns an EmptyMessage sentinel")
     void emptyContainer() {
@@ -58,10 +42,6 @@ class MessageContainerContentTest {
         assertTrue(container.isEmpty());
     }
 
-    /**
-     * Verifies that a bare {@code conversation} string is wrapped in an
-     * {@link ExtendedTextMessage}.
-     */
     @Test
     @DisplayName("string conversation field promotes to an ExtendedTextMessage")
     void conversationPromotesToExtendedText() {
@@ -73,10 +53,6 @@ class MessageContainerContentTest {
         assertEquals("hello world", text.text().orElseThrow());
     }
 
-    /**
-     * Verifies that a direct payload field is returned by reference rather
-     * than rebuilt.
-     */
     @Test
     @DisplayName("direct ImageMessage is returned as-is (no wrapping)")
     void directImageMessage() {
@@ -91,10 +67,6 @@ class MessageContainerContentTest {
         assertSame(image, content, "direct payload field must be returned by-reference");
     }
 
-    /**
-     * Verifies that the viewOnce {@link FutureProofMessage} wrapper unwraps
-     * to its inner payload.
-     */
     @Test
     @DisplayName("FutureProofMessage (viewOnce) unwraps to its inner content")
     void futureProofViewOnceUnwraps() {
@@ -117,10 +89,6 @@ class MessageContainerContentTest {
                 "viewOnce wrapper must unwrap to its inner location message");
     }
 
-    /**
-     * Verifies that the ephemeral {@link FutureProofMessage} wrapper unwraps
-     * to its inner payload.
-     */
     @Test
     @DisplayName("FutureProofMessage (ephemeral) unwraps to inner content")
     void futureProofEphemeralUnwraps() {
@@ -136,10 +104,6 @@ class MessageContainerContentTest {
         assertSame(image, container.content());
     }
 
-    /**
-     * Verifies that the editedMessage {@link FutureProofMessage} wrapper
-     * unwraps to its inner payload.
-     */
     @Test
     @DisplayName("FutureProofMessage (editedMessage) unwraps to inner content")
     void futureProofEditedUnwraps() {
@@ -155,10 +119,6 @@ class MessageContainerContentTest {
         assertSame(text, container.content());
     }
 
-    /**
-     * Verifies that nested {@link FutureProofMessage} wrappers unwrap
-     * recursively to the innermost payload.
-     */
     @Test
     @DisplayName("nested FutureProofMessage wrappers unwrap recursively")
     void nestedFutureProofUnwraps() {
@@ -181,10 +141,6 @@ class MessageContainerContentTest {
                 "two-level FutureProof nesting must unwrap to the innermost payload");
     }
 
-    /**
-     * Verifies that a {@link DeviceSentMessage} wrapper unwraps to its inner
-     * payload before direct fields are consulted.
-     */
     @Test
     @DisplayName("DeviceSentMessage unwraps to its inner message before direct fields are consulted")
     void deviceSentUnwraps() {
@@ -203,13 +159,6 @@ class MessageContainerContentTest {
                 "DeviceSentMessage must unwrap to its inner ReactionMessage");
     }
 
-    /**
-     * Verifies that a {@link FutureProofMessage} wrapper wins over a direct
-     * field on the same container.
-     *
-     * @apiNote Mirrors WA Web's resolver, which probes wrappers first to
-     * recover the original payload nested inside.
-     */
     @Test
     @DisplayName("FutureProofMessage wrapper wins over a direct field on the same container")
     void wrapperWinsOverDirectField() {
@@ -229,10 +178,6 @@ class MessageContainerContentTest {
                 "viewOnce wrapper takes precedence over a direct extendedTextMessage");
     }
 
-    /**
-     * Verifies that {@link MessageContainer#contextualContent()} returns the
-     * innermost message when it is contextual.
-     */
     @Test
     @DisplayName("contextualContent() returns the contextual inner message when present")
     void contextualContentReturnsContextual() {
@@ -246,14 +191,6 @@ class MessageContainerContentTest {
         assertSame(text, contextual.orElseThrow());
     }
 
-    /**
-     * Verifies that {@link MessageContainer#contextualContent()} returns
-     * empty when the innermost message is not contextual.
-     *
-     * @implNote {@link ReactionMessage} does not implement
-     * {@code ContextualMessage}, so the contextual accessor must report
-     * absent rather than fall through to the non-contextual payload.
-     */
     @Test
     @DisplayName("contextualContent() returns empty when innermost message is not contextual")
     void contextualContentEmptyForNonContextual() {
@@ -266,16 +203,6 @@ class MessageContainerContentTest {
                 "ReactionMessage is not a ContextualMessage; contextualContent() must be empty");
     }
 
-    /**
-     * Verifies that a {@link DeviceSentMessage} carrying an empty inner
-     * container falls through to {@link EmptyMessage#INSTANCE} rather than
-     * pinning the resolver on the wrapper.
-     *
-     * @implNote The resolver checks {@code deviceSentMessage.message().isPresent()}
-     * before committing to the wrapper; when the inner message is empty it
-     * falls through to subsequent fields, leaving the container resolved as
-     * empty.
-     */
     @Test
     @DisplayName("DeviceSentMessage with empty inner message falls back to EmptyMessage")
     void deviceSentEmptyInner() {
@@ -290,13 +217,6 @@ class MessageContainerContentTest {
         assertInstanceOf(EmptyMessage.class, container.content());
     }
 
-    /**
-     * Verifies that the groupMentioned wrapper outranks every other wrapper.
-     *
-     * @apiNote The groupMentionedMessage is the first field tested by the
-     * resolver, so anything inside it takes priority over a sibling viewOnce
-     * wrapper on the same container.
-     */
     @Test
     @DisplayName("groupMentioned wrapper wins over every other wrapper (highest priority)")
     void groupMentionedWinsOverOtherWrappers() {
@@ -324,11 +244,6 @@ class MessageContainerContentTest {
                 "groupMentioned wrapper must beat viewOnce wrapper");
     }
 
-    /**
-     * Verifies the field-order tie-break between {@code conversation} and
-     * {@code extendedTextMessage}: the former is consulted first and wins
-     * when both are populated.
-     */
     @Test
     @DisplayName("conversation field is overridden by extendedTextMessage when both are set")
     void conversationLosesToExtendedText() {
@@ -344,11 +259,6 @@ class MessageContainerContentTest {
                 "conversation precedes extendedTextMessage in the field order; wins");
     }
 
-    /**
-     * Verifies that {@link MessageContainer#of(com.github.auties00.cobalt.model.message.Message)}
-     * routes the supplied message to the correct typed field and that
-     * {@link MessageContainer#content()} returns it unchanged.
-     */
     @Test
     @DisplayName("static factory MessageContainer.of(Message) routes the message to the correct typed field")
     void factoryOfMessageRoutes() {
@@ -365,10 +275,6 @@ class MessageContainerContentTest {
         assertSame(reaction, MessageContainer.of(reaction).content());
     }
 
-    /**
-     * Verifies that copying a container through the builder preserves the
-     * original payload through {@link MessageContainer#content()}.
-     */
     @Test
     @DisplayName("withMessageContextInfo preserves the original content")
     void withMessageContextInfoPreservesContent() {
@@ -382,10 +288,6 @@ class MessageContainerContentTest {
                 "side-channel fields don't affect content() resolution");
     }
 
-    /**
-     * Sentinel test that exercises the static-import of {@link Jid} so test
-     * refactors that drop other JID usages do not leave the import unused.
-     */
     @Test
     @DisplayName("scratch suppression: a JID-typed field shape can round-trip through the resolver")
     void jidImportSentinel() {

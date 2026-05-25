@@ -13,158 +13,118 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="fb:thrift_iq" smax_id="105" type="set"/>}
- * bug-report submission.
+ * Models the outbound {@code <iq xmlns="fb:thrift_iq" smax_id="105" type="set">} bug-report
+ * submission.
  *
- * @apiNote
- * Drives the WA Web {@code submitBugReport} flow exposed through the
- * Help and Feedback surface (and the employee-only
- * {@code trigger_bugreport_v2} command in {@code WAWebCmd}); the relay
- * routes the payload to the internal bug-tracking backend and replies
- * with a {@link SmaxBugReportingReportBugResponse.Success} carrying the
- * backend-assigned task id. Cobalt embedders build one of these to
- * submit a programmatic bug report end-to-end without going through
- * the GraphQL {@code WAWebSupportBugReportSubmitMutation} fallback.
+ * <p>An instance carries one bug report end to end: a mandatory description and debug-information
+ * JSON blob, an optional device-log handle, up to ten {@link SmaxBugReportingReportBugMediaUpload}
+ * attachments, and optional title, category, client-server join key, and reproducibility markers.
+ * {@link #toNode()} serialises these into the IQ-set stanza the relay routes to the internal
+ * bug-tracking backend; the backend replies with a {@link SmaxBugReportingReportBugResponse}
+ * variant carrying either the assigned task id or a rejection code. Every field is intrinsic to a
+ * single submission, so an instance is built once per report and not reused.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBugReportingReportBugRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBugReportingHackBaseIQSetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBugReportingBaseIQSetRequestMixin")
 public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Request {
     /**
-     * The optional sender JID stamped onto the IQ envelope.
-     *
-     * @apiNote
-     * Mirrors the {@code OPTIONAL(USER_JID, iqFrom)} attribute slot in
-     * {@code WASmaxOutBugReportingHackBaseIQSetRequestMixin.mergeHackBaseIQSetRequestMixin};
-     * left {@code null} so the relay derives the sender from the
-     * authenticated session.
+     * Holds the optional sender JID stamped onto the {@code from} attribute of the IQ envelope, or
+     * {@code null} so the relay derives the sender from the authenticated session.
      */
     private final Jid iqFrom;
 
     /**
-     * The free-form description text shown to the user.
+     * Holds the free-form description text shown to the user.
      *
-     * @apiNote
-     * Rendered as the mandatory {@code <description/>} child of the
-     * outbound IQ; corresponds to the textarea the user fills in the
-     * Help and Feedback dialog.
+     * <p>Rendered as the mandatory {@code <description>} child of the outbound IQ.
      */
     private final String descriptionElementValue;
 
     /**
-     * The debug-information JSON blob attached to the report.
+     * Holds the debug-information JSON blob attached to the report.
      *
-     * @apiNote
-     * Rendered as the mandatory {@code <debug_information_json/>}
-     * child; WA Web ships a JSON-stringified snapshot of platform,
-     * gating, and storage diagnostics here.
+     * <p>Rendered as the mandatory {@code <debug_information_json>} child. WhatsApp Web populates
+     * this with a JSON-stringified snapshot of platform, gating, and storage diagnostics.
      */
     private final String debugInformationJsonElementValue;
 
     /**
-     * The optional device-log handle attached to the report.
+     * Holds the optional handle of a server-side device-log artefact previously uploaded by the
+     * client, or {@code null} when none was uploaded.
      *
-     * @apiNote
-     * Rendered as an optional {@code <device_log_handle/>} child via
-     * {@code makeReportBugRequestDeviceLogHandle}; identifies a
-     * server-side log artefact previously uploaded by the client so
-     * the bug tracker can correlate the report with full device logs.
+     * <p>Rendered as an optional {@code <device_log_handle>} child so the bug tracker can correlate
+     * the report with full device logs.
      */
     private final String deviceLogHandleElementValue;
 
     /**
-     * The media uploads attached to the report.
+     * Holds the media uploads attached to the report, as an immutable list of at most ten entries.
      *
-     * @apiNote
-     * Rendered as the {@code REPEATED_CHILD(media, 0, 10)} slot via
-     * {@code makeReportBugRequestMedia}; capped at 10 entries by the
-     * WA Web SMAX schema and validated in the constructor.
+     * <p>Each entry is rendered by {@link SmaxBugReportingReportBugMediaUpload#toNode()} into the
+     * repeated {@code media} slot.
      */
     private final List<SmaxBugReportingReportBugMediaUpload> mediaUploads;
 
     /**
-     * The optional title label for the report.
+     * Holds the optional subject-line label for the report, or {@code null} when the user left it
+     * blank.
      *
-     * @apiNote
-     * Rendered as an optional {@code <title/>} child via
-     * {@code makeReportBugRequestTitle}; corresponds to the optional
-     * subject-line field on the Help and Feedback dialog.
+     * <p>Rendered as an optional {@code <title>} child.
      */
     private final String titleElementValue;
 
     /**
-     * The optional category label for the report.
+     * Holds the optional category label for the report, or {@code null} when none was selected.
      *
-     * @apiNote
-     * Rendered as an optional {@code <category/>} child via
-     * {@code makeReportBugRequestCategory}; one of the
-     * {@code WAWebBugReportCategoryTypes} keys selected from the
-     * dropdown.
+     * <p>Rendered as an optional {@code <category>} child.
      */
     private final String categoryElementValue;
 
     /**
-     * The optional client-server join key.
+     * Holds the optional cross-correlation token shared with the telemetry record, or {@code null}
+     * when the submission is not paired with one.
      *
-     * @apiNote
-     * Rendered as an optional {@code <client_server_join_key/>} child
-     * via {@code makeReportBugRequestClientServerJoinKey}; carries the
-     * cross-correlation token shared with the
-     * {@code WAWebBugReportSessionWamEvent} so the report can be
-     * joined back to the WAM telemetry record.
+     * <p>Rendered as an optional {@code <client_server_join_key>} child so the report can be joined
+     * back to its telemetry event.
      */
     private final String clientServerJoinKeyElementValue;
 
     /**
-     * The optional reproducibility marker.
+     * Holds the optional reproducibility-bucket marker the user picked, or {@code null} when none
+     * was selected.
      *
-     * @apiNote
-     * Rendered as an optional {@code <reproducibility/>} child via
-     * {@code makeReportBugRequestReproducibility}; one of the
-     * reproducibility-bucket strings the user picks from the dialog.
+     * <p>Rendered as an optional {@code <reproducibility>} child.
      */
     private final String reproducibilityElementValue;
 
     /**
-     * Constructs a new bug-report request.
+     * Constructs a bug-report request from its mandatory text fields and optional metadata.
      *
-     * @apiNote
-     * Embedders build one per submission; reuse across submissions is
-     * pointless because every field is intrinsic to the specific
-     * report being filed.
+     * <p>The required arguments are null-checked eagerly. The {@code mediaUploads} list is bounded
+     * at ten entries and copied into an immutable list so later mutation by the caller cannot race
+     * with {@link #toNode()}.
      *
      * @implNote
-     * This implementation validates the {@code mediaUploads} cardinality
-     * eagerly and stores the list as an immutable copy so concurrent
-     * modification by the caller cannot race with {@link #toNode()};
-     * WA Web defers the bound check to
-     * {@code WASmaxChildren.REPEATED_CHILD(_, _, 0, 10)} at render
-     * time.
+     * This implementation rejects an oversized {@code mediaUploads} list in the constructor,
+     * whereas WhatsApp Web defers the ten-entry bound to its repeated-child renderer at stanza
+     * build time; the eager check fails the caller before any partial stanza is assembled.
      *
-     * @param iqFrom                          the optional sender JID;
-     *                                        may be {@code null}
-     * @param descriptionElementValue         the description text;
-     *                                        never {@code null}
-     * @param debugInformationJsonElementValue the debug JSON; never
-     *                                        {@code null}
-     * @param deviceLogHandleElementValue     the optional log handle;
-     *                                        may be {@code null}
-     * @param mediaUploads                    the media uploads; never
-     *                                        {@code null}; at most 10
-     *                                        entries
-     * @param titleElementValue               the optional title; may
-     *                                        be {@code null}
-     * @param categoryElementValue            the optional category;
-     *                                        may be {@code null}
-     * @param clientServerJoinKeyElementValue the optional join key;
-     *                                        may be {@code null}
-     * @param reproducibilityElementValue     the optional
-     *                                        reproducibility marker;
-     *                                        may be {@code null}
-     * @throws NullPointerException     if any required argument is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code mediaUploads} carries
-     *                                  more than 10 entries
+     * @param iqFrom                           the optional sender JID; may be {@code null}
+     * @param descriptionElementValue          the description text; never {@code null}
+     * @param debugInformationJsonElementValue the debug JSON; never {@code null}
+     * @param deviceLogHandleElementValue      the optional log handle; may be {@code null}
+     * @param mediaUploads                     the media uploads; never {@code null}; at most ten
+     *                                         entries
+     * @param titleElementValue                the optional title; may be {@code null}
+     * @param categoryElementValue             the optional category; may be {@code null}
+     * @param clientServerJoinKeyElementValue  the optional join key; may be {@code null}
+     * @param reproducibilityElementValue      the optional reproducibility marker; may be
+     *                                         {@code null}
+     * @throws NullPointerException     if {@code descriptionElementValue},
+     *                                  {@code debugInformationJsonElementValue}, or
+     *                                  {@code mediaUploads} is {@code null}
+     * @throws IllegalArgumentException if {@code mediaUploads} carries more than ten entries
      */
     public SmaxBugReportingReportBugRequest(Jid iqFrom,
                    String descriptionElementValue,
@@ -196,9 +156,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the optional sender JID.
      *
-     * @apiNote
-     * Empty when the relay should derive the sender from the
-     * authenticated session.
+     * <p>Empty when the relay should derive the sender from the authenticated session.
      *
      * @return an {@link Optional} carrying the JID
      */
@@ -209,10 +167,6 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the description text.
      *
-     * @apiNote
-     * Mirrors the user-typed contents of the Help and Feedback
-     * textarea.
-     *
      * @return the description; never {@code null}
      */
     public String descriptionElementValue() {
@@ -221,10 +175,6 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
 
     /**
      * Returns the debug-information JSON blob.
-     *
-     * @apiNote
-     * Mirrors the JSON-stringified diagnostics snapshot WA Web bundles
-     * with the report.
      *
      * @return the blob; never {@code null}
      */
@@ -235,9 +185,8 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the optional device-log handle.
      *
-     * @apiNote
-     * Empty when the embedder has not pre-uploaded a device-log
-     * artefact for the backend to correlate.
+     * <p>Empty when the embedder has not pre-uploaded a device-log artefact for the backend to
+     * correlate.
      *
      * @return an {@link Optional} carrying the handle
      */
@@ -248,9 +197,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the media uploads.
      *
-     * @apiNote
-     * Returns an unmodifiable snapshot; callers that want to mutate
-     * the list must copy it first.
+     * <p>The returned list is unmodifiable; callers that want to mutate it must copy it first.
      *
      * @return the uploads; never {@code null}
      */
@@ -261,8 +208,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the optional title label.
      *
-     * @apiNote
-     * Empty when the user left the optional subject-line field blank.
+     * <p>Empty when the user left the optional subject-line field blank.
      *
      * @return an {@link Optional} carrying the title
      */
@@ -273,9 +219,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the optional category label.
      *
-     * @apiNote
-     * Empty when no category was selected; otherwise one of the
-     * {@code WAWebBugReportCategoryTypes} keys.
+     * <p>Empty when no category was selected.
      *
      * @return an {@link Optional} carrying the category
      */
@@ -286,10 +230,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the optional client-server join key.
      *
-     * @apiNote
-     * Empty when the embedder did not pair this submission with a
-     * WAM telemetry record via the
-     * {@code WAWebBugReportSessionWamEvent.clientServerJoinKey} slot.
+     * <p>Empty when the embedder did not pair this submission with a telemetry record.
      *
      * @return an {@link Optional} carrying the key
      */
@@ -300,8 +241,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     /**
      * Returns the optional reproducibility marker.
      *
-     * @apiNote
-     * Empty when no reproducibility bucket was selected.
+     * <p>Empty when no reproducibility bucket was selected.
      *
      * @return an {@link Optional} carrying the marker
      */
@@ -310,17 +250,18 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Folded together with
-     * {@link com.github.auties00.cobalt.node.smax.util.SmaxBaseServerErrorMixin}
-     * and the IQ-set merge mixins so the result is ready for
-     * {@code WAComms.sendSmaxStanza}; the dispatcher stamps the IQ id
-     * before flushing.
+     * <p>Assembles the {@code <iq xmlns="fb:thrift_iq" smax_id="105" type="set">} envelope
+     * addressed to {@link Jid#userServer()}, stamping the {@code from} attribute from
+     * {@link #iqFrom} when present. The children are appended in the WhatsApp Web declared order:
+     * the mandatory {@code <description>} and {@code <debug_information_json>}, then the optional
+     * {@code <device_log_handle>}, then each {@link SmaxBugReportingReportBugMediaUpload#toNode()}
+     * media child, then the optional {@code <title>}, {@code <category>},
+     * {@code <client_server_join_key>}, and {@code <reproducibility>} children. The builder is
+     * returned unbuilt so the dispatch path can stamp the IQ {@code id} before flushing.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and
-     *         payload
+     * @return the {@link NodeBuilder} carrying the IQ envelope and payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBugReportingReportBugRequest",
@@ -399,6 +340,15 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
                 .content(children);
     }
 
+    /**
+     * Indicates whether the given object is a bug-report request equal to this one.
+     *
+     * <p>Two requests are equal when every field, including the {@code mediaUploads} list, is
+     * equal.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is an equal request; {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -419,6 +369,11 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
                 && Objects.equals(this.reproducibilityElementValue, that.reproducibilityElementValue);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(iqFrom, descriptionElementValue, debugInformationJsonElementValue,
@@ -426,6 +381,11 @@ public final class SmaxBugReportingReportBugRequest implements SmaxOperation.Req
                 clientServerJoinKeyElementValue, reproducibilityElementValue);
     }
 
+    /**
+     * Returns a debug representation listing every field.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxBugReportingReportBugRequest[iqFrom=" + iqFrom

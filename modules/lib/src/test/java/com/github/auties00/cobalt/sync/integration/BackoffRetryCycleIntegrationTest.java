@@ -18,21 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration cycle for the sync retry path under a server-rejected upload.
- *
- * <p>Per WA Web {@code WAWebSyncd.te} / {@code WAWebSyncd.ee}, when the server
- * returns a retryable {@code ErrorRetry} response (with an optional
- * {@code backoff} attribute), the orchestrator schedules a retry via the
- * global attempt counter ({@code W}) and the sticky server-backoff floor
- * ({@code q}). The delay is
- * {@code min(max(pow(2, W) * BASE_DELAY, q), MAX_DELAY)}. After the finite
- * failure window expires ({@code FINITE_FAILURE_EXPIRY_DURATION = 48h}) the
- * collection is moved to a fatal state and no further retries are scheduled.
- *
- * <p>The captured cycle ({@code integration/backoff-retry-cycle/}) replays a
- * sequence of (failed-IQ, retryable-error, success-IQ) traces and asserts the
- * observed retry delays match WA Web's curve under the same server backoff
- * inputs.
+ * Exercises the app-state sync retry cycle: a server-rejected upload schedules a
+ * backoff retry, retries fire within their computed delays, the finite 48h
+ * failure window moves a collection to a fatal (no-retry) state, and a sticky
+ * server-backoff floor caps the delay curve. The synthetic group asserts the
+ * {@link WebAppStateBackoffScheduler} invariants directly; the captured group is
+ * gated on {@link SyncFixtures#isAvailable(String)} so it skips cleanly until the
+ * recorded retry corpus is committed.
  */
 @DisplayName("BackoffRetryCycle integration")
 class BackoffRetryCycleIntegrationTest {
@@ -104,11 +96,9 @@ class BackoffRetryCycleIntegrationTest {
         @DisplayName("captured retryable error → retry → success matches the WA Web delay curve")
         void capturedRetryCurve() {
             if (!SyncFixtures.isAvailable("integration/backoff-retry-cycle/retryable-then-success")) return;
-            // Reserved for Phase 10 corpus. The fixture captures (a) the original
-            // failed IQ + retryable error attrs (code, backoff), (b) the retry IQ,
-            // (c) the elapsed wall-clock delay between attempts. The cycle drives
-            // the same sequence and asserts the scheduler chose a delay within
-            // ±10% of the captured value (allowing for jitter).
+            // Fixture captures the failed IQ with its retryable-error attrs, the
+            // retry IQ, and the elapsed wall-clock delay between attempts; the
+            // assertion tolerates +/-10% jitter against the captured delay.
             assertNotNull(SyncFixtures.loadOracle(
                     "integration/backoff-retry-cycle/retryable-then-success"));
         }

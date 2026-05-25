@@ -5,25 +5,24 @@ package com.github.auties00.cobalt.client;
  * shapes used to register lambda-based listeners with a
  * {@link WhatsAppClient}.
  *
+ * <p>The permitted sub-interfaces span zero through four payloads
+ * ({@link Empty}, {@link Unary}, {@link Binary}, {@link Ternary}, and
+ * {@link Quaternary}); each per-event registration method, such as
+ * {@link WhatsAppClient#addLoggedInListener(WhatsappClientListenerConsumer.Unary)},
+ * accepts the variant whose arity matches the underlying
+ * {@link WhatsAppClientListener} callback.
+ *
  * @apiNote
- * Java lambdas cannot be polymorphic across arities, so each
- * convenience overload on {@link WhatsAppClient#addListener(WhatsappClientListenerConsumer)}
- * accepts a consumer whose arity matches the underlying
- * {@link WhatsAppClientListener} callback. Callers pick the variant
- * (zero through four payloads) that mirrors the event signature they
- * want to observe.
+ * Use these to observe an event with a target-typed lambda rather than a
+ * full {@link WhatsAppClientListener} implementation; pick the variant
+ * whose arity mirrors the event signature you want to observe.
  *
  * @see WhatsAppClientListener
  */
 public sealed interface WhatsappClientListenerConsumer {
     /**
-     * A consumer for listener overloads whose underlying event carries
-     * no payload.
-     *
-     * @apiNote
-     * Used for callbacks such as
-     * {@link WhatsAppClientListener#onLoggedIn(WhatsAppClient)} where
-     * the receipt of the event is the entire signal.
+     * A consumer for listener overloads whose underlying event carries no
+     * payload, where the receipt of the event is the entire signal.
      */
     @FunctionalInterface
     non-sealed interface Empty extends WhatsappClientListenerConsumer {
@@ -34,8 +33,8 @@ public sealed interface WhatsappClientListenerConsumer {
     }
 
     /**
-     * A consumer for listener overloads whose underlying event carries
-     * a single payload.
+     * A consumer for listener overloads whose underlying event carries a
+     * single payload.
      *
      * @param <F> the payload type
      */
@@ -50,8 +49,8 @@ public sealed interface WhatsappClientListenerConsumer {
     }
 
     /**
-     * A consumer for listener overloads whose underlying event carries
-     * two payloads.
+     * A consumer for listener overloads whose underlying event carries two
+     * payloads.
      *
      * @param <F> the first payload type
      * @param <S> the second payload type
@@ -88,8 +87,8 @@ public sealed interface WhatsappClientListenerConsumer {
     }
 
     /**
-     * A consumer for listener overloads whose underlying event carries
-     * four payloads.
+     * A consumer for listener overloads whose underlying event carries four
+     * payloads.
      *
      * @param <F>  the first payload type
      * @param <S>  the second payload type

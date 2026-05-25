@@ -19,18 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Branch-coverage tests for {@link SenderKeyDistribution#encrypt}.
+ * Branch-coverage suite for {@link SenderKeyDistribution} sender-key fanout: one payload per
+ * recipient device, {@link MessageEncryptionType#PKMSG} envelope for freshly-established sessions,
+ * silent drop of sessionless companion devices, empty-list and null-argument handling.
  *
- * @apiNote
- * Mirrors WA Web's {@code WAWebGetGroupKeyDistributionMsg.getKeyDistributionMsg}:
- * one payload per recipient device, PKMSG envelope for freshly-established
- * sessions, silent drop of companion failures, and propagation of primary
- * failures as a {@link com.github.auties00.cobalt.exception.WhatsAppMessageException.Send.Unknown}.
- * @implNote
- * Uses {@link TestSignalSession} to set up real libsignal sessions between
- * {@link MessageFixtures#temporaryStore} pairs and a
- * {@link StubDeviceService} for ICDC bookkeeping, so the tests exercise the
- * real Signal cipher without driving the device-list service.
+ * <p>The harness pairs real libsignal sessions established through {@link TestSignalSession} over
+ * {@link MessageFixtures#temporaryStore(Jid, Jid)} stores with a {@link StubDeviceService}, so the
+ * tests drive the real Signal cipher without the device-list service.
  */
 @DisplayName("SenderKeyDistribution")
 class SenderKeyDistributionTest {
@@ -40,9 +35,6 @@ class SenderKeyDistributionTest {
     private static final Jid DEVICE_ONE = Jid.of("19254863482:0@s.whatsapp.net");
     private static final Jid DEVICE_TWO = Jid.of("19254863482:1@s.whatsapp.net");
 
-    /**
-     * Verifies that the three constructor collaborators are mandatory.
-     */
     @Test
     @DisplayName("constructor: every collaborator is required (null throws NullPointerException)")
     void constructorNullArgs() {
@@ -60,9 +52,6 @@ class SenderKeyDistributionTest {
                 () -> new SenderKeyDistribution(encryption, deviceService, null));
     }
 
-    /**
-     * Verifies that a single recipient device yields one PKMSG payload.
-     */
     @Test
     @DisplayName("encrypt: produces one PKMSG payload per recipient device on a fresh session")
     void encryptPerDevicePkmsg() {
@@ -89,9 +78,6 @@ class SenderKeyDistributionTest {
         assertTrue(payload.ciphertext().length > 0);
     }
 
-    /**
-     * Verifies that multiple sessioned devices yield one payload each.
-     */
     @Test
     @DisplayName("encrypt: multi-device fanout yields one payload per device when each has a session")
     void encryptMultiDevice() {
@@ -117,23 +103,14 @@ class SenderKeyDistributionTest {
         }
     }
 
-    /**
-     * Pins the companion-failure branch: a sessionless companion is silently
-     * dropped, the rest of the fanout still ships.
-     *
-     * @apiNote
-     * DEVICE_TWO has no session. The encryption failure is logged and dropped
-     * because the device id is not {@code 0}; the primary failure branch (a
-     * thrown {@link com.github.auties00.cobalt.exception.WhatsAppMessageException.Send.Unknown})
-     * would require constructing a primary device with no session, which the
-     * encryption layer cannot meaningfully exercise without skipping the
-     * Signal session establishment in a way that no longer mirrors WA Web.
-     */
     @Test
     @DisplayName("encrypt: devices without a session are silently dropped (when non-primary)")
     void noSessionNonPrimaryDevicesDropped() {
         var senderStore = MessageFixtures.temporaryStore(SENDER_BARE, null);
         var recipientStore = MessageFixtures.temporaryStore(SENDER_BARE, null);
+        // only DEVICE_ONE gets a session; DEVICE_TWO has none, so its encryption fails and is
+        // dropped because its device id is non-zero (the primary-failure branch, which throws, would
+        // require a sessionless primary device that the cipher cannot reach without diverging from WA Web)
         TestSignalSession.establishSession(senderStore, DEVICE_ONE, recipientStore);
 
         var encryption = new MessageEncryption(senderStore,
@@ -148,10 +125,6 @@ class SenderKeyDistributionTest {
                 "companion device without a session must be dropped, not throw");
     }
 
-    /**
-     * Verifies that {@code null} required arguments throw
-     * {@link NullPointerException}.
-     */
     @Test
     @DisplayName("encrypt: null arguments throw NullPointerException")
     void encryptNullArgs() {
@@ -171,10 +144,6 @@ class SenderKeyDistributionTest {
                 () -> distribution.encrypt(GROUP, senderKeyBytes, null));
     }
 
-    /**
-     * Verifies that an empty device list yields an empty payload list with
-     * no exceptions.
-     */
     @Test
     @DisplayName("encrypt: empty device list returns empty list (no payloads)")
     void encryptEmptyDeviceList() {

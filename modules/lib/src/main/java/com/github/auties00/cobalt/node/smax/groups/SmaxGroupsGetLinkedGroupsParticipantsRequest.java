@@ -17,10 +17,9 @@ import java.util.Optional;
 /**
  * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that asks the relay for the union of participants across a
  * community's sub-groups.
- *
- * @apiNote Drives the {@code WAWebGroupGetCommunityParticipantsJob.getCommunityParticipants} flow used by both the
- * community member-list page and the share-VCard surface ({@code WAWebFrontendVcardUtils}); pass the community parent
- * group {@link Jid} and dispatch through the matching {@link SmaxGroupsGetLinkedGroupsParticipantsResponse} parser.
+ * <p>
+ * The target {@link Jid} must be a community parent group; the relay rejects requests addressed to non-parent groups.
+ * Replies are parsed through {@link SmaxGroupsGetLinkedGroupsParticipantsResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetLinkedGroupsParticipantsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -33,8 +32,6 @@ public final class SmaxGroupsGetLinkedGroupsParticipantsRequest implements SmaxO
 
     /**
      * Constructs a request for the given community parent group.
-     *
-     * @apiNote Pass only a community parent JID; the relay rejects requests targeting non-parent groups.
      *
      * @param groupJid the community parent group {@link Jid}; never {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
@@ -54,8 +51,8 @@ public final class SmaxGroupsGetLinkedGroupsParticipantsRequest implements SmaxO
 
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
-     *
-     * @apiNote The resulting envelope is
+     * <p>
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="get">
      *         <linked_groups_participants/>

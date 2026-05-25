@@ -28,15 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastInsightsHandler} - Cobalt's adapter
- * for {@code WAWebBusinessBroadcastInsightsSync}.
- *
- * <p>The handler upserts post-send delivery statistics keyed by the
- * {@code indexParts[1]} campaign id. SET upserts; REMOVE drops; any
- * other operation produces {@code FAILED}. These tests pin the wire
- * metadata, the SET/REMOVE behaviours, the malformed-input fallbacks,
- * the default timestamp-based conflict resolution, and the batch
- * fan-out. No outbound static builder is exposed (inbound-only).
+ * Covers {@link BusinessBroadcastInsightsHandler}, which upserts post-send delivery statistics
+ * keyed by the {@code indexParts[1]} campaign id: SET upserts, REMOVE drops. The handler is
+ * inbound-only and exposes no outbound mutation builder.
  */
 @DisplayName("BusinessBroadcastInsightsHandler")
 class BusinessBroadcastInsightsHandlerTest {
@@ -54,15 +48,6 @@ class BusinessBroadcastInsightsHandlerTest {
         handler = new BusinessBroadcastInsightsHandler();
     }
 
-    /**
-     * Builds a trusted mutation carrying the given insights action.
-     *
-     * @param indexId   the campaign id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action    the insights action payload, may be {@code null}
-     * @param operation the sync operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted buildMutation(String indexId, BusinessBroadcastInsightsAction action,
                                                     SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
@@ -246,8 +231,7 @@ class BusinessBroadcastInsightsHandlerTest {
         @Test
         @DisplayName("BusinessBroadcastInsightsHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
-            // Insights are server-published only - Cobalt has no outbound mutation path for this
-            // action. The handler has no builder surface.
+            // Insights are server-published only, so there is no outbound mutation path.
             assertNotNull(new BusinessBroadcastInsightsHandler(),
                     "BusinessBroadcastInsightsHandler instantiates with a no-arg constructor and exposes no builder method");
         }

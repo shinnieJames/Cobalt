@@ -29,26 +29,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link RecentEmojiWeightsHandler} against the
- * protobuf-only {@code "recent_emoji_weights_action"} action shape.
- *
- * @apiNote
- * Verifies the Cobalt forward-looking implementation: WA Web ships
- * the protobuf in {@code WAWebProtobufSyncAction.pb} (action index
- * 11, mapped to {@code REGULAR_LOW}) but no
- * {@code WAWebRecentEmojiWeightsSync} handler module exists. The
- * Cobalt handler accepts only
- * {@link SyncdOperation#SET},
- * persists the full {@link RecentEmojiWeight} snapshot via
- * {@link WhatsAppStore#setRecentEmojiWeights}, and rejects a
- * wrong-typed value as
- * {@link SyncActionState#MALFORMED}.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link RecentEmojiWeightsHandler#applyMutation} via the local
- * {@code build} helper because no public outgoing-mutation factory
- * exists for this action.
+ * Covers {@link RecentEmojiWeightsHandler}, which accepts only
+ * {@link SyncdOperation#SET}, persists the full {@link RecentEmojiWeight} snapshot via
+ * {@link WhatsAppStore#setRecentEmojiWeights} (an empty list is still
+ * {@link SyncActionState#SUCCESS}), rejects a wrong-typed value as
+ * {@link SyncActionState#MALFORMED}, reports {@link SyncActionState#UNSUPPORTED} for
+ * {@link SyncdOperation#REMOVE}, and resolves conflicts by timestamp.
  */
 @DisplayName("RecentEmojiWeightsHandler")
 class RecentEmojiWeightsHandlerTest {

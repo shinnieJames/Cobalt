@@ -21,9 +21,13 @@ export interface PlatformBridge {
     ...args: any[]
   ): Promise<R>;
 
+  addInitScript(source: string): Promise<void>;
+
   url(): string;
 
   navigate(url: string, options?: { timeout?: number }): Promise<void>;
+
+  reload(options?: { timeout?: number }): Promise<void>;
 
   getLoadedResourceUrls(): Promise<LoadedResources>;
 

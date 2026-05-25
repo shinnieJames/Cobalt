@@ -19,10 +19,9 @@ import java.util.logging.Logger;
 /**
  * Renames a Meta-AI conversation thread in the local store in response to an {@code ai_thread_rename} sync mutation.
  *
- * @apiNote
- * Drives the Meta-AI chat surface where the user has renamed a single
- * AI conversation thread on another device. Cobalt embedders observe
- * the new title through
+ * <p>When a single AI conversation thread is renamed on another device, the
+ * server replays the rename here and the stored title is updated; the new
+ * title is read back through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findAiThreadTitle(String)}.
  *
  * @implNote
@@ -38,18 +37,15 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
     /**
      * The handler-scoped {@link Logger} used to record failed mutation attempts.
      *
-     * @apiNote
-     * Used to record the {@link Exception} message of a mutation that
-     * threw before completing.
+     * <p>Records the {@link Exception} message of a mutation that threw before
+     * completing.
      */
     private static final Logger LOGGER = Logger.getLogger(AiThreadRenameHandler.class.getName());
 
     /**
      * Constructs the singleton AI thread rename handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public AiThreadRenameHandler() {
@@ -77,15 +73,14 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the JSON index {@code ["ai_thread_rename", chatJid, threadId]}
-     * and the {@link AiThreadRenameAction#newTitle()} payload, gates on
-     * AI-thread support, and stores the new title via
+     * <p>Validates the JSON index {@code ["ai_thread_rename", chatJid, threadId]}
+     * and the {@link AiThreadRenameAction#newTitle()} payload, confirms the chat
+     * JID is a bot, gates on AI-thread support, and stores the new title via
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#putAiThreadTitle(com.github.auties00.cobalt.model.bot.AiThreadTitle)}.
-     * Returns {@link SyncActionState#UNSUPPORTED} for non-{@code SET}
-     * operations or when AI-thread support is off,
-     * {@link SyncActionState#ORPHAN} when no matching thread is in the
-     * store, and {@link SyncActionState#FAILED} on any thrown exception.
+     * Returns {@link SyncActionState#UNSUPPORTED} for non-{@link SyncdOperation#SET}
+     * operations or when AI-thread support is off, {@link SyncActionState#ORPHAN}
+     * when no matching thread is in the store, and {@link SyncActionState#FAILED}
+     * on any thrown exception.
      *
      * @implNote
      * This implementation maps WA Web's

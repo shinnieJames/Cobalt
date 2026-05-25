@@ -19,12 +19,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Flips the archive state of a chat in the local store in response to an {@code archive} sync mutation.
  *
- * @apiNote
- * Drives the chat-list "Archived" surface. When the user archives or
- * unarchives a chat on another device, the server replays the action
- * to this device as a {@link ArchiveChatAction} and lands here.
- * Cobalt embedders observe the result via the per-chat
- * {@link com.github.auties00.cobalt.model.chat.Chat#archived()} flag.
+ * <p>When a chat is archived or unarchived on another device, the server
+ * replays the action here as an {@link ArchiveChatAction} and the per-chat
+ * {@link com.github.auties00.cobalt.model.chat.Chat#archived()} flag is
+ * updated.
  *
  * @implNote
  * This implementation drops WA Web's {@code activeMessageRanges} state
@@ -41,9 +39,7 @@ public final class ArchiveChatHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton archive-chat handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public ArchiveChatHandler() {
@@ -71,16 +67,15 @@ public final class ArchiveChatHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Reads {@link ArchiveChatAction#archived()} from the mutation
-     * value, locates the target {@link com.github.auties00.cobalt.model.chat.Chat}
-     * by JID, and writes the archive flag. Returns
-     * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     * operations, an orphan result keyed by chat JID and model type
-     * {@code "Chat"} when the chat is not in the store, malformed
-     * results when the index or value is shaped wrong, and
-     * {@link MutationApplicationResult#failed()} on any thrown
-     * exception.
+     * <p>Reads {@link ArchiveChatAction#archived()} from the mutation value,
+     * locates the target {@link com.github.auties00.cobalt.model.chat.Chat} by
+     * JID, and writes the archive flag through
+     * {@link com.github.auties00.cobalt.model.chat.Chat#setArchived(Boolean)}.
+     * Returns {@link MutationApplicationResult#unsupported()} for non-{@link SyncdOperation#SET}
+     * operations, an orphan result keyed by chat JID and model type {@code "Chat"}
+     * when the chat is not in the store, malformed results when the index or
+     * value is shaped wrong, and {@link MutationApplicationResult#failed()} on
+     * any thrown exception.
      *
      * @implNote
      * This implementation skips WA Web's
@@ -127,16 +122,15 @@ public final class ArchiveChatHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Resolves the local-vs-remote tie by comparing the message ranges
-     * carried inside each {@link ArchiveChatAction}. Returns
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the
+     * <p>Resolves the local-vs-remote tie by comparing the message ranges
+     * carried inside each {@link ArchiveChatAction} via
+     * {@link MessageRangeUtils#compareMessageRanges(com.github.auties00.cobalt.model.sync.SyncActionMessageRange, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
+     * Returns {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the
      * remote range encloses the local one,
-     * {@link ConflictResolutionState#SKIP_REMOTE} when the local range
-     * encloses the remote one, a timestamp tiebreaker when ranges are
-     * equal, and a merged {@link ConflictResolution} (combining both
-     * ranges and the newer side's {@code archived} flag) when ranges
-     * partially overlap.
+     * {@link ConflictResolutionState#SKIP_REMOTE} when the local range encloses
+     * the remote one, a timestamp tiebreaker when ranges are equal, and a merged
+     * {@link ConflictResolution} (combining both ranges and the newer side's
+     * {@link ArchiveChatAction#archived()} flag) when ranges partially overlap.
      *
      * @implNote
      * This implementation returns the merged mutation for the caller to

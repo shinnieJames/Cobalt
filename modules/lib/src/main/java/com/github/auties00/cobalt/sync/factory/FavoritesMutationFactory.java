@@ -18,31 +18,24 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that overwrite the favourites chat list (pinned-conversations short list).
  *
- * @apiNote
- * Drives the favourites surface that
- * {@code WAWebAddToFavoritesAction} and
- * {@code WAWebRemoveFromFavoritesAction} flush through: every add or remove
- * computes the new full favourites list and pushes the snapshot via this
- * factory so linked devices replace their stored favourites in one shot.
- * The factory is the outgoing-mutation counterpart of
+ * Drives the favourites surface: every add or remove computes the new full favourites list and
+ * pushes the snapshot via this factory so linked devices replace their stored favourites in one
+ * shot. This factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.FavoritesHandler}.
  *
  * @implNote
- * This implementation uses {@link Jid#toString()} verbatim for each
- * favourite entry's id. WA Web's
- * {@code WAWebFavoritesSync.getFavoritesMutation} runs every JID through
- * {@code WAWebSyncdGetChat.getWidMutationIndexForWid} to translate user
- * JIDs into their LID mutation-index form during the LID 1x1 migration;
- * Cobalt's store handles LID resolution at a higher layer so this factory
- * does not duplicate that translation.
+ * This implementation uses {@link Jid#toString()} verbatim for each favourite entry's id. WA Web's
+ * {@code getFavoritesMutation} runs every JID through
+ * {@code WAWebSyncdGetChat.getWidMutationIndexForWid} to translate user JIDs into their LID
+ * mutation-index form during the LID 1x1 migration; Cobalt's store handles LID resolution at a
+ * higher layer so this factory does not duplicate that translation.
  */
 public final class FavoritesMutationFactory {
     /**
      * Creates an instance with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public FavoritesMutationFactory() {
 
@@ -51,23 +44,20 @@ public final class FavoritesMutationFactory {
     /**
      * Returns a SET mutation that replaces the favourites list with the supplied ordered snapshot.
      *
-     * @apiNote
      * The mutation index follows
      * {@snippet :
      *     ["favorites"]
      * }
-     * with no per-row segment; the action carries the complete ordered list
-     * so the receive-side handler picks the latest-timestamp mutation per
-     * batch and replaces the local favourites collection wholesale via
-     * {@code WAWebDBFavoriteDatabaseApi.setFavorites}.
+     * with no per-row segment; the action carries the complete ordered list so the receive side
+     * picks the latest-timestamp mutation per batch and replaces the local favourites collection
+     * wholesale.
      *
      * @implNote
-     * This implementation derives each entry's {@code orderIndex} implicitly
-     * from list position by relying on the upstream order; WA Web preserves
-     * order through an explicit {@code orderIndex} field on every
-     * favourite which it sorts on the receive side. Cobalt's
-     * {@link FavoritesActionFavoriteBuilder} writes only {@code id} so the
-     * order is the wire order, not a per-entry numeric tag.
+     * This implementation derives each entry's {@code orderIndex} implicitly from list position by
+     * relying on the upstream order; WA Web preserves order through an explicit {@code orderIndex}
+     * field on every favourite which it sorts on the receive side. Cobalt's
+     * {@link FavoritesActionFavoriteBuilder} writes only {@code id}, so the order is the wire order,
+     * not a per-entry numeric tag.
      *
      * @param favoriteJids the new full snapshot of favourite chat {@link Jid}s, in display order
      * @param timestamp    the mutation timestamp

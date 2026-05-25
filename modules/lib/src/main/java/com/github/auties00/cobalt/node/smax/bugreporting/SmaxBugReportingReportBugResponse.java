@@ -16,41 +16,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
- * {@link SmaxBugReportingReportBugRequest}.
+ * Closes the sealed family of inbound replies to a {@link SmaxBugReportingReportBugRequest}.
  *
- * @apiNote
- * Mirrors the two-arm disjunction the WA Web RPC
- * {@code WASmaxBugReportingReportBugRPC.sendReportBugRPC} returns: a
- * {@link Success} carrying the backend-assigned task id or an
- * {@link Error} carrying the relay's bad-request / internal-server-error
- * verdict; Cobalt embedders pattern-match on the variant to decide
- * whether to surface a confirmation toast or a retry-eligible failure.
+ * <p>The reply is a two-arm disjunction: a {@link Success} carrying the backend-assigned task id,
+ * or an {@link Error} carrying the relay's rejection code. Callers obtain a variant through
+ * {@link #of(Node, Node)} and pattern-match on it to decide whether to surface a confirmation or
+ * a failure.
  */
 public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.Response
         permits SmaxBugReportingReportBugResponse.Success, SmaxBugReportingReportBugResponse.Error {
 
     /**
-     * Tries each {@link SmaxBugReportingReportBugResponse} variant in
-     * the WA Web declared order.
+     * Tries each variant in the WhatsApp Web declared order and returns the first that parses.
      *
-     * @apiNote
-     * Models {@code sendReportBugRPC}'s post-{@code sendSmaxStanza}
-     * disjunction: {@link Success} first, then {@link Error}; embedders
-     * pass the awaited {@code <iq result/>} stanza along with the
-     * original request and pattern-match on the returned variant.
+     * <p>{@link Success} is attempted first, then {@link Error}. The inbound IQ stanza is passed
+     * along with the original outbound request so the underlying mixins can cross-check the echoed
+     * {@code id} and {@code from} identifiers.
      *
      * @implNote
-     * This implementation returns {@link Optional#empty()} when neither
-     * variant parses cleanly; WA Web instead throws a
-     * {@code SmaxParsingFailure} so the caller's promise rejects.
-     * Cobalt's dispatch layer surfaces the empty Optional through the
-     * configurable error handler instead of hardcoding the throw.
+     * This implementation returns {@link Optional#empty()} when neither variant parses cleanly,
+     * whereas WhatsApp Web throws a parsing failure that rejects the caller's promise; Cobalt's
+     * dispatch layer routes the empty result through the configurable error handler instead of
+     * hardcoding the throw.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
      * @return an {@link Optional} carrying the parsed variant
-     * @throws NullPointerException if either argument is {@code null}
+     * @throws NullPointerException if {@code node} or {@code request} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBugReportingReportBugRPC",
             exports = "sendReportBugRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -65,50 +57,34 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
     }
 
     /**
-     * The success reply variant carrying the backend-assigned task id.
+     * Models the success reply carrying the backend-assigned task id.
      *
-     * @apiNote
-     * Surfaced by {@link #of(Node, Node)} when the relay accepted the
-     * report; embedders can join the {@link #taskIdElementValue} back to
-     * their telemetry through
-     * {@code WAWebSupportBugReportSubmitMutation.resolveSmaxReportId}.
+     * <p>Surfaced by {@link #of(Node, Node)} when the relay accepted the report. The
+     * {@link #taskIdElementValue} identifies the report in the bug-tracking backend.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBugReportingReportBugResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBugReportingHackBaseIQResultResponseMixin")
     final class Success implements SmaxBugReportingReportBugResponse {
         /**
-         * The optional {@code to} attribute echoed back by the relay.
-         *
-         * @apiNote
-         * Present when the original request stamped {@code from} with a
-         * user JID, so the relay echoes that JID into the reply's
-         * {@code to} attribute.
+         * Holds the {@code to} attribute echoed back by the relay, or {@code null} when the
+         * original request stamped no {@code from} for the relay to echo.
          */
         private final Jid replyTo;
 
         /**
-         * The backend-side task id assigned to the report.
-         *
-         * @apiNote
-         * Returned by the bug-tracking backend; the
-         * {@code resolveSmaxReportId} helper splits it into a
-         * {@code reportType} / {@code reportId} pair when surfacing it
-         * in the UI.
+         * Holds the task id the bug-tracking backend assigned to the report.
          */
         private final String taskIdElementValue;
 
         /**
-         * Constructs a new success projection.
+         * Constructs a success reply from its optional reply-to JID and the assigned task id.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the inbound stanza
-         * passes the IQ-result mixin validation.
+         * <p>Invoked by {@link #of(Node, Node)} after the inbound stanza passes the IQ-result
+         * envelope validation.
          *
-         * @param replyTo            the optional reply-to JID; may be
-         *                           {@code null}
+         * @param replyTo            the optional reply-to JID; may be {@code null}
          * @param taskIdElementValue the task id; never {@code null}
-         * @throws NullPointerException if {@code taskIdElementValue} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code taskIdElementValue} is {@code null}
          */
         public Success(Jid replyTo, String taskIdElementValue) {
             this.replyTo = replyTo;
@@ -119,9 +95,8 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         /**
          * Returns the optional reply-to JID.
          *
-         * @apiNote
-         * Empty when the original request did not stamp {@code from},
-         * so the relay had nothing to echo back.
+         * <p>Empty when the original request did not stamp {@code from}, so the relay had nothing
+         * to echo back.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -130,12 +105,7 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         }
 
         /**
-         * Returns the backend-side task id.
-         *
-         * @apiNote
-         * Embedders surface this id in the confirmation UI and route
-         * it through {@code resolveSmaxReportId} when correlating with
-         * server logs.
+         * Returns the backend-assigned task id.
          *
          * @return the task id; never {@code null}
          */
@@ -144,14 +114,11 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a success reply from the given inbound stanza.
          *
-         * @apiNote
-         * Empty when the stanza is not an IQ result, when the
-         * {@code <task_id/>} child is missing, or when its content
-         * cannot be decoded as a string; mirrors
-         * {@code WASmaxInBugReportingReportBugResponseSuccess.parseReportBugResponseSuccess}.
+         * <p>Returns {@link Optional#empty()} when the stanza fails the IQ-result envelope check,
+         * when the {@code <task_id>} child is missing, or when its content cannot be decoded as a
+         * string. On success the {@code to} attribute, when present, populates {@link #replyTo}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -176,6 +143,14 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
             return Optional.of(new Success(replyTo, taskId));
         }
 
+        /**
+         * Indicates whether the given object is a success reply equal to this one.
+         *
+         * <p>Two replies are equal when their reply-to JID and task id both match.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an equal success reply; {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -189,11 +164,21 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
                     && Objects.equals(this.taskIdElementValue, that.taskIdElementValue);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(replyTo, taskIdElementValue);
         }
 
+        /**
+         * Returns a debug representation listing the reply-to JID and task id.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxBugReportingReportBugResponse.Success[replyTo=" + replyTo
@@ -202,15 +187,12 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
     }
 
     /**
-     * The error reply variant carrying the relay's rejection code.
+     * Models the error reply carrying the relay's rejection code.
      *
-     * @apiNote
-     * Surfaced by {@link #of(Node, Node)} when the relay rejected the
-     * report; the only two documented disjuncts are
-     * {@code 400 bad-request} (client should not retry) and
-     * {@code 500 internal-server-error} (transient, retry-eligible),
-     * enumerated by
-     * {@code WASmaxInBugReportingReportBugErrors.parseReportBugErrors}.
+     * <p>Surfaced by {@link #of(Node, Node)} when the relay rejected the report. The only two
+     * documented disjuncts are code {@code 400} with text {@code "bad-request"} (the client should
+     * not retry) and code {@code 500} with text {@code "internal-server-error"} (transient,
+     * retry-eligible).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBugReportingReportBugResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBugReportingHackBaseIQErrorResponseMixin")
@@ -219,32 +201,31 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
     @WhatsAppWebModule(moduleName = "WASmaxInBugReportingIQErrorInternalServerErrorMixin")
     final class Error implements SmaxBugReportingReportBugResponse {
         /**
-         * The optional {@code to} attribute echoed back by the relay.
+         * Holds the {@code to} attribute echoed back by the relay, or {@code null} when the
+         * original request stamped no {@code from} for the relay to echo.
          */
         private final Jid replyTo;
 
         /**
-         * The numeric error code; one of {@code 400} or {@code 500}.
+         * Holds the numeric error code; one of {@code 400} or {@code 500}.
          */
         private final int errorCode;
 
         /**
-         * The error text paired with {@link #errorCode}; one of
-         * {@code "bad-request"} or {@code "internal-server-error"}.
+         * Holds the error text paired with {@link #errorCode}; one of {@code "bad-request"} or
+         * {@code "internal-server-error"}.
          */
         private final String errorText;
 
         /**
-         * Constructs a new error projection.
+         * Constructs an error reply from its optional reply-to JID and the classified code/text
+         * pair.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} once the
-         * {@link SmaxBaseServerErrorMixin} envelope has been classified
-         * against the documented {@code (400, "bad-request")} /
+         * <p>Invoked by {@link #of(Node, Node)} once the {@link SmaxBaseServerErrorMixin} envelope
+         * has been classified against the documented {@code (400, "bad-request")} and
          * {@code (500, "internal-server-error")} pairs.
          *
-         * @param replyTo   the optional reply-to JID; may be
-         *                  {@code null}
+         * @param replyTo   the optional reply-to JID; may be {@code null}
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be {@code null}
          */
@@ -257,9 +238,8 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         /**
          * Returns the optional reply-to JID.
          *
-         * @apiNote
-         * Empty when the original request did not stamp {@code from},
-         * so the relay had nothing to echo back.
+         * <p>Empty when the original request did not stamp {@code from}, so the relay had nothing
+         * to echo back.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -270,10 +250,8 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * One of {@code 400} (do-not-retry) or {@code 500}
-         * (retry-eligible); used by embedders to decide whether to
-         * resurface the dialog with the original payload pre-filled.
+         * <p>One of {@code 400} (do not retry) or {@code 500} (retry-eligible); callers use it to
+         * decide whether to resurface the report dialog with the original payload pre-filled.
          *
          * @return the error code
          */
@@ -284,10 +262,9 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         /**
          * Returns the optional error text.
          *
-         * @apiNote
-         * Empty only when the relay omitted the text; the
-         * disjunction-validation in {@link #of(Node, Node)} normally
-         * guarantees it is present and paired with {@link #errorCode}.
+         * <p>Empty only when the relay omitted the text; the disjunction validation in
+         * {@link #of(Node, Node)} normally guarantees it is present and paired with
+         * {@link #errorCode}.
          *
          * @return an {@link Optional} carrying the text
          */
@@ -296,15 +273,14 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
         }
 
         /**
-         * Tries to parse an {@link Error} variant from the given
-         * inbound stanza.
+         * Tries to parse an error reply from the given inbound stanza.
          *
-         * @apiNote
-         * Tries the client-error envelope first (4xx) then the
-         * server-error envelope (5xx) and verifies the resulting
-         * code/text pair against the documented disjunction; mirrors
-         * {@code parseReportBugResponseError} composed with
-         * {@code parseReportBugErrors}.
+         * <p>The client-error envelope (codes below {@code 500}) is tried first, then the
+         * server-error envelope, both through {@link SmaxBaseServerErrorMixin}. The resulting
+         * code/text pair must be one of the documented {@code (400, "bad-request")} or
+         * {@code (500, "internal-server-error")} disjuncts; any other pair, or a missing envelope,
+         * yields {@link Optional#empty()}. On success the {@code to} attribute, when present,
+         * populates {@link #replyTo}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -328,9 +304,7 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
             var code = envelope.code();
             var text = envelope.text();
             if (code == 400 && "bad-request".equals(text)) {
-                // IQErrorBadRequestMixin
             } else if (code == 500 && "internal-server-error".equals(text)) {
-                // IQErrorInternalServerErrorMixin
             } else {
                 return Optional.empty();
             }
@@ -338,6 +312,14 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
             return Optional.of(new Error(replyTo, code, text));
         }
 
+        /**
+         * Indicates whether the given object is an error reply equal to this one.
+         *
+         * <p>Two replies are equal when their error code, reply-to JID, and error text all match.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an equal error reply; {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -352,11 +334,21 @@ public sealed interface SmaxBugReportingReportBugResponse extends SmaxOperation.
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(replyTo, errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation listing the reply-to JID, error code, and error text.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxBugReportingReportBugResponse.Error[replyTo=" + replyTo

@@ -14,49 +14,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:stats" type="set">} stanza uploading
- * an encoded WAM (WhatsApp Analytics Metrics) buffer to the relay.
- *
- * @apiNote
- * Backs the field-stats / WAM upload pipeline driven by WA Web's
- * {@code WAWebStatsUploadJob}: a periodic flush serialises a batch of
- * encoded WAM events into the {@code addElementValue} byte buffer and
- * sends it through
- * {@code WASmaxStatsSendBufferRPC.sendSendBufferRPC}. The reply is
- * parsed by {@link SmaxStatsSendBufferResponse}; a {@code Success}
- * lets the local buffer be cleared, an {@code ErrorRetry} requires
- * re-buffering, and an {@code ErrorNoRetry} surfaces a permanent
- * rejection.
+ * Carries the outbound {@code <iq xmlns="w:stats" type="set">} stanza that uploads an encoded WAM
+ * (WhatsApp Analytics Metrics) buffer to the relay.
+ * <p>
+ * A periodic flush serialises a batch of encoded WAM events into the {@code addElementValue} byte
+ * buffer, seals it with a timestamp, and dispatches it as a single IQ. The reply is parsed by
+ * {@link SmaxStatsSendBufferResponse}: {@link SmaxStatsSendBufferResponse.Success} lets the local
+ * buffer be cleared, {@link SmaxStatsSendBufferResponse.ErrorRetry} requires re-buffering the batch
+ * for the next flush window, and {@link SmaxStatsSendBufferResponse.ErrorNoRetry} surfaces a
+ * permanent rejection.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutStatsSendBufferRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutStatsBaseIQSetRequestMixin")
 public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     /**
-     * The Unix-epoch timestamp at which the batch was sealed;
-     * forwarded verbatim into the {@code <add t="..."/>} attribute.
+     * Holds the Unix-epoch timestamp at which the batch was sealed.
+     * <p>
+     * Forwarded verbatim into the {@code <add t="..."/>} attribute of the outbound stanza.
      */
     private final long addT;
 
     /**
-     * The encoded WAM payload bytes carried as the {@code <add>}
-     * child's content.
+     * Holds the encoded WAM payload bytes.
+     * <p>
+     * These bytes are the serialised WAM buffer, not a serialised stanza child; they are carried as
+     * the {@code <add>} child's content by {@link #toNode()}.
      */
     private final byte[] addElementValue;
 
     /**
-     * Constructs a new send-buffer request.
-     *
-     * @apiNote
-     * The pair {@code (addT, addElementValue)} matches the keys WA
-     * Web's {@code WAWebStatsUploadJob} passes to
-     * {@code sendSendBufferRPC}; the bytes are the encoded WAM
-     * buffer, not a serialised stanza child.
+     * Constructs a new send-buffer request from a sealed batch timestamp and its encoded payload.
+     * <p>
+     * The pair {@code (addT, addElementValue)} mirrors the keys WhatsApp Web passes when sealing a
+     * WAM batch for upload; {@code addElementValue} is the encoded WAM buffer rather than a
+     * serialised stanza child.
      *
      * @param addT the batch timestamp in seconds since the Unix epoch
-     * @param addElementValue the encoded WAM payload bytes; never
-     *                        {@code null}
-     * @throws NullPointerException if {@code addElementValue} is
-     *                              {@code null}
+     * @param addElementValue the encoded WAM payload bytes; never {@code null}
+     * @throws NullPointerException if {@code addElementValue} is {@code null}
      */
     public SmaxStatsSendBufferRequest(long addT, byte[] addElementValue) {
         this.addT = addT;
@@ -84,15 +79,12 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     * <p>
+     * Produces an {@code <iq xmlns="w:stats" type="set">} envelope addressed to
+     * {@link Jid#userServer()} wrapping a single {@code <add t="...">} child whose content is the
+     * encoded WAM payload; the envelope's {@code id} is stamped by the dispatch path.
      *
-     * @apiNote
-     * Produces
-     * {@code <iq xmlns="w:stats" type="set" to="s.whatsapp.net">
-     *   <add t="...">BYTES</add></iq>}; the envelope's {@code id} is
-     * stamped by the dispatch path.
-     *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <add>} child
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <add>} child
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutStatsSendBufferRequest",
@@ -112,9 +104,10 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxStatsSendBufferRequest} with equal timestamp and
-     * payload.
+     * Compares this request with the given object for equality.
+     * <p>
+     * Two requests are equal when both are {@link SmaxStatsSendBufferRequest} instances with the
+     * same timestamp and byte-for-byte equal payloads.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when both fields match

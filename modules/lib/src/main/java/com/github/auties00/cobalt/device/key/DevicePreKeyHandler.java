@@ -14,27 +14,24 @@ import com.github.auties00.libsignal.state.SignalPreKeyBundle;
 import com.github.auties00.libsignal.state.SignalPreKeyBundleBuilder;
 
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.StructuredTaskScope;
-import java.util.concurrent.StructuredTaskScope.Subtask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Fetches Signal pre-key bundles and identity keys for newly-learned devices and installs them
  * into the local Signal store so outgoing messages can be encrypted.
  *
- * @apiNote
- * Wired by {@link com.github.auties00.cobalt.device.DeviceService} to back two surfaces:
- * <ul>
- *   <li>the send path, which calls {@link #ensureSessions(Collection)} (and through it
- *       {@link #fetchAndProcessPreKeyBundles(Collection)}) before encrypting to a device that
- *       Cobalt has not yet talked to;</li>
- *   <li>the post-sync identity-prefetch path, which calls
- *       {@link #fetchAndStoreIdentityKeys(Collection)} so incoming PKMSG decryption does not
- *       need a separate server round-trip to validate peer identities.</li>
- * </ul>
- * Embedders do not normally call this class directly; the {@code DeviceService} fronting it
- * is the public surface.
+ * <p>This handler backs two surfaces fronted by
+ * {@link com.github.auties00.cobalt.device.DeviceService}. The send path calls
+ * {@link #ensureSessions(Collection)} (and through it
+ * {@link #fetchAndProcessPreKeyBundles(Collection)}) before encrypting to a device that Cobalt has
+ * not yet talked to. The post-sync identity-prefetch path calls
+ * {@link #fetchAndStoreIdentityKeys(Collection)} so incoming PKMSG decryption does not need a
+ * separate server round-trip to validate peer identities. Embedders interact with the
+ * {@code DeviceService} that fronts this class rather than with the handler directly.
  */
 @WhatsAppWebModule(moduleName = "WAWebFetchPrekeysJob")
 @WhatsAppWebModule(moduleName = "WAWebManageE2ESessionsJob")
@@ -43,16 +40,17 @@ public final class DevicePreKeyHandler {
     /**
      * Maximum number of devices included in a single pre-key IQ batch.
      *
-     * @apiNote
-     * Caps a single {@code <iq>}'s {@code <user>} child count so partial failures only affect
-     * one batch and the parallel scope has more subtasks to dispatch; WA Web's smax schema
-     * accepts up to {@code 1e5} users per request, so the limit is a Cobalt-side throttle, not
-     * a wire constraint.
+     * <p>Caps a single {@code <iq>}'s {@code <user>} child count so partial failures only affect
+     * one batch and the parallel scope has more subtasks to dispatch.
+     *
+     * @implNote
+     * This implementation chooses {@code 100} as a Cobalt-side throttle, not a wire constraint:
+     * WA Web's smax schema accepts up to {@code 1e5} users per request.
      */
     private static final int MAX_DEVICES_PER_QUERY = 100;
 
     /**
-     * XML namespace used on pre-key and identity-key IQs ({@code <iq xmlns="encrypt">}).
+     * XML namespace placed on pre-key and identity-key IQs, producing {@code <iq xmlns="encrypt">}.
      */
     private static final String ENCRYPT_XMLNS = "encrypt";
 
@@ -75,10 +73,6 @@ public final class DevicePreKeyHandler {
     /**
      * Constructs a handler bound to the given client and session cipher.
      *
-     * @apiNote
-     * Wired by {@link com.github.auties00.cobalt.device.DeviceService}; embedders do not
-     * normally instantiate this directly.
-     *
      * @param client        the WhatsApp client used for store access and IQ dispatch
      * @param sessionCipher the Signal session cipher used to materialise sessions
      * @throws NullPointerException if any argument is {@code null}
@@ -94,14 +88,13 @@ public final class DevicePreKeyHandler {
     /**
      * Carries the result of a pre-key fetch and session-establishment pass.
      *
-     * @apiNote
-     * Combines the parsed {@link SignalPreKeyBundle}s with the {@code depletedPrekeyCount}
-     * that downstream WAM emission needs. The WA Web counterparts return two adjacent tuples:
+     * <p>Combines the parsed {@link SignalPreKeyBundle}s with the {@code depletedPrekeyCount} that
+     * downstream WAM emission needs. The WA Web counterparts return two adjacent tuples:
      * {@code WAWebManageE2ESessionsJob.ensureE2ESessions} yields
      * {@code {missedPrekeyCount, depletedPrekeyCount, deletedDevices}} and
      * {@code WAWebProcessKeyBundle.processKeyBundles} yields
-     * {@code {depletedPrekeyCount, processedPrekeyCount}}; Cobalt keeps the two fields it
-     * actually consumes downstream.
+     * {@code {depletedPrekeyCount, processedPrekeyCount}}; this record keeps only the two fields
+     * that Cobalt consumes downstream.
      *
      * @param bundles             the pre-key bundles keyed by device JID; empty when the fetch failed
      * @param depletedPrekeyCount the number of devices for which the server returned no
@@ -110,12 +103,11 @@ public final class DevicePreKeyHandler {
      */
     public record PreKeyFetchResult(Map<Jid, SignalPreKeyBundle> bundles, int depletedPrekeyCount) {
         /**
-         * Canonical constructor that copies {@code bundles} into an unmodifiable map and
-         * tolerates a {@code null} input.
+         * Constructs a result, copying {@code bundles} into an unmodifiable map and tolerating a
+         * {@code null} input.
          *
-         * @apiNote
-         * Defensive copy ensures the record's map cannot be mutated after construction; passing
-         * {@code null} collapses to an empty map rather than throwing.
+         * <p>The defensive copy ensures the record's map cannot be mutated after construction;
+         * passing {@code null} collapses to an empty map rather than throwing.
          *
          * @param bundles             the pre-key bundles keyed by device JID, or {@code null}
          * @param depletedPrekeyCount the depleted one-time pre-key count
@@ -126,14 +118,13 @@ public final class DevicePreKeyHandler {
     }
 
     /**
-     * Fetches pre-key bundles for the specified devices and establishes Signal sessions, with
-     * the identity-reason flag off.
+     * Fetches pre-key bundles for the specified devices and establishes Signal sessions, with the
+     * identity-reason flag off.
      *
-     * @apiNote
-     * Convenience overload equivalent to
-     * {@link #fetchAndProcessPreKeyBundles(Collection, boolean) fetchAndProcessPreKeyBundles(deviceJids, false)};
-     * use this on the regular send path. The two-argument variant is reserved for identity
-     * prefetches.
+     * <p>Equivalent to
+     * {@link #fetchAndProcessPreKeyBundles(Collection, boolean) fetchAndProcessPreKeyBundles(deviceJids, false)},
+     * which is the form the regular send path uses; the two-argument variant is reserved for
+     * identity prefetches that need the per-user {@code reason="identity"} attribute.
      *
      * @param deviceJids the device JIDs to fetch pre-keys for
      * @return the {@link PreKeyFetchResult} carrying the resolved bundles and the depleted count
@@ -148,27 +139,27 @@ public final class DevicePreKeyHandler {
     /**
      * Fetches pre-key bundles for the specified devices and establishes Signal sessions.
      *
-     * @apiNote
-     * Sets the per-user {@code reason="identity"} attribute on each {@code <user>} child when
-     * {@code hasUserReasonIdentity} is true so the server can distinguish identity-verification
-     * prefetches from regular send-path fetches; pass {@code false} for the send path. The
-     * pass deduplicates concurrent fetches for the same device via {@link #inFlightRequests},
-     * batches new devices in groups of at most {@value #MAX_DEVICES_PER_QUERY} per IQ, and
-     * dispatches the batches in parallel across virtual threads.
+     * <p>Sets the per-user {@code reason="identity"} attribute on each {@code <user>} child when
+     * {@code hasUserReasonIdentity} is {@code true} so the server can distinguish
+     * identity-verification prefetches from regular send-path fetches; callers on the send path
+     * pass {@code false}. The pass deduplicates concurrent fetches for the same device via
+     * {@link #inFlightRequests}, batches new devices in groups of at most
+     * {@value #MAX_DEVICES_PER_QUERY} per IQ, and dispatches the batches in parallel across virtual
+     * threads.
      *
      * @implNote
-     * This implementation sorts the resolved bundles so primary devices (device id {@code 0})
-     * land in the session cipher before companion devices, avoiding shared-state races inside
-     * the Signal session install path. Devices the server omits from the response resolve to a
-     * {@code null} future and are dropped silently from the result. Failures inside an
-     * in-flight future leave the device without a bundle but do not throw; the dedicated
-     * exception path only fires on virtual-thread interruption.
+     * This implementation sorts the resolved bundles so primary devices (device id {@code 0}) land
+     * in the session cipher before companion devices, avoiding shared-state races inside the Signal
+     * session install path. Devices the server omits from the response resolve to a {@code null}
+     * future and are dropped silently from the result. Failures inside an in-flight future leave
+     * the device without a bundle but do not throw; a batch IQ that fails leaves only its own
+     * devices without bundles while the remaining batches still resolve.
      *
      * @param deviceJids            the device JIDs to fetch pre-keys for
      * @param hasUserReasonIdentity whether to set {@code reason="identity"} on each {@code <user>} node
      * @return the {@link PreKeyFetchResult} carrying the resolved bundles and the depleted count
      * @throws NullPointerException if {@code deviceJids} is {@code null}
-     * @throws RuntimeException     wrapping {@link InterruptedException} when the virtual thread is interrupted while waiting for the batches
+     * @throws RuntimeException     wrapping {@link InterruptedException} when the calling thread is interrupted while waiting for the batches
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchPrekeysJob",
             exports = "fetchPrekeys",
@@ -213,25 +204,26 @@ public final class DevicePreKeyHandler {
             var devicesToFetch = new ArrayList<>(newFutures.keySet());
             var batches = batchDevices(devicesToFetch);
 
-            try (var scope = StructuredTaskScope.open()) {
-                var subtasks = new ArrayList<Subtask<PreKeyBatchResult>>();
-                for (var batch : batches) {
-                    subtasks.add(scope.fork(() -> fetchPreKeyBatch(batch, hasUserReasonIdentity)));
-                }
-                scope.join();
+            // TODO: Use https://openjdk.org/jeps/505 when it comes out of preview
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                var tasks = batches.stream()
+                        .<Callable<PreKeyBatchResult>>map(batch -> () -> fetchPreKeyBatch(batch, hasUserReasonIdentity))
+                        .toList();
+                var batchResults = executor.invokeAll(tasks);
 
-                for (var subtask : subtasks) {
-                    if (subtask.state() == Subtask.State.SUCCESS) {
-                        var batchResult = subtask.get();
-                        depletedPrekeyCount += batchResult.depletedPrekeyCount();
-                        var fetchedBundles = batchResult.bundles();
-                        allBundles.putAll(fetchedBundles);
+                for (var batchResultTask : batchResults) {
+                    if (batchResultTask.state() != Future.State.SUCCESS) {
+                        continue;
+                    }
+                    var batchResult = batchResultTask.resultNow();
+                    depletedPrekeyCount += batchResult.depletedPrekeyCount();
+                    var fetchedBundles = batchResult.bundles();
+                    allBundles.putAll(fetchedBundles);
 
-                        for (var entry : fetchedBundles.entrySet()) {
-                            var future = newFutures.get(entry.getKey());
-                            if (future != null) {
-                                future.complete(entry.getValue());
-                            }
+                    for (var entry : fetchedBundles.entrySet()) {
+                        var future = newFutures.get(entry.getKey());
+                        if (future != null) {
+                            future.complete(entry.getValue());
                         }
                     }
                 }
@@ -287,12 +279,12 @@ public final class DevicePreKeyHandler {
     }
 
     /**
-     * Carries one batch's worth of parsed bundles together with the depleted count surfaced by
-     * that batch's response.
+     * Carries one batch's worth of parsed bundles together with the depleted count surfaced by that
+     * batch's response.
      *
-     * @apiNote
-     * Internal-only return type for {@link #fetchPreKeyBatch}; aggregated into the top-level
-     * {@link PreKeyFetchResult} by {@link #fetchAndProcessPreKeyBundles(Collection, boolean)}.
+     * <p>This is the per-batch return type produced by {@link #fetchPreKeyBatch} and aggregated
+     * into the top-level {@link PreKeyFetchResult} by
+     * {@link #fetchAndProcessPreKeyBundles(Collection, boolean)}.
      *
      * @param bundles             the pre-key bundles parsed from this batch's response
      * @param depletedPrekeyCount the depleted one-time pre-key count for this batch
@@ -303,10 +295,8 @@ public final class DevicePreKeyHandler {
     /**
      * Dispatches a single pre-key IQ for one batch of devices and parses the response.
      *
-     * @apiNote
-     * One subtask of the {@link StructuredTaskScope} in
-     * {@link #fetchAndProcessPreKeyBundles(Collection, boolean)}; runs on its own virtual
-     * thread so batches dispatch in parallel.
+     * <p>Runs on its own virtual thread as one of the parallel batch tasks dispatched by
+     * {@link #fetchAndProcessPreKeyBundles(Collection, boolean)}.
      *
      * @param deviceJids            the devices included in this batch
      * @param hasUserReasonIdentity whether to set {@code reason="identity"} on each {@code <user>} node
@@ -324,9 +314,7 @@ public final class DevicePreKeyHandler {
     /**
      * Splits a device list into batches of at most {@value #MAX_DEVICES_PER_QUERY} entries.
      *
-     * @apiNote
-     * Helper for {@link #fetchAndProcessPreKeyBundles(Collection, boolean)}; preserves the
-     * input order so the eventual session-install order is stable.
+     * <p>Preserves the input order so the eventual session-install order is stable.
      *
      * @param deviceJids the devices to batch
      * @return the list of batches in input order
@@ -356,8 +344,7 @@ public final class DevicePreKeyHandler {
     /**
      * Builds the pre-key query IQ stanza for one batch of devices.
      *
-     * @apiNote
-     * Produces an IQ of shape
+     * <p>Produces an IQ of shape
      * {@snippet :
      *     <iq xmlns="encrypt" type="get" to="s.whatsapp.net">
      *       <key>
@@ -366,8 +353,8 @@ public final class DevicePreKeyHandler {
      *       </key>
      *     </iq>
      * }
-     * The {@code reason="identity"} attribute is included only when the caller flagged the
-     * batch as an identity prefetch so the server can route the request differently.
+     * The {@code reason="identity"} attribute is included only when the caller flagged the batch as
+     * an identity prefetch so the server can route the request differently.
      *
      * @param deviceJids            the device JIDs to query
      * @param hasUserReasonIdentity whether to include {@code reason="identity"} on every {@code <user>} node
@@ -403,21 +390,19 @@ public final class DevicePreKeyHandler {
     }
 
     /**
-     * Parses the pre-key response into {@link SignalPreKeyBundle}s keyed by device {@link Jid}
-     * and tallies the depleted one-time pre-key count.
+     * Parses the pre-key response into {@link SignalPreKeyBundle}s keyed by device {@link Jid} and
+     * tallies the depleted one-time pre-key count.
      *
-     * @apiNote
-     * The response carries a {@code <list>} envelope with one {@code <user>} entry per
-     * queried device. An entry that fails to parse is logged and skipped so a single malformed
-     * device does not fail the batch.
+     * <p>The response carries a {@code <list>} envelope with one {@code <user>} entry per queried
+     * device. An entry that fails to parse is logged and skipped so a single malformed device does
+     * not fail the batch.
      *
      * @implNote
      * This implementation matches WA Web's {@code WAWebProcessKeyBundle.splitKeyBundles}
      * depletion-counting rule: a {@code <user>} entry contributes to {@code depletedPrekeyCount}
-     * only when it has no {@code <key>} child and is not a bot JID. The count drives
-     * downstream WAM telemetry (Cobalt does not currently emit
-     * {@code PostPrekeysDepletionMetric}; this field is exposed for embedders that mirror
-     * WA Web's WAM surface).
+     * only when it has no {@code <key>} child and is not a bot JID. The count drives downstream WAM
+     * telemetry; Cobalt does not currently emit {@code PostPrekeysDepletionMetric}, and this field
+     * is exposed for embedders that mirror WA Web's WAM surface.
      *
      * @param response the IQ response node
      * @return the bundles and depleted count for this batch
@@ -461,16 +446,15 @@ public final class DevicePreKeyHandler {
     /**
      * Parses a single user's pre-key bundle from a response {@code <user>} child.
      *
-     * @apiNote
-     * Extracts the registration id, identity key, signed pre-key (id, public, signature) and
-     * optional one-time pre-key (id, public) into a {@link SignalPreKeyBundle}. The one-time
-     * pre-key is genuinely optional; when the server's pool is exhausted only the signed
-     * pre-key block is returned.
+     * <p>Extracts the registration id, identity key, signed pre-key (id, public, signature) and
+     * optional one-time pre-key (id, public) into a {@link SignalPreKeyBundle}. The one-time pre-key
+     * is genuinely optional; when the server's pool is exhausted only the signed pre-key block is
+     * returned.
      *
      * @implNote
-     * This implementation decodes the registration id (4 bytes) and the pre-key ids (3 bytes
-     * each) via {@link #convertBytesToUint(byte[], int)} because the wire format uses raw
-     * big-endian unsigned bytes rather than an ASCII number string.
+     * This implementation decodes the registration id (4 bytes) and the pre-key ids (3 bytes each)
+     * via {@link #convertBytesToUint(byte[], int)} because the wire format uses raw big-endian
+     * unsigned bytes rather than an ASCII number string.
      *
      * @param userNode the {@code <user>} node for this device
      * @return the parsed pre-key bundle
@@ -537,12 +521,11 @@ public final class DevicePreKeyHandler {
     }
 
     /**
-     * Converts a big-endian unsigned byte array to an int.
+     * Converts a big-endian unsigned byte array to an {@code int}.
      *
-     * @apiNote
-     * Helper for {@link #parseUserPreKeyBundle} that decodes the raw byte encoding used by
-     * every smax {@code KeyIDMixin} and {@code RegistrationIDMixin} parser; registration ids
-     * occupy 4 bytes, signed-pre-key and one-time-pre-key ids occupy 3 bytes.
+     * <p>Decodes the raw byte encoding used by every smax {@code KeyIDMixin} and
+     * {@code RegistrationIDMixin} parser, on behalf of {@link #parseUserPreKeyBundle}: registration
+     * ids occupy 4 bytes while signed-pre-key and one-time-pre-key ids occupy 3 bytes.
      *
      * @implNote
      * This implementation accumulates {@code n = (n << 8) | (bytes[i] & 0xFF)} for the first
@@ -570,14 +553,13 @@ public final class DevicePreKeyHandler {
     /**
      * Returns the subset of the given devices that do not yet have a cached Signal session.
      *
-     * @apiNote
-     * Driven by {@link #ensureSessions(Collection)} to determine which devices still need a
-     * pre-key fetch before they can be encrypted to; mirrors the
-     * {@code Signal.Session.hasSignalSessions} check inside
-     * {@code WAWebManageE2ESessionsJob.ensureE2ESessions}.
+     * <p>Drives {@link #ensureSessions(Collection)} to determine which devices still need a pre-key
+     * fetch before they can be encrypted to; mirrors the {@code Signal.Session.hasSignalSessions}
+     * check inside {@code WAWebManageE2ESessionsJob.ensureE2ESessions}. A device is included exactly
+     * when {@code findSessionByAddress} on the store returns empty for its Signal address.
      *
      * @param deviceJids the device JIDs to check
-     * @return the devices for which {@link com.github.auties00.cobalt.store.WhatsAppStore#findSessionByAddress} returned empty
+     * @return the devices for which the store holds no cached session
      */
     @WhatsAppWebExport(moduleName = "WAWebManageE2ESessionsJob",
             exports = "ensureE2ESessions",
@@ -597,14 +579,14 @@ public final class DevicePreKeyHandler {
     }
 
     /**
-     * Ensures Signal sessions exist for the specified devices, fetching and installing any
-     * missing bundles.
+     * Ensures Signal sessions exist for the specified devices, fetching and installing any missing
+     * bundles.
      *
-     * @apiNote
-     * The canonical send-path entry point: callers pass the fanout from
-     * {@link com.github.auties00.cobalt.device.fanout.DeviceFanoutCalculator} and the returned
-     * count drives the WAM {@code PostPrekeysDepletionMetric} branch on the caller side (WA
-     * Web emits it through {@code WAWebPostPrekeysDepletionMetric.maybePostPrekeysDepletionMetric}).
+     * <p>This is the canonical send-path entry point: callers pass the fanout from
+     * {@link com.github.auties00.cobalt.device.fanout.DeviceFanoutCalculator} and the returned count
+     * drives the WAM {@code PostPrekeysDepletionMetric} branch on the caller side (WA Web emits it
+     * through {@code WAWebPostPrekeysDepletionMetric.maybePostPrekeysDepletionMetric}). Devices that
+     * already hold a cached session are skipped, so only genuinely new devices trigger a fetch.
      *
      * @param deviceJids the device JIDs to ensure sessions for
      * @return the number of devices in the response whose one-time pre-key pool was depleted
@@ -626,11 +608,10 @@ public final class DevicePreKeyHandler {
     /**
      * Prefetches identity keys for the specified users and stores them as trusted identities.
      *
-     * @apiNote
-     * Called by {@link com.github.auties00.cobalt.device.DeviceService} after a successful
-     * device sync for every user whose validated signed-key-index list contains at least one
-     * entry, so incoming PKMSG decryption can validate peer identities without a separate
-     * server round-trip. The request shape is
+     * <p>Called by {@link com.github.auties00.cobalt.device.DeviceService} after a successful device
+     * sync for every user whose validated signed-key-index list contains at least one entry, so
+     * incoming PKMSG decryption can validate peer identities without a separate server round-trip.
+     * The request shape is
      * {@snippet :
      *     <iq xmlns="encrypt" type="get" to="s.whatsapp.net">
      *       <identity>
@@ -642,13 +623,13 @@ public final class DevicePreKeyHandler {
      * with one {@code <user>} per user JID, each targeting that user's primary device.
      *
      * @implNote
-     * This implementation skips users whose primary-device identity is already cached, so the
-     * IQ never carries already-known entries; matches the
+     * This implementation skips users whose primary-device identity is already cached, so the IQ
+     * never carries already-known entries; matches the
      * {@code WAWebGetIdentityKeysJob.getAndStoreIdentityKeys} bulk-load-then-filter pattern.
      *
      * @param userJids the user JIDs to fetch identity keys for
      * @throws NullPointerException if {@code userJids} is {@code null}
-     * @throws RuntimeException     wrapping {@link InterruptedException} when the virtual thread is interrupted while waiting for the batches
+     * @throws RuntimeException     wrapping {@link InterruptedException} when the calling thread is interrupted while waiting for the batches
      */
     @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
             exports = "getAndStoreIdentityKeys",
@@ -677,15 +658,15 @@ public final class DevicePreKeyHandler {
 
         var batches = batchUsers(usersNeedingKeys, MAX_DEVICES_PER_QUERY);
 
-        try (var scope = StructuredTaskScope.open()) {
-            var subtasks = new ArrayList<Subtask<Void>>();
-            for (var batch : batches) {
-                subtasks.add(scope.fork(() -> {
-                    fetchAndStoreIdentityKeyBatch(batch);
-                    return null;
-                }));
-            }
-            scope.join();
+        // TODO: Use https://openjdk.org/jeps/505 when it comes out of preview
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var tasks = batches.stream()
+                    .<Callable<Void>>map(batch -> () -> {
+                        fetchAndStoreIdentityKeyBatch(batch);
+                        return null;
+                    })
+                    .toList();
+            executor.invokeAll(tasks);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while fetching identity keys", e);
@@ -695,10 +676,8 @@ public final class DevicePreKeyHandler {
     /**
      * Dispatches and parses one batch of the identity-key prefetch.
      *
-     * @apiNote
-     * One subtask of the {@link StructuredTaskScope} inside
-     * {@link #fetchAndStoreIdentityKeys(Collection)}; runs on its own virtual thread so
-     * batches dispatch in parallel.
+     * <p>Runs on its own virtual thread as one of the parallel batch tasks dispatched by
+     * {@link #fetchAndStoreIdentityKeys(Collection)}.
      *
      * @param userJids the users in this batch
      */
@@ -714,9 +693,8 @@ public final class DevicePreKeyHandler {
     /**
      * Builds the identity-key query IQ stanza for one batch of users.
      *
-     * @apiNote
-     * Produces an IQ with one {@code <user jid="...primary-device JID...">} child per user
-     * inside an {@code <identity>} envelope; matches the wapper shape built by
+     * <p>Produces an IQ with one {@code <user jid="...primary-device JID...">} child per user inside
+     * an {@code <identity>} envelope; matches the wrapper shape built by
      * {@code WAWebGetIdentityKeysJob}'s inner {@code m} function.
      *
      * @param userJids the users in this batch
@@ -750,15 +728,14 @@ public final class DevicePreKeyHandler {
      * Parses the identity-key response and stores each successfully decoded key as a trusted
      * identity.
      *
-     * @apiNote
-     * Entries that carry an {@code <error>} child are skipped (matching the WA Web
-     * {@code identityKeysParser} branch that throws on the same condition); entries with a
-     * malformed or non-32-byte identity blob are likewise skipped and logged.
+     * <p>Entries that carry an {@code <error>} child are skipped (matching the WA Web
+     * {@code identityKeysParser} branch that throws on the same condition); entries with a malformed
+     * or non-32-byte identity blob are likewise skipped and logged.
      *
      * @implNote
      * This implementation enforces the 32-byte length check before passing the value to
-     * {@link SignalIdentityPublicKey#ofDirect(byte[])}, mirroring WA Web's
-     * {@code contentBytes(32)} length-checked accessor.
+     * {@link SignalIdentityPublicKey#ofDirect(byte[])}, mirroring WA Web's {@code contentBytes(32)}
+     * length-checked accessor.
      *
      * @param response the IQ response node
      */
@@ -804,9 +781,8 @@ public final class DevicePreKeyHandler {
     /**
      * Splits a user list into batches of at most {@code batchSize} entries.
      *
-     * @apiNote
-     * Helper for {@link #fetchAndStoreIdentityKeys(Collection)}; preserves the input order so
-     * the dispatch order matches the caller's input order.
+     * <p>Preserves the input order so the dispatch order matches the caller's input order on behalf
+     * of {@link #fetchAndStoreIdentityKeys(Collection)}.
      *
      * @param userJids  the users to batch
      * @param batchSize the maximum batch size
@@ -838,12 +814,11 @@ public final class DevicePreKeyHandler {
      * Stores an identity key directly from an ADV account-signature key, bypassing the
      * identity-fetch round-trip.
      *
-     * @apiNote
-     * Used on the hosted-devices fast path: when the hosted-override AB prop is on and a
-     * device list contains hosted entries, the {@code accountSignatureKey} taken from the
-     * signed-key-index list is stored as the user's primary-device identity directly, saving
-     * a round-trip. Matches the {@code WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey}
-     * branch that ends in {@code saveIdentity(createSignalAddress(...), accSigKey)}.
+     * <p>Used on the hosted-devices fast path: when the hosted-override AB prop is on and a device
+     * list contains hosted entries, the {@code accountSignatureKey} taken from the signed-key-index
+     * list is stored as the user's primary-device identity directly, saving a round-trip. Matches
+     * the {@code WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey} branch that ends
+     * in {@code saveIdentity(createSignalAddress(...), accSigKey)}.
      *
      * @param userJid             the user JID to store the identity for
      * @param accountSignatureKey the 32-byte account signature key

@@ -123,10 +123,9 @@ import java.util.*;
  *       notifications.
  * </ul>
  *
- * <p>WhatsApp Web stores all of this across roughly a dozen IndexedDB
- * databases, around a hundred IDB tables, dozens of in-memory reactive
- * collections and a key-value preferences store. Cobalt collapses that
- * fan-out into this single abstraction.
+ * <p>The official clients spread this state across many separate
+ * databases, tables, in-memory caches and a key-value preferences store.
+ * Cobalt collapses that fan-out into this single abstraction.
  *
  * @apiNote
  * Embedders never construct this directly. Instances are obtained
@@ -835,12 +834,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns whether the primary device supports syncd snapshot recovery.
      *
      * @apiNote
-     * WA Web's {@code WAWebSyncdSnapshotRecoveryGatingUtils} gates the
-     * snapshot-recovery flow on this signal (stored under the
-     * {@code WAPrimaryDeviceSupportsSyncdRecovery} prefs key) and on
-     * the {@code enable_peer_snapshot_recovery} AB prop. The flag is
-     * set when the primary device advertises support through peer data
-     * operations.
+     * Gates the app-state snapshot-recovery flow, which lets a companion
+     * rebuild its synced settings and metadata from a server snapshot
+     * rather than replaying every patch. The flag is set when the primary
+     * device advertises that it supports the recovery handshake.
      *
      * @return {@code true} if the primary device supports syncd recovery
      */
@@ -1253,8 +1250,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Corresponds to Meta's <i>Accounts Center</i> integration: the
      * user can link WhatsApp with their Facebook/Instagram identity for
      * shared sign-in, cross-app posting and federated profile data. The
-     * value reflects whether that link is active, paused or absent. WA
-     * Web's internal codename for this feature is "Waffle".
+     * value reflects whether that link is active, paused or absent.
      *
      * @return an {@link Optional} containing the link state if the
      *         server has ever reported it
@@ -1391,9 +1387,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @apiNote
      * WhatsApp force-unpairs companion devices that go offline for too
      * long (the "Linked devices" screen lists this as the device being
-     * inactive); this is the deadline. WA Web's
-     * {@code WASmaxClientExpirationClientExpirationRPC} delivers the
-     * value to the client.
+     * inactive); this is the deadline, communicated by the server.
      *
      * @return an {@link Optional} containing the expiration instant if
      *         the server has communicated one
@@ -1569,9 +1563,9 @@ public interface WhatsAppStore extends SignalProtocolStore {
      *
      * @apiNote
      * Each {@link CtwaDataSharingPreference} pairs a customer's account
-     * LID with the enabled flag chosen by the user; consumed by WA
-     * Web's {@code WAWebCommonCTWADataSharing} surface to decide which
-     * downstream signals are forwarded to the advertiser.
+     * LID with the enabled flag chosen by the user; it decides which
+     * downstream signals from a click-to-WhatsApp conversation are
+     * forwarded to the advertiser.
      *
      * @return an unmodifiable collection of CTWA preferences, never
      *         {@code null}
@@ -1617,16 +1611,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the user's own SMB data-sharing-with-Meta consent value.
      *
      * @apiNote
-     * The global single-value tri-state consent surfaced by the
-     * {@code <smb_data_sharing_with_meta_consent value="..."/>} child
-     * of the privacy notification, with valid wire literals
-     * {@code "true"}, {@code "false"} and {@code "notset"}. WA Web
-     * exchanges this value through the
-     * {@code WASmaxInBizSettingsSmbDataSharingSettingMixin} and
-     * {@code WASmaxOutBizSettingsSmbDataSharingSettingMixin} RPCs.
+     * A WhatsApp Business account's global, single-value tri-state choice
+     * of whether to share business data with Meta, with valid wire
+     * literals {@code "true"}, {@code "false"} and {@code "notset"}.
      *
      * @return an {@link Optional} carrying the wire literal, or empty
-     *         when the value has never been observed or the relay
+     *         when the value has never been observed or the server
      *         cleared it
      */
     Optional<String> smbDataSharingConsent();
@@ -1716,9 +1706,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * WhatsApp records aggregate on-device signals about the outcome of
      * actions (for example whether a click-to-WhatsApp ad led to a
      * reply) and uploads them in privacy-preserving form when this flag
-     * is on. WA Web's {@code WAWebDetectedOutcomesStatusSync} drives
-     * the toggle through the
-     * {@code ctwaDetectedOutcomeOnboardingStatusUpdate} backend call.
+     * is on.
      *
      * @return {@code true} if detected-outcomes reporting is enabled
      */
@@ -2154,6 +2142,13 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<Sticker> removeRecentSticker(String stickerHash);
 
     /**
+     * Returns the recent stickers currently retained by the store.
+     *
+     * @return an unmodifiable snapshot of the recent stickers
+     */
+    SequencedCollection<Sticker> recentStickers();
+
+    /**
      * Finds a favourite sticker by its hash.
      *
      * @param stickerHash the sticker hash
@@ -2178,10 +2173,16 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<Sticker> removeFavouriteSticker(String stickerHash);
 
     /**
-     * Finds a quick reply by its stable identifier. The {@code id} parameter
-     * is the same value used as the second element of the sync index
-     * ({@code indexParts[1]}) and as the primary key of the underlying
-     * {@code quick-reply} IndexedDB table.
+     * Returns the favourite stickers currently retained by the store.
+     *
+     * @return an unmodifiable snapshot of the favourite stickers
+     */
+    SequencedCollection<Sticker> favouriteStickers();
+
+    /**
+     * Finds a quick reply by its stable identifier. The {@code id} is the
+     * shortcut's server-assigned identifier, stable across edits to the
+     * shortcut text or message body.
      *
      * @param id the quick reply identifier
      * @return an {@code Optional} containing the quick reply if found
@@ -2269,11 +2270,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * one is stored.
      *
      * @apiNote
-     * Direct, non-validated read intended for low-level subsystems only;
-     * matches the {@code _DO_NOT_USE} suffix on the WA Web export, which
-     * warns callers that the result is not guarded against rotation or
-     * expiry. Most consumers should go through the higher-level patch
-     * decoder rather than calling this directly.
+     * Direct, non-validated read intended for low-level subsystems only:
+     * the result is not guarded against key rotation or expiry. Most
+     * consumers should go through the higher-level patch decoder rather
+     * than calling this directly.
      *
      * @param id the raw sync key identifier bytes, must not be {@code null}
      * @return an {@link Optional} containing the matching key, or
@@ -2296,8 +2296,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      *
      * @implNote
      * This implementation skips keys whose {@code keyData.keyData} payload
-     * is absent or empty, matching the defensive check WA Web performs in
-     * {@code setSyncKeyInTransaction}.
+     * is absent or empty.
      *
      * @param keys the collection of keys to add or update, must not be
      *             {@code null}
@@ -2354,7 +2353,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Drives app-state-sync collection bookkeeping: the LT-Hash is
      * compared against the freshly computed hash of incoming patches to
      * detect divergence, and the version is the monotonically increasing
-     * patch counter the server sends in {@code <sync>} notifications.
+     * patch counter the server sends in sync notifications.
      *
      * @param patchType the collection type to query
      * @return an {@link Optional} containing the hash state if found
@@ -2877,8 +2876,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @apiNote
      * Orphan mutations reference entities (messages, chats, threads,
      * agents, chat assignments, status mutes, favourite stickers) that
-     * have not yet arrived locally; the WA Web {@code checkOrphanMutations}
-     * pipeline replays them once the referenced entities are observed.
+     * have not yet arrived locally; they are replayed once the referenced
+     * entities are observed.
      *
      * @param collectionName the collection name
      * @param mutation       the orphan mutation entry
@@ -2927,9 +2926,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Removes all orphan mutations for the specified collection.
      *
      * @apiNote
-     * Invoked by the {@code applyAllOrphansAndUnsupported} sweep after
-     * the orphan batch has been replayed, draining the queue so the same
-     * mutations are not re-played on the next tick.
+     * Invoked after the orphan batch has been replayed, draining the queue
+     * so the same mutations are not re-played on the next tick.
      *
      * @param collectionName the collection name
      */
@@ -3227,8 +3225,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * encryption on Meta's servers under E2EE attestation rather than on
      * the third-party app; this cache memoizes which peers have already
      * been verified as hosted so the verification handshake is not re-run
-     * on every message. The underlying WA Web codename is "coex", short
-     * for "coexistence".
+     * on every message.
      *
      * @param userJid the user {@link Jid} to record
      */
@@ -3273,17 +3270,15 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Evicts the given chat from the UTM-read cache, so that its UTM payload
      * will be re-read the next time it is requested. Invoked when a fresh
-     * UTM value is persisted for the chat, matching WA Web's
-     * {@code WAWebUpdateUtmAction.addUtmToChat} flow.
+     * click-to-WhatsApp UTM value is persisted for the chat.
      *
      * @param chatJid the chat JID to forget; {@code null} is ignored
      */
     void deleteUtmReadChatId(Jid chatJid);
 
     /**
-     * Clears every entry from the UTM-read cache. Mirrors the
-     * {@code clearAll} lifecycle hook of {@code WAWebChatUtmCache}, which
-     * is called during logout / account-swap.
+     * Clears every entry from the UTM-read cache, typically during logout
+     * or account-swap.
      */
     void clearUtmReadChatIds();
 
@@ -3320,11 +3315,9 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the last server-supplied blocklist digest.
      *
      * @apiNote
-     * Mirrors WA Web's {@code WAWebUserPrefsMultiDevice.getBlocklistHash}
-     * UserPrefs entry. Pass the value back to
-     * {@code <iq xmlns="blocklist" type="get">} so the relay can
-     * answer with the cache-match short-circuit when the local cache
-     * is still authoritative.
+     * The client passes this digest back when refreshing the block list so
+     * the server can answer with a cache-match short-circuit while the
+     * local cache is still authoritative.
      *
      * @return an {@code Optional} carrying the digest, or empty when
      *         no fetch has succeeded yet
@@ -3334,10 +3327,6 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Stores the latest server-supplied blocklist digest.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebUserPrefsMultiDevice.setBlocklistHash}
-     * UserPrefs setter.
-     *
      * @param blocklistHash the digest to remember, or {@code null} to
      *                      clear the cache
      * @return this store for fluent chaining
@@ -3345,13 +3334,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setBlocklistHash(String blocklistHash);
 
     /**
-     * Returns whether the local blocklist has been migrated from PN to
-     * LID addressing.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebBlocklistMigration.isBlocklistMigrated} UserPrefs
-     * flag.
+     * Returns whether the local blocklist has been migrated from phone-number
+     * to LID addressing.
      *
      * @return {@code true} when the blocklist has been migrated
      */
@@ -3360,38 +3344,26 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the blocklist-migrated flag.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebBlocklistMigration.setBlocklistMigrated} and
-     * {@code setBlocklistUnmigrated} UserPrefs setters.
-     *
      * @param blocklistMigrated the new flag value
      * @return this store for fluent chaining
      */
     WhatsAppStore setBlocklistMigrated(boolean blocklistMigrated);
 
     /**
-     * Returns whether the relay has delivered a LID-addressed blocklist
+     * Returns whether the server has delivered a LID-addressed blocklist
      * before the device has completed its own 1:1 LID migration.
      *
      * @apiNote
-     * Mirrors WA Web's
-     * {@code WAReceivedBlocklistMigrationBefore1x1Migration} UserPrefs
-     * entry. The deferred blocklist migration runs after the 1:1 LID
-     * migration completes.
+     * The deferred blocklist migration runs after the 1:1 LID migration
+     * completes.
      *
-     * @return {@code true} when the relay has delivered a
+     * @return {@code true} when the server has delivered a
      *         LID-addressed blocklist early
      */
     boolean receivedBlocklistMigrationBefore1x1Migration();
 
     /**
      * Sets the early-blocklist-migration flag.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAReceivedBlocklistMigrationBefore1x1Migration} UserPrefs
-     * setter.
      *
      * @param value the new flag value
      * @return this store for fluent chaining
@@ -3576,16 +3548,16 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * the mutated row when present.
      *
      * @apiNote
-     * Used by sync action handlers that mutate group state without a
-     * server round-trip; today the only field honoured is
-     * {@link GroupMetadataEdit#statusMuted() statusMuted}, driven by the
-     * {@code WAWebUserStatusMuteSync.applyMutations} sync action.
+     * Used by the settings-sync machinery that mutates group state without
+     * a server round-trip; today the only field honoured is
+     * {@link GroupMetadataEdit#statusMuted() statusMuted}, set when the user
+     * mutes a group's status updates.
      *
      * @implNote
      * This implementation skips other fields on the edit (subject,
      * description, picture, settings flags) because they are
      * server-authoritative and only become visible to the local store via
-     * a subsequent {@code group_metadata} notification. Returns
+     * a subsequent group-metadata notification. Returns
      * {@link Optional#empty()} when the target group has no metadata row.
      *
      * @param groupJid the group or community {@link Jid}, must not be {@code null}
@@ -4230,8 +4202,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the Notification Content Token salt issued by the server.
      * WhatsApp uses this salt to derive opaque per-notification tokens
      * that let the OS push-notification provider (APNs/FCM) deliver a
-     * notice without learning the chat content. (Originally exposed under
-     * the WA Web codename "NCT".)
+     * notice without learning the chat content.
      *
      * @return an {@code Optional} containing the salt if known
      */
@@ -4752,8 +4723,6 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * are the one-shot tooltips and banners WhatsApp shows the first time
      * a user hits a new feature; an entry whose flag is {@code true} means
      * the hint has already been dismissed and should not appear again.
-     * (Originally exposed under the WA Web codename "NUX", short for
-     * "New User Experience".)
      *
      * @return an unmodifiable collection of onboarding-hint states, never
      *         {@code null}
@@ -5210,8 +5179,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Drives WAM buffer header continuity across restarts: every WAM
      * buffer carries a per-stream uint16 sequence number in its 8-byte
      * header, and persisting it ensures the server does not see a reset
-     * to {@code 1} after every restart, matching WhatsApp Web's
-     * {@code WAWebWamStorage.getNextSequenceNumberForStream} semantics.
+     * to {@code 1} after every restart.
      *
      * @param channel the transport channel, must not be {@code null}
      * @return an {@link OptionalInt} containing the persisted next
@@ -5295,8 +5263,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * ties the account to its subscription record (plan id, billing
      * status, ToS acceptance, link with the Meta Accounts Center record),
      * so both consumer and admin flows can resolve the right subscription
-     * profile. The underlying WA Web codename is "WAMO", short for
-     * "WhatsApp Monetisation".
+     * profile.
      *
      * @return an {@link Optional} containing the user id if the server has
      *         issued one
@@ -5412,8 +5379,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the binary definition (encoded protobuf) of the custom AI
      * bot this account has authored, if any. WhatsApp's AI Studio lets
      * users create custom AI personas; the definition blob holds the
-     * persona prompt, name and avatar. (The underlying WA Web codename
-     * for these bots is "UGC", short for "user-generated content".)
+     * persona prompt, name and avatar.
      *
      * @return an {@code Optional} containing the encoded bot definition
      */
@@ -5432,13 +5398,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the on/off status of the AI Business Agent for this account.
      *
      * @apiNote
-     * Surfaces the WhatsApp Business AI Agent toggle (referred to
-     * internally by the WA Web codename "Maiba" / "Maiba AI Hub"), which
-     * lets a business owner put an AI assistant in front of customer
-     * chats via a Cloud-API thread takeover. The status records whether
-     * the AI agent is currently enabled, disabled or pending server
-     * confirmation and is updated by the
-     * {@code maiba_ai_features_control} sync action.
+     * Surfaces the WhatsApp Business AI Agent toggle, which lets a business
+     * owner put an AI assistant in front of customer chats. The status
+     * records whether the AI agent is currently enabled, disabled or
+     * pending server confirmation.
      *
      * @implNote
      * This implementation stores the value verbatim for round-trip
@@ -5478,10 +5441,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns the clock skew between the server and the local clock, in
-     * seconds. Computed as the difference between the server timestamp
-     * carried by the {@code <success>} stanza's {@code t} attribute and the
-     * local epoch seconds, then persisted so every timestamp-aware module
-     * can rebase comparisons against server time.
+     * seconds. Computed as the difference between the server-supplied
+     * connect timestamp and the local epoch seconds, then persisted so
+     * every timestamp-aware module can rebase comparisons against server
+     * time.
      *
      * @return the stored clock skew in seconds, or {@code 0} when never set
      */
@@ -5499,9 +5462,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns the timestamp of the last group AB-props emergency push
-     * signalled by the server through the {@code <success>} stanza's
-     * {@code group_abprops} attribute. Used on subsequent syncs to decide
-     * whether the delta push has already been applied.
+     * signalled by the server on connect. Used on subsequent syncs to
+     * decide whether the delta push has already been applied.
      *
      * @return an {@link Optional} containing the last emergency push
      *         timestamp, or empty when none has been recorded

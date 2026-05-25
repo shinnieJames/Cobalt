@@ -1,7 +1,5 @@
 import { parseArgs } from "node:util";
-import { fetchWhatsAppWebJs } from "./whatsapp/fetcher.js";
-import { parseEnums } from "./parser/enum-parser.js";
-import { parseEvents } from "./parser/event-parser.js";
+import { extractWamDefinitions } from "./whatsapp/wam-extractor.js";
 import { writeEnums } from "./generator/java-enum-writer.js";
 import { writeEvents } from "./generator/java-event-writer.js";
 
@@ -23,22 +21,14 @@ async function main(): Promise<void> {
     console.log(`Package    : ${pkg}`);
     console.log("");
 
-    // 1. Fetch JS from WhatsApp Web
-    const jsContent = await fetchWhatsAppWebJs();
-    console.log(`\nTotal JS content: ${(jsContent.length / 1_000_000).toFixed(1)} MB`);
+    const { enums, events } = await extractWamDefinitions();
 
-    // 2. Parse enum definitions
-    console.log("\nParsing WAM enum definitions...");
-    const { enums, exportMap } = parseEnums(jsContent);
-    console.log(`Found ${enums.length} WAM enums`);
+    console.log(`\nFound ${enums.length} WAM enums`);
     for (const e of enums) {
         console.log(`  ${e.javaName}: ${e.constants.length} constants`);
     }
 
-    // 3. Parse event definitions
-    console.log("\nParsing WAM event definitions...");
-    const events = parseEvents(jsContent, exportMap);
-    console.log(`Found ${events.length} WAM events`);
+    console.log(`\nFound ${events.length} WAM events`);
     for (const ev of events) {
         const extras: string[] = [];
         if (ev.channel !== "regular") extras.push(`channel=${ev.channel}`);
@@ -48,12 +38,10 @@ async function main(): Promise<void> {
         console.log(`  ${ev.javaClassName}: ${ev.fields.length} fields, id=${ev.eventId}${suffix}`);
     }
 
-    // 4. Generate Java enum files
     console.log("\nGenerating Java enum files...");
     const enumCount = await writeEnums(enums, outputDir, pkg);
     console.log(`Wrote ${enumCount} enum files`);
 
-    // 5. Generate Java event files
     console.log("\nGenerating Java event files...");
     const eventCount = await writeEvents(events, outputDir, pkg);
     console.log(`Wrote ${eventCount} event files`);

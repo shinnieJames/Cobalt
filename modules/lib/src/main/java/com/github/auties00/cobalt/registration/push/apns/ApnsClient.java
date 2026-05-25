@@ -12,28 +12,22 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * The public-facing APNS-backed implementation of
- * {@link WhatsAppDevicePushClient} that receives WhatsApp's silent
- * verification push while pretending to be the
- * {@code net.whatsapp.WhatsApp} (or {@code net.whatsapp.WhatsAppSMB})
- * iOS app.
+ * Receives WhatsApp's silent verification push over Apple Push Notification Service while
+ * impersonating the {@code net.whatsapp.WhatsApp} (or {@code net.whatsapp.WhatsAppSMB}) iOS app.
  *
- * <p>Owns three single-responsibility collaborators and orchestrates
- * the lifecycle around them:
+ * <p>The public-facing {@link WhatsAppDevicePushClient} implementation for iOS. It owns three
+ * single-responsibility collaborators and orchestrates the lifecycle around them:
  * <ul>
- *   <li>{@link ApnsActivation} runs the FairPlay-signed activation
- *       handshake against {@code albert.apple.com} on demand.</li>
- *   <li>{@link ApnsCourierConnection} owns the long-lived TLS
- *       courier stream, the request multiplexer, and the keep-alive
- *       loop.</li>
- *   <li>{@link ApnsPushCode} is the single-value sync primitive that
- *       hands the verification code back to
- *       {@link #getPushCode()}.</li>
+ *   <li>{@link ApnsActivation} runs the FairPlay-signed activation handshake against
+ *       {@code albert.apple.com} on demand.</li>
+ *   <li>{@link ApnsCourierConnection} owns the long-lived TLS courier stream, the request
+ *       multiplexer, and the keep-alive loop.</li>
+ *   <li>{@link ApnsPushCode} is the single-value sync primitive that hands the verification code
+ *       back to {@link #getPushCode()}.</li>
  * </ul>
  *
- * <p>State is owned by the caller via {@link #getSession()} and
- * {@link #loadSession(ApnsSession)}; the client never touches the
- * file system. Typical first-run usage:
+ * <p>State is owned by the caller via {@link #getSession()} and {@link #loadSession(ApnsSession)};
+ * the client never touches the file system. Typical first-run usage:
  *
  * <pre>{@code
  *   try (var apns = ApnsClient.newSession()) {
@@ -44,8 +38,8 @@ import java.util.concurrent.atomic.AtomicReference;
  *   }
  * }</pre>
  *
- * <p>Subsequent runs reuse the activation certificate and skip the
- * {@code albert.apple.com} round-trip:
+ * <p>Subsequent runs reuse the activation certificate and skip the {@code albert.apple.com}
+ * round-trip:
  *
  * <pre>{@code
  *   try (var apns = ApnsClient.loadSession(saved)) {
@@ -55,135 +49,104 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable {
     /**
-     * The cached, unmodifiable set of platforms this client can
-     * authenticate against.
+     * Holds the cached, unmodifiable set of platforms this client can authenticate against.
      *
-     * @apiNote
-     * Contains exactly {@link ClientPlatformType#IOS} and
-     * {@link ClientPlatformType#IOS_BUSINESS}; returned by
-     * {@link #supportedPlatforms()}.
+     * <p>Contains exactly {@link ClientPlatformType#IOS} and {@link ClientPlatformType#IOS_BUSINESS};
+     * returned by {@link #supportedPlatforms()}.
      */
     private static final Set<ClientPlatformType> SUPPORTED_PLATFORMS =
             Set.of(ClientPlatformType.IOS, ClientPlatformType.IOS_BUSINESS);
 
     /**
-     * The lifecycle states of the client.
+     * Enumerates the lifecycle states of the client.
      *
-     * @apiNote
-     * Transitions:
-     * <ul>
-     *   <li>{@link #UNAUTHENTICATED} via
-     *       {@link #authenticate(WhatsAppDevice)} to
-     *       {@link #AUTHENTICATING};</li>
-     *   <li>{@link #AUTHENTICATING} via success to
-     *       {@link #AUTHENTICATED} or via error back to
-     *       {@link #UNAUTHENTICATED};</li>
-     *   <li>any state via {@link #close()} to {@link #CLOSED}.</li>
-     * </ul>
+     * <p>Transitions are: {@link #UNAUTHENTICATED} to {@link #AUTHENTICATING} on
+     * {@link #authenticate(WhatsAppDevice)}; {@link #AUTHENTICATING} to {@link #AUTHENTICATED} on
+     * success or back to {@link #UNAUTHENTICATED} on error; and any state to {@link #CLOSED} on
+     * {@link #close()}.
      */
     private enum State {
         /**
-         * No session bound.
+         * Indicates no session is bound.
          *
-         * @apiNote
-         * Only {@link #authenticate(WhatsAppDevice)} and
-         * {@link #close()} are valid in this state.
+         * <p>Only {@link #authenticate(WhatsAppDevice)} and {@link #close()} are valid in this state.
          */
         UNAUTHENTICATED,
         /**
-         * {@link #authenticate(WhatsAppDevice)} is currently running
-         * on another thread.
+         * Indicates {@link #authenticate(WhatsAppDevice)} is currently running on another thread.
          *
-         * @apiNote
-         * Concurrent callers observing this state throw
-         * {@link IllegalStateException}.
+         * <p>Concurrent callers observing this state throw {@link IllegalStateException}.
          */
         AUTHENTICATING,
         /**
-         * Activation has succeeded and the courier is running.
+         * Indicates activation has succeeded and the courier is running.
          *
-         * @apiNote
-         * The read-only accessors ({@link #getSession()},
-         * {@link #getPushToken()}, {@link #getPushCode()}) are
-         * usable.
+         * <p>The read-only accessors ({@link #getSession()}, {@link #getPushToken()},
+         * {@link #getPushCode()}) are usable in this state.
          */
         AUTHENTICATED,
         /**
-         * {@link #close()} has been invoked.
+         * Indicates {@link #close()} has been invoked.
          *
-         * @apiNote
-         * All accessors throw and the courier is being torn down.
+         * <p>All accessors throw and the courier is being torn down in this state.
          */
         CLOSED
     }
 
     /**
-     * The pre-built activation helper bound to the configured proxy.
+     * Holds the pre-built activation helper bound to the configured proxy.
      *
-     * @apiNote
-     * Stateless beyond its dependencies, so a single instance is
-     * reused across {@link #authenticate(WhatsAppDevice)} retries.
+     * <p>Stateless beyond its dependencies, so a single instance is reused across
+     * {@link #authenticate(WhatsAppDevice)} retries.
      */
     private final ApnsActivation activation;
 
     /**
-     * The single-value sync primitive that holds the verification
-     * code once it arrives over the courier stream.
+     * Holds the single-value sync primitive that carries the verification code once it arrives over
+     * the courier stream.
      *
-     * @apiNote
-     * Shared with {@link #connection} so the read pump can hand the
-     * code straight to any {@link #getPushCode()} caller blocked on
-     * its {@code waitForCode} method.
+     * <p>Shared with {@link #connection} so the read pump can hand the code straight to any
+     * {@link #getPushCode()} caller blocked on its {@code waitForCode} method.
      */
     private final ApnsPushCode pushCode;
 
     /**
-     * The proxy URI handed to {@link #connection} on construction.
+     * Holds the proxy URI handed to {@link #connection} on construction.
      *
-     * @apiNote
-     * {@code null} for direct connections; honoured for the bag HTTP
-     * fetch but not for the courier TLS socket (which is dialled
-     * directly).
+     * <p>{@code null} for direct connections; honoured for the bag HTTP fetch but not for the courier
+     * TLS socket, which is dialled directly.
      */
     private final URI proxy;
 
     /**
-     * The lifecycle state.
+     * Holds the lifecycle state.
      *
-     * @apiNote
-     * Transitioned via {@link AtomicReference#compareAndSet} so
-     * concurrent {@link #authenticate(WhatsAppDevice)} callers see a
-     * consistent view and only one wins the race.
+     * <p>Transitioned via {@link AtomicReference#compareAndSet} so concurrent
+     * {@link #authenticate(WhatsAppDevice)} callers see a consistent view and only one wins the race.
      */
     private final AtomicReference<State> state;
 
     /**
-     * The session bound during
-     * {@link #authenticate(WhatsAppDevice)} or
+     * Holds the session bound during {@link #authenticate(WhatsAppDevice)} or
      * {@link #loadSession(ApnsSession, URI)}.
      *
-     * @apiNote
-     * {@code null} until authentication succeeds; reset to
-     * {@code null} on auth failure so a retry sees a clean slate.
+     * <p>{@code null} until authentication succeeds; reset to {@code null} on auth failure so a retry
+     * sees a clean slate.
      */
     private volatile ApnsSession session;
 
     /**
-     * The courier connection owning the long-lived TLS stream.
+     * Holds the courier connection owning the long-lived TLS stream.
      *
-     * @apiNote
-     * {@code null} until authentication completes; closed and
-     * dereferenced by {@link #close()}.
+     * <p>{@code null} until authentication completes; closed and dereferenced by {@link #close()}.
      */
     private volatile ApnsCourierConnection connection;
 
     /**
      * Constructs an unauthenticated client.
      *
-     * @apiNote
-     * Builds the activation helper and the push-code holder; no
-     * socket is opened. Public callers go through the static
-     * factories.
+     * <p>Builds the activation helper and the push-code holder; no socket is opened. Public callers
+     * go through the static factories.
      *
      * @param proxy proxy URI, or {@code null} for direct
      */
@@ -197,9 +160,8 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     /**
      * Creates a fresh, unauthenticated client.
      *
-     * @apiNote
-     * The caller must call {@link #authenticate(WhatsAppDevice)}
-     * before any of the read-only accessors become usable.
+     * <p>The caller must call {@link #authenticate(WhatsAppDevice)} before any of the read-only
+     * accessors become usable.
      *
      * @return a new unauthenticated client
      */
@@ -208,15 +170,11 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * Creates a fresh, unauthenticated client routed through a
-     * proxy.
+     * Creates a fresh, unauthenticated client routed through a proxy.
      *
-     * @apiNote
-     * The proxy is honoured for the bag HTTP fetch but not for the
-     * courier TLS socket.
+     * <p>The proxy is honoured for the bag HTTP fetch but not for the courier TLS socket.
      *
-     * @param proxy proxy URI ({@code http(s)://...},
-     *              {@code socks://...}), or {@code null} for direct
+     * @param proxy proxy URI ({@code http(s)://...}, {@code socks://...}), or {@code null} for direct
      * @return a new unauthenticated client
      */
     public static ApnsClient newSession(URI proxy) {
@@ -224,18 +182,13 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * Restores a client from a previously captured
-     * {@link ApnsSession}.
+     * Restores a client from a previously captured {@link ApnsSession}.
      *
-     * @apiNote
-     * Skips the activation handshake (the device certificate
-     * persists for roughly three years) and immediately starts the
-     * courier connection. The returned client is already in
-     * {@code AUTHENTICATED} state, so
-     * {@link #authenticate(WhatsAppDevice)} would throw.
+     * <p>Skips the activation handshake (the device certificate persists for roughly three years) and
+     * immediately starts the courier connection. The returned client is already in
+     * {@code AUTHENTICATED} state, so {@link #authenticate(WhatsAppDevice)} would throw.
      *
-     * @param session the session previously obtained from
-     *                {@link #getSession()}
+     * @param session the session previously obtained from {@link #getSession()}
      * @return a restored, listening client
      * @throws IOException if the courier handshake fails
      */
@@ -244,15 +197,12 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * Restores a client from a previously captured
-     * {@link ApnsSession} routed through a proxy.
+     * Restores a client from a previously captured {@link ApnsSession} routed through a proxy.
      *
-     * @apiNote
-     * Behaves like {@link #loadSession(ApnsSession)} but binds the
-     * bag HTTP fetch to the given proxy.
+     * <p>Behaves like {@link #loadSession(ApnsSession)} but binds the bag HTTP fetch to the given
+     * proxy.
      *
-     * @param session the session previously obtained from
-     *                {@link #getSession()}
+     * @param session the session previously obtained from {@link #getSession()}
      * @param proxy   proxy URI, or {@code null} for direct
      * @return a restored, listening client
      * @throws IOException if the courier handshake fails
@@ -271,9 +221,7 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns an unmodifiable two-element set containing
-     * {@link ClientPlatformType#IOS} and
+     * <p>Returns an unmodifiable two-element set containing {@link ClientPlatformType#IOS} and
      * {@link ClientPlatformType#IOS_BUSINESS}.
      */
     @Override
@@ -282,35 +230,32 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * {@inheritDoc}
+     * Selects the WhatsApp APNS configuration from the device platform, runs the activation
+     * handshake, and starts the courier connection.
      *
-     * @apiNote
-     * Selects {@link ApnsConfig#WHATSAPP_PERSONAL} or
-     * {@link ApnsConfig#WHATSAPP_BUSINESS} from
-     * {@code device.platform()}, runs the activation handshake
-     * (skipping the network call when the session is already
-     * populated), and starts the courier connection. After this
-     * call returns successfully, {@link #isAuthenticated()} reports
-     * {@code true} and the read-only accessors become usable.
+     * <p>Maps {@code device.platform()} to {@link ApnsConfig#WHATSAPP_PERSONAL} for
+     * {@link ClientPlatformType#IOS} or {@link ApnsConfig#WHATSAPP_BUSINESS} for
+     * {@link ClientPlatformType#IOS_BUSINESS}, runs the activation handshake (skipping the network
+     * call when the session is already populated), and starts the courier connection. After this call
+     * returns successfully {@link #isAuthenticated()} reports {@code true} and the read-only accessors
+     * become usable. Unlike the idempotent contract declared by
+     * {@link WhatsAppDevicePushClient#authenticate(WhatsAppDevice)}, a call made while the client is
+     * already authenticating, authenticated, or closed throws {@link IllegalStateException} rather
+     * than acting as a no-op.
      *
-     * @implNote
-     * This implementation is thread-safe via
-     * {@link AtomicReference#compareAndSet}: only the first
-     * concurrent caller actually runs the activation. Any other
-     * caller observing {@code AUTHENTICATING} or
-     * {@code AUTHENTICATED} throws {@link IllegalStateException}.
-     * On failure the state reverts to {@code UNAUTHENTICATED} via
-     * {@link #rollbackAuthentication()} so the caller may retry.
+     * @implNote This implementation is thread-safe via {@link AtomicReference#compareAndSet}: only the
+     *           first concurrent caller actually runs the activation, and any other caller observing
+     *           {@code AUTHENTICATING} or {@code AUTHENTICATED} throws {@link IllegalStateException}.
+     *           On failure the state reverts to {@code UNAUTHENTICATED} via
+     *           {@link #rollbackAuthentication()} so the caller may retry.
      *
      * @param device the device whose platform selects the WA config
-     * @throws IllegalArgumentException if {@code device.platform()}
-     *                                  is neither {@code IOS} nor
-     *                                  {@code IOS_BUSINESS}
-     * @throws IllegalStateException    if the client is already
-     *                                  authenticating, authenticated,
-     *                                  or closed
-     * @throws UncheckedIOException     wrapping any HTTP, TLS, or
-     *                                  protocol failure
+     * @throws IllegalArgumentException if {@code device.platform()} is neither
+     *                                  {@link ClientPlatformType#IOS} nor
+     *                                  {@link ClientPlatformType#IOS_BUSINESS}
+     * @throws IllegalStateException    if the client is already authenticating, authenticated, or
+     *                                  closed
+     * @throws UncheckedIOException     wrapping any HTTP, TLS, or protocol failure
      */
     @Override
     public void authenticate(WhatsAppDevice device) {
@@ -341,14 +286,10 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * Wipes the partial state left by a failed
-     * {@link #authenticate(WhatsAppDevice)} attempt.
+     * Wipes the partial state left by a failed {@link #authenticate(WhatsAppDevice)} attempt.
      *
-     * @apiNote
-     * Reverts the lifecycle back to {@code UNAUTHENTICATED} so the
-     * caller may retry; clears {@link #session} and
-     * {@link #connection} so a subsequent attempt sees a clean
-     * slate.
+     * <p>Reverts the lifecycle back to {@code UNAUTHENTICATED} so the caller may retry, and clears
+     * {@link #session} and {@link #connection} so a subsequent attempt sees a clean slate.
      */
     private void rollbackAuthentication() {
         this.session = null;
@@ -359,10 +300,8 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@code true} iff the client is in {@code AUTHENTICATED}
-     * state, i.e. {@link #authenticate(WhatsAppDevice)} or
-     * {@link #loadSession(ApnsSession)} has completed and the
+     * <p>Returns {@code true} exactly when the client is in {@code AUTHENTICATED} state, that is when
+     * {@link #authenticate(WhatsAppDevice)} or {@link #loadSession(ApnsSession)} has completed and the
      * courier is running.
      */
     @Override
@@ -373,15 +312,11 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     /**
      * Returns the live {@link ApnsSession} backing this client.
      *
-     * @apiNote
-     * Callers may pass the result back to
-     * {@link #loadSession(ApnsSession)} on a future run to keep the
-     * same device identity, or hand it to {@code ApnsSessionSpec}
-     * for byte-level persistence.
+     * <p>Callers may pass the result back to {@link #loadSession(ApnsSession)} on a future run to keep
+     * the same device identity, or hand it to {@code ApnsSessionSpec} for byte-level persistence.
      *
      * @return the live session
-     * @throws IllegalStateException if the client is not
-     *                               authenticated
+     * @throws IllegalStateException if the client is not authenticated
      */
     public ApnsSession getSession() {
         requireAuthenticated();
@@ -389,23 +324,17 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the push token for the primary topic of the configured WhatsApp flavour.
      *
-     * @apiNote
-     * Returns the push token for the primary topic of the
-     * configured WhatsApp flavour (the first entry in
-     * {@code session.config().topics()}, e.g.
-     * {@code "net.whatsapp.WhatsApp"} for personal or
-     * {@code "net.whatsapp.WhatsAppSMB"} for business). Blocking;
-     * safe to call repeatedly because subsequent calls reuse the
-     * existing courier connection.
+     * <p>The primary topic is the first entry in {@code session.config().topics()}, for example
+     * {@code "net.whatsapp.WhatsApp"} for personal or {@code "net.whatsapp.WhatsAppSMB"} for business.
+     * Blocking; safe to call repeatedly because subsequent calls reuse the existing courier
+     * connection. The token is hex-encoded, sourced from the {@code regcode}-independent
+     * {@code GET_TOKEN} courier exchange.
      *
      * @return the hex-encoded push token bytes
-     * @throws UncheckedIOException  wrapping any courier or
-     *                               protocol failure
-     * @throws IllegalStateException if the client is not
-     *                               authenticated or the session has
-     *                               no topics
+     * @throws UncheckedIOException  wrapping any courier or protocol failure
+     * @throws IllegalStateException if the client is not authenticated or the session has no topics
      */
     @Override
     public String getPushToken() {
@@ -422,34 +351,25 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the WhatsApp verification code carried by the silent APNS notification WhatsApp's server
+     * emits in response to the {@code /v2/exist} call.
      *
-     * @apiNote
-     * Returns the WhatsApp verification code carried by the silent
-     * APNS notification WhatsApp's server emits in response to the
-     * {@code /v2/exist} call. Returns immediately if the
-     * notification has already arrived, otherwise blocks the
-     * calling thread until either the notification arrives or
-     * {@link #close()} is invoked. Safe to call from multiple
-     * threads concurrently; every caller observes the same
-     * delivered code because the WhatsApp registration flow only
-     * ever sends one per session.
+     * <p>Returns immediately if the notification has already arrived, otherwise blocks the calling
+     * thread until either the notification arrives or {@link #close()} is invoked. Safe to call from
+     * multiple threads concurrently; every caller observes the same delivered code because the
+     * WhatsApp registration flow only ever sends one per session. Unlike the empty-string contract
+     * declared by {@link WhatsAppDevicePushClient#getPushCode()}, this implementation blocks for a
+     * code rather than returning the empty string when no push is in flight, and throws on close.
      *
-     * @implNote
-     * This implementation translates the {@link InterruptedException}
-     * thrown by {@link ApnsPushCode#waitForCode()} into a
-     * {@link RuntimeException} after restoring the interrupt flag,
-     * because the interface contract does not include a checked
-     * {@link InterruptedException}.
+     * @implNote This implementation translates the {@link InterruptedException} thrown by
+     *           {@link ApnsPushCode#waitForCode()} into a {@link RuntimeException} after restoring the
+     *           interrupt flag, because the interface contract does not include a checked
+     *           {@link InterruptedException}.
      *
-     * @return the verification code from the notification's
-     *         {@code regcode} JSON field
-     * @throws UncheckedIOException  if the client has been closed
-     *                               before a code was delivered
-     * @throws RuntimeException      if the caller is interrupted
-     *                               while waiting
-     * @throws IllegalStateException if the client is not
-     *                               authenticated
+     * @return the verification code from the notification's {@code regcode} JSON field
+     * @throws UncheckedIOException  if the client has been closed before a code was delivered
+     * @throws RuntimeException      if the caller is interrupted while waiting
+     * @throws IllegalStateException if the client is not authenticated
      */
     @Override
     public String getPushCode() {
@@ -467,12 +387,10 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     /**
      * Throws if the client is not in {@code AUTHENTICATED} state.
      *
-     * @apiNote
-     * Used to guard accessors that depend on a populated
-     * {@link #session} and a running courier connection.
+     * <p>Guards the accessors that depend on a populated {@link #session} and a running courier
+     * connection.
      *
-     * @throws IllegalStateException if the client is not
-     *                               authenticated
+     * @throws IllegalStateException if the client is not authenticated
      */
     private void requireAuthenticated() {
         var current = state.get();
@@ -485,11 +403,9 @@ public final class ApnsClient implements WhatsAppDevicePushClient, AutoCloseable
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Stops the courier read pump and keep-alive threads, tears
-     * down the TLS socket, transitions the lifecycle to
-     * {@code CLOSED}, and unblocks every pending
-     * {@link #getPushCode()} caller. Idempotent.
+     * <p>Stops the courier read pump and keep-alive threads, tears down the TLS socket, transitions
+     * the lifecycle to {@code CLOSED}, and unblocks every pending {@link #getPushCode()} caller.
+     * Idempotent.
      */
     @Override
     public void close() {

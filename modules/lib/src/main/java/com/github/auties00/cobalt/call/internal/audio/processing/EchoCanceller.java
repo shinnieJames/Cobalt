@@ -10,26 +10,38 @@ import java.lang.foreign.ValueLayout;
 import java.util.Objects;
 
 /**
- * Acoustic echo canceller, backed by speexdsp's
- * {@code speex_echo_*} family. Bindings are jextract-generated; this
- * class is the high-level idiomatic-Java wrapper around them.
+ * Wraps the speexdsp {@code speex_echo_*} family to subtract the far-end (speaker) signal from the
+ * near-end (microphone) capture.
  *
- * <p>Pipeline:
+ * <p>An instance holds a single C-side {@code SpeexEchoState} sized to one fixed frame and one
+ * adaptive-filter length, both supplied at construction. For each frame {@link #cancel(short[], short[])}
+ * takes the microphone capture together with the audio that was played out over the same interval and
+ * returns a fresh frame with the acoustic echo removed. The adaptive filter converges over successive
+ * frames; {@link #reset()} clears that adaptation when the acoustic path changes (a speaker-volume
+ * change, a headphone being plugged in, and similar). The instance is single-threaded and owns native
+ * memory; {@link #close()} destroys the underlying state and must run when the call ends.
  *
- * <pre>{@code
- *   var aec = new EchoCanceller(160 /*10ms@16kHz*\/, 1600 /*100ms tail*\/, 16000);
- *   while (call running) {
- *       short[] far  = receivedFromPeerThisFrame();
- *       short[] near = capturedFromMicThisFrame();
- *       short[] cleaned = aec.cancel(near, far);
- *       // feed `cleaned` into Opus encode
- *   }
- *   aec.close();
- * }</pre>
+ * <p>A canceller pairs with an {@link AudioPreprocessor} over the same frame size and sample rate.
+ * The canceller runs first on each frame and the preprocessor second, and
+ * {@link AudioPreprocessor#linkEchoState(EchoCanceller)} lets the preprocessor's residual-echo
+ * suppressor consult this canceller's estimate through {@link #state()}:
  *
- * <p>Filter length: speexdsp recommends {@code ~tail_ms * Fs / 1000};
- * 100 ms is a good default for a normal-sized room. Longer is not
- * better — adapter convergence slows.
+ * {@snippet :
+ * var aec = new EchoCanceller(160, 1600, 16000);
+ * while (callRunning) {
+ *     short[] far  = receivedFromPeerThisFrame();
+ *     short[] near = capturedFromMicThisFrame();
+ *     short[] cleaned = aec.cancel(near, far);
+ *     // feed cleaned into Opus encode
+ * }
+ * aec.close();
+ * }
+ *
+ * @implNote This implementation expresses the adaptive-filter tail as a sample count
+ * ({@code filterLength}) rather than a duration. speexdsp recommends a tail of
+ * {@code tailMs * sampleRate / 1000} samples; 100 ms (1600 samples at 16 kHz) suits a normal-sized
+ * room. A longer filter does not improve cancellation unconditionally: a larger filter slows the
+ * adaptive convergence, so the tail is sized to the expected acoustic path rather than maximized.
  */
 public final class EchoCanceller implements AutoCloseable {
     static {
@@ -37,56 +49,73 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Per-instance arena for native scratch buffers (state pointer
-     * is heap-allocated by speexdsp itself, so isn't part of the
-     * arena's lifetime).
+     * Owns the native scratch buffers allocated for this instance.
+     *
+     * <p>This arena is created shared at construction and closed by {@link #close()}, releasing
+     * {@link #recBuf}, {@link #playBuf}, and {@link #outBuf}. The C-side {@code SpeexEchoState} is
+     * allocated by speexdsp itself and is not part of this arena's lifetime; it is freed separately.
      */
     private final Arena arena;
 
     /**
-     * Pointer to the C-side {@code SpeexEchoState}; nulled out by
-     * {@link #close()}.
+     * Points to the C-side {@code SpeexEchoState} backing this canceller.
+     *
+     * <p>This field is assigned the value returned by {@code speex_echo_state_init} during
+     * construction and reset to {@link MemorySegment#NULL} by {@link #close()}. A {@code null} or
+     * {@code NULL} value marks a closed instance, which {@link #requireOpenState()} rejects.
      */
     private MemorySegment state;
 
     /**
-     * Per-channel sample count of one frame.
+     * Holds the per-channel sample count of one frame.
+     *
+     * <p>Both arrays passed to {@link #cancel(short[], short[])} must hold exactly this many samples,
+     * and the returned array holds exactly this many.
      */
     private final int frameSize;
 
     /**
-     * Reusable scratch segment for the mic (near-end) buffer.
+     * Provides reusable native storage for the microphone (near-end) frame handed to
+     * {@code speex_echo_cancellation}.
+     *
+     * <p>This segment spans {@code frameSize * 2} bytes and is reused across frames so that no
+     * per-call native allocation occurs for the input.
      */
     private final MemorySegment recBuf;
 
     /**
-     * Reusable scratch segment for the far-end (speaker) reference.
+     * Provides reusable native storage for the far-end (speaker) reference frame handed to
+     * {@code speex_echo_cancellation}.
      */
     private final MemorySegment playBuf;
 
     /**
-     * Reusable scratch segment for the cleaned output.
+     * Provides reusable native storage for the echo-cancelled output produced by
+     * {@code speex_echo_cancellation}.
+     *
+     * <p>The contents are copied into a freshly allocated {@code short[]} on each
+     * {@link #cancel(short[], short[])} call.
      */
     private final MemorySegment outBuf;
 
     /**
-     * Constructs a new echo canceller.
+     * Constructs an echo canceller sized to the given frame, adaptive-filter length, and sample rate.
      *
-     * @param frameSize    the per-channel sample count of one frame
-     *                     (e.g. 160 for 10 ms at 16 kHz)
-     * @param filterLength the AEC tail length in samples — should be
-     *                     roughly {@code tailMs * sampleRate / 1000}
-     * @param sampleRate   the input/output sample rate in Hz (used
-     *                     by the matching {@link AudioPreprocessor})
-     * @throws IllegalArgumentException if any argument is &lt; 1
-     * @throws UnsatisfiedLinkError     if libspeexdsp cannot be
-     *                                  loaded on the running
-     *                                  platform
+     * <p>The frame size and sample rate must match the {@link AudioPreprocessor} the call pairs this
+     * canceller with. On failure the shared arena is closed before the exception propagates, so a
+     * thrown constructor leaks no native memory.
+     *
+     * @param frameSize    the per-channel sample count of one frame, such as {@code 160} for 10 ms at 16 kHz
+     * @param filterLength the adaptive-filter tail length in samples, roughly {@code tailMs * sampleRate / 1000}
+     * @param sampleRate   the input and output sample rate in Hz, shared with the paired {@link AudioPreprocessor}
+     * @throws IllegalArgumentException if {@code frameSize}, {@code filterLength}, or {@code sampleRate} is less than {@code 1}
+     * @throws WhatsAppCallException.SpeexDsp if {@code speex_echo_state_init} fails or returns {@code NULL}
+     * @throws UnsatisfiedLinkError if libspeexdsp cannot be loaded on the running platform
      */
     public EchoCanceller(int frameSize, int filterLength, int sampleRate) {
-        if (frameSize < 1) throw new IllegalArgumentException("frameSize must be ≥ 1");
-        if (filterLength < 1) throw new IllegalArgumentException("filterLength must be ≥ 1");
-        if (sampleRate < 1) throw new IllegalArgumentException("sampleRate must be ≥ 1");
+        if (frameSize < 1) throw new IllegalArgumentException("frameSize must be >= 1");
+        if (filterLength < 1) throw new IllegalArgumentException("filterLength must be >= 1");
+        if (sampleRate < 1) throw new IllegalArgumentException("sampleRate must be >= 1");
         this.arena = Arena.ofShared();
         this.frameSize = frameSize;
         try {
@@ -106,19 +135,20 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Cancels the far-end echo from the near-end (mic) signal.
+     * Cancels the far-end echo present in the near-end microphone signal for one frame.
      *
-     * @param mic the mic capture (near-end) — exactly
-     *            {@link #frameSize()} mono int16 samples
-     * @param far the far-end (speaker) reference — what was played
-     *            this same frame, exactly {@link #frameSize()}
-     *            samples
-     * @return a fresh {@code short[]} of {@link #frameSize()}
-     *         containing the echo-cancelled mic signal
-     * @throws IllegalArgumentException if either array is the wrong
-     *                                  length
-     * @throws IllegalStateException    if {@link #close} has been
-     *                                  called
+     * <p>Both inputs are copied into native scratch, {@code speex_echo_cancellation} adapts its
+     * filter and subtracts the estimated echo, and the cleaned result is copied into a freshly
+     * allocated array. The {@code far} frame must be the audio that was played out over the same
+     * interval as the {@code mic} capture for the cancellation to align.
+     *
+     * @param mic the microphone (near-end) capture of exactly {@link #frameSize()} mono int16 samples
+     * @param far the far-end (speaker) reference played this same frame, of exactly {@link #frameSize()} samples
+     * @return a freshly allocated {@code short[]} of {@link #frameSize()} samples holding the echo-cancelled signal
+     * @throws NullPointerException if {@code mic} or {@code far} is {@code null}
+     * @throws IllegalArgumentException if either array does not hold exactly {@link #frameSize()} samples
+     * @throws IllegalStateException if this canceller has been closed
+     * @throws WhatsAppCallException.SpeexDsp if {@code speex_echo_cancellation} fails
      */
     public short[] cancel(short[] mic, short[] far) {
         Objects.requireNonNull(mic, "mic cannot be null");
@@ -143,9 +173,13 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Resets the canceller's adaptive filter state, e.g. on
-     * acoustic-path change (speaker volume bump, headphone plug,
-     * etc.).
+     * Resets the adaptive-filter state so cancellation re-converges from scratch.
+     *
+     * <p>This is intended for an acoustic-path change such as a speaker-volume change or a headphone
+     * being plugged in, where the previously learned filter no longer matches the path.
+     *
+     * @throws IllegalStateException if this canceller has been closed
+     * @throws WhatsAppCallException.SpeexDsp if {@code speex_echo_state_reset} fails
      */
     public void reset() {
         requireOpenState();
@@ -157,12 +191,14 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Returns the underlying {@code SpeexEchoState} pointer for use
-     * by {@link AudioPreprocessor#linkEchoState} — the preprocessor's
-     * residual-echo suppressor cooperates with the AEC's own
-     * estimate.
+     * Returns the underlying {@code SpeexEchoState} pointer for the paired preprocessor.
      *
-     * @return the state pointer
+     * <p>The returned pointer is consumed by {@link AudioPreprocessor#linkEchoState(EchoCanceller)},
+     * which hands it to the residual-echo suppressor so the suppressor cooperates with this
+     * canceller's adaptive estimate. The pointer is valid only while this canceller stays open.
+     *
+     * @return the live {@code SpeexEchoState} pointer
+     * @throws IllegalStateException if this canceller has been closed
      */
     MemorySegment state() {
         requireOpenState();
@@ -170,8 +206,9 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Throws if the underlying C state has been destroyed via
-     * {@link #close}.
+     * Verifies that the underlying C state is still live.
+     *
+     * @throws IllegalStateException if {@link #close()} has destroyed the underlying state
      */
     private void requireOpenState() {
         if (state == null || state.equals(MemorySegment.NULL)) {
@@ -180,7 +217,7 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Returns the configured frame size.
+     * Returns the per-channel frame size this canceller was constructed with.
      *
      * @return the per-channel samples per frame
      */
@@ -189,8 +226,13 @@ public final class EchoCanceller implements AutoCloseable {
     }
 
     /**
-     * Destroys the C-side state and releases scratch buffers.
-     * Idempotent.
+     * Destroys the C-side state and releases the scratch arena.
+     *
+     * <p>This method is idempotent: invoking it on an already-closed instance returns without effect.
+     * After a successful close the instance rejects every further operation through
+     * {@link #requireOpenState()}.
+     *
+     * @throws WhatsAppCallException.SpeexDsp if {@code speex_echo_state_destroy} fails
      */
     @Override
     public void close() {

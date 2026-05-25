@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -10,16 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for the M8 {@link CallInteraction} sealed hierarchy —
- * validates the wire-kind discriminator, field validation, and
- * pattern-match exhaustiveness.
+ * Covers the M8 {@link CallInteraction} sealed hierarchy: the wire-kind
+ * discriminator, field validation, and pattern-match exhaustiveness.
  */
 public class CallInteractionTest {
 
-    /**
-     * Each variant exposes the expected wire-kind string.
-     */
     @Test
+    @DisplayName("each variant exposes its expected wire-kind string")
     public void wireKindIsDistinctPerVariant() {
         assertEquals("reaction", new CallInteraction.Reaction("👍").wireKind());
         assertEquals("raise_hand", new CallInteraction.RaiseHand().wireKind());
@@ -30,10 +28,8 @@ public class CallInteractionTest {
                 new CallInteraction.KeyFrameRequest().wireKind());
     }
 
-    /**
-     * Reaction with empty / null emoji is rejected.
-     */
     @Test
+    @DisplayName("Reaction with empty or null emoji is rejected")
     public void emptyReactionRejected() {
         assertThrows(IllegalArgumentException.class,
                 () -> new CallInteraction.Reaction(""));
@@ -41,10 +37,8 @@ public class CallInteractionTest {
                 () -> new CallInteraction.Reaction(null));
     }
 
-    /**
-     * Pattern matching across the sealed hierarchy is exhaustive.
-     */
     @Test
+    @DisplayName("pattern matching across the sealed hierarchy is exhaustive")
     public void patternMatchExhaustive() {
         CallInteraction[] all = {
                 new CallInteraction.Reaction("🎉"),
@@ -67,11 +61,8 @@ public class CallInteractionTest {
         }
     }
 
-    /**
-     * {@link CallInteraction.PeerMuteRequest} carries an optional
-     * reason.
-     */
     @Test
+    @DisplayName("PeerMuteRequest carries an optional reason")
     public void peerMuteCarriesOptionalReason() {
         var req = new CallInteraction.PeerMuteRequest("target", Optional.of("background noise"));
         assertEquals("background noise", req.reason().orElseThrow());

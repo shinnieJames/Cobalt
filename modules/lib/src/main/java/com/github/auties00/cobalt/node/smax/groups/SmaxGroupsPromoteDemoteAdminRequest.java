@@ -18,9 +18,9 @@ import java.util.Optional;
  * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that adjusts the community-admin roster of a parent
  * group.
  *
- * @apiNote Drives the "Add community admin" and "Remove community admin" affordances on the community-management
- * screen. The relay accepts the promote and demote lists inside a single {@code <admin>} envelope (each capped at
- * 1024 entries) and returns a per-participant outcome list in the matching
+ * <p>Backs the "Add community admin" and "Remove community admin" affordances on the community-management screen.
+ * The relay accepts the promote and demote lists inside a single {@code <admin>} envelope (each capped at 1024
+ * entries) and returns a per-participant outcome list in the matching
  * {@link SmaxGroupsPromoteDemoteAdminResponse.SuccessMultiAdmin#participants()}. At least one of the two lists
  * must be non-empty; an entirely empty payload is rejected client-side.
  */
@@ -46,8 +46,8 @@ public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.
     /**
      * Constructs a promote-demote-admin request.
      *
-     * @apiNote The relay caps each of the {@code <promote>} and {@code <demote>} child sets at 1024 entries; a
-     * caller batching a wider roster change should split the work across multiple requests. The two lists are
+     * <p>The relay caps each of the {@code <promote>} and {@code <demote>} child sets at 1024 entries; a caller
+     * batching a wider roster change should split the work across multiple requests. The two lists are
      * defensively copied so post-construction mutation of the caller's lists has no effect on the request.
      *
      * @param groupJid              the community parent-group {@link Jid}
@@ -72,7 +72,7 @@ public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.
     /**
      * Returns the community parent-group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -101,7 +101,7 @@ public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <admin>

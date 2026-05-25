@@ -7,62 +7,38 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * The {@code state} enum carried by the
- * {@code <whatsapp_as_page_button>} grandchild of
- * {@code <fb_page/>} in the {@code GetLinkedAccounts} success
- * reply.
- *
- * @apiNote
- * Surfaces the opt-in toggle for the "WhatsApp as page button"
- * overlay on the linked Facebook page; the WA Web CTWA pipeline
- * consults this state to decide whether the page renders a
- * direct-message call-to-action.
- *
- * @implNote
- * This implementation accepts only the case-insensitive literals
- * {@code "OFF"} and {@code "ON"} surfaced by
- * {@code WASmaxInBizLinkingEnums.ENUM_OFF_ON}.
+ * Models the {@code state} enum carried by the {@code <whatsapp_as_page_button>} grandchild
+ * of {@code <fb_page/>} in the {@code GetLinkedAccounts} success reply.
+ * <p>
+ * The value is the opt-in toggle for the WhatsApp-as-page-button overlay on the linked
+ * Facebook page; the CTWA pipeline consults it to decide whether the page renders a
+ * direct-message call-to-action. Only the case-insensitive wire literals {@code "off"} and
+ * {@code "on"} are recognised.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingEnums")
 public enum SmaxGetLinkedAccountsOffOnState {
     /**
-     * Wire form {@code "off"}.
-     *
-     * @apiNote
-     * The WhatsApp page button is disabled.
+     * Wire form {@code "off"}; the WhatsApp page button is disabled.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingEnums",
             exports = "ENUM_OFF_ON", adaptation = WhatsAppAdaptation.DIRECT)
     OFF,
     /**
-     * Wire form {@code "on"}.
-     *
-     * @apiNote
-     * The WhatsApp page button is enabled.
+     * Wire form {@code "on"}; the WhatsApp page button is enabled.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingEnums",
             exports = "ENUM_OFF_ON", adaptation = WhatsAppAdaptation.DIRECT)
     ON;
 
     /**
-     * Resolves a wire-form attribute string into the matching enum
-     * constant.
+     * Resolves a wire-form attribute string into the matching enum constant.
      *
-     * @apiNote
-     * Invoked while parsing a successful {@code GetLinkedAccounts}
-     * reply for the {@code <fb_page><whatsapp_as_page_button state>}
-     * position.
-     *
-     * @implNote
-     * This implementation upper-cases the input under
-     * {@link Locale#ROOT} before delegating to
-     * {@link #valueOf(String)} and swallows the resulting
+     * @implNote This implementation upper-cases the input under {@link Locale#ROOT} before
+     * delegating to {@link #valueOf(String)} and swallows the resulting
      * {@link IllegalArgumentException} as an empty result.
-     *
      * @param value the attribute value; may be {@code null}
-     * @return an {@link Optional} carrying the matching enum
-     *         constant, or empty when the value is {@code null} or
-     *         does not match a documented literal
+     * @return an {@link Optional} carrying the matching enum constant, or empty when the value
+     *         is {@code null} or does not match a documented literal
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingEnums",
             exports = "ENUM_OFF_ON", adaptation = WhatsAppAdaptation.ADAPTED)

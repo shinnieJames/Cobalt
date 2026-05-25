@@ -6,11 +6,14 @@ import java.util.Optional;
 /**
  * One per-day configuration row inside an {@link IqEditBusinessProfileBusinessHours} payload.
  *
- * @apiNote
- * Use this row to express one open or closed segment for a given day of week; for an open window pass the open and close times as minutes since midnight, and for a closed day pass the matching {@code mode} string (for example {@code "closed"}) with both endpoints absent.
+ * <p>Each row expresses one open or closed segment for a given day of week. For an open window the open and close
+ * times are minutes since midnight; for a closed day the matching {@code mode} string (for example {@code "closed"})
+ * is supplied with both endpoints absent.
  *
  * @implNote
- * This implementation models the row as {@code (dayOfWeek, mode, openTime, closeTime)} where the times are minutes since midnight; multiple rows on the same day produce split open windows (for example morning and evening). The {@code mode} string is routed verbatim into the {@code mode} attribute of the {@code <business_hours_config/>} child.
+ * This implementation models the row as {@code (dayOfWeek, mode, openTime, closeTime)} where the times are minutes
+ * since midnight; multiple rows on the same day produce split open windows (for example morning and evening). The
+ * {@code mode} string is routed verbatim into the {@code mode} attribute of the {@code <business_hours_config/>} child.
  */
 public final class IqEditBusinessProfileBusinessHoursConfig {
     /**
@@ -19,7 +22,8 @@ public final class IqEditBusinessProfileBusinessHoursConfig {
     private final String dayOfWeek;
 
     /**
-     * The open/closed mode identifier (for example {@code "open_specific_hours"}, {@code "closed"}) routed verbatim into the {@code mode} attribute.
+     * The open/closed mode identifier (for example {@code "open_specific_hours"}, {@code "closed"}) routed verbatim
+     * into the {@code mode} attribute.
      */
     private final String mode;
 
@@ -34,10 +38,10 @@ public final class IqEditBusinessProfileBusinessHoursConfig {
     private final Integer closeTime;
 
     /**
-     * Constructs a typed row.
+     * Constructs a typed row from a day and a mode.
      *
-     * @apiNote
-     * Call this constructor with the day and the mode; pass {@code null} for {@code openTime} and {@code closeTime} when the row models a closed day or any mode where the per-row times do not apply.
+     * <p>Pass {@code null} for {@code openTime} and {@code closeTime} when the row models a closed day or any mode
+     * where the per-row times do not apply.
      *
      * @param dayOfWeek the day-of-week identifier; never {@code null}
      * @param mode      the mode identifier; never {@code null}
@@ -53,10 +57,7 @@ public final class IqEditBusinessProfileBusinessHoursConfig {
     }
 
     /**
-     * Returns the day-of-week identifier.
-     *
-     * @apiNote
-     * Use this getter to read back the day that the row targets.
+     * Returns the day-of-week identifier that the row targets.
      *
      * @return the day; never {@code null}
      */
@@ -65,10 +66,8 @@ public final class IqEditBusinessProfileBusinessHoursConfig {
     }
 
     /**
-     * Returns the open/closed mode identifier.
-     *
-     * @apiNote
-     * Use this getter to read back the row's mode (typically {@code "open_specific_hours"} for an open window, {@code "closed"} for a closed day).
+     * Returns the open/closed mode identifier, typically {@code "open_specific_hours"} for an open window or
+     * {@code "closed"} for a closed day.
      *
      * @return the mode; never {@code null}
      */
@@ -79,8 +78,7 @@ public final class IqEditBusinessProfileBusinessHoursConfig {
     /**
      * Returns the open time in minutes since midnight.
      *
-     * @apiNote
-     * Use this getter to read back the row's opening endpoint; the value is absent when the mode does not carry a per-row open time.
+     * <p>The value is absent when the mode does not carry a per-row open time.
      *
      * @return an {@link Optional} carrying the time
      */
@@ -91,8 +89,7 @@ public final class IqEditBusinessProfileBusinessHoursConfig {
     /**
      * Returns the close time in minutes since midnight.
      *
-     * @apiNote
-     * Use this getter to read back the row's closing endpoint; the value is absent when the mode does not carry a per-row close time.
+     * <p>The value is absent when the mode does not carry a per-row close time.
      *
      * @return an {@link Optional} carrying the time
      */

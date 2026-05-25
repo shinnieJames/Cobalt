@@ -16,12 +16,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code deleteMessageForMe} app-state sync action that removes a
  * single message from the local view without touching the remote copy.
  *
- * @apiNote
- * Drives the "Delete for me" message-context affordance that the primary
- * device fans out to its companions through the
- * {@link SyncPatchType#REGULAR_HIGH} collection. The mutation index encodes
- * the chat, the message id, the {@code fromMe} flag and the participant
- * (relevant for group messages), formatted as
+ * <p>This handler drives the "Delete for me" message-context affordance that
+ * the primary device fans out to its companions through the
+ * {@link SyncPatchType#REGULAR_HIGH} collection. The mutation index encodes the
+ * chat, the message id, the {@code fromMe} flag and the participant (relevant
+ * for group messages), formatted as
  * {@snippet :
  *     ["deleteMessageForMe", chatJid, messageId, fromMe, participant] // fromMe = "1" or "0"
  * }
@@ -185,10 +184,8 @@ public final class DeleteMessageForMeHandler implements WebAppStateActionHandler
     /**
      * Returns whether the given string is {@code null} or empty.
      *
-     * @apiNote
-     * Mirrors the JavaScript falsy check {@code (!value)} that WA Web
-     * applies to every part of the four-element index before treating the
-     * mutation as malformed.
+     * <p>Gates the malformed-index check applied to every part of the
+     * four-element index before the mutation is accepted.
      *
      * @param value the candidate string
      * @return {@code true} when {@code value} is {@code null} or has length

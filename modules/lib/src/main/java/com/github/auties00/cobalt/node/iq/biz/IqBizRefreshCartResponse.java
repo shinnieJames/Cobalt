@@ -14,20 +14,23 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed sealed family of inbound reply variants produced by the relay in response to an {@link IqBizRefreshCartRequest}.
+ * The typed sealed family of inbound reply variants produced by the relay in response to an
+ * {@link IqBizRefreshCartRequest}.
  *
- * @apiNote
- * Use this type to switch over the three documented outcomes of a cart refresh: {@link Success} carries the per-line price, the cart-wide totals and the cap available, {@link ClientError} surfaces a relay validation rejection, and {@link ServerError} reports a transport or backend failure. The dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node} into the right variant before handing it to the caller.
+ * <p>The family covers the three documented outcomes of a cart refresh: {@link Success} carries the per-line price,
+ * the cart-wide totals and the cap available, {@link ClientError} surfaces a relay validation rejection, and
+ * {@link ServerError} reports a transport or backend failure. {@link #of(Node, Node)} projects the raw {@link Node}
+ * into the right variant before the caller switches over it.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizRefreshCartJob")
 public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         permits IqBizRefreshCartResponse.Success, IqBizRefreshCartResponse.ClientError, IqBizRefreshCartResponse.ServerError {
 
     /**
-     * Tries each {@link IqBizRefreshCartResponse} variant in priority order.
+     * Tries each {@link IqBizRefreshCartResponse} variant in priority order and returns the first match.
      *
-     * @apiNote
-     * Call this entry from the dispatcher to fan the inbound stanza into the matching sealed variant; the success path is tried first, then the client-error envelope, then the server-error envelope. Returns empty only when none of the three documented shapes apply.
+     * <p>The success path is tried first, then the client-error envelope, then the server-error envelope. The result
+     * is empty only when none of the three documented shapes apply.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -51,15 +54,15 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
     /**
      * The {@code Success} reply variant carrying the typed cart envelope.
      *
-     * @apiNote
-     * Use this variant to read the cart-wide totals block and the per-line {@link Product} entries; consumers render the cart-revalidate surface from these fields before allowing the buyer to advance to checkout.
+     * <p>This variant carries the cart-wide totals block and the per-line {@link Product} entries from which the
+     * cart-revalidate surface is rendered before the buyer advances to checkout.
      */
     final class Success implements IqBizRefreshCartResponse {
         /**
          * The cart totals block carrying the pre-tax subtotal, the grand total, the currency code and the status marker.
          *
-         * @apiNote
-         * Use this class to model the {@code <price/>} child of the {@code <cart/>} envelope; consumers render the totals row of the cart-revalidate surface from these fields.
+         * <p>The block models the {@code <price/>} child of the {@code <cart/>} envelope, rendered as the totals row of
+         * the cart-revalidate surface.
          */
         public static final class Price {
             /**
@@ -83,10 +86,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             private final String priceStatus;
 
             /**
-             * Constructs a typed price block.
+             * Constructs a typed price block by projecting the {@code <price/>} child of a {@code <cart/>} envelope.
              *
-             * @apiNote
-             * Call this constructor when projecting the {@code <price/>} child of a {@code <cart/>} envelope; pass {@code null} for any field that the wire shape omitted.
+             * <p>Pass {@code null} for any field that the wire shape omitted.
              *
              * @param subtotal    the pre-tax subtotal string; may be {@code null}
              * @param total       the grand total string; may be {@code null}
@@ -101,10 +103,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the pre-tax subtotal string.
-             *
-             * @apiNote
-             * Use this getter to render the subtotal row of the cart totals block.
+             * Returns the pre-tax subtotal string for the subtotal row of the cart totals block.
              *
              * @return an {@link Optional} carrying the subtotal
              */
@@ -113,10 +112,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the grand total string.
-             *
-             * @apiNote
-             * Use this getter to render the headline total of the cart-revalidate surface.
+             * Returns the grand total string for the headline total of the cart-revalidate surface.
              *
              * @return an {@link Optional} carrying the total
              */
@@ -125,10 +121,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the currency code (ISO 4217).
-             *
-             * @apiNote
-             * Use this getter to read back the currency that frames the subtotal and total strings when rendering the totals row.
+             * Returns the currency code (ISO 4217) that frames the subtotal and total strings.
              *
              * @return an {@link Optional} carrying the code
              */
@@ -137,10 +130,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the price-status marker.
+             * Returns the per-cart price-status marker that the relay returns alongside the totals.
              *
-             * @apiNote
-             * Use this getter to read back the per-cart price status that the relay returns alongside the totals (typically {@code "OK"} when the cart resolves cleanly).
+             * <p>The value is typically {@code "OK"} when the cart resolves cleanly.
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -177,10 +169,10 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * One typed cart line carrying the product identity, the canonical price, the cart cap, the optional thumbnail, the optional sale-price block and the per-line status marker.
+         * One typed cart line carrying the product identity, the canonical price, the cart cap, the optional thumbnail,
+         * the optional sale-price block and the per-line status marker.
          *
-         * @apiNote
-         * Use this class to model one row in the cart-revalidate surface; the status marker lets the UI flag entries that have been removed or are no longer purchasable.
+         * <p>The status marker lets the UI flag entries that have been removed or are no longer purchasable.
          */
         public static final class Product {
             /**
@@ -229,10 +221,10 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             private final String status;
 
             /**
-             * Constructs a typed cart line.
+             * Constructs a typed cart line by projecting a {@code <product/>} child of the {@code <cart/>} envelope.
              *
-             * @apiNote
-             * Call this constructor when projecting a {@code <product/>} child of the {@code <cart/>} envelope; pass {@code null} for any optional field that the wire shape omitted. The {@code maxAvailable} cap defaults to {@code 99} when the relay does not stamp a per-line limit.
+             * <p>Pass {@code null} for any optional field that the wire shape omitted. The {@code maxAvailable} cap
+             * defaults to {@code 99} when the relay does not stamp a per-line limit.
              *
              * @param id           the product identifier; never {@code null}
              * @param name         the display name; may be {@code null}
@@ -266,10 +258,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the product identifier.
-             *
-             * @apiNote
-             * Use this getter to read back the merchant-catalog id that identifies the product the cart line refers to.
+             * Returns the merchant-catalog identifier of the product the cart line refers to.
              *
              * @return the identifier; never {@code null}
              */
@@ -278,10 +267,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the product display name.
+             * Returns the cart-line display name.
              *
-             * @apiNote
-             * Use this getter to render the cart-line display name in the cart-revalidate surface; the value is absent when the relay omitted the {@code <name/>} child.
+             * <p>The value is absent when the relay omitted the {@code <name/>} child.
              *
              * @return an {@link Optional} carrying the name
              */
@@ -290,10 +278,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the unit price string.
+             * Returns the unit price string for the per-line price column.
              *
-             * @apiNote
-             * Use this getter to render the per-line price column; the value is absent when the relay did not stamp a per-line price.
+             * <p>The value is absent when the relay did not stamp a per-line price.
              *
              * @return an {@link Optional} carrying the price
              */
@@ -302,10 +289,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the line currency code (ISO 4217).
+             * Returns the line currency code (ISO 4217) when it diverges from the cart-wide currency.
              *
-             * @apiNote
-             * Use this getter to read back the per-line currency when it diverges from the cart-wide currency; absent when the relay omitted the {@code <currency/>} child.
+             * <p>The value is absent when the relay omitted the {@code <currency/>} child.
              *
              * @return an {@link Optional} carrying the code
              */
@@ -316,8 +302,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             /**
              * Returns the maximum cart quantity that the relay allows for this line.
              *
-             * @apiNote
-             * Use this getter to clamp the buyer's quantity selector to the merchant-supplied cap before re-submitting the cart.
+             * <p>The cap clamps the buyer's quantity selector before the cart is re-submitted.
              *
              * @return the cap
              */
@@ -326,10 +311,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the catalog thumbnail identifier.
+             * Returns the catalog thumbnail identifier for downloading the image bytes separately.
              *
-             * @apiNote
-             * Use this getter to fetch the thumbnail asset id when downloading the image bytes separately; the value is absent when the cart line references a product without a thumbnail.
+             * <p>The value is absent when the cart line references a product without a thumbnail.
              *
              * @return an {@link Optional} carrying the identifier
              */
@@ -338,10 +322,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the catalog thumbnail URL.
-             *
-             * @apiNote
-             * Use this getter to load the thumbnail image directly via HTTP when an URL is provided by the relay.
+             * Returns the catalog thumbnail URL for loading the image directly over HTTP.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -350,10 +331,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the sale-price block.
+             * Returns the sale-price block carrying the discounted price and optional sale window.
              *
-             * @apiNote
-             * Use this getter to surface the discounted price and optional sale window when the merchant has a promo running on this line.
+             * <p>The value is present only when the merchant has a promo running on this line.
              *
              * @return an {@link Optional} carrying the block
              */
@@ -362,10 +342,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the per-line status marker.
+             * Returns the per-line status marker flagging a cart line as no longer purchasable.
              *
-             * @apiNote
-             * Use this getter to detect cart lines that the relay has flagged as no longer purchasable (for example {@code "INVALID_PRODUCT"} or {@code "MISSING"}).
+             * <p>Typical values are {@code "INVALID_PRODUCT"} or {@code "MISSING"}.
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -410,8 +389,8 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         /**
          * The sale-price sub-block carrying a discounted price and an optional sale window.
          *
-         * @apiNote
-         * Use this class to model the {@code <sale_price/>} child of a cart {@code <product/>}; consumers render the strike-through price and a sale window when both endpoints are stamped.
+         * <p>The block models the {@code <sale_price/>} child of a cart {@code <product/>}; the strike-through price and
+         * a sale window are rendered when both endpoints are stamped.
          */
         public static final class SalePrice {
             /**
@@ -430,10 +409,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             private final String endDate;
 
             /**
-             * Constructs a typed sale-price block.
+             * Constructs a typed sale-price block by projecting a {@code <sale_price/>} child.
              *
-             * @apiNote
-             * Call this constructor when projecting a {@code <sale_price/>} child; pass {@code null} for either endpoint when the wire shape omitted the sale window.
+             * <p>Pass {@code null} for either endpoint when the wire shape omitted the sale window.
              *
              * @param price     the discounted price; never {@code null}
              * @param startDate the sale start date; may be {@code null}
@@ -447,10 +425,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the discounted price string.
-             *
-             * @apiNote
-             * Use this getter to render the sale price alongside the strike-through {@link Product#price()}.
+             * Returns the discounted price string rendered alongside the strike-through {@link Product#price()}.
              *
              * @return the price; never {@code null}
              */
@@ -459,10 +434,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the sale start date string.
-             *
-             * @apiNote
-             * Use this getter to surface the sale window's start endpoint when the merchant stamped one on the line.
+             * Returns the sale window's start endpoint when the merchant stamped one on the line.
              *
              * @return an {@link Optional} carrying the date
              */
@@ -471,10 +443,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the sale end date string.
-             *
-             * @apiNote
-             * Use this getter to surface the sale window's end endpoint when the merchant stamped one on the line.
+             * Returns the sale window's end endpoint when the merchant stamped one on the line.
              *
              * @return an {@link Optional} carrying the date
              */
@@ -519,10 +488,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         private final List<Product> products;
 
         /**
-         * Constructs a typed success reply.
-         *
-         * @apiNote
-         * Call this constructor when projecting a {@code <cart/>} child into the typed model.
+         * Constructs a typed success reply by projecting a {@code <cart/>} child into the typed model.
          *
          * @param price    the totals block; never {@code null}
          * @param products the cart lines; never {@code null}
@@ -535,10 +501,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the cart totals block.
-         *
-         * @apiNote
-         * Use this getter to render the cart totals row containing subtotal, total, currency and status marker.
+         * Returns the cart totals block containing subtotal, total, currency and status marker.
          *
          * @return the block; never {@code null}
          */
@@ -547,10 +510,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the typed cart lines.
+         * Returns the typed cart lines in wire order.
          *
-         * @apiNote
-         * Use this getter to iterate the per-line entries when rendering the cart-revalidate table; the list is empty when the relay returned a cart envelope without any product rows.
+         * <p>The list is empty when the relay returned a cart envelope without any product rows.
          *
          * @return an unmodifiable list; never {@code null}
          */
@@ -561,11 +523,14 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqBizRefreshCartResponse#of(Node, Node)} or directly when only the success branch is interesting; returns empty when the stanza does not carry a {@code result} envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a {@code result} envelope matching the original request.
          *
          * @implNote
-         * This implementation mirrors the cart-shape projection done by {@code WAWebBizGraphQLRefreshCartJob.RefreshCart}: when the {@code <cart/>} child is absent the result is an empty success envelope, the totals are read from the nested {@code <price/>} block, and each {@code <product/>} child contributes a {@link Product} carrying its optional {@code <media><image>} sub-block (mapping {@code request_image_url} to {@link Product#thumbnailUrl()}) and {@code <sale_price/>} sub-block. The {@code max_available} cap defaults to {@code 99} when the wire shape omits it.
+         * This implementation returns an empty success envelope when the {@code <cart/>} child is absent, reads the
+         * totals from the nested {@code <price/>} block, and projects each {@code <product/>} child into a
+         * {@link Product} carrying its optional {@code <media><image>} sub-block (mapping {@code request_image_url} to
+         * {@link Product#thumbnailUrl()}) and {@code <sale_price/>} sub-block. The {@code max_available} cap defaults to
+         * {@code 99} when the wire shape omits it.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
@@ -682,8 +647,8 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
     /**
      * The {@code ClientError} reply variant surfacing a client-side rejection.
      *
-     * @apiNote
-     * Use this variant to react to a refused cart refresh; typical examples include a relay validation failure surfaced as a SMAX error envelope.
+     * <p>This variant reports a refused cart refresh; a typical example is a relay validation failure surfaced as a
+     * SMAX error envelope.
      */
     final class ClientError implements IqBizRefreshCartResponse {
         /**
@@ -697,10 +662,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         private final String errorText;
 
         /**
-         * Constructs a typed client-error reply.
+         * Constructs a typed client-error reply from a parsed error envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting a client-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
+         * <p>Pass {@code null} for {@code errorText} when the wire shape omitted the text field.
          *
          * @param errorCode the numeric error code
          * @param errorText the human-readable error text; may be {@code null}
@@ -711,10 +675,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
+         * Returns the SMAX error code that the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -723,10 +684,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the human-readable error text, when supplied.
-         *
-         * @apiNote
-         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         * Returns the relay-supplied error explanation when present.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -737,8 +695,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqBizRefreshCartResponse#of(Node, Node)} or directly when only the client-error branch is interesting; returns empty when the stanza does not carry a client-error envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a client-error envelope matching the original request.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}
@@ -779,8 +736,8 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
     /**
      * The {@code ServerError} reply variant surfacing a server-side failure.
      *
-     * @apiNote
-     * Use this variant to react to a backend failure that did not produce a typed cart; typical examples include the relay returning a 500-class status when the GraphQL path returned an unparseable shape.
+     * <p>This variant reports a backend failure that did not produce a typed cart; a typical example is a 500-class
+     * status returned when the backend produced an unparseable shape.
      */
     final class ServerError implements IqBizRefreshCartResponse {
         /**
@@ -794,10 +751,9 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         private final String errorText;
 
         /**
-         * Constructs a typed server-error reply.
+         * Constructs a typed server-error reply from a parsed error envelope.
          *
-         * @apiNote
-         * Call this constructor when projecting a server-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
+         * <p>Pass {@code null} for {@code errorText} when the wire shape omitted the text field.
          *
          * @param errorCode the numeric error code
          * @param errorText the human-readable error text; may be {@code null}
@@ -808,10 +764,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
+         * Returns the SMAX error code that the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -820,10 +773,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the human-readable error text, when supplied.
-         *
-         * @apiNote
-         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         * Returns the relay-supplied error explanation when present.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -834,8 +784,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Call this entry from {@link IqBizRefreshCartResponse#of(Node, Node)} or directly when only the server-error branch is interesting; returns empty when the stanza does not carry a server-error envelope matching the original request.
+         * <p>The result is empty when the stanza does not carry a server-error envelope matching the original request.
          *
          * @param node    the inbound IQ stanza; never {@code null}
          * @param request the original outbound request; never {@code null}

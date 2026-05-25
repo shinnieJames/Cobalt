@@ -14,23 +14,15 @@ import java.util.Optional;
  * The sealed family of inbound reply variants produced by the relay
  * in response to a {@link SmaxSetPrivacySettingRequest}.
  *
- * @apiNote
- * Surfaced by the CTWA (click-to-WhatsApp) data-sharing settings
- * flow whose JS caller
- * {@code WAWebCTWABizDataSharingJob.setCtwaBizDataSharingSettingJob}
- * writes the new SMB data-sharing-with-Meta consent value to the
- * relay; the three variants split the wire outcome into
- * {@link Success} (relay accepted the write and optionally echoed
- * the post-write consent value), {@link ClientError} (relay
- * rejected the write via a {@code 4xx}
- * {@code parsePrivacySettingErrors} envelope) and {@link ServerError}
- * (transient {@code 5xx} relay failure).
+ * <p>The CTWA data-sharing settings flow writes the new SMB data-sharing-with-Meta consent value
+ * to the relay. The three variants split the wire outcome into {@link Success} (relay accepted the
+ * write and optionally echoed the post-write consent value), {@link ClientError} (relay rejected
+ * the write via a {@code 4xx} envelope) and {@link ServerError} (transient {@code 5xx} relay
+ * failure).
  *
  * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxBizSettingsSetPrivacySettingRPC.sendSetPrivacySettingRPC}
- * by trying each variant in priority order via {@link #of} and
- * returning the first successful parse.
+ * This implementation tries each variant in priority order via {@link #of(Node, Node)} and returns
+ * the first successful parse.
  */
 public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Response
         permits SmaxSetPrivacySettingResponse.Success, SmaxSetPrivacySettingResponse.ClientError, SmaxSetPrivacySettingResponse.ServerError {
@@ -39,11 +31,8 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
      * Tries each {@link SmaxSetPrivacySettingResponse} variant in
      * priority order and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxSetPrivacySettingRequest}; the priority order
-     * matches WA Web's {@code parsing} dispatch table so that a
-     * malformed {@code Success} stanza falls through to
+     * <p>Invoked by the smax reply pump after dispatching a {@link SmaxSetPrivacySettingRequest}.
+     * The priority order ensures a malformed {@link Success} stanza falls through to
      * {@link ClientError} rather than masking an error.
      *
      * @implNote
@@ -85,15 +74,10 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
      * accepted the consent write and optionally echoed the
      * post-write value.
      *
-     * @apiNote
-     * Projected by {@link SmaxSetPrivacySettingResponse#of(Node, Node)}
-     * when the relay returns the documented {@code <privacy>}
-     * envelope; the optional {@link #dataSharingConsent} mirrors
-     * the {@code privacySmbDataSharingSettingMixin.value} that WA
-     * Web's {@code setCtwaBizDataSharingSettingJob} forwards to the
-     * cache when present, falling back to {@code null} when the
-     * inner {@code parseSmbDataSharingSettingMixin} arm did not
-     * succeed.
+     * <p>Projected by {@link SmaxSetPrivacySettingResponse#of(Node, Node)} when the relay returns
+     * the documented {@code <privacy>} envelope. The optional {@link #dataSharingConsent} carries
+     * the post-write consent value when the relay echoed one, falling back to {@code null} when the
+     * inner consent echo was absent or failed validation.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSetPrivacySettingResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSmbDataSharingSettingMixin")
@@ -111,10 +95,8 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Constructs a new successful reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code <privacy>} envelope has been validated and the
-         * optional consent echo has been extracted.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code <privacy>} envelope has been
+         * validated and the optional consent echo has been extracted.
          *
          * @param dataSharingConsent the optional echoed consent
          *                           value; may be {@code null}
@@ -126,13 +108,10 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Returns the optional echoed consent value.
          *
-         * @apiNote
-         * Surfaces the post-write consent value when the relay
-         * echoed one (the standard happy path) or
-         * {@link Optional#empty()} when the relay sent a bare
-         * {@code <privacy/>} reply; WA Web treats the empty branch
-         * as a {@code null} write outcome and logs a recoverable
-         * error rather than failing the job.
+         * <p>Surfaces the post-write consent value when the relay echoed one (the standard happy
+         * path) or {@link Optional#empty()} when the relay sent a bare {@code <privacy/>} reply; the
+         * caller treats the empty branch as a recoverable {@code null} write outcome rather than a
+         * failure.
          *
          * @return an {@link Optional} carrying the consent value,
          *         or empty when the relay omitted it
@@ -227,12 +206,8 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
      * The {@code ClientError} reply variant carrying a documented
      * {@code 4xx} privacy-setting rejection.
      *
-     * @apiNote
-     * Surfaced when the relay rejected the consent write via one of
-     * the {@code parsePrivacySettingErrors} mixin arms; WA Web's
-     * {@code setCtwaBizDataSharingSettingJob} logs the
-     * {@code (code, text)} pair and returns {@code null} so the UI
-     * preserves the pre-write display.
+     * <p>Surfaced when the relay rejected the consent write. The caller logs the {@code (code,
+     * text)} pair and preserves the pre-write display rather than retrying.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSetPrivacySettingResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsPrivacySettingErrors")
@@ -252,9 +227,7 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Constructs a new client-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 4xx} envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 4xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may
@@ -350,10 +323,8 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
      * The {@code ServerError} reply variant carrying a transient
      * {@code 5xx} relay failure.
      *
-     * @apiNote
-     * Surfaced when the relay returned a transient internal failure
-     * while processing the consent write; the caller can re-issue
-     * the request with backoff.
+     * <p>Surfaced when the relay returned a transient internal failure while processing the consent
+     * write; the caller can re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSetPrivacySettingResponseError")
     final class ServerError implements SmaxSetPrivacySettingResponse {
@@ -372,9 +343,7 @@ public sealed interface SmaxSetPrivacySettingResponse extends SmaxOperation.Resp
         /**
          * Constructs a new server-error reply.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 5xx} envelope has been validated.
+         * <p>Invoked by {@link #of(Node, Node)} after the {@code 5xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may

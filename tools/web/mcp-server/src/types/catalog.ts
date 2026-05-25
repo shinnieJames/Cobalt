@@ -89,3 +89,60 @@ export interface NativeModuleMetadataResponse {
   sizeBytes: number;
 }
 
+// Native (WASM) reverse-engineering query results. Kept distinct from the
+// JS-side shapes above: a WASM reference is a function index, not a JS symbol
+// with a source byte range.
+
+export interface NativeReferenceResult {
+  funcIndex: number;
+  name?: string;
+  /** Data strings that drove the match, when the query was string-based. */
+  strings?: string[];
+}
+
+export interface NativeDataMatch {
+  /** Linear-memory address of the matched data string. */
+  address: number;
+  value: string;
+  /** Function indices whose bodies load this string's address. */
+  referencedBy: number[];
+}
+
+export interface NativeIndirectEdge {
+  typeIndex: number;
+  tableIndex: number;
+  /** Type-compatible functions installed in the table (the candidate callees). */
+  candidates: number[];
+}
+
+export interface NativeCallGraphNode {
+  funcIndex: number;
+  name?: string;
+  depth: number;
+  direction: "forward" | "reverse";
+  calls: number[];
+  callers: number[];
+  indirect: NativeIndirectEdge[];
+}
+
+export interface NativeVtableSlot {
+  slot: number;
+  /** Function index the slot resolves to via the element table, or -1. */
+  funcIndex: number;
+  name?: string;
+}
+
+export interface NativeVtable {
+  /** The (possibly mangled) typeinfo name the vtable was anchored on. */
+  typeName: string;
+  /** Best-effort demangled form (Itanium nested name), else the raw name. */
+  demangled: string;
+  ztsAddr: number;
+  ztiAddr: number | null;
+  vtableAddr: number | null;
+  addressPoint: number | null;
+  slots: NativeVtableSlot[];
+  /** Diagnostics: failure modes encountered (no RTTI, passive segment, etc.). */
+  notes: string[];
+}
+

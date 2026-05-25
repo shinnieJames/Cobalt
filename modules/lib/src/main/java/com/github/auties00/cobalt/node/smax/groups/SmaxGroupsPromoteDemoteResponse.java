@@ -17,10 +17,10 @@ import java.util.Optional;
 /**
  * The sealed reply family for a {@link SmaxGroupsPromoteDemoteRequest}.
  *
- * @apiNote The four variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsPromoteDemoteRPC}.
- * Promote-side outcomes and demote-side outcomes arrive in separate envelopes ({@link SuccessPromote} carries the
- * {@code <promote>} child, {@link SuccessDemote} carries the {@code <demote>} child), even when the original
+ * <p>Promote-side outcomes and demote-side outcomes arrive in separate envelopes ({@link SuccessPromote} carries
+ * the {@code <promote>} child, {@link SuccessDemote} carries the {@code <demote>} child), even when the original
  * request batched both sub-actions; the relay emits whichever envelope corresponds to the sub-action it processed.
+ * {@link ClientError} and {@link ServerError} surface the relay's reason codes.
  */
 public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Response
         permits SmaxGroupsPromoteDemoteResponse.SuccessPromote, SmaxGroupsPromoteDemoteResponse.SuccessDemote,
@@ -30,8 +30,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
      * Dispatches the inbound IQ across each {@link SmaxGroupsPromoteDemoteResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsPromoteDemoteRPC}:
-     * {@link SuccessPromote} is tried before {@link SuccessDemote}.
+     * <p>{@link SuccessPromote} is tried before {@link SuccessDemote}, then {@link ClientError}, then
+     * {@link ServerError}.
      *
      * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented variants;
      * WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the caller so
@@ -66,10 +66,9 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
     /**
      * The reply variant carrying the per-participant outcomes for the {@code <promote>} sub-action.
      *
-     * @apiNote The IQ envelope succeeds even when every candidate is rejected at the participant-policy level,
-     * so callers must walk {@link #participants()} to detect partial or total rejection. Each row exposes an
-     * optional {@code type="admin"} marker confirming the promotion plus an optional rejection code lifted from
-     * the WA Web {@code ENUM_404_419} projection.
+     * <p>The IQ envelope succeeds even when every candidate is rejected at the participant-policy level, so callers
+     * must walk {@link #participants()} to detect partial or total rejection. Each row exposes an optional
+     * {@code type="admin"} marker confirming the promotion plus an optional rejection code.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsPromoteDemoteResponseSuccessPromote")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
@@ -99,8 +98,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * Returns the optional {@code addressing_mode} echo.
          *
-         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
-         * mode; the field is omitted on legacy groups.
+         * <p>The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing mode; the
+         * field is omitted on legacy groups.
          *
          * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
@@ -120,9 +119,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link SuccessPromote} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parsePromoteDemoteResponseSuccessPromote}: the IQ must be a
-         * valid {@code type="result"} echo of the request, must carry a {@code <promote>} child, and every
-         * {@code <participant>} grand-child must satisfy {@link PromoteParticipantResult#of(Node)}.
+         * <p>The IQ must be a valid {@code type="result"} echo of the request, must carry a {@code <promote>}
+         * child, and every {@code <participant>} grand-child must satisfy {@link PromoteParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -194,9 +192,9 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * The per-participant outcome row produced by the relay for a single promotion candidate.
          *
-         * @apiNote Each row exposes {@link #jid()} (always present), {@link #type()} (set to {@code "admin"} on
-         * confirmed promotions), {@link #errorCode()} (lifted from the WA Web {@code ENUM_404_419} projection on
-         * rejections), and the optional {@link #phoneNumber()} / {@link #username()} echoes.
+         * <p>Each row exposes {@link #jid()} (always present), {@link #type()} (set to {@code "admin"} on confirmed
+         * promotions), {@link #errorCode()} (the rejection code on rejections), and the optional
+         * {@link #phoneNumber()} / {@link #username()} echoes.
          */
         public static final class PromoteParticipantResult {
             /**
@@ -255,7 +253,7 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
             /**
              * Returns the optional {@code type} marker.
              *
-             * @apiNote Present and set to {@code "admin"} on confirmed promotions; empty on rejected entries.
+             * <p>Present and set to {@code "admin"} on confirmed promotions; empty on rejected entries.
              *
              * @return an {@link Optional} carrying the marker, or empty
              */
@@ -266,8 +264,7 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
             /**
              * Returns the optional rejection-error code.
              *
-             * @apiNote The code is one of the values projected by WA Web's {@code ENUM_404_419}; empty when the
-             * promotion succeeded.
+             * <p>The code is one of {@code 404} or {@code 419}; empty when the promotion succeeded.
              *
              * @return an {@link Optional} carrying the error code, or empty
              */
@@ -296,10 +293,9 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
             /**
              * Tries to parse a promotion outcome row from a single {@code <participant>} child.
              *
-             * @apiNote Matches the WA Web parser
-             * {@code parsePromoteDemoteResponseSuccessPromotePromoteParticipant}: the node must be a
-             * {@code <participant>} carrying a {@code jid} attribute, with optional {@code type="admin"} and
-             * {@code error} attributes lifted from the {@code ENUM_404_419} projection.
+             * <p>The node must be a {@code <participant>} carrying a {@code jid} attribute, with optional
+             * {@code type="admin"} and {@code error} attributes; the {@code error} value is one of {@code 404} or
+             * {@code 419}.
              *
              * @param node the {@code <participant>} child
              * @return an {@link Optional} carrying the parsed row, or empty when the node does not match
@@ -376,9 +372,9 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
     /**
      * The reply variant carrying the per-participant outcomes for the {@code <demote>} sub-action.
      *
-     * @apiNote The IQ envelope succeeds even when every candidate is rejected at the participant-policy level,
-     * so callers must walk {@link #participants()} to detect partial or total rejection. Each row exposes an
-     * optional rejection code lifted from the WA Web {@code ENUM_404_406} projection.
+     * <p>The IQ envelope succeeds even when every candidate is rejected at the participant-policy level, so callers
+     * must walk {@link #participants()} to detect partial or total rejection. Each row exposes an optional rejection
+     * code.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsPromoteDemoteResponseSuccessDemote")
     final class SuccessDemote implements SmaxGroupsPromoteDemoteResponse {
@@ -407,8 +403,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * Returns the optional {@code addressing_mode} echo.
          *
-         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
-         * mode; the field is omitted on legacy groups.
+         * <p>The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing mode; the
+         * field is omitted on legacy groups.
          *
          * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
@@ -428,9 +424,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link SuccessDemote} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parsePromoteDemoteResponseSuccessDemote}: the IQ must be a
-         * valid {@code type="result"} echo of the request, must carry a {@code <demote>} child, and every
-         * {@code <participant>} grand-child must satisfy {@link DemoteParticipantResult#of(Node)}.
+         * <p>The IQ must be a valid {@code type="result"} echo of the request, must carry a {@code <demote>} child,
+         * and every {@code <participant>} grand-child must satisfy {@link DemoteParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -502,10 +497,9 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * The per-participant outcome row produced by the relay for a single demotion candidate.
          *
-         * @apiNote Each row exposes {@link #jid()} (always present), {@link #errorCode()} (lifted from the WA Web
-         * {@code ENUM_404_406} projection on rejections), and the optional {@link #phoneNumber()} /
-         * {@link #username()} echoes. Unlike the promotion row there is no {@code type} marker since a successful
-         * demotion carries no positive label.
+         * <p>Each row exposes {@link #jid()} (always present), {@link #errorCode()} (the rejection code on
+         * rejections), and the optional {@link #phoneNumber()} / {@link #username()} echoes. Unlike the promotion
+         * row there is no {@code type} marker since a successful demotion carries no positive label.
          */
         public static final class DemoteParticipantResult {
             /**
@@ -557,8 +551,7 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
             /**
              * Returns the optional rejection-error code.
              *
-             * @apiNote The code is one of the values projected by WA Web's {@code ENUM_404_406}; empty when the
-             * demotion succeeded.
+             * <p>The code is one of {@code 404} or {@code 406}; empty when the demotion succeeded.
              *
              * @return an {@link Optional} carrying the error code, or empty
              */
@@ -587,10 +580,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
             /**
              * Tries to parse a demotion outcome row from a single {@code <participant>} child.
              *
-             * @apiNote Matches the WA Web parser
-             * {@code parsePromoteDemoteResponseSuccessDemoteDemoteParticipant}: the node must be a
-             * {@code <participant>} carrying a {@code jid} attribute, with an optional {@code error} attribute
-             * lifted from the {@code ENUM_404_406} projection.
+             * <p>The node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * {@code error} attribute; the {@code error} value is one of {@code 404} or {@code 406}.
              *
              * @param node the {@code <participant>} child
              * @return an {@link Optional} carrying the parsed row, or empty when the node does not match
@@ -708,8 +699,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -813,8 +804,8 @@ public sealed interface SmaxGroupsPromoteDemoteResponse extends SmaxOperation.Re
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

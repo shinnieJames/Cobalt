@@ -30,11 +30,11 @@ import java.util.Objects;
  * Drives the companion side of WhatsApp's alt-device-linking
  * (eight-character pairing-code) flow.
  *
- * <p>One instance is created per {@link WhatsAppClient} when the
- * client is configured with a
+ * <p>One instance is created per {@link WhatsAppClient} when the client
+ * is configured with a
  * {@link WhatsAppClientVerificationHandler.Web.PairingCode} handler and
- * a phone number is set on the store. The service is shared between
- * the IQ stream handler that triggers {@code companion_hello} and the
+ * a phone number is set on the store. The service is shared between the
+ * IQ stream handler that triggers {@code companion_hello} and the
  * notification stream handler that consumes the resulting
  * {@code primary_hello} and {@code refresh_code} notifications, and it
  * caches the generated pairing code, the companion ephemeral keypair,
@@ -42,14 +42,13 @@ import java.util.Objects;
  * timestamp so the companion can validate the primary's response and
  * complete the handshake.
  *
- * @apiNote
- * The entry point for Cobalt embedders that want to attach a new
- * device by having the user type an eight-character code into their
- * primary phone instead of scanning a QR code. The lifecycle is:
+ * <p>The flow lets the user attach a new device by typing an
+ * eight-character code into their primary phone instead of scanning a
+ * QR code. The lifecycle is:
  * <ol>
  *   <li>{@link #start} generates the code, ships
- *       {@code companion_hello} and delivers the code to
- *       {@link WhatsAppClientVerificationHandler.Web.PairingCode#handle}.</li>
+ *       {@code companion_hello}, and delivers the code to
+ *       {@link WhatsAppClientVerificationHandler.Web#handle(String)}.</li>
  *   <li>The user types the code on their primary device.</li>
  *   <li>{@link #handlePrimaryHello} runs the {@code companion_finish}
  *       algorithm, ships the IQ, and persists the derived ADV master
@@ -58,12 +57,12 @@ import java.util.Objects;
  *
  * @implNote
  * This implementation adapts WA Web's {@code WAWebAltDeviceLinkingApi}
- * module-level state into an instance-scoped service so multiple
- * Cobalt clients can run independent pairing flows. WA Web keeps the
- * pairing state in a singleton {@code PairingState} guarded by the
- * browser's single-threaded event loop; Cobalt runs stream handlers
- * across virtual threads, so this class serialises every state
- * transition under {@link #lock}. The QPL telemetry markers and the
+ * module-level state into an instance-scoped service so multiple Cobalt
+ * clients can run independent pairing flows. WA Web keeps the pairing
+ * state in a singleton {@code PairingState} guarded by the browser's
+ * single-threaded event loop; Cobalt runs stream handlers across
+ * virtual threads, so this class serialises every state transition
+ * under {@link #lock}. The QPL telemetry markers and the
  * {@code WAWebBackendApi.frontendFireAndForget} hooks emitted around
  * each phase by WA Web are dropped because Cobalt has no telemetry
  * pipeline and no front-end bus.
@@ -77,33 +76,36 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WACryptoHkdf")
 public final class CompanionPairingService {
     /**
-     * Maximum age in seconds of a pairing code before
+     * Holds the maximum age of a pairing code before
      * {@code primary_hello} is rejected.
      *
-     * @apiNote
-     * Caps how long the user has to type the code on the primary
-     * device. Matches the {@code I=180} literal in
-     * {@code WAWebAltDeviceLinkingApi}.
+     * <p>This caps how long the user has to type the code on the
+     * primary device.
+     *
+     * @implNote
+     * This implementation uses 180 seconds to match the {@code I=180}
+     * literal in {@code WAWebAltDeviceLinkingApi}.
      */
     private static final Duration CODE_MAX_AGE = Duration.ofSeconds(180);
 
     /**
-     * Maximum number of {@code primary_hello} notifications tolerated
-     * per generated pairing code.
+     * Holds the maximum number of {@code primary_hello} notifications
+     * tolerated per generated pairing code.
      *
-     * @apiNote
-     * Bounds how many times the user can mistype the code on the
-     * primary before the handshake aborts. Matches the {@code T=3}
-     * literal in {@code WAWebAltDeviceLinkingApi}.
+     * <p>This bounds how many times the user can mistype the code on
+     * the primary before the handshake aborts.
+     *
+     * @implNote
+     * This implementation uses 3 to match the {@code T=3} literal in
+     * {@code WAWebAltDeviceLinkingApi}.
      */
     private static final int MAX_PRIMARY_HELLO_ATTEMPTS = 3;
 
     /**
-     * Length in bytes of the PBKDF2 salt prefixing the wrapped
-     * ephemeral public key.
+     * Holds the length in bytes of the PBKDF2 salt prefixing the
+     * wrapped ephemeral public key.
      *
-     * @apiNote
-     * Used both when generating
+     * <p>This is used both when generating
      * {@code <link_code_pairing_wrapped_companion_ephemeral_pub>} and
      * when parsing the symmetric
      * {@code link_code_pairing_wrapped_primary_ephemeral_pub} delivered
@@ -112,33 +114,33 @@ public final class CompanionPairingService {
     private static final int PBKDF2_SALT_LENGTH = 32;
 
     /**
-     * Length in bytes of the AES-CTR initial counter prefixing the
-     * wrapped ephemeral public key.
+     * Holds the length in bytes of the AES-CTR initial counter
+     * prefixing the wrapped ephemeral public key.
      *
-     * @apiNote
-     * Matches the {@code new Uint8Array(16)} in WA Web's
-     * {@code WAWebAltDeviceLinkingAlgorithm.companionHelloInternal}
-     * and the symmetric parser in {@code companionFinishInternal}.
+     * @implNote
+     * This implementation uses 16 to match the
+     * {@code new Uint8Array(16)} in WA Web's
+     * {@code WAWebAltDeviceLinkingAlgorithm.companionHelloInternal} and
+     * the symmetric parser in {@code companionFinishInternal}.
      */
     private static final int AES_CTR_IV_LENGTH = 16;
 
     /**
-     * Length in bytes of the AES-GCM nonce used to encrypt the final
-     * identity bundle.
+     * Holds the length in bytes of the AES-GCM nonce used to encrypt
+     * the final identity bundle.
      *
-     * @apiNote
-     * Matches the WebCrypto default nonce length and the
-     * {@code new Uint8Array(12)} in WA Web's
+     * @implNote
+     * This implementation uses 12 to match the WebCrypto default nonce
+     * length and the {@code new Uint8Array(12)} in WA Web's
      * {@code companionFinishInternal}.
      */
     private static final int AES_GCM_IV_LENGTH = 12;
 
     /**
-     * Length in bytes of the Curve25519 public key component of the
-     * ephemeral keypair the companion ships to the primary.
+     * Holds the length in bytes of the Curve25519 public key component
+     * of the ephemeral keypair the companion ships to the primary.
      *
-     * @apiNote
-     * Consulted only to validate the minimum size of
+     * <p>This is consulted only to validate the minimum size of
      * {@code link_code_pairing_wrapped_primary_ephemeral_pub}; the
      * actual ciphertext can be longer because AES-CTR preserves the
      * input length.
@@ -146,45 +148,37 @@ public final class CompanionPairingService {
     private static final int CURVE25519_PUBLIC_KEY_LENGTH = 32;
 
     /**
-     * Length in bytes of the HKDF output used both as the AES-GCM
-     * bundle encryption key and as the derived ADV master secret.
+     * Holds the length in bytes of the HKDF output used both as the
+     * AES-GCM bundle encryption key and as the derived ADV master
+     * secret.
      *
-     * @apiNote
-     * Matches the {@code 32} length argument WA Web passes to
-     * {@link KDF}-equivalent
-     * {@code WACryptoHkdf.extractWithSaltAndExpand} for both the
-     * {@code link_code_pairing_key_bundle_encryption_key} and the
+     * @implNote
+     * This implementation uses 32 to match the length argument WA Web
+     * passes to {@code WACryptoHkdf.extractWithSaltAndExpand} for both
+     * the {@code link_code_pairing_key_bundle_encryption_key} and the
      * {@code adv_secret}.
      */
     private static final int HKDF_OUTPUT_LENGTH = 32;
 
     /**
-     * ASCII HKDF {@code info} label used when deriving the AES-GCM
-     * bundle encryption key from the X25519 ephemeral shared secret.
-     *
-     * @apiNote
-     * Verbatim from WA Web's
-     * {@code WAWebAltDeviceLinkingAlgorithm.getBundleEncryptionKey}.
+     * Holds the ASCII HKDF {@code info} label used when deriving the
+     * AES-GCM bundle encryption key from the X25519 ephemeral shared
+     * secret.
      */
     private static final String BUNDLE_ENCRYPTION_INFO = "link_code_pairing_key_bundle_encryption_key";
 
     /**
-     * ASCII HKDF {@code info} label used when deriving the ADV master
-     * secret from the concatenated X25519 shared secrets.
-     *
-     * @apiNote
-     * Verbatim from WA Web's
-     * {@code WAWebAltDeviceLinkingAlgorithm.createAdvSecret}.
+     * Holds the ASCII HKDF {@code info} label used when deriving the
+     * ADV master secret from the concatenated X25519 shared secrets.
      */
     private static final String ADV_SECRET_INFO = "adv_secret";
 
     /**
-     * Pairing-code Crockford-style base32 alphabet.
+     * Holds the pairing-code Crockford-style base32 alphabet.
      *
-     * @apiNote
-     * The alphabet skips {@code 0}, {@code I}, {@code O}, and
-     * {@code U} so the eight-character code is unambiguous when typed
-     * by a human reading it off the companion display.
+     * <p>The alphabet skips {@code 0}, {@code I}, {@code O}, and
+     * {@code U} so the eight-character code is unambiguous when typed by
+     * a human reading it off the companion display.
      *
      * @implNote
      * This implementation copies the literal
@@ -196,54 +190,53 @@ public final class CompanionPairingService {
             "123456789ABCDEFGHJKLMNPQRSTVWXYZ".toCharArray();
 
     /**
-     * Number of PBKDF2-HMAC-SHA256 iterations applied to the pairing
-     * code when deriving the AES-CTR key.
+     * Holds the number of PBKDF2-HMAC-SHA256 iterations applied to the
+     * pairing code when deriving the AES-CTR key.
      *
-     * @apiNote
-     * Reproduces WA Web's {@code iterations: 2<<16} (131072)
-     * literal in
+     * @implNote
+     * This implementation uses {@code 2 << 16} (131072) to reproduce WA
+     * Web's {@code iterations: 2<<16} literal in
      * {@code WAWebAltDeviceLinkingAlgorithm.deriveKey}.
      */
     private static final int PBKDF2_ITERATIONS = 2 << 16;
 
     /**
-     * Length in bits of the AES-CTR key derived by PBKDF2 from the
-     * pairing code.
+     * Holds the length in bits of the AES-CTR key derived by PBKDF2
+     * from the pairing code.
      *
-     * @apiNote
-     * Matches WA Web's {@code length: 256} parameter to
-     * {@code crypto.subtle.deriveKey} for the
-     * {@code name: "AES-CTR"} key.
+     * @implNote
+     * This implementation uses 256 to match WA Web's
+     * {@code length: 256} parameter to
+     * {@code crypto.subtle.deriveKey} for the {@code name: "AES-CTR"}
+     * key.
      */
     private static final int PBKDF2_KEY_BITS = 256;
 
     /**
-     * Length in bits of the AES-GCM authentication tag appended to the
-     * encrypted identity bundle.
+     * Holds the length in bits of the AES-GCM authentication tag
+     * appended to the encrypted identity bundle.
      *
-     * @apiNote
-     * Matches the WebCrypto default; WA Web does not specify
-     * {@code tagLength} explicitly so the bundle inherits the 128-bit
-     * tag.
+     * @implNote
+     * This implementation uses 128 to match the WebCrypto default; WA
+     * Web does not specify {@code tagLength} explicitly so the bundle
+     * inherits the 128-bit tag.
      */
     private static final int GCM_TAG_BITS = 128;
 
     /**
-     * The {@link WhatsAppClient} used to reach the store and dispatch
-     * the pairing IQs.
+     * Holds the {@link WhatsAppClient} used to reach the store and
+     * dispatch the pairing IQs.
      *
-     * @apiNote
-     * Injected via constructor; never {@code null} once construction
-     * has completed.
+     * <p>This is injected via the constructor and is never {@code null}
+     * once construction has completed.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The web verification handler that receives the pairing code
+     * Holds the web verification handler that receives the pairing code
      * after {@code companion_hello} returns.
      *
-     * @apiNote
-     * Only the
+     * <p>Only the
      * {@link WhatsAppClientVerificationHandler.Web.PairingCode}
      * sub-type triggers this service; QR handlers leave the field
      * present but {@link #isEnabled} returns {@code false}.
@@ -251,8 +244,8 @@ public final class CompanionPairingService {
     private final WhatsAppClientVerificationHandler.Web webVerificationHandler;
 
     /**
-     * Mutex serialising every transition of {@link #stage} and every
-     * read or write of the cached handshake fields.
+     * Holds the mutex serialising every transition of {@link #stage}
+     * and every read or write of the cached handshake fields.
      *
      * @implNote
      * This implementation introduces an explicit lock because Cobalt
@@ -264,52 +257,48 @@ public final class CompanionPairingService {
     private final Object lock;
 
     /**
-     * The current handshake stage.
+     * Holds the current handshake stage.
      *
-     * @apiNote
-     * Inspected by {@link #handlePrimaryHello} to decide whether to
-     * regenerate the ADV secret and rerun the algorithm or to reject
-     * the notification as out-of-order.
+     * <p>This is inspected by {@link #handlePrimaryHello} to decide
+     * whether to regenerate the ADV secret and rerun the algorithm or
+     * to reject the notification as out-of-order.
      */
     private CompanionPairingStage stage;
 
     /**
-     * The pairing code produced by the most recent
+     * Holds the pairing code produced by the most recent
      * {@code companion_hello}.
      *
-     * @apiNote
-     * Cached because {@link #handlePrimaryHello} needs the original
-     * code to re-derive the PBKDF2 AES-CTR key that unwraps the
+     * <p>This is cached because {@link #handlePrimaryHello} needs the
+     * original code to re-derive the PBKDF2 AES-CTR key that unwraps the
      * primary's ephemeral public key.
      */
     private String pairingCode;
 
     /**
-     * The companion's ephemeral Curve25519 keypair for the current
-     * pairing attempt.
+     * Holds the companion's ephemeral Curve25519 keypair for the
+     * current pairing attempt.
      *
-     * @apiNote
-     * The private half is needed to run X25519 against the primary's
+     * <p>The private half is needed to run X25519 against the primary's
      * decrypted ephemeral public key during {@code companion_finish}.
      */
     private SignalIdentityKeyPair companionEphemeralKeyPair;
 
     /**
-     * The server-issued {@code link_code_pairing_ref} returned by the
-     * {@code companion_hello} IQ.
+     * Holds the server-issued {@code link_code_pairing_ref} returned by
+     * the {@code companion_hello} IQ.
      *
-     * @apiNote
-     * Compared byte-for-byte against the ref carried by the primary's
-     * notification to detect replays or concurrent pairing attempts.
+     * <p>This is compared byte-for-byte against the ref carried by the
+     * primary's notification to detect replays or concurrent pairing
+     * attempts.
      */
     private byte[] cachedRef;
 
     /**
-     * The phone-number JID identifying the primary device the user is
-     * linking against.
+     * Holds the phone-number JID identifying the primary device the
+     * user is linking against.
      *
-     * @apiNote
-     * Captured from
+     * <p>This is captured from
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#phoneNumber}
      * at {@link #start} time and echoed into the {@code companion_hello}
      * and {@code companion_finish} IQs.
@@ -317,21 +306,20 @@ public final class CompanionPairingService {
     private Jid phoneJid;
 
     /**
-     * Wall-clock instant at which the pairing code was generated.
+     * Holds the wall-clock instant at which the pairing code was
+     * generated.
      *
-     * @apiNote
-     * Compared against {@link Instant#now} in
+     * <p>This is compared against {@link Instant#now()} in
      * {@link #handlePrimaryHello} to reject codes older than
      * {@link #CODE_MAX_AGE}.
      */
     private Instant codeGenerationTs;
 
     /**
-     * Count of {@code primary_hello} notifications observed against
-     * the current pairing code.
+     * Holds the count of {@code primary_hello} notifications observed
+     * against the current pairing code.
      *
-     * @apiNote
-     * Incremented on every call to
+     * <p>This is incremented on every call to
      * {@link #handlePrimaryHello(byte[], byte[], byte[])} and checked
      * against {@link #MAX_PRIMARY_HELLO_ATTEMPTS} before the algorithm
      * is allowed to run.
@@ -342,17 +330,15 @@ public final class CompanionPairingService {
      * Constructs a service tied to the given client and verification
      * handler.
      *
-     * @apiNote
-     * Internal constructor wired by the client builder; embedders
-     * never call this directly. The same instance is shared between
-     * every handler that participates in the alt-device-linking flow.
+     * <p>The same instance is shared between every handler that
+     * participates in the alt-device-linking flow.
      *
      * @param whatsapp               the WhatsApp client; never
      *                               {@code null}
-     * @param webVerificationHandler the verification handler, which
-     *                               may be a QR or a pairing-code
-     *                               variant; {@code null} disables
-     *                               external code delivery
+     * @param webVerificationHandler the verification handler, which may
+     *                               be a QR or a pairing-code variant;
+     *                               {@code null} disables external code
+     *                               delivery
      * @throws NullPointerException if {@code whatsapp} is {@code null}
      */
     public CompanionPairingService(WhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
@@ -366,11 +352,11 @@ public final class CompanionPairingService {
      * Returns the pairing code published by the most recent
      * {@link #start} invocation.
      *
-     * @apiNote
-     * Synchronous accessor for embedders that prefer polling over the
-     * {@link WhatsAppClientVerificationHandler.Web.PairingCode#handle}
-     * push delivery. Returns {@code null} before {@link #start} runs
-     * and after the service clears its cache.
+     * <p>This is a synchronous accessor for callers that prefer polling
+     * over the
+     * {@link WhatsAppClientVerificationHandler.Web#handle(String)} push
+     * delivery. It returns {@code null} before {@link #start} runs and
+     * after the service clears its cache.
      *
      * @return the eight-character pairing code, or {@code null} when
      *         none is available
@@ -384,14 +370,13 @@ public final class CompanionPairingService {
     /**
      * Returns whether this service should drive the pair-device flow.
      *
-     * @apiNote
-     * Consulted by the pair-device IQ stream handler to decide whether
-     * to route the flow through pairing-code logic (this service) or
-     * to fall back to the QR path. Reports {@code true} only when the
-     * configured verification handler is a
-     * {@link WhatsAppClientVerificationHandler.Web.PairingCode} and
-     * the store carries a phone number that can be turned into the
-     * primary JID.
+     * <p>This is consulted by the pair-device IQ stream handler to
+     * decide whether to route the flow through pairing-code logic (this
+     * service) or to fall back to the QR path. It reports {@code true}
+     * only when the configured verification handler is a
+     * {@link WhatsAppClientVerificationHandler.Web.PairingCode} and the
+     * store carries a phone number that can be turned into the primary
+     * JID.
      *
      * @return whether the alt-device-linking flow should run
      */
@@ -404,37 +389,36 @@ public final class CompanionPairingService {
      * Generates a fresh pairing code, ships {@code companion_hello},
      * and publishes the code to the verification handler.
      *
-     * @apiNote
-     * The entry point of the companion-side handshake. Must be invoked
-     * before any {@code primary_hello} or {@code refresh_code}
-     * notification is routed to this service. On success the user
-     * sees the eight-character code via
-     * {@link WhatsAppClientVerificationHandler.Web.PairingCode#handle}
-     * and can type it on their primary device.
+     * <p>This is the entry point of the companion-side handshake. It
+     * must be invoked before any {@code primary_hello} or
+     * {@code refresh_code} notification is routed to this service. On
+     * success the user sees the eight-character code via
+     * {@link WhatsAppClientVerificationHandler.Web#handle(String)} and
+     * can type it on their primary device. The pairing code is
+     * published only after the server has acknowledged the IQ, so the
+     * caller never sees a code that the server silently rejected.
      *
      * @implNote
-     * This implementation differs from WA Web in three places. WA Web
+     * This implementation differs from WA Web in two places. WA Web
      * generates the ADV secret eagerly inside
-     * {@code initializeAltDeviceLinking} (via
-     * {@code setADVSecretKey()} with no argument, which mints a fresh
-     * one); Cobalt defers ADV-secret material generation until inside
+     * {@code initializeAltDeviceLinking} (via {@code setADVSecretKey()}
+     * with no argument, which mints a fresh one); Cobalt defers
+     * ADV-secret material generation until inside
      * {@code companionFinish}. WA Web logs QPL points
      * ({@code generate_code_start}, {@code send_companion_hello_end},
-     * etc.) and emits {@code WAWebBackendApi.frontendFireAndForget}
-     * events; Cobalt skips both because it has no QPL pipeline. The
-     * pairing code is published only after the server has acknowledged
-     * the IQ so the embedder never sees a code that the server
-     * silently rejected.
+     * and others) and emits
+     * {@code WAWebBackendApi.frontendFireAndForget} events; Cobalt skips
+     * both because it has no QPL pipeline.
      *
-     * @throws IllegalStateException    if {@link #isEnabled} returned
-     *                                  {@code false}
-     * @throws GeneralSecurityException if the JCE provider rejects
-     *                                  any step of the code derivation
-     *                                  or if the server fails to
-     *                                  return a ref
-     * @throws WhatsAppRegistrationException if the server answered
-     *                                       with an {@code <iq
-     *                                       type="error">} stanza
+     * @throws IllegalStateException         if {@link #isEnabled}
+     *                                       returned {@code false}
+     * @throws GeneralSecurityException      if the JCE provider rejects
+     *                                       any step of the code
+     *                                       derivation or if the server
+     *                                       fails to return a ref
+     * @throws WhatsAppRegistrationException if the server answered with
+     *                                       an {@code <iq type="error">}
+     *                                       stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingApi", exports = {"initializeAltDeviceLinking", "startAltLinkingFlow"}, adaptation = WhatsAppAdaptation.ADAPTED)
     public void start() throws GeneralSecurityException {
@@ -470,20 +454,18 @@ public final class CompanionPairingService {
     /**
      * Handles a {@code refresh_code} notification.
      *
-     * @apiNote
-     * Invoked from the notification stream handler when the primary
-     * device asks the relay to refresh the pairing code presentation
-     * (for example, when the user re-opens the linked-devices screen).
-     * The Cobalt embedder does not call this directly.
+     * <p>This is invoked from the notification stream handler when the
+     * primary device asks the relay to refresh the pairing code
+     * presentation, for example when the user re-opens the
+     * linked-devices screen. It is a no-op when the cached ref matches
+     * the notification ref and discards the notification otherwise.
      *
      * @implNote
-     * This implementation is a no-op when the cached ref matches the
-     * notification ref, and discards the notification otherwise; the
-     * branch that re-writes {@link #cachedRef} only re-binds the
+     * The branch that re-writes {@link #cachedRef} only re-binds the
      * existing value to itself. WA Web's {@code refreshAltLinkingCode}
-     * triggers a {@code link_device_events:refresh_alt_linking_code}
-     * UI event; Cobalt has no UI bus and therefore intentionally drops
-     * the event.
+     * triggers a {@code link_device_events:refresh_alt_linking_code} UI
+     * event; Cobalt has no UI bus and therefore intentionally drops the
+     * event.
      *
      * @param notificationRef the ref carried by the notification, or
      *                        {@code null} if absent
@@ -503,43 +485,44 @@ public final class CompanionPairingService {
 
     /**
      * Handles a {@code primary_hello} notification by running the
-     * {@code companion_finish} algorithm and shipping the resulting
-     * IQ.
+     * {@code companion_finish} algorithm and shipping the resulting IQ.
      *
-     * @apiNote
-     * Invoked from the notification stream handler when the primary
-     * device confirms the typed code. On the first successful call
-     * the store's ADV secret is persisted via
+     * <p>This is invoked from the notification stream handler when the
+     * primary device confirms the typed code. On the first successful
+     * call the store's ADV secret is persisted via
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#setAdvSecretKey},
-     * concluding the handshake. A repeat notification arriving after
-     * the handshake has already finished triggers an ADV-secret
-     * regeneration and a rerun, up to
-     * {@link #MAX_PRIMARY_HELLO_ATTEMPTS} times per code.
+     * concluding the handshake. A repeat notification arriving after the
+     * handshake has already finished triggers an ADV-secret
+     * regeneration and a rerun, up to {@link #MAX_PRIMARY_HELLO_ATTEMPTS}
+     * times per code. Pairing-state mutations happen under
+     * {@link #lock} so a second notification cannot observe a
+     * half-applied state.
      *
      * @implNote
      * This implementation mirrors WA Web's
      * {@code handlePrimaryHelloInternal} except that Cobalt does not
      * catch and re-emit the {@code errorAltLinking} event WA Web fires
      * on failure; the exception is allowed to propagate to the stream
-     * handler. Pairing-state mutations happen under {@link #lock} so a
-     * second notification cannot observe a half-applied state.
+     * handler.
      *
-     * @param wrappedPrimaryEphemeralPub the 32-byte salt || 16-byte
-     *                                   counter || AES-CTR ciphertext
-     *                                   payload from the notification
+     * @param wrappedPrimaryEphemeralPub the 32-byte salt {@code ||}
+     *                                   16-byte counter {@code ||}
+     *                                   AES-CTR ciphertext payload from
+     *                                   the notification
      * @param primaryIdentityPublic      the primary's long-term
      *                                   identity public key
-     * @param notificationRef            the {@code link_code_pairing_ref}
+     * @param notificationRef            the
+     *                                   {@code link_code_pairing_ref}
      *                                   echoed by the notification
      * @throws IllegalStateException    if the service is not in
      *                                  {@link CompanionPairingStage#AFTER_SEND_COMPANION_HELLO}
      *                                  or able to be regressed into it
      * @throws GeneralSecurityException if any of the cached
-     *                                  preconditions fail (ref absent
-     *                                  or mismatched, hello cache
-     *                                  missing, code expired,
-     *                                  attempts exceeded), or if the
-     *                                  JCE provider rejects a step
+     *                                  preconditions fail (ref absent or
+     *                                  mismatched, hello cache missing,
+     *                                  code expired, attempts exceeded),
+     *                                  or if the JCE provider rejects a
+     *                                  step
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingApi", exports = {"handlePrimaryHello", "handlePrimaryHelloInternal"}, adaptation = WhatsAppAdaptation.DIRECT)
     public void handlePrimaryHello(byte[] wrappedPrimaryEphemeralPub, byte[] primaryIdentityPublic, byte[] notificationRef) throws GeneralSecurityException {
@@ -588,14 +571,13 @@ public final class CompanionPairingService {
     /**
      * Resets every field in the cached pairing state.
      *
-     * @apiNote
-     * Invoked at the top of {@link #start} so an aborted previous
-     * attempt cannot bleed into a fresh one. The caller must already
-     * hold {@link #lock}.
+     * <p>This is invoked at the top of {@link #start} so an aborted
+     * previous attempt cannot bleed into a fresh one. The caller must
+     * already hold {@link #lock}.
      *
      * @implNote
-     * This implementation mirrors WA Web's
-     * {@code PairingState.clear()} but does not call
+     * This implementation mirrors WA Web's {@code PairingState.clear()}
+     * but does not call
      * {@code WAWebAltDeviceLinkingQpl.clearCurrentMarker()} because
      * Cobalt has no QPL pipeline.
      */
@@ -613,21 +595,19 @@ public final class CompanionPairingService {
      * Regenerates the store's ADV secret to recover from a repeat
      * {@code primary_hello} in the same code window.
      *
-     * @apiNote
-     * Invoked only from {@link #handlePrimaryHello} when a second
-     * notification arrives while {@link #stage} is already
-     * {@link CompanionPairingStage#AFTER_SEND_COMPANION_FINISH},
-     * matching WA Web's same-named branch in
-     * {@code handlePrimaryHelloInternal}.
+     * <p>This is invoked only from {@link #handlePrimaryHello} when a
+     * second notification arrives while {@link #stage} is already
+     * {@link CompanionPairingStage#AFTER_SEND_COMPANION_FINISH}.
      *
      * @implNote
      * This implementation mints 32 random bytes locally rather than
      * delegating to a key-derivation helper. WA Web routes the same
-     * regeneration through {@code WAWebAdvSignatureApi.generateADVSecretKey},
-     * which internally calls
-     * {@code WAWebUserPrefsMultiDevice.setADVSecretKey} after building
-     * a random buffer of identical size, so the wire-visible
-     * behaviour matches.
+     * regeneration through
+     * {@code WAWebAdvSignatureApi.generateADVSecretKey}, which
+     * internally calls
+     * {@code WAWebUserPrefsMultiDevice.setADVSecretKey} after building a
+     * random buffer of identical size, so the wire-visible behaviour
+     * matches.
      */
     @WhatsAppWebExport(moduleName = "WAWebUserPrefsMultiDevice", exports = "setADVSecretKey", adaptation = WhatsAppAdaptation.ADAPTED)
     private void regenerateAdvSecret() {
@@ -639,27 +619,25 @@ public final class CompanionPairingService {
      * Distills an {@code <iq type="error">} response into a
      * {@link WhatsAppRegistrationException}.
      *
-     * @apiNote
-     * Internal helper for {@link #sendCompanionHello} and
-     * {@link #sendCompanionFinish}; returns {@code null} when the
-     * response is an ordinary {@code type="result"} stanza so the
-     * caller can proceed.
+     * <p>This is a helper for {@link #sendCompanionHello} and
+     * {@link #sendCompanionFinish}; it returns {@code null} when the
+     * response is an ordinary {@code type="result"} stanza so the caller
+     * can proceed.
      *
      * @implNote
      * This implementation reads the {@code <error>} child's
      * {@code code} (integer) and {@code text} (string) attributes and
-     * folds them into a single human-readable message. It mirrors WA
+     * folds them into a single human-readable message. It collapses WA
      * Web's {@code CompanionHelloError}/{@code CompanionFinishError}
-     * pair, with both error families collapsed onto Cobalt's single
-     * sealed
+     * pair onto Cobalt's single
      * {@link WhatsAppRegistrationException}.
      *
      * @param response the raw IQ response from the server
      * @param flow     a short label identifying the sub-flow, for
      *                 example {@code "companion_hello"} or
      *                 {@code "companion_finish"}
-     * @return the exception to throw, or {@code null} when the
-     *         response is not an error
+     * @return the exception to throw, or {@code null} when the response
+     *         is not an error
      */
     private WhatsAppRegistrationException extractIqError(Node response, String flow) {
         if (response == null || !response.hasAttribute("type", "error")) {
@@ -675,28 +653,25 @@ public final class CompanionPairingService {
     /**
      * Builds and sends the {@code companion_hello} IQ.
      *
-     * @apiNote
-     * Internal helper for {@link #start}; embedders never call this
-     * directly. Carries the wrapped companion ephemeral public key,
-     * the companion noise server-auth public key, the platform id
-     * and display label, and the (always-zero) link-code pairing
-     * nonce up to the WhatsApp relay.
+     * <p>This is a helper for {@link #start}. It carries the wrapped
+     * companion ephemeral public key, the companion noise server-auth
+     * public key, the platform id and display label, and the
+     * always-zero link-code pairing nonce up to the WhatsApp relay.
      *
      * @implNote
-     * This implementation issues the IQ at the {@link NodeBuilder}
-     * level rather than going through WA Web's
+     * This implementation issues the IQ at the {@link NodeBuilder} level
+     * rather than going through WA Web's
      * {@code WASmaxMdCompanionHelloRPC}-generated RPC. The
      * {@code link_code_pairing_nonce} element is always emitted with a
-     * single zero byte even though it is declared
-     * {@code OPTIONAL_CHILD} in the outbound mixin, matching WA Web's
-     * unconditional {@code new Uint8Array(1)} (a zero-initialised
-     * one-byte array). The {@code companion_platform_id} and
+     * single zero byte even though it is declared {@code OPTIONAL_CHILD}
+     * in the outbound mixin, matching WA Web's unconditional
+     * {@code new Uint8Array(1)}. The {@code companion_platform_id} and
      * {@code companion_platform_display} children are written as raw
-     * UTF-8 bytes rather than tokenised WAP labels so the relay
-     * accepts arbitrary platform names. The
+     * UTF-8 bytes rather than tokenised WAP labels so the relay accepts
+     * arbitrary platform names. The
      * {@code should_show_push_notification} attribute is always
-     * {@code "true"} on Cobalt, matching the {@code i:true} branch in
-     * WA Web's {@code sendCompanionHello}.
+     * {@code "true"} on Cobalt, matching the {@code i:true} branch in WA
+     * Web's {@code sendCompanionHello}.
      *
      * @param phoneJid                                    the primary
      *                                                    phone-number
@@ -762,20 +737,17 @@ public final class CompanionPairingService {
     /**
      * Builds and sends the {@code companion_finish} IQ.
      *
-     * @apiNote
-     * Internal helper for {@link #handlePrimaryHello}; embedders
-     * never call this directly. Carries the encrypted identity
-     * bundle, the companion's long-term identity public key, and the
-     * server-issued ref the relay uses to correlate this IQ with the
-     * earlier {@code companion_hello}.
+     * <p>This is a helper for {@link #handlePrimaryHello}. It carries
+     * the encrypted identity bundle, the companion's long-term identity
+     * public key, and the server-issued ref the relay uses to correlate
+     * this IQ with the earlier {@code companion_hello}.
      *
      * @implNote
      * This implementation builds the stanza at the {@link NodeBuilder}
      * level rather than through WA Web's
-     * {@code WASmaxMdCompanionFinishRPC}. The element ordering
-     * (wrapped bundle, companion identity, pairing ref) matches the
-     * order WA Web declares in
-     * {@code WAWebAltDeviceLinkingIq.sendCompanionFinish}.
+     * {@code WASmaxMdCompanionFinishRPC}. The element ordering (wrapped
+     * bundle, companion identity, pairing ref) matches the order WA Web
+     * declares in {@code WAWebAltDeviceLinkingIq.sendCompanionFinish}.
      *
      * @param phoneJid                        the primary phone-number
      *                                        JID being linked against
@@ -828,23 +800,21 @@ public final class CompanionPairingService {
      * Returns the {@code companion_platform_id} string identifying the
      * companion device to the primary.
      *
-     * @apiNote
-     * The string is sent inside {@code companion_hello} so the
+     * <p>The string is sent inside {@code companion_hello} so the
      * primary's confirmation dialog can name the device the user is
-     * about to authorize. Cobalt does not run inside a browser, so
-     * the mapping is approximate: the companion impersonates the
-     * client whose user agent it advertises.
+     * about to authorize. Cobalt does not run inside a browser, so the
+     * mapping is approximate: the companion impersonates the client
+     * whose user agent it advertises.
      *
      * @implNote
      * This implementation diverges from WA Web's
-     * {@code WAWebCompanionRegClientUtils.DEVICE_PLATFORM} table in
-     * one place. WA Web maps Edge running on Windows to the
-     * {@code EDGE = 2} branch, but Cobalt deliberately answers
-     * {@code "8"} ({@code UWP}) for {@link WhatsAppClient}s whose
-     * configured device platform is Windows, matching the wire shape
-     * the native UWP client sends. MacOS maps to {@code "6"}
-     * ({@code SAFARI}), and every other configuration falls back to
-     * {@code "1"} ({@code CHROME}).
+     * {@code WAWebCompanionRegClientUtils.DEVICE_PLATFORM} table in one
+     * place. WA Web maps Edge running on Windows to the {@code EDGE = 2}
+     * branch, but Cobalt deliberately answers {@code "8"} ({@code UWP})
+     * for {@link WhatsAppClient}s whose configured device platform is
+     * Windows, matching the wire shape the native UWP client sends.
+     * MacOS maps to {@code "6"} ({@code SAFARI}), and every other
+     * configuration falls back to {@code "1"} ({@code CHROME}).
      *
      * @return the decimal-string platform identifier
      */
@@ -858,13 +828,12 @@ public final class CompanionPairingService {
     }
 
     /**
-     * Returns the {@code companion_platform_display} label shown in
-     * the primary's confirmation UI.
+     * Returns the {@code companion_platform_display} label shown in the
+     * primary's confirmation UI.
      *
-     * @apiNote
-     * The label appears under the platform icon when the primary
-     * device asks the user to confirm the link. The browser portion
-     * of the label must agree with the platform id returned by
+     * <p>The label appears under the platform icon when the primary
+     * device asks the user to confirm the link. The browser portion of
+     * the label must agree with the platform id returned by
      * {@link #companionPlatformId} so the primary device sees a
      * self-consistent identification.
      *
@@ -872,10 +841,9 @@ public final class CompanionPairingService {
      * This implementation mirrors WA Web's
      * {@code l.name+" ("+l.os+")"} from
      * {@code WAWebAltDeviceLinkingIq.sendCompanionHello} but reads
-     * {@code os.name} via {@link System#getProperty} when the
-     * configured platform is neither Windows nor macOS, because
-     * Cobalt has no equivalent of WA Web's
-     * {@code WAWebBrowserInfo}.
+     * {@code os.name} via {@link System#getProperty(String, String)}
+     * when the configured platform is neither Windows nor macOS, because
+     * Cobalt has no equivalent of WA Web's {@code WAWebBrowserInfo}.
      *
      * @return the human-readable {@code "Browser (OS)"} label
      */
@@ -905,15 +873,14 @@ public final class CompanionPairingService {
      * Extracts the {@code <link_code_pairing_ref>} content from the
      * {@code companion_hello} response.
      *
-     * @apiNote
-     * Internal helper for {@link #sendCompanionHello}; warns through
-     * {@link System.Logger} when the ref is absent so a malformed
-     * server response shows up in the diagnostic log even though the
-     * caller raises a generic error.
+     * <p>This is a helper for {@link #sendCompanionHello}. It warns
+     * through {@link System.Logger} when the ref is absent so a
+     * malformed server response shows up in the diagnostic log even
+     * though the caller raises a generic error.
      *
      * @param response the IQ result node, or {@code null}
-     * @return the raw ref bytes, or {@code null} if the response or
-     *         the ref child is absent
+     * @return the raw ref bytes, or {@code null} if the response or the
+     *         ref child is absent
      */
     private byte[] extractRef(Node response) {
         if (response == null) {
@@ -935,23 +902,21 @@ public final class CompanionPairingService {
      * counter, then wraps the public key under the PBKDF2-derived
      * AES-CTR key.
      *
-     * @apiNote
-     * The wire-format contract is the concatenation
+     * <p>The wire-format contract is the concatenation
      * {@code salt || counter || AES-CTR(ephemeralPub)} carried inside
      * {@code <link_code_pairing_wrapped_companion_ephemeral_pub>}.
      *
      * @implNote
-     * This implementation matches WA Web's
-     * {@code companionHelloInternal} bit for bit on the wire, but
-     * does not return WA Web's {@code linkCodeKey} field: WA Web
-     * caches the imported PBKDF2 key so {@code companionFinish} can
-     * reuse it, while Cobalt re-derives the key from the pairing code
-     * and the primary's salt when needed, so the cached key would
-     * have no consumer.
+     * This implementation matches WA Web's {@code companionHelloInternal}
+     * bit for bit on the wire but does not return WA Web's
+     * {@code linkCodeKey} field: WA Web caches the imported PBKDF2 key so
+     * {@code companionFinish} can reuse it, while Cobalt re-derives the
+     * key from the pairing code and the primary's salt when needed, so
+     * the cached key would have no consumer.
      *
      * @return a populated {@link CompanionPairingCompanionHello}
-     * @throws GeneralSecurityException if the JCE provider rejects
-     *                                  any step
+     * @throws GeneralSecurityException if the JCE provider rejects any
+     *                                  step
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingAlgorithm", exports = {"companionHello", "companionHelloInternal"}, adaptation = WhatsAppAdaptation.DIRECT)
     private static CompanionPairingCompanionHello companionHello() throws GeneralSecurityException {
@@ -973,19 +938,17 @@ public final class CompanionPairingService {
      * Encodes exactly five bytes (40 bits) as an eight-character
      * Crockford-style base32 string over {@link #CROCKFORD_ALPHABET}.
      *
-     * @apiNote
-     * The output is the human-readable pairing code shown to the
-     * user. The fixed 5-byte input maps cleanly to eight 5-bit
-     * Crockford symbols with no leftover bits.
+     * <p>The output is the human-readable pairing code shown to the
+     * user. The fixed 5-byte input maps cleanly to eight 5-bit Crockford
+     * symbols with no leftover bits.
      *
      * @implNote
-     * This implementation specialises WA Web's
-     * arbitrary-length {@code bytesToCrockford} loop (a
-     * {@link ByteBuffer}-equivalent {@code DataView} walk
-     * with a trailing-bits branch) to straight-line bit extractions,
-     * since the only call site passes exactly five random bytes. The
-     * output is bit-for-bit identical to WA Web's for any 5-byte
-     * input.
+     * This implementation specialises WA Web's arbitrary-length
+     * {@code bytesToCrockford} loop (a {@link ByteBuffer}-equivalent
+     * {@code DataView} walk with a trailing-bits branch) to
+     * straight-line bit extractions, since the only call site passes
+     * exactly five random bytes. The output is bit-for-bit identical to
+     * WA Web's for any 5-byte input.
      *
      * @param input the 5-byte buffer to encode
      * @return an 8-character Crockford-base32 string
@@ -1019,47 +982,42 @@ public final class CompanionPairingService {
      * Completes the handshake after a {@code primary_hello}
      * notification.
      *
-     * @apiNote
-     * Internal helper for {@link #handlePrimaryHello}; embedders
-     * never call this directly. Re-derives the PBKDF2 key from the
-     * pairing code and the primary's salt, decrypts the primary's
-     * ephemeral public key, runs two X25519 agreements (ephemeral and
-     * identity), and wraps the companion identity bundle under an
-     * HKDF-derived AES-GCM key.
+     * <p>This is a helper for {@link #handlePrimaryHello}. It re-derives
+     * the PBKDF2 key from the pairing code and the primary's salt,
+     * decrypts the primary's ephemeral public key, runs two X25519
+     * agreements (ephemeral and identity), and wraps the companion
+     * identity bundle under an HKDF-derived AES-GCM key.
      *
      * @implNote
-     * This implementation matches WA Web's
-     * {@code companionFinishInternal} bit for bit on the wire format
-     * but folds in the random generation that WA Web routes through
-     * a separate {@code companionFinish} wrapper (the
-     * {@code advSecretMaterialSalt}, {@code bundleHkdfSalt}, and
-     * {@code gcmIv} buffers WA Web fills from
+     * This implementation matches WA Web's {@code companionFinishInternal}
+     * bit for bit on the wire format but folds in the random generation
+     * that WA Web routes through a separate {@code companionFinish}
+     * wrapper (the {@code advSecretMaterialSalt}, {@code bundleHkdfSalt},
+     * and {@code gcmIv} buffers WA Web fills from
      * {@code crypto.getRandomValues}). The HKDF-Extract-then-Expand
      * sequence is invoked through {@link KDF} with
-     * {@link HKDFParameterSpec}, the JDK 25 API equivalent of WA
-     * Web's {@code WACryptoHkdf.extractWithSaltAndExpand}. AES-GCM is
-     * driven with a sequence of {@link Cipher#update} calls so the
+     * {@link HKDFParameterSpec}, the JDK API equivalent of WA Web's
+     * {@code WACryptoHkdf.extractWithSaltAndExpand}. AES-GCM is driven
+     * with a sequence of
+     * {@link Cipher#update(byte[], int, int, byte[], int)} calls so the
      * three plaintext segments (companion identity, primary identity,
-     * ADV secret material salt) feed into one authentication tag in
-     * the same order WA Web concatenates them.
+     * ADV secret material salt) feed into one authentication tag in the
+     * same order WA Web concatenates them.
      *
-     * @param pairingCode                the pairing code the user
-     *                                   typed on the primary
-     * @param wrappedPrimaryEphemeralPub the salt || counter ||
-     *                                   ciphertext payload from
-     *                                   {@code primary_hello}
-     * @param primaryIdentityPublic      the primary's long-term
-     *                                   identity public key
-     * @param companionEphemeralKeyPair  the companion keypair
-     *                                   produced by
-     *                                   {@link #companionHello}
+     * @param pairingCode                the pairing code the user typed
+     *                                   on the primary
+     * @param wrappedPrimaryEphemeralPub the salt {@code ||} counter
+     *                                   {@code ||} ciphertext payload
+     *                                   from {@code primary_hello}
+     * @param primaryIdentityPublic      the primary's long-term identity
+     *                                   public key
+     * @param companionEphemeralKeyPair  the companion keypair produced
+     *                                   by {@link #companionHello}
      * @param companionIdentityKeyPair   the companion's long-term
      *                                   identity keypair
-     * @return a populated
-     *         {@link CompanionPairingCompanionFinish}
-     * @throws GeneralSecurityException if any argument is malformed
-     *                                  or the JCE provider rejects a
-     *                                  step
+     * @return a populated {@link CompanionPairingCompanionFinish}
+     * @throws GeneralSecurityException if any argument is malformed or
+     *                                  the JCE provider rejects a step
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingAlgorithm", exports = {"companionFinish", "companionFinishInternal"}, adaptation = WhatsAppAdaptation.DIRECT)
     private static CompanionPairingCompanionFinish companionFinish(
@@ -1147,29 +1105,27 @@ public final class CompanionPairingService {
      * Derives a 256-bit AES-CTR key from the pairing code via
      * PBKDF2-HMAC-SHA256.
      *
-     * @apiNote
-     * Internal helper called from both
-     * {@link #companionHello} (encrypting the companion ephemeral
-     * public key) and {@link #companionFinish} (decrypting the primary
-     * ephemeral public key). The pairing code is the password and the
-     * caller-supplied salt is the same {@link #PBKDF2_SALT_LENGTH}
-     * byte buffer that prefixes the wire payload.
+     * <p>This is a helper called from both {@link #companionHello}
+     * (encrypting the companion ephemeral public key) and
+     * {@link #companionFinish} (decrypting the primary ephemeral public
+     * key). The pairing code is the password and the caller-supplied
+     * salt is the same {@link #PBKDF2_SALT_LENGTH} byte buffer that
+     * prefixes the wire payload.
      *
      * @implNote
      * This implementation matches WA Web's
      * {@code WAWebAltDeviceLinkingAlgorithm.deriveKey} parameter for
      * parameter: SHA-256 HMAC, {@value #PBKDF2_ITERATIONS} iterations,
-     * {@value #PBKDF2_KEY_BITS}-bit output. The result is rewrapped
-     * as a {@link SecretKeySpec} so it can drive an
+     * {@value #PBKDF2_KEY_BITS}-bit output. The result is rewrapped as a
+     * {@link SecretKeySpec} so it can drive an
      * {@code "AES/CTR/NoPadding"} cipher directly.
      *
      * @param pairingCode the eight-character pairing code used as the
      *                    password
      * @param salt        the per-side PBKDF2 salt
-     * @return a {@link SecretKey} suitable for
-     *         {@code AES/CTR/NoPadding}
-     * @throws GeneralSecurityException if the JCE provider rejects
-     *                                  the parameters
+     * @return a {@link SecretKey} suitable for {@code AES/CTR/NoPadding}
+     * @throws GeneralSecurityException if the JCE provider rejects the
+     *                                  parameters
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingAlgorithm", exports = "deriveKey", adaptation = WhatsAppAdaptation.DIRECT)
     private static SecretKey derivePairingKey(String pairingCode, byte[] salt) throws GeneralSecurityException {

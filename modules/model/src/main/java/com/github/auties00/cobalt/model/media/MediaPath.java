@@ -126,10 +126,11 @@ public enum MediaPath {
     PTV("ptv", null, "WhatsApp Video Keys", false),
 
     /**
-     * Encrypted application-state synchronization blobs. The payload is
-     * compressed and must be inflated after decryption.
+     * Encrypted application-state synchronization blobs. The payload is not
+     * compressed; once decrypted, the bytes are decoded directly as a
+     * synchronization protobuf, so no inflation step is applied.
      */
-    APP_STATE("md-app-state", "mms/md-app-state", "WhatsApp App State Keys", true),
+    APP_STATE("md-app-state", "mms/md-app-state", "WhatsApp App State Keys", false),
 
     /**
      * Encrypted message-history synchronization blobs delivered during

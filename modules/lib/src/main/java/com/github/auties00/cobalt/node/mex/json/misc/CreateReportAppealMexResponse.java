@@ -19,96 +19,78 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Inbound parsed response of the {@link CreateReportAppealMexRequest}
- * mutation, exposing the full {@code xwa2_create_channel_report_appeal_v2}
- * envelope returned by the relay.
+ * Exposes the parsed {@code xwa2_create_channel_report_appeal_v2} envelope returned by the
+ * {@link CreateReportAppealMexRequest} mutation.
  *
- * @apiNote Drives the channel-report appeal entry on WA Web's report
- * management surface; consumed by callers mirroring
- * {@code WAWebCreateReportAppealJob.createReportAppeal}, which feeds the
- * envelope through
- * {@code WAWebNewsletterReportModelUtils.mapMexReportToNewsletterReport}
- * to project an updated report record into the UI.
+ * <p>The envelope projects the updated channel-report record so callers can render an appeal entry
+ * on a report management surface. Each top-level scalar is exposed as an {@link Optional}, the two
+ * epoch-second timestamps as {@link Instant}, and the appeal-specific scalars through the nested
+ * {@link Appeal} record.
  *
- * @implNote This implementation flattens WA Web's
- * {@code reported_content_data} inline-fragment block
- * ({@code XWA2ChannelServerMsgData} and
- * {@code XWA2ChannelQuestionResponseData}) into three independent
- * {@link Optional} scalars (server message id, server response id, notify
- * name), and exposes each top-level scalar as an {@link Optional} or as an
- * {@link Instant} for the two epoch-second timestamps. The nested
- * {@link Appeal} record carries the appeal-specific scalars without further
- * projection.
+ * @implNote This implementation flattens the {@code reported_content_data} inline-fragment block
+ * into three independent {@link Optional} scalars (server message id, server response id, notify
+ * name) rather than preserving the fragment nesting.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateReportAppealJob")
 public final class CreateReportAppealMexResponse implements MexOperation.Response.Json {
     /**
-     * The {@code report_id} scalar projected from
-     * {@code xwa2_create_channel_report_appeal_v2.report_id}.
+     * Holds the {@code report_id} scalar projected from the envelope.
      */
     private final String reportId;
 
     /**
-     * The {@code status} scalar projected from
-     * {@code xwa2_create_channel_report_appeal_v2.status}.
+     * Holds the {@code status} scalar projected from the envelope.
      */
     private final String status;
 
     /**
-     * The {@code creation_time} scalar (Unix epoch second) projected from
-     * {@code xwa2_create_channel_report_appeal_v2.creation_time}.
+     * Holds the {@code creation_time} scalar (Unix epoch second) projected from the envelope.
      */
     private final Long creationTime;
 
     /**
-     * The {@code last_update_time} scalar (Unix epoch second) projected from
-     * {@code xwa2_create_channel_report_appeal_v2.last_update_time}.
+     * Holds the {@code last_update_time} scalar (Unix epoch second) projected from the envelope.
      */
     private final Long lastUpdateTime;
 
     /**
-     * The {@code channel_name} scalar projected from
-     * {@code xwa2_create_channel_report_appeal_v2.channel_name}.
+     * Holds the {@code channel_name} scalar projected from the envelope.
      */
     private final String channelName;
 
     /**
-     * The {@code channel_jid} scalar projected from
-     * {@code xwa2_create_channel_report_appeal_v2.channel_jid}.
+     * Holds the {@code channel_jid} scalar projected from the envelope.
      */
     private final String channelJid;
 
     /**
-     * The {@code server_msg_id} scalar nested under
-     * {@code reported_content_data} (XWA2ChannelServerMsgData fragment).
+     * Holds the {@code server_msg_id} scalar flattened from the {@code reported_content_data}
+     * inline-fragment block.
      */
     private final String serverMsgId;
 
     /**
-     * The {@code server_response_id} scalar nested under
-     * {@code reported_content_data} (XWA2ChannelQuestionResponseData
-     * fragment).
+     * Holds the {@code server_response_id} scalar flattened from the {@code reported_content_data}
+     * inline-fragment block.
      */
     private final String responseServerMsgId;
 
     /**
-     * The {@code notify_name} scalar nested under
-     * {@code reported_content_data}.
+     * Holds the {@code notify_name} scalar flattened from the {@code reported_content_data}
+     * inline-fragment block.
      */
     private final String notifyName;
 
     /**
-     * The parsed {@code appeal} sub-object carrying the appeal-specific
-     * scalars.
+     * Holds the parsed {@code appeal} sub-object carrying the appeal-specific scalars.
      */
     private final Appeal appeal;
 
     /**
-     * Constructs a new response wrapping the parsed scalar and nested fields
-     * of the {@code xwa2_create_channel_report_appeal_v2} envelope.
+     * Constructs a new response wrapping the parsed scalar and nested fields of the
+     * {@code xwa2_create_channel_report_appeal_v2} envelope.
      *
-     * @apiNote Private; instances are produced by the {@link #of(Node)}
-     * parser.
+     * <p>Instances are produced only by the {@link #of(Node)} parser.
      *
      * @param reportId             the {@code report_id} scalar, may be {@code null}
      * @param status               the {@code status} scalar, may be {@code null}
@@ -137,16 +119,13 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Reads the {@code <result>} child's byte content and routes
-     * it through the private byte-level parser. Callers receive
-     * {@link Optional#empty()} when the stanza carries no result or when
-     * the {@code data.xwa2_create_channel_report_appeal_v2} envelope is
-     * absent; WA Web's wrapper raises a {@code ServerStatusCodeError(500)}
-     * in the same situation.
+     * <p>Reads the {@code <result>} child's byte content and routes it through the private
+     * byte-level parser. Yields {@link Optional#empty()} when the stanza carries no result or when
+     * the {@code data.xwa2_create_channel_report_appeal_v2} envelope is absent.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return an {@link Optional} wrapping the parsed response, or
-     *         {@link Optional#empty()} if the expected JSON shape is absent
+     * @return an {@link Optional} wrapping the parsed response, or {@link Optional#empty()} if the
+     *         expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexCreateReportAppealJob", exports = "createReportAppeal",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -157,162 +136,150 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
     }
 
     /**
-     * Returns the {@code report_id} scalar projected from the
-     * {@code xwa2_create_channel_report_appeal_v2} envelope.
+     * Returns the {@code report_id} scalar projected from the envelope.
      *
-     * @return an {@link Optional} containing the report identifier, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the report identifier, or {@link Optional#empty()} if
+     *         the relay omitted the scalar
      */
     public Optional<String> reportId() {
         return Optional.ofNullable(reportId);
     }
 
     /**
-     * Returns the {@code status} scalar projected from the
-     * {@code xwa2_create_channel_report_appeal_v2} envelope.
+     * Returns the {@code status} scalar projected from the envelope.
      *
-     * @return an {@link Optional} containing the report status, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the report status, or {@link Optional#empty()} if the
+     *         relay omitted the scalar
      */
     public Optional<String> status() {
         return Optional.ofNullable(status);
     }
 
     /**
-     * Returns the {@code creation_time} scalar projected from the
-     * {@code xwa2_create_channel_report_appeal_v2} envelope, converted from
-     * Unix epoch seconds to an {@link Instant}.
+     * Returns the {@code creation_time} scalar converted from Unix epoch seconds to an
+     * {@link Instant}.
      *
-     * @return an {@link Optional} containing the creation instant, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the creation instant, or {@link Optional#empty()} if
+     *         the relay omitted the scalar
      */
     public Optional<Instant> creationTime() {
         return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
     }
 
     /**
-     * Returns the {@code last_update_time} scalar projected from the
-     * {@code xwa2_create_channel_report_appeal_v2} envelope, converted from
-     * Unix epoch seconds to an {@link Instant}.
+     * Returns the {@code last_update_time} scalar converted from Unix epoch seconds to an
+     * {@link Instant}.
      *
-     * @return an {@link Optional} containing the last update instant, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the last update instant, or {@link Optional#empty()}
+     *         if the relay omitted the scalar
      */
     public Optional<Instant> lastUpdateTime() {
         return Optional.ofNullable(lastUpdateTime).map(Instant::ofEpochSecond);
     }
 
     /**
-     * Returns the {@code channel_name} scalar projected from the
-     * {@code xwa2_create_channel_report_appeal_v2} envelope.
+     * Returns the {@code channel_name} scalar projected from the envelope.
      *
-     * @return an {@link Optional} containing the channel name, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the channel name, or {@link Optional#empty()} if the
+     *         relay omitted the scalar
      */
     public Optional<String> channelName() {
         return Optional.ofNullable(channelName);
     }
 
     /**
-     * Returns the {@code channel_jid} scalar projected from the
-     * {@code xwa2_create_channel_report_appeal_v2} envelope.
+     * Returns the {@code channel_jid} scalar projected from the envelope.
      *
-     * @return an {@link Optional} containing the channel JID, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the channel JID, or {@link Optional#empty()} if the
+     *         relay omitted the scalar
      */
     public Optional<String> channelJid() {
         return Optional.ofNullable(channelJid);
     }
 
     /**
-     * Returns the {@code server_msg_id} scalar nested under
-     * {@code reported_content_data} (XWA2ChannelServerMsgData fragment).
+     * Returns the {@code server_msg_id} scalar flattened from the {@code reported_content_data}
+     * inline-fragment block.
      *
-     * @return an {@link Optional} containing the server message id, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the server message id, or {@link Optional#empty()} if
+     *         the relay omitted the scalar
      */
     public Optional<String> serverMsgId() {
         return Optional.ofNullable(serverMsgId);
     }
 
     /**
-     * Returns the {@code server_response_id} scalar nested under
-     * {@code reported_content_data} (XWA2ChannelQuestionResponseData
-     * fragment).
+     * Returns the {@code server_response_id} scalar flattened from the
+     * {@code reported_content_data} inline-fragment block.
      *
-     * @return an {@link Optional} containing the server response id, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the server response id, or {@link Optional#empty()} if
+     *         the relay omitted the scalar
      */
     public Optional<String> responseServerMsgId() {
         return Optional.ofNullable(responseServerMsgId);
     }
 
     /**
-     * Returns the {@code notify_name} scalar nested under
-     * {@code reported_content_data}.
+     * Returns the {@code notify_name} scalar flattened from the {@code reported_content_data}
+     * inline-fragment block.
      *
-     * @return an {@link Optional} containing the reporter notify name, or
-     *         {@link Optional#empty()} if the relay omitted the scalar
+     * @return an {@link Optional} containing the reporter notify name, or {@link Optional#empty()}
+     *         if the relay omitted the scalar
      */
     public Optional<String> notifyName() {
         return Optional.ofNullable(notifyName);
     }
 
     /**
-     * Returns the parsed {@code appeal} sub-object exposing the appeal-
-     * specific scalars.
+     * Returns the parsed {@code appeal} sub-object exposing the appeal-specific scalars.
      *
-     * @return an {@link Optional} containing the parsed {@link Appeal}, or
-     *         {@link Optional#empty()} if the relay omitted the sub-object
+     * @return an {@link Optional} containing the parsed {@link Appeal}, or {@link Optional#empty()}
+     *         if the relay omitted the sub-object
      */
     public Optional<Appeal> appeal() {
         return Optional.ofNullable(appeal);
     }
 
     /**
-     * Parsed projection of the {@code appeal} sub-object nested under
+     * Holds the parsed projection of the {@code appeal} sub-object nested under
      * {@code xwa2_create_channel_report_appeal_v2}.
      *
-     * @apiNote Carries the appeal-specific scalars (state, reason, creation
-     * timestamp, original report id, generated appeal id) that drive the
-     * appeal timeline entry in WA Web's report management surface.
+     * <p>Carries the appeal-specific scalars (state, reason, creation timestamp, original report
+     * id, generated appeal id) that drive the appeal timeline entry on a report management surface.
      */
     public static final class Appeal {
         /**
-         * The {@code state} scalar of the appeal (for example
-         * {@code "PENDING"}, {@code "ACCEPTED"}, {@code "REJECTED"}).
+         * Holds the {@code state} scalar of the appeal (for example {@code "PENDING"},
+         * {@code "ACCEPTED"}, {@code "REJECTED"}).
          */
         private final String state;
 
         /**
-         * The {@code appeal_reason} scalar carrying the free-form
-         * justification submitted by the appellant.
+         * Holds the {@code appeal_reason} scalar carrying the free-form justification submitted by
+         * the appellant.
          */
         private final String appealReason;
 
         /**
-         * The {@code creation_time} scalar (Unix epoch second) marking when
-         * the appeal record was created.
+         * Holds the {@code creation_time} scalar (Unix epoch second) marking when the appeal record
+         * was created.
          */
         private final Long creationTime;
 
         /**
-         * The {@code report_id} scalar identifying the original report this
-         * appeal targets.
+         * Holds the {@code report_id} scalar identifying the original report this appeal targets.
          */
         private final String reportId;
 
         /**
-         * The {@code appeal_id} scalar carrying the relay-assigned appeal
-         * identifier.
+         * Holds the {@code appeal_id} scalar carrying the relay-assigned appeal identifier.
          */
         private final String appealId;
 
         /**
          * Constructs a new appeal record from the parsed scalar fields.
          *
-         * @apiNote Private; instances are produced by the
-         * {@link #of(JSONObject)} parser.
+         * <p>Instances are produced only by the {@link #of(JSONObject)} parser.
          *
          * @param state         the {@code state} scalar, may be {@code null}
          * @param appealReason  the {@code appeal_reason} scalar, may be {@code null}
@@ -331,8 +298,8 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
         /**
          * Returns the {@code state} scalar of the appeal.
          *
-         * @return an {@link Optional} containing the appeal state, or
-         *         {@link Optional#empty()} if the relay omitted the scalar
+         * @return an {@link Optional} containing the appeal state, or {@link Optional#empty()} if
+         *         the relay omitted the scalar
          */
         public Optional<String> state() {
             return Optional.ofNullable(state);
@@ -341,41 +308,39 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
         /**
          * Returns the {@code appeal_reason} scalar.
          *
-         * @return an {@link Optional} containing the appeal reason, or
-         *         {@link Optional#empty()} if the relay omitted the scalar
+         * @return an {@link Optional} containing the appeal reason, or {@link Optional#empty()} if
+         *         the relay omitted the scalar
          */
         public Optional<String> appealReason() {
             return Optional.ofNullable(appealReason);
         }
 
         /**
-         * Returns the {@code creation_time} scalar converted from Unix epoch
-         * seconds to an {@link Instant}.
+         * Returns the {@code creation_time} scalar converted from Unix epoch seconds to an
+         * {@link Instant}.
          *
-         * @return an {@link Optional} containing the appeal creation instant,
-         *         or {@link Optional#empty()} if the relay omitted the scalar
+         * @return an {@link Optional} containing the appeal creation instant, or
+         *         {@link Optional#empty()} if the relay omitted the scalar
          */
         public Optional<Instant> creationTime() {
             return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Returns the {@code report_id} scalar identifying the original
-         * report.
+         * Returns the {@code report_id} scalar identifying the original report.
          *
-         * @return an {@link Optional} containing the report identifier, or
-         *         {@link Optional#empty()} if the relay omitted the scalar
+         * @return an {@link Optional} containing the report identifier, or {@link Optional#empty()}
+         *         if the relay omitted the scalar
          */
         public Optional<String> reportId() {
             return Optional.ofNullable(reportId);
         }
 
         /**
-         * Returns the {@code appeal_id} scalar carrying the relay-assigned
-         * appeal identifier.
+         * Returns the {@code appeal_id} scalar carrying the relay-assigned appeal identifier.
          *
-         * @return an {@link Optional} containing the appeal identifier, or
-         *         {@link Optional#empty()} if the relay omitted the scalar
+         * @return an {@link Optional} containing the appeal identifier, or {@link Optional#empty()}
+         *         if the relay omitted the scalar
          */
         public Optional<String> appealId() {
             return Optional.ofNullable(appealId);
@@ -384,15 +349,13 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
         /**
          * Parses a single {@link Appeal} record from the given JSON object.
          *
-         * @apiNote Used by the enclosing
-         * {@link CreateReportAppealMexResponse#of(byte[])} byte-level parser
-         * and by {@link #ofArray(JSONArray)} when an appeal collection is
-         * returned. Callers receive {@link Optional#empty()} when
-         * {@code obj} is {@code null}.
+         * <p>Used by the enclosing {@link CreateReportAppealMexResponse#of(byte[])} byte-level
+         * parser and by {@link #ofArray(JSONArray)} when an appeal collection is returned. Yields
+         * {@link Optional#empty()} when {@code obj} is {@code null}.
          *
          * @param obj the JSON object carrying the appeal scalars, may be {@code null}
-         * @return an {@link Optional} wrapping the parsed appeal, or
-         *         {@link Optional#empty()} if {@code obj} is {@code null}
+         * @return an {@link Optional} wrapping the parsed appeal, or {@link Optional#empty()} if
+         *         {@code obj} is {@code null}
          */
         static Optional<Appeal> of(JSONObject obj) {
             if (obj == null) {
@@ -410,14 +373,11 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
         /**
          * Parses a list of {@link Appeal} records from the given JSON array.
          *
-         * @apiNote Provided for callers iterating an appeal collection in
-         * one step. {@code null} entries inside the array are skipped via
-         * {@link #of(JSONObject)} returning {@link Optional#empty()}; a
-         * {@code null} array collapses to {@link List#of()}.
+         * <p>Walks every element through {@link #of(JSONObject)}; {@code null} entries inside the
+         * array are skipped. A {@code null} array collapses to {@link List#of()}.
          *
          * @param arr the JSON array carrying the appeal records, may be {@code null}
-         * @return an unmodifiable list of parsed appeals, empty when
-         *         {@code arr} is {@code null}
+         * @return an unmodifiable list of parsed appeals, empty when {@code arr} is {@code null}
          */
         static List<Appeal> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -436,22 +396,17 @@ public final class CreateReportAppealMexResponse implements MexOperation.Respons
      * Parses the JSON payload carried by the {@code <result>} child into a
      * {@link CreateReportAppealMexResponse}.
      *
-     * @apiNote Private; routed through {@link #of(Node)} after the byte
-     * content of the {@code <result>} child is extracted. Returns
-     * {@link Optional#empty()} when the envelope, the {@code data} branch,
-     * or the {@code xwa2_create_channel_report_appeal_v2} child is absent.
+     * <p>Routed through {@link #of(Node)} after the byte content of the {@code <result>} child is
+     * extracted. Yields {@link Optional#empty()} when the envelope, the {@code data} branch, or the
+     * {@code xwa2_create_channel_report_appeal_v2} child is absent.
      *
-     * @implNote This implementation guards against the missing
-     * {@code reported_content_data} inline-fragment block by collapsing the
-     * three nested scalars to {@code null} when the object is absent rather
-     * than throwing, leaving the choice of how to surface absence to the
-     * caller via {@link Optional}.
+     * @implNote This implementation collapses the three {@code reported_content_data} scalars to
+     * {@code null} when that inline-fragment block is absent rather than throwing, leaving the
+     * choice of how to surface absence to the caller via {@link Optional}.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} wrapping the parsed response, or
-     *         {@link Optional#empty()} if the
-     *         {@code data.xwa2_create_channel_report_appeal_v2} envelope is
-     *         absent
+     * @return an {@link Optional} wrapping the parsed response, or {@link Optional#empty()} if the
+     *         {@code data.xwa2_create_channel_report_appeal_v2} envelope is absent
      */
     private static Optional<CreateReportAppealMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

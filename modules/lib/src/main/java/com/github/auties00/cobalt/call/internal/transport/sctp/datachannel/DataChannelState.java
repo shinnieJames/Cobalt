@@ -1,38 +1,46 @@
 package com.github.auties00.cobalt.call.internal.transport.sctp.datachannel;
 
 /**
- * Lifecycle state of a {@link DataChannel}.
+ * Enumerates the lifecycle states of a {@link DataChannel}.
  *
- * <p>Mirrors the four states defined by the WebRTC RTCDataChannel
- * specification (W3C webrtc §6.2). A channel proceeds linearly:
- * {@link #CONNECTING} → {@link #OPEN} → {@link #CLOSING} →
- * {@link #CLOSED}, with terminal {@link #CLOSED}.
+ * <p>The four states mirror the {@code RTCDataChannel.readyState} values defined by the W3C
+ * WebRTC specification. A channel advances strictly forward through
+ * {@link #CONNECTING}, {@link #OPEN}, {@link #CLOSING}, {@link #CLOSED}, with {@link #CLOSED}
+ * being terminal; no transition ever moves backward. The transition is published atomically on
+ * the channel's state holder so concurrent readers observe a single consistent value.
  */
 public enum DataChannelState {
     /**
-     * The channel has been created locally (or a remote
-     * {@link DcepMessage.Open DATA_CHANNEL_OPEN} was just received) but
-     * has not yet been acknowledged by the peer. Sends are not
-     * permitted.
+     * Indicates the channel exists but is not yet usable for application data.
+     *
+     * <p>A locally opened in-band channel starts here and remains until the peer's
+     * {@link DcepMessage.Ack} arrives; a channel created from a freshly received
+     * {@link DcepMessage.Open} also passes through this state momentarily before its
+     * acknowledgement is sent. Calls to {@link DataChannel#send(String)} and
+     * {@link DataChannel#send(byte[])} are rejected while the channel is in this state.
      */
     CONNECTING,
     /**
-     * Both sides have exchanged DCEP and the channel is ready for
-     * application data. Sends are permitted; the peer may also send to
-     * us.
+     * Indicates both sides have completed (or skipped, for negotiated channels) the DCEP
+     * handshake and the channel can carry application data in either direction.
+     *
+     * <p>Sends are permitted and inbound messages are dispatched to the registered
+     * {@link DataChannel.MessageListener}.
      */
     OPEN,
     /**
-     * A local {@link DataChannel#close()} has been requested but the
-     * close has not yet been observed by the peer (the SCTP outgoing
-     * stream has been reset, but the incoming stream-reset from the
-     * peer has not been acknowledged). Sends are no longer permitted.
+     * Indicates a local {@link DataChannel#close()} has been requested but the peer has not yet
+     * observed the close.
+     *
+     * <p>The local SCTP outgoing stream has been reset while the matching incoming stream-reset
+     * from the peer is still outstanding. Sends are no longer permitted.
      */
     CLOSING,
     /**
-     * The channel is closed in both directions and the {@code DataChannel}
-     * instance is permanently inert. Subsequent calls to
-     * {@link DataChannel#close()} are no-ops.
+     * Indicates the channel is closed in both directions and permanently inert.
+     *
+     * <p>Further calls to {@link DataChannel#close()} are no-ops and the {@link DataChannel}
+     * instance can no longer send or receive.
      */
     CLOSED
 }

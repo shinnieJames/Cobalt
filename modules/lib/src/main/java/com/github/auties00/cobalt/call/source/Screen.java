@@ -3,17 +3,15 @@ package com.github.auties00.cobalt.call.source;
 import com.github.auties00.cobalt.call.frame.video.VideoSource;
 
 /**
- * Factory helpers for capturing the system's screen as a
- * {@link VideoSource}. {@link #primary()} auto-detects the running
- * platform and grabs the conventional default display; the
- * named factories ({@link #x11(String)}, {@link #wayland(String)},
- * {@link #drm(String)}, {@link #macOs(int)},
- * {@link #windowsDesktop()}, {@link #windowsWindow(String)}) cover
- * the cases where the platform-default isn't right (Wayland,
- * specific monitor on a multi-display setup, single window
- * recording on Windows).
+ * Creates {@link VideoSource}s that capture the system's screen for screen-sharing in a call.
  *
- * <p>Indev choice:
+ * <p>This is a static factory with no instances. {@link #primary()} detects the running platform and
+ * captures its conventional default display. The named factories cover the cases the platform
+ * default does not: {@link #x11(String)}, {@link #wayland(String)}, and {@link #drm(String)} for the
+ * Linux display servers, {@link #macOs(int)} for a specific macOS screen, and
+ * {@link #windowsDesktop()} or {@link #windowsWindow(String)} for the whole Windows desktop or a
+ * single window. Each factory selects the libavdevice screen-grab input format conventional for its
+ * platform:
  *
  * <ul>
  *   <li>Linux X11: {@code xcbgrab}</li>
@@ -23,24 +21,32 @@ import com.github.auties00.cobalt.call.frame.video.VideoSource;
  *   <li>Windows: {@code gdigrab}</li>
  * </ul>
  *
- * <p>Each returned source produces I420 frames via the same
- * libavdevice → libavcodec → libswscale pipeline that
- * {@link Camera} uses.
+ * <p>Every returned source is a {@link Camera} pointed at a screen-grab device, so it produces I420
+ * frames through the same libavdevice, libavcodec, and libswscale pipeline that camera capture uses.
+ *
+ * @apiNote Wire one of these sources into a call to share a screen or a window. Prefer
+ * {@link #primary()} for the simple "share my main display" case, and reach for a named factory only
+ * when the platform default is wrong, for example on Wayland (where {@link #primary()} assumes X11)
+ * or to pick one monitor of a multi-display setup.
  */
 public final class Screen {
     /**
-     * Prevents instantiation.
+     * Prevents instantiation of this static factory.
+     *
+     * @throws AssertionError always, since the class is not instantiable
      */
     private Screen() {
         throw new AssertionError("Screen is not instantiable");
     }
 
     /**
-     * Captures the platform's default screen / primary display.
-     * On Linux this assumes X11 with display {@code ":0.0"} —
-     * Wayland users should call {@link #wayland(String)}.
+     * Returns a source capturing the platform's default screen.
      *
-     * @return the source
+     * <p>Selects the macOS screen at index {@code 0}, the whole Windows desktop, or the X11 display
+     * {@code ":0.0"} according to the running platform. On Linux this assumes X11; a Wayland session
+     * must instead use {@link #wayland(String)}.
+     *
+     * @return a source capturing the primary display
      */
     public static VideoSource primary() {
         var os = System.getProperty("os.name", "").toLowerCase();
@@ -50,68 +56,65 @@ public final class Screen {
     }
 
     /**
-     * Captures the X11 display via libavdevice's
-     * {@code xcbgrab} indev.
+     * Returns a source capturing an X11 display through the {@code xcbgrab} input format.
      *
-     * @param display the display string (e.g. {@code ":0.0"})
-     * @return the source
+     * @param display the X11 display string (for example {@code ":0.0"})
+     * @return a source capturing the given X11 display
      */
     public static VideoSource x11(String display) {
         return new Camera("xcbgrab", display);
     }
 
     /**
-     * Captures a Wayland source via libavdevice's
-     * {@code pipewiregrab} indev.
+     * Returns a source capturing a Wayland source through the {@code pipewiregrab} input format.
      *
-     * @param node the PipeWire node name
-     * @return the source
+     * @param node the PipeWire node name to capture
+     * @return a source capturing the given PipeWire node
      */
     public static VideoSource wayland(String node) {
         return new Camera("pipewiregrab", node);
     }
 
     /**
-     * Captures a Linux DRM card via libavdevice's
-     * {@code kmsgrab} indev. Requires root or
-     * {@code CAP_SYS_ADMIN}.
+     * Returns a source capturing a Linux DRM card through the {@code kmsgrab} input format.
      *
-     * @param card the DRM card path
-     *             (e.g. {@code "/dev/dri/card0"})
-     * @return the source
+     * <p>Capturing a DRM card requires elevated privileges (root or {@code CAP_SYS_ADMIN}).
+     *
+     * @param card the DRM card path (for example {@code "/dev/dri/card0"})
+     * @return a source capturing the given DRM card
      */
     public static VideoSource drm(String card) {
         return new Camera("kmsgrab", card);
     }
 
     /**
-     * Captures a macOS screen via libavdevice's
-     * {@code avfoundation} indev. Passing only the screen index
-     * yields a video-only capture.
+     * Returns a source capturing a macOS screen through the {@code avfoundation} input format.
+     *
+     * <p>Passing only the screen index yields a video-only capture with no audio.
      *
      * @param screenIndex the AVFoundation screen index
-     * @return the source
+     * @return a source capturing the given macOS screen
      */
     public static VideoSource macOs(int screenIndex) {
         return new Camera("avfoundation", screenIndex + ":");
     }
 
     /**
-     * Captures the entire Windows desktop via libavdevice's
-     * {@code gdigrab} indev.
+     * Returns a source capturing the entire Windows desktop through the {@code gdigrab} input
+     * format.
      *
-     * @return the source
+     * @return a source capturing the Windows desktop
      */
     public static VideoSource windowsDesktop() {
         return new Camera("gdigrab", "desktop");
     }
 
     /**
-     * Captures a specific Windows window by title via
-     * libavdevice's {@code gdigrab} indev.
+     * Returns a source capturing a single Windows window by title through the {@code gdigrab} input
+     * format.
      *
-     * @param title the window title
-     * @return the source
+     * @param title the title of the window to capture
+     * @return a source capturing the given Windows window
      */
     public static VideoSource windowsWindow(String title) {
         return new Camera("gdigrab", "title=" + title);

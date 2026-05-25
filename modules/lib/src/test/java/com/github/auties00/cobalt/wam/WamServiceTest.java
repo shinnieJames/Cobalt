@@ -47,43 +47,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Exercises the behavioural state machine of {@link WamService}
- * through a {@link TestableWamService} subclass that stubs the four
- * abstract timing/scheduling hooks.
+ * Exercises the behavioural state machine of {@link WamService} through a
+ * {@link TestableWamService} subclass that stubs the four abstract
+ * timing/scheduling hooks, validating commit dispatch and channel routing,
+ * the sampling-override surface, the {@code WAWebWamInitQueue} pre-init
+ * fallback, close idempotency, per-channel sequence-number wrap, retry and
+ * backoff, connectivity waiting, and buffer rotation and drop. Channel
+ * pinning is verified dynamically against the captured live event registry
+ * under {@code wam-event-definitions.json}.
  *
- * @apiNote
- * Validates the user-observable contract of {@link WamService}:
- * commit dispatch and channel routing, the sampling-override surface,
- * the {@code WAWebWamInitQueue} pre-init fallback, close idempotency,
- * per-channel sequence-number wrap, retry and backoff, connectivity
- * waiting, and buffer rotation and drop. Channel pinning is verified
- * dynamically against the captured live event registry under
- * {@code wam-event-definitions.json}.
- *
- * @implNote
- * This implementation never schedules a real
+ * <p>The subclass never schedules a real
  * {@link java.util.concurrent.ScheduledExecutorService} task or calls
- * {@link Thread#sleep(long)}; the {@link TestableWamService} records
- * every scheduler and sleep request so the test bodies can drive ticks
- * deterministically. The retry/backoff and connectivity tests use a
- * second-tier {@link RealisticHarness} that wires a
- * {@link TestWhatsAppClient} with an injectable connectivity flag and a
- * queue of canned IQ responses.
+ * {@link Thread#sleep(long)}; it records every scheduler and sleep request
+ * so the test bodies can drive ticks deterministically. The retry/backoff
+ * and connectivity tests use a second-tier {@link RealisticHarness} that
+ * wires a {@link TestWhatsAppClient} with an injectable connectivity flag
+ * and a queue of canned IQ responses.
  */
 @DisplayName("WamService behavioural state machine")
 class WamServiceTest {
-    /**
-     * Constructor smoke tests for both the public
-     * {@link DefaultWamService} ctor and the protected three-arg
-     * {@link WamService} ctor.
-     */
     @Nested
     @DisplayName("constructor")
     class ConstructorTests {
-        /**
-         * The {@link DefaultWamService} two-arg constructor builds
-         * without throwing.
-         */
         @Test
         @DisplayName("DefaultWamService(client, abPropsService) builds without throwing")
         void defaultBuilds() {
@@ -93,35 +78,20 @@ class WamServiceTest {
             assertNotNull(service);
         }
 
-        /**
-         * The protected three-arg ctor accepts a substituted
-         * {@link WamBeaconing} implementation.
-         */
         @Test
         @DisplayName("protected ctor accepts a substituted WamBeaconing")
         void protectedCtorAcceptsCustomBeaconing() {
             var props = TestABPropsService.builder().build();
             var client = TestWhatsAppClient.create();
-            var beaconing = (WamBeaconing) _ -> OptionalLong.empty();
+            var beaconing = (WamBeaconingService) _ -> OptionalLong.empty();
             var service = assertDoesNotThrow(() -> new TestableWamService(client, props, beaconing));
             assertNotNull(service);
         }
     }
 
-    /**
-     * Public-API smoke and deterministic-keep tests for the runtime
-     * sampling-override surface
-     * ({@link WamService#setSamplingOverride(int, int)},
-     * {@link WamService#removeSamplingOverride(int)},
-     * {@link WamService#replaceSamplingOverrides(Map)}).
-     */
     @Nested
     @DisplayName("setSamplingOverride / removeSamplingOverride / replaceSamplingOverrides")
     class SamplingOverrideSurface {
-        /**
-         * The three public sampling-override methods do not throw on
-         * representative input shapes.
-         */
         @Test
         @DisplayName("set / remove / replaceAll are no-throw")
         void apiSurface() {
@@ -131,15 +101,8 @@ class WamServiceTest {
             assertDoesNotThrow(() -> service.replaceSamplingOverrides(Map.of(1144, 50)));
         }
 
-        /**
-         * A sampling override with {@code weight=1} lets the next
-         * commit reach the pending list.
-         *
-         * @apiNote
-         * Only the deterministic case is asserted; the
-         * {@code weight>1} branch is probabilistic and would flake
-         * on a small sample.
-         */
+        // Only the deterministic weight=1 case is asserted; the weight>1 branch
+        // is probabilistic and would flake on a small sample.
         @Test
         @DisplayName("weight=1 override never samples out")
         void weightOneOverrideAlwaysKeeps() {
@@ -153,19 +116,14 @@ class WamServiceTest {
     }
 
     /**
-     * Commit-dispatch tests covering
-     * {@link WamChannel#REGULAR} routing after
-     * {@link WamService#markInitializedForTesting()} has flipped the
-     * service into the post-init phase. The pre-init deferral path is
-     * covered separately by {@link InitQueueReplay}.
+     * Commit-dispatch tests covering {@link WamChannel#REGULAR} routing
+     * after {@link WamService#markInitializedForTesting()} flips the
+     * service into the post-init phase; the pre-init deferral path is
+     * covered by {@link InitQueueReplay}.
      */
     @Nested
     @DisplayName("commit dispatch (post-init)")
     class CommitDispatch {
-        /**
-         * A freshly-constructed service reports zero pending events
-         * for every channel.
-         */
         @Test
         @DisplayName("fresh service has zero pending events per channel")
         void freshHasEmptyPending() {
@@ -176,14 +134,6 @@ class WamServiceTest {
             }
         }
 
-        /**
-         * A {@link WamChannel#REGULAR} commit lands in the REGULAR
-         * pending list and not in any other channel's list.
-         *
-         * @implNote
-         * Installs a {@code weight=1} override on the event id to
-         * remove the probabilistic sampling branch.
-         */
         @Test
         @DisplayName("REGULAR commit lands in the REGULAR pending list")
         void regularCommitLands() {
@@ -196,16 +146,8 @@ class WamServiceTest {
             assertEquals(0, service.pendingCount(WamChannel.PRIVATE));
         }
 
-        /**
-         * A redundant commit of the same event instance leaves the
-         * pending list unchanged.
-         *
-         * @apiNote
-         * Mirrors WA Web's
-         * {@code WAWebWamCodegenWamEvent.WamEvent.commit} redundant-commit
-         * guard: a second {@code markCommitted()} returns {@code false}
-         * and the event is dropped with a logged warning.
-         */
+        // A second markCommitted() returns false and the event is dropped with
+        // a logged warning, matching WA Web's redundant-commit guard.
         @Test
         @DisplayName("redundant commit of the same event leaves pending unchanged")
         void redundantCommitIsNoop() {
@@ -220,11 +162,6 @@ class WamServiceTest {
                     "second commit of the same instance should be dropped by markCommitted()");
         }
 
-        /**
-         * Two distinct event instances of the same spec both land in
-         * the pending list; there is no de-duplication at the spec
-         * level.
-         */
         @Test
         @DisplayName("distinct event instances both land")
         void twoInstancesLand() {
@@ -236,11 +173,6 @@ class WamServiceTest {
             assertEquals(2, service.pendingCount(WamChannel.REGULAR));
         }
 
-        /**
-         * {@link WamService#commitAndWaitForFlush(WamEventSpec)}
-         * returns a non-null future and queues the event into pending
-         * just like {@link WamService#commit(WamEventSpec)}.
-         */
         @Test
         @DisplayName("commitAndWaitForFlush returns a future and queues the event")
         void commitAndWaitForFlushFuture() {
@@ -252,11 +184,6 @@ class WamServiceTest {
             assertEquals(1, service.pendingCount(WamChannel.REGULAR));
         }
 
-        /**
-         * A {@link WamClientErrorsEventBuilder}-built event lands in
-         * the REGULAR pending list, covering a second representative
-         * event type beyond {@code PsIdUpdate}.
-         */
         @Test
         @DisplayName("WamClientErrorsEvent commit lands in REGULAR")
         void wamClientErrorsCommit() {
@@ -272,27 +199,17 @@ class WamServiceTest {
     }
 
     /**
-     * Init-queue tests covering the
-     * {@code WAWebWamInitQueue} fallback path: a commit that arrives
-     * before {@link WamService#initialize()} (or
-     * {@link WamService#markInitializedForTesting()}) has run is
+     * Init-queue tests covering the {@code WAWebWamInitQueue} fallback
+     * path: a commit that arrives before {@link WamService#initialize()}
+     * (or {@link WamService#markInitializedForTesting()}) has run is
      * deferred to the init queue and replayed when
-     * {@link WamService#drainInitQueue()} runs.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamCodegenWamEvent.WamEvent.commit} branch
-     * {@code getWamRuntime() ?? queueEvent}: validation, sampling,
-     * and dispatch all happen at drain time against the live runtime,
-     * not at the original commit point.
+     * {@link WamService#drainInitQueue()} runs, so validation, sampling,
+     * and dispatch all happen at drain time against the live runtime, not
+     * at the original commit point.
      */
     @Nested
     @DisplayName("init queue (WAWebWamInitQueue fallback)")
     class InitQueueReplay {
-        /**
-         * A pre-init commit pushes into the init queue rather than
-         * the pending list.
-         */
         @Test
         @DisplayName("pre-init commit defers into the init queue, not pending")
         void preInitCommitDefersToInitQueue() {
@@ -304,10 +221,6 @@ class WamServiceTest {
                     "pre-init commit must land in the init queue");
         }
 
-        /**
-         * Multiple pre-init commits accumulate in the init queue in
-         * FIFO order and none escape into the pending list.
-         */
         @Test
         @DisplayName("multiple pre-init commits all queue")
         void multiplePreInitCommitsAllQueue() {
@@ -319,11 +232,6 @@ class WamServiceTest {
             assertEquals(0, service.pendingCount(WamChannel.REGULAR));
         }
 
-        /**
-         * Draining the init queue after marking the service
-         * initialised re-runs each deferred commit and lands every
-         * event in the pending list.
-         */
         @Test
         @DisplayName("drain replays queued commits into pending and empties the queue")
         void drainReplaysIntoPending() {
@@ -342,18 +250,10 @@ class WamServiceTest {
                     "drained events must land in the REGULAR pending list");
         }
 
-        /**
-         * Sampling overrides installed between a pre-init commit and
-         * the drain are observed by the drained commit.
-         *
-         * @apiNote
-         * Models the production sequence inside
-         * {@link WamService#initialize()}: load AB-props sampling
-         * configs, set {@code initialized=true}, then drain. The
-         * drained commit re-enters the post-init dispatch path and
-         * consults {@link WamSamplingOverride} freshly, so AB-prop
-         * weights loaded mid-sequence apply to queued events.
-         */
+        // Models the production initialize() sequence: load AB-props sampling
+        // configs, set initialized=true, then drain. The drained commit re-enters
+        // the post-init dispatch path and consults WamSamplingOverride freshly,
+        // so weights loaded mid-sequence apply to queued events.
         @Test
         @DisplayName("sampling override installed before drain applies to queued commits")
         void samplingOverrideAppliesToDrainedCommits() {
@@ -373,17 +273,9 @@ class WamServiceTest {
                     "weight=1 override installed before drain must keep the event");
         }
 
-        /**
-         * A pre-init
-         * {@link WamService#commitAndWaitForFlush(WamEventSpec)}
-         * queues the event and returns a non-null future.
-         *
-         * @implNote
-         * The future is not asserted to complete here (completion
-         * requires a flush); the test only exercises the
-         * {@code whenComplete} bridge that the pre-init path wires
-         * between the deferred and live futures.
-         */
+        // The future is not asserted to complete here (completion requires a
+        // flush); this only exercises the whenComplete bridge the pre-init path
+        // wires between the deferred and live futures.
         @Test
         @DisplayName("pre-init commitAndWaitForFlush queues and returns a non-null future")
         void preInitCommitAndWaitForFlushFuture() {
@@ -403,16 +295,9 @@ class WamServiceTest {
         }
     }
 
-    /**
-     * Lifecycle tests for {@link WamService#close()}.
-     */
     @Nested
     @DisplayName("close")
     class CloseLifecycle {
-        /**
-         * {@link WamService#close()} on a never-initialised service
-         * does not throw.
-         */
         @Test
         @DisplayName("close on never-initialized service does not throw")
         void closeWithoutInitialize() {
@@ -420,10 +305,6 @@ class WamServiceTest {
             assertDoesNotThrow(service::close);
         }
 
-        /**
-         * A second {@link WamService#close()} after the first
-         * completes without throwing (idempotency).
-         */
         @Test
         @DisplayName("repeated close is idempotent")
         void repeatedClose() {
@@ -432,12 +313,6 @@ class WamServiceTest {
             assertDoesNotThrow(service::close);
         }
 
-        /**
-         * {@link WamService#close()} invokes
-         * {@link WamService#cancelAllScheduled()} so the captured
-         * recurring-task queue on the testable subclass drains to
-         * empty.
-         */
         @Test
         @DisplayName("close invokes cancelAllScheduled")
         void closeCancelsScheduled() {
@@ -452,23 +327,13 @@ class WamServiceTest {
 
     /**
      * Tests covering {@link WamService#checkMidCycleUpload()}, the
-     * five-second serialize tick's threshold-driven early-flush
-     * behaviour.
+     * five-second serialize tick's threshold-driven early-flush behaviour.
      */
     @Nested
     @DisplayName("checkMidCycleUpload")
     class MidCycleEntry {
-        /**
-         * The local self-PN seed used by the in-memory store
-         * harness.
-         */
         private final Jid selfPn = Jid.of("19254863482@s.whatsapp.net");
 
-        /**
-         * {@link WamService#checkMidCycleUpload()} pre-init returns
-         * silently and leaves the init queue and pending lists
-         * untouched.
-         */
         @Test
         @DisplayName("no-ops when not initialised, leaves init queue intact")
         void noopWhenNotInitialized() {
@@ -482,10 +347,6 @@ class WamServiceTest {
                     "checkMidCycleUpload pre-init must not promote queued events");
         }
 
-        /**
-         * Below-threshold pending aggregates stay in place and do
-         * not trigger an early flush.
-         */
         @Test
         @DisplayName("below-threshold pending stays in place")
         void belowThresholdDoesNotFlush() {
@@ -508,10 +369,6 @@ class WamServiceTest {
                     "below-threshold pending must stay queued for the next cycle");
         }
 
-        /**
-         * Above-threshold {@link WamChannel#REGULAR} pending
-         * triggers an early flush.
-         */
         @Test
         @DisplayName("above-threshold REGULAR pending triggers early flush")
         void aboveThresholdTriggersFlush() {
@@ -531,16 +388,9 @@ class WamServiceTest {
                     "early flush must drain the REGULAR pending list");
         }
 
-        /**
-         * The mid-cycle sweep skips {@link WamChannel#REALTIME} and
-         * continues across without throwing.
-         *
-         * @implNote
-         * Asserting the skip via a queued REALTIME event would race
-         * against the production immediate-flush virtual thread, so
-         * the test instead drives a small REGULAR commit and
-         * verifies the sweep completes without sending any node.
-         */
+        // Asserting the skip via a queued REALTIME event would race the
+        // immediate-flush virtual thread, so this drives a small REGULAR commit
+        // and verifies the sweep completes without sending any node.
         @Test
         @DisplayName("REALTIME channel is skipped by the mid-cycle sweep")
         void realtimeIsSkipped() {
@@ -555,29 +405,12 @@ class WamServiceTest {
         }
     }
 
-    /**
-     * Asserts per-event channel parity against the captured
-     * live WAM registry.
-     *
-     * @apiNote
-     * For every event in {@code wam-event-definitions.json} that
-     * resolves to a Cobalt {@link WamEventSpec}, the
-     * {@link WamEventSpec#channel()} reported by Cobalt must equal
-     * the channel string declared by WA Web's
-     * {@code WAWebWamCodegenUtils.events} (case-insensitive match
-     * against {@link WamChannel}). The factory catches regressions
-     * where a Cobalt {@code @WamEvent} annotation defaults a channel
-     * (typically REGULAR) for an event WA Web actually classifies as
-     * REALTIME or PRIVATE.
-     *
-     * @implNote
-     * The factory degrades to a single skip-test when the corpus
-     * fixture is unavailable; this lets contributors run the suite
-     * without the captured live registry installed.
-     *
-     * @return one {@link DynamicTest} per event id in the fixture,
-     *         or a single skip-test when the corpus is missing
-     */
+    // For every event in wam-event-definitions.json that resolves to a Cobalt
+    // WamEventSpec, the reported channel must equal the channel string from WA
+    // Web's WAWebWamCodegenUtils.events (case-insensitive against WamChannel),
+    // catching a Cobalt @WamEvent that defaults a channel (typically REGULAR)
+    // for an event WA Web classifies as REALTIME or PRIVATE. Degrades to a
+    // single skip-test when the corpus fixture is unavailable.
     @TestFactory
     @DisplayName("channel pinning vs live WAM registry")
     List<DynamicTest> channelPinningAgainstLiveRegistry() {
@@ -605,22 +438,8 @@ class WamServiceTest {
         return tests;
     }
 
-    /**
-     * Decodes a minimal event marker for the given id and asserts
-     * the resulting spec's channel matches the live channel string.
-     *
-     * @apiNote
-     * Helper for {@link #channelPinningAgainstLiveRegistry()}; the
-     * minimal marker carries no fields, so the registry must report
-     * the spec on the event id alone.
-     *
-     * @param eventName   the live event name, used only for
-     *                    assertion-failure messages
-     * @param eventId     the wire event id
-     * @param liveChannel the live channel string
-     *                    ({@code "regular"}, {@code "realtime"}, or
-     *                    {@code "private"})
-     */
+    // The minimal marker carries no fields, so the registry must report the
+    // spec on the event id alone.
     private static void assertChannelMatches(String eventName, int eventId, String liveChannel) {
         var buffer = new byte[8];
         var encoder = WamEventEncoder.of(buffer);
@@ -633,17 +452,8 @@ class WamServiceTest {
                         + "): Cobalt=" + spec.channel() + " live=" + expected);
     }
 
-    /**
-     * Builds a fresh {@code PsIdUpdate} event with the
-     * {@link PsIdAction#CREATED} action for use in commit tests.
-     *
-     * @apiNote
-     * Each call returns a new instance so the spec's
-     * {@code markCommitted()} guard does not reject repeat commits in
-     * tests that need to push more than one event.
-     *
-     * @return a fresh {@code PsIdUpdate} event spec
-     */
+    // Each call returns a new instance so the spec's markCommitted() guard does
+    // not reject repeat commits in tests that push more than one event.
     private static WamEventSpec samplePsIdEvent() {
         return new PsIdUpdateEventBuilder()
                 .psIdAction(PsIdAction.CREATED)
@@ -652,65 +462,31 @@ class WamServiceTest {
                 .build();
     }
 
-    /**
-     * Constructs a fresh {@link TestableWamService} bound to a
-     * trivially wired {@link TestWhatsAppClient} and
-     * {@link TestABPropsService}.
-     *
-     * @apiNote
-     * Used by the unit-level state-machine tests that do not need a
-     * real store or canned-response IQ pipeline; the heavier
-     * {@link #newRealisticHarness(Jid)} factory is used by the
-     * flush/retry tests.
-     *
-     * @return a new testable WAM service
-     */
+    // For the unit-level state-machine tests that do not need a real store or
+    // canned-response IQ pipeline; the flush/retry tests use newRealisticHarness.
     private static TestableWamService newService() {
         var props = TestABPropsService.builder().build();
         var client = TestWhatsAppClient.create().withAbPropsService(props);
-        return new TestableWamService(client, props, new DefaultWamBeaconing());
+        return new TestableWamService(client, props, new DefaultWamBeaconingService());
     }
 
     /**
-     * Test double for {@link WamService} that stubs the four
-     * abstract timing/scheduling hooks with deterministic capture
-     * lists.
-     *
-     * @apiNote
-     * Allows tests to inspect {@link #sleepRequests} and
-     * {@link #scheduledRunnables} after exercising the service;
-     * neither {@link #sleep(long)} nor
-     * {@link #scheduleRecurring(Runnable, long, long)} actually
-     * blocks or schedules.
+     * Test double for {@link WamService} that stubs the four abstract
+     * timing/scheduling hooks with deterministic capture lists: tests
+     * inspect {@link #sleepRequests} and {@link #scheduledRunnables} after
+     * exercising the service, and neither {@link #sleep(long)} nor
+     * {@link #scheduleRecurring(Runnable, long, long)} actually blocks or
+     * schedules. The virtual clock advances on each {@link #sleep(long)}
+     * so the connectivity-wait deadline check terminates deterministically.
      */
     private static final class TestableWamService extends WamService {
-        /**
-         * The current virtual instant returned by {@link #now()};
-         * advanced by {@link #sleep(long)} so the connectivity-wait
-         * deadline check terminates deterministically.
-         */
         private final AtomicReference<Instant> now = new AtomicReference<>(Instant.ofEpochSecond(1_747_000_000L));
 
-        /**
-         * The captured sleep requests in milliseconds, in submission
-         * order.
-         */
         final List<Long> sleepRequests = new ArrayList<>();
 
-        /**
-         * The captured recurring-task schedule requests in
-         * submission order.
-         */
         final Queue<ScheduledCall> scheduledRunnables = new ConcurrentLinkedQueue<>();
 
-        /**
-         * Constructs the testable service.
-         *
-         * @param client    the bound test client
-         * @param props     the bound test AB-props service
-         * @param beaconing the beaconing implementation
-         */
-        TestableWamService(WhatsAppClient client, ABPropsService props, WamBeaconing beaconing) {
+        TestableWamService(WhatsAppClient client, ABPropsService props, WamBeaconingService beaconing) {
             super(client, props, beaconing);
         }
 
@@ -739,43 +515,23 @@ class WamServiceTest {
     /**
      * One captured
      * {@link WamService#scheduleRecurring(Runnable, long, long)}
-     * invocation.
-     *
-     * @apiNote
-     * Tests pop entries off
+     * invocation; tests pop entries off
      * {@link TestableWamService#scheduledRunnables} and assert the
-     * captured task and timing arguments against the production
-     * call site.
-     *
-     * @param task                the task that would have been
-     *                            scheduled
-     * @param initialDelaySeconds the requested initial delay in
-     *                            seconds
-     * @param periodSeconds       the requested recurring period in
-     *                            seconds
+     * captured task and timing arguments against the production call site.
      */
     private record ScheduledCall(Runnable task, long initialDelaySeconds, long periodSeconds) {
     }
 
     /**
-     * Per-channel sequence-counter tests covering monotonic
-     * advancement, wrap from {@code MAX_SEQUENCE_NUMBER}
-     * ({@code 0xFFFF}) back to {@code 1}, and independence across
-     * the three channels.
+     * Per-channel sequence-counter tests covering monotonic advancement,
+     * wrap from {@code MAX_SEQUENCE_NUMBER} ({@code 0xFFFF}) back to
+     * {@code 1}, and independence across the three channels.
      */
     @Nested
     @DisplayName("sequence numbers")
     class SequenceNumbers {
-        /**
-         * The local self-PN seed used by the in-memory store
-         * harness.
-         */
         private final Jid selfPn = Jid.of("19254863482@s.whatsapp.net");
 
-        /**
-         * Each successful {@link WamChannel#REGULAR} flush advances
-         * the channel's sequence counter by exactly one.
-         */
         @Test
         @DisplayName("REGULAR flush advances the counter by 1 per buffer")
         void counterAdvancesPerFlush() {
@@ -798,11 +554,6 @@ class WamServiceTest {
                     "second flush bumps the counter by 1 again");
         }
 
-        /**
-         * The per-channel sequence counters advance independently;
-         * a flush on one channel does not move the other channels'
-         * counters.
-         */
         @Test
         @DisplayName("REGULAR / REALTIME / PRIVATE counters are independent")
         void countersAreIndependent() {
@@ -824,10 +575,6 @@ class WamServiceTest {
                     "REGULAR flush must not touch the PRIVATE counter");
         }
 
-        /**
-         * A counter at {@code MAX_SEQUENCE_NUMBER} wraps to
-         * {@code 1} (not {@code 0}) on the next flush.
-         */
         @Test
         @DisplayName("counter at MAX_SEQUENCE_NUMBER wraps to 1 on next flush")
         void counterWrapsToOne() {
@@ -848,30 +595,19 @@ class WamServiceTest {
 
     /**
      * Channel-routing tests covering the divergent commit paths for
-     * {@link WamChannel#REALTIME} (immediate virtual-thread flush)
-     * and {@link WamChannel#REGULAR} (accumulate-until-flush).
+     * {@link WamChannel#REALTIME} (immediate virtual-thread flush) and
+     * {@link WamChannel#REGULAR} (accumulate-until-flush).
      *
-     * @apiNote
-     * {@link WamChannel#PRIVATE} bucketing is not exercised here
-     * because private events upload through the HTTP-only
+     * <p>{@link WamChannel#PRIVATE} bucketing is not exercised here because
+     * private events upload through the HTTP-only
      * {@link com.github.auties00.cobalt.wam.privatestats.WamPrivateStatsUploader},
-     * which does not surface through
-     * {@code TestWhatsAppClient.sendNode}.
+     * which does not surface through the test client's send handler.
      */
     @Nested
     @DisplayName("channel routing")
     class ChannelRouting {
-        /**
-         * The local self-PN seed used by the in-memory store
-         * harness.
-         */
         private final Jid selfPn = Jid.of("19254863482@s.whatsapp.net");
 
-        /**
-         * A {@link WamChannel#REGULAR} commit accumulates into the
-         * pending list without triggering an immediate
-         * {@code sendNode}.
-         */
         @Test
         @DisplayName("REGULAR commit accumulates, no immediate flush")
         void regularAccumulatesUntilFlush() {
@@ -888,18 +624,6 @@ class WamServiceTest {
             assertEquals(1, harness.service.pendingCount(WamChannel.REGULAR));
         }
 
-        /**
-         * A {@link WamChannel#REALTIME} commit spawns a virtual
-         * thread that ultimately reaches {@code sendNode}.
-         *
-         * @implNote
-         * The assertion waits up to five seconds on a latch the
-         * {@code sendNodeHandler} counts down on every captured
-         * invocation.
-         *
-         * @throws InterruptedException if the test is interrupted
-         *                              waiting on the latch
-         */
         @Test
         @DisplayName("REALTIME commit triggers immediate flush via virtual thread")
         void realtimeTriggersImmediateFlush() throws InterruptedException {
@@ -918,30 +642,11 @@ class WamServiceTest {
                     "REALTIME commit must trigger sendNode within 5s via the virtual-thread flush spawn");
         }
 
-        /**
-         * Three {@link WamChannel#REALTIME} commits all drain
-         * through the upload pipeline without losing any event.
-         *
-         * @apiNote
-         * Mirrors WA Web's {@code WAWam} commit handler which pushes
-         * REALTIME events onto a shared pending list and schedules a
-         * single {@code setTimeout(forceRunNow("realtime"), 1)};
-         * multiple commits within the same tick all batch into one
-         * upload, so the assertion only requires
-         * {@code sendNodeCalls >= 1} and {@code pendingCount == 0}.
-         *
-         * @implNote
-         * Cobalt's parallel of the upstream batching is
-         * {@code Thread.ofVirtual().start(() -> flushChannel(REALTIME))}
-         * plus the atomic drain in
-         * {@link WamService}'s
-         * {@code swapPending}: the first virtual thread to reach
-         * {@code swapPending} takes every queued event, later
-         * threads observe an empty list and return.
-         *
-         * @throws InterruptedException if the test is interrupted
-         *                              waiting on the upload latch
-         */
+        // Multiple commits within the same tick all batch into one upload, so
+        // the assertion only requires sendNodeCalls >= 1 and pendingCount == 0:
+        // each commit spawns a flushChannel(REALTIME) virtual thread, and the
+        // first to reach the atomic drain takes every queued event while later
+        // threads observe an empty list and return.
         @Test
         @DisplayName("three REALTIME commits all drain through the pipeline")
         void multipleRealtimeCommitsAllFlush() throws InterruptedException {
@@ -971,27 +676,11 @@ class WamServiceTest {
         }
     }
 
-    /**
-     * Builds a synthetic {@link WamChannel#REALTIME}-channel
-     * {@link WamEventSpec} with the given wire event id and no
-     * fields.
-     *
-     * @apiNote
-     * Used by {@link ChannelRouting} to drive the immediate-flush
-     * path on a known-realtime spec without depending on a generated
-     * realtime event class.
-     *
-     * @implNote
-     * The {@code markCommitted()} guard only permits one positive
-     * call; the deferred-into-init-queue replay re-enters
-     * {@link WamService#commit(WamEventSpec)} which calls
-     * {@code markCommitted()} again, but the second call returns
-     * {@code false} and the deferred-replay branch handles the
-     * redundant-commit log without re-enqueuing.
-     *
-     * @param eventId the wire event id
-     * @return a fresh REALTIME event spec
-     */
+    // Drives the immediate-flush path on a known-realtime spec without a
+    // generated realtime event class. markCommitted() permits one positive call:
+    // the init-queue replay re-enters commit(), but the second markCommitted()
+    // returns false and the replay branch logs the redundant commit without
+    // re-enqueuing.
     private static WamEventSpec realtimeEvent(int eventId) {
         return new WamEventSpec() {
             private volatile boolean committed;
@@ -1048,34 +737,19 @@ class WamServiceTest {
     }
 
     /**
-     * Retry and backoff tests driving the full
-     * {@link WamService}'s
-     * {@code flushChannel} pipeline against an in-memory store and a
-     * controllable {@code sendNode} response sequence.
-     *
-     * @apiNote
-     * Captured {@link TestableWamService#sleepRequests} are asserted
-     * against the expected exponential-backoff delays computed by
+     * Retry and backoff tests driving the full flush pipeline against an
+     * in-memory store and a controllable response sequence; the captured
+     * {@link TestableWamService#sleepRequests} are asserted against the
+     * exponential-backoff delays computed by
      * {@link WamService#computeBackoffDelay(int)}.
      */
     @Nested
     @DisplayName("retry / backoff")
     class RetryBackoff {
-        /**
-         * The local self-PN seed used by the in-memory store
-         * harness.
-         */
         private final Jid selfPn = Jid.of("19254863482@s.whatsapp.net");
 
-        /**
-         * {@link WamService#computeBackoffDelay(int)} clamps low and
-         * high and stays within the ten-percent jitter band.
-         *
-         * @apiNote
-         * Probes the three documented regions: low clamp
-         * ({@code 2^attempt < base}), the unclamped middle band, and
-         * high clamp ({@code 2^attempt > max}).
-         */
+        // Probes the three regions: low clamp (2^attempt < base), the unclamped
+        // middle band, and high clamp (2^attempt > max).
         @Test
         @DisplayName("computeBackoffDelay clamps low/high and lies within the 10% jitter band")
         void backoffFormulaBounds() {
@@ -1092,15 +766,6 @@ class WamServiceTest {
                     "attempt=20 should clamp to max [120_000, 132_000], was " + clamped);
         }
 
-        /**
-         * Two {@code 5xx} responses are retried with backoff and a
-         * third successful response terminates the retry loop.
-         *
-         * @apiNote
-         * Asserts the cumulative invocation contract: three
-         * {@code sendNode} calls (two failures plus one success) and
-         * two captured backoff sleeps in the documented range.
-         */
         @Test
         @DisplayName("two 5xx responses are retried with backoff, third success terminates")
         void retryUntilSuccess() {
@@ -1124,11 +789,6 @@ class WamServiceTest {
             }
         }
 
-        /**
-         * A {@code 4xx} response does not retry and the buffer is
-         * dropped with a {@code WamClientErrors} drop-counter event
-         * re-committed.
-         */
         @Test
         @DisplayName("4xx response does not retry; buffer is dropped")
         void permanentErrorDropsBuffer() {
@@ -1149,24 +809,15 @@ class WamServiceTest {
     }
 
     /**
-     * Connectivity-wait tests covering
-     * {@link WamService}'s
-     * {@code waitIfDisconnected}, which polls the client in
-     * one-second steps up to the 30-second timeout.
+     * Connectivity-wait tests covering {@link WamService}'s disconnected
+     * poll loop, which checks the client in one-second steps up to the
+     * 30-second timeout.
      */
     @Nested
     @DisplayName("connectivity wait")
     class Connectivity {
-        /**
-         * The local self-PN seed used by the in-memory store
-         * harness.
-         */
         private final Jid selfPn = Jid.of("19254863482@s.whatsapp.net");
 
-        /**
-         * No sleep is captured when the client is connected on
-         * entry.
-         */
         @Test
         @DisplayName("connected on entry: no sleeps recorded")
         void connectedOnEntry() {
@@ -1182,18 +833,6 @@ class WamServiceTest {
                     "no waitIfDisconnected sleeps should fire when client is connected");
         }
 
-        /**
-         * A permanently-disconnected client produces a sequence of
-         * one-second sleeps until the 30-second deadline elapses
-         * and the upload then proceeds.
-         *
-         * @apiNote
-         * Each captured sleep is exactly {@code 1_000} milliseconds
-         * (the production {@code Thread.sleep(1_000)} call site)
-         * and at least {@code 30} sleeps are captured because the
-         * testable {@link TestableWamService#sleep(long)} advances
-         * the virtual clock by the requested duration.
-         */
         @Test
         @DisplayName("disconnected on entry: 1s sleeps until deadline, then upload proceeds")
         void disconnectedUntilDeadline() {
@@ -1219,25 +858,16 @@ class WamServiceTest {
     }
 
     /**
-     * Buffer rotation and drop tests driving the encoder pipeline
-     * with enough payload to cross the rotation threshold
-     * ({@code MAX_BUFFER_SIZE = 50_000}) and the upload-drop
-     * threshold ({@code MAX_UPLOAD_SIZE = 64_000}).
+     * Buffer rotation and drop tests driving the encoder pipeline with
+     * enough payload to cross the rotation threshold
+     * ({@code MAX_BUFFER_SIZE = 50_000}) and the upload-drop threshold
+     * ({@code MAX_UPLOAD_SIZE = 64_000}).
      */
     @Nested
     @DisplayName("buffer rotation / drop")
     class BufferRotation {
-        /**
-         * The local self-PN seed used by the in-memory store
-         * harness.
-         */
         private final Jid selfPn = Jid.of("19254863482@s.whatsapp.net");
 
-        /**
-         * A flush whose aggregate payload exceeds
-         * {@code MAX_BUFFER_SIZE} splits into multiple
-         * {@code sendNode} calls.
-         */
         @Test
         @DisplayName("flush across MAX_BUFFER_SIZE splits into multiple sendNode calls")
         void multipleBuffersAcrossMaxBufferSize() {
@@ -1262,10 +892,6 @@ class WamServiceTest {
                     "all committed events should be drained after flush");
         }
 
-        /**
-         * A successful flush drains the pending list to zero,
-         * regardless of the number of physical buffers sent.
-         */
         @Test
         @DisplayName("flush drains pending to zero on success")
         void flushDrainsPending() {
@@ -1285,20 +911,9 @@ class WamServiceTest {
                     "successful flush must drain pending to zero");
         }
 
-        /**
-         * An event whose encoded size exceeds {@code MAX_UPLOAD_SIZE}
-         * is dropped without uploading and a
-         * {@link WamClientErrorsEventBuilder} drop-counter event is
-         * re-committed into REGULAR pending for the next cycle.
-         *
-         * @implNote
-         * Flow: the aggregate exceeds {@code MAX_BUFFER_SIZE} so
-         * {@code flushEventList} calls {@code buildAndSend} once;
-         * inside {@code buildAndSend} the precomputed size exceeds
-         * {@code MAX_UPLOAD_SIZE} so the buffer is dropped before any
-         * {@code sendNode} call and the drop-counter event is
-         * re-committed for the next cycle.
-         */
+        // The aggregate exceeds MAX_BUFFER_SIZE so one buffer is built; inside,
+        // its precomputed size exceeds MAX_UPLOAD_SIZE so it is dropped before
+        // any send and the drop-counter event is re-committed for the next cycle.
         @Test
         @DisplayName("buffer >64KB is dropped, drop-counter event re-committed")
         void oversizedBufferDropsAndRecommitsCounter() {
@@ -1322,21 +937,8 @@ class WamServiceTest {
         }
     }
 
-    /**
-     * Builds a synthetic {@link WamChannel#REGULAR} event spec with
-     * a configurable {@code releaseWeight} so sampling-override
-     * tests can observe the keep/drop probability change.
-     *
-     * @apiNote
-     * A {@code releaseWeight} of {@code 1} always keeps; higher
-     * values produce a probabilistic drop that the test counteracts
-     * by installing a {@code weight=1} override on the same id.
-     *
-     * @param eventId       the wire event id
-     * @param releaseWeight the sampling weight reported by
-     *                      {@link WamEventSpec#releaseWeight()}
-     * @return a fresh REGULAR event spec
-     */
+    // A releaseWeight of 1 always keeps; higher values produce a probabilistic
+    // drop that tests counteract with a weight=1 override on the same id.
     private static WamEventSpec heavilySampledRegularEvent(int eventId, int releaseWeight) {
         return new WamEventSpec() {
             private volatile boolean committed;
@@ -1392,21 +994,9 @@ class WamServiceTest {
         };
     }
 
-    /**
-     * Builds a synthetic {@link WamChannel#REGULAR} event spec
-     * carrying a single string field of the requested approximate
-     * size.
-     *
-     * @apiNote
-     * Used by the buffer-rotation and oversized-buffer tests; the
-     * actual encoded length is the string length plus the event
-     * marker and the {@code str32} length prefix (~10 bytes
-     * overhead).
-     *
-     * @param targetSize the desired payload size in bytes
-     * @return a fresh REGULAR event spec carrying a string of the
-     *         requested length
-     */
+    // For the buffer-rotation and oversized-buffer tests; the actual encoded
+    // length is the string length plus the event marker and the str32 length
+    // prefix (~10 bytes overhead).
     private static WamEventSpec hugeRegularEvent(int targetSize) {
         var payload = "a".repeat(targetSize);
         return new WamEventSpec() {
@@ -1467,46 +1057,22 @@ class WamServiceTest {
 
     /**
      * Realistic-store harness used by the retry, rotation, and
-     * connectivity tests; wires a real in-memory store and a
-     * controllable canned-response IQ pipeline.
+     * connectivity tests; wires a real in-memory store and a controllable
+     * canned-response IQ pipeline. When {@link #alwaysSucceed} is set, the
+     * send handler returns a fresh success response once
+     * {@link #responsesQueue} is empty; otherwise it throws.
      */
     private static final class RealisticHarness {
-        /**
-         * The bound test client.
-         */
         final TestWhatsAppClient client;
 
-        /**
-         * The testable WAM service under test.
-         */
         final TestableWamService service;
 
-        /**
-         * The FIFO queue of canned IQ responses drained on each
-         * {@code sendNode} invocation.
-         */
         final Deque<Node> responsesQueue;
 
-        /**
-         * The cumulative count of {@code sendNode} invocations.
-         */
         final AtomicInteger sendNodeCalls;
 
-        /**
-         * When {@code true}, {@code sendNode} returns a fresh
-         * success response once {@link #responsesQueue} is empty;
-         * when {@code false} (the default) the handler throws.
-         */
         boolean alwaysSucceed;
 
-        /**
-         * Constructs the harness from its fully-wired collaborators.
-         *
-         * @param client         the bound test client
-         * @param service        the testable WAM service
-         * @param responsesQueue the canned IQ-response queue
-         * @param sendNodeCalls  the cumulative invocation counter
-         */
         RealisticHarness(
                 TestWhatsAppClient client,
                 TestableWamService service,
@@ -1519,22 +1085,10 @@ class WamServiceTest {
         }
     }
 
-    /**
-     * Builds a {@link RealisticHarness} bound to a real in-memory
-     * store and a canned-response IQ pipeline.
-     *
-     * @apiNote
-     * The store lets the flush path's {@code putWamSequenceNumber}
-     * and persisted-buffer writes land in real backing storage,
-     * which the retry and rotation tests rely on. The client is
-     * pre-wired with {@code isConnected=true} so connectivity-wait
-     * tests that opt into the disconnected branch must explicitly
-     * call {@link TestWhatsAppClient#withIsConnected(boolean)}.
-     *
-     * @param selfPn the local user's PN-form JID used to seed the
-     *               temporary store
-     * @return a fresh realistic harness
-     */
+    // The store lets the flush path's sequence-number and persisted-buffer
+    // writes land in real backing storage, which the retry and rotation tests
+    // rely on. The client is pre-wired with isConnected=true, so connectivity
+    // tests that need the disconnected branch must call withIsConnected(false).
     private static RealisticHarness newRealisticHarness(Jid selfPn) {
         var props = TestABPropsService.builder().build();
         var responses = new ArrayDeque<Node>();
@@ -1556,19 +1110,11 @@ class WamServiceTest {
                     }
                     throw new IllegalStateException("realistic harness ran out of canned responses for sendNode");
                 });
-        var service = new TestableWamService(client, props, new DefaultWamBeaconing());
+        var service = new TestableWamService(client, props, new DefaultWamBeaconingService());
         harnessRef[0] = new RealisticHarness(client, service, responses, calls);
         return harnessRef[0];
     }
 
-    /**
-     * Builds a successful IQ response recognised by
-     * {@link WamService}'s
-     * {@code sendWithRetry} ({@code type="result"} on the root
-     * {@code <iq>}).
-     *
-     * @return the success node
-     */
     private static Node successResponse() {
         return new NodeBuilder()
                 .description("iq")
@@ -1576,19 +1122,8 @@ class WamServiceTest {
                 .build();
     }
 
-    /**
-     * Builds an error IQ response with the given HTTP-style code.
-     *
-     * @apiNote
-     * The error code is embedded in an
-     * {@code <error code="..."/>} child node;
-     * {@link WamService}'s
-     * {@code sendWithRetry} dispatches to retry for {@code >= 500}
-     * and to permanent-drop for everything else.
-     *
-     * @param code the HTTP-style error code
-     * @return the error node
-     */
+    // The error code lands in an <error code="..."/> child; the flush path
+    // retries for code >= 500 and permanently drops everything else.
     private static Node errorResponse(int code) {
         var error = new NodeBuilder()
                 .description("error")

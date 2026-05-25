@@ -203,12 +203,23 @@ export class CdpBridge implements PlatformBridge {
     return this.page.evaluate(pageFunction as any, ...args);
   }
 
+  async addInitScript(source: string): Promise<void> {
+    await this.page.addInitScript(source);
+  }
+
   url(): string {
     return this.page.url();
   }
 
   async navigate(url: string, options?: { timeout?: number }): Promise<void> {
     await this.page.goto(url, {
+      waitUntil: "networkidle",
+      timeout: options?.timeout ?? 60_000,
+    });
+  }
+
+  async reload(options?: { timeout?: number }): Promise<void> {
+    await this.page.reload({
       waitUntil: "networkidle",
       timeout: options?.timeout ?? 60_000,
     });

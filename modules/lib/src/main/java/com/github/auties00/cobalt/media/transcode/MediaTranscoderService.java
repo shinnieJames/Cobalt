@@ -36,54 +36,48 @@ import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
 /**
- * Prepares outgoing media for upload to the WhatsApp CDN by dispatching
- * to the matching per-format pipeline.
+ * Prepares outgoing media for upload to the WhatsApp CDN by dispatching to the
+ * matching per-format pipeline.
  *
- * @apiNote
- * Owned by {@code LinkedWhatsAppClient} and consulted from two call
- * sites: the byte-level {@link #transcode(MediaProvider, Path)} (and its
- * {@link InputStream} adapter) is invoked from {@code uploadMedia}
- * immediately before the encrypted upload is handed to
- * {@link com.github.auties00.cobalt.media.MediaConnection#upload(MediaProvider, MediaPayload)};
- * the orchestration entry point
- * {@link #decorate(Jid, ExtendedTextMessage)} is invoked from the
- * message-sending pipeline to enrich a text message with a rich link
- * preview. Not part of the public API surface.
+ * <p>This service is consulted from two call sites. The byte-level
+ * {@link #transcode(MediaProvider, Path)} and its {@link InputStream} adapter
+ * encode the user-supplied source into the wire format WhatsApp expects, apply
+ * the resulting codec metadata to the {@link MediaProvider} in place, and
+ * return the {@link MediaPayload} that the upload layer
+ * ({@link MediaConnectionService#upload(MediaProvider, MediaPayload)}) reads
+ * from. The orchestration entry point {@link #decorate(Jid, ExtendedTextMessage)}
+ * enriches a text message with a rich link-preview card. Dispatch pattern-matches
+ * on the sealed {@link MediaProvider} hierarchy so every variant is routed at
+ * compile time: {@link AudioMessage} splits on {@link AudioMessage#ptt()} so
+ * push-to-talk voice notes reach the OGG-Opus pipeline; internal-blob providers
+ * ({@link ExternalBlobReference}, {@link HistorySyncNotification}) and
+ * {@link ExtendedTextMessage} pass through unchanged because their bytes already
+ * match the wire format.
  *
  * @implNote
- * This implementation owns the per-format pipeline instances as private
- * final fields and pattern-matches on the sealed {@link MediaProvider}
- * hierarchy so every variant is routed at compile time.
- * {@link AudioMessage} splits on {@link AudioMessage#ptt()} so
- * push-to-talk voice notes hit the OGG-Opus pipeline.
- * {@link ExtendedTextMessage} is the entry point for the link-preview
- * orchestration; its byte-level upload bypasses the transcoder because
- * the JPEG payload already matches the wire format. Internal-blob
- * providers ({@link ExternalBlobReference}, {@link HistorySyncNotification})
- * pass through unchanged so application-state and history-sync uploads
- * stay byte-identical. The {@link InputStream} overload skips the source
- * spill when the stream is a {@link FileInputStream} (channel extracted
- * via {@link FileInputStream#getChannel()}) and otherwise spills to a
- * delete-on-success temp file before delegating to the channel-based
- * dispatch.
+ * This implementation owns one instance of each per-format pipeline as a private
+ * final field. The {@link InputStream} overload extracts the {@link FileChannel}
+ * directly when the stream is a {@link FileInputStream} and otherwise drains the
+ * stream to a delete-on-success temp file before delegating to the channel-based
+ * dispatch, so no source spill occurs for the common file-backed case.
  */
 public final class MediaTranscoderService {
     /**
-     * Prefix used for the source-spill temp file when an
-     * {@link InputStream} entry point is taken and the stream is not
-     * already file-backed.
+     * Filename prefix for the source-spill temp file created when an
+     * {@link InputStream} entry point is taken and the stream is not already
+     * file-backed.
      */
     private static final String SOURCE_SPILL_PREFIX = "cobalt-src-";
 
     /**
-     * Suffix used for the source-spill temp file.
+     * Filename suffix for the source-spill temp file.
      */
     private static final String SOURCE_SPILL_SUFFIX = ".tmp";
 
     /**
-     * The owning client; consulted for the media-upload quality
-     * preference on every transcode call and threaded into the pipelines
-     * that need session-level state.
+     * The owning client, consulted for the media-upload quality preference on
+     * every channel dispatch and threaded into the pipelines that need
+     * session-level state.
      */
     private final WhatsAppClient client;
 
@@ -125,18 +119,18 @@ public final class MediaTranscoderService {
     /**
      * Constructs the media-transcoder service bound to {@code client}.
      *
-     * @apiNote
-     * Invoked once per session by {@code LinkedWhatsAppClient}.
+     * <p>Instantiates one pipeline per supported media format and threads
+     * {@code abPropsService} and {@code mediaConnectionService} into the
+     * {@link TextPipeline} so it can gate link-preview behaviour on AB props and
+     * upload link-preview thumbnails. Invoked once per session by the owning
+     * client.
      *
-     * @param client                 the owning client; must not be
-     *                               {@code null}
-     * @param abPropsService         the AB-props service threaded into
-     *                               the text pipeline; must not be
-     *                               {@code null}
-     * @param mediaConnectionService the CDN credentials singleton
-     *                               threaded into the text pipeline for
-     *                               link-preview thumbnail uploads; must
-     *                               not be {@code null}
+     * @param client                 the owning client; must not be {@code null}
+     * @param abPropsService         the AB-props service threaded into the text
+     *                               pipeline; must not be {@code null}
+     * @param mediaConnectionService the CDN credentials service threaded into the
+     *                               text pipeline for link-preview thumbnail
+     *                               uploads; must not be {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public MediaTranscoderService(WhatsAppClient client, ABPropsService abPropsService,
@@ -154,34 +148,31 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Transcodes the source file for the upload slot encoded by
-     * {@code provider} and applies the resulting codec metadata to
-     * {@code provider} in place.
+     * Transcodes the source file for the upload slot encoded by {@code provider}
+     * and applies the resulting codec metadata to {@code provider} in place.
      *
-     * @apiNote
-     * Primary entry point: when the caller has a file on disk this
-     * variant avoids any source-side spill. The returned
-     * {@link MediaPayload} carries the encoded plaintext (heap byte array
-     * for image/sticker outputs; temp file for muxed outputs and for the
-     * document pass-through). The caller must invoke
-     * {@link MediaPayload#close()} after the upload completes to release
-     * any owned temp file. {@link MediaProvider} variants without a
-     * dedicated byte-level pipeline ({@link ExternalBlobReference}
-     * application-state and history blobs, {@link HistorySyncNotification}
-     * archives, and {@link ExtendedTextMessage} link previews whose HQ
-     * thumbnail upload bypasses this method entirely) pass through as a
-     * {@link MediaPayload.OfPath} that references {@code source} with
-     * {@code ownsFile} = {@code false}.
+     * <p>This is the primary entry point: when the caller already holds a file on
+     * disk this variant avoids any source-side spill. The returned
+     * {@link MediaPayload} carries the encoded plaintext, either as a heap byte
+     * array (image and sticker outputs) or as a temp file (muxed outputs and the
+     * document pass-through); the caller must invoke {@link MediaPayload#close()}
+     * after the upload completes to release any owned temp file.
+     * {@link MediaProvider} variants without a dedicated byte-level pipeline,
+     * namely {@link ExternalBlobReference} application-state and history blobs,
+     * {@link HistorySyncNotification} archives, and {@link ExtendedTextMessage}
+     * link previews, pass through as a {@link MediaPayload.OfPath} that references
+     * {@code source} without owning it, so {@link MediaPayload#close()} leaves the
+     * caller's file alone.
      *
-     * @param provider the upload target; codec-derived fields are applied
-     *                 to this instance, never {@code null}
-     * @param source   the raw user-provided file path, never {@code null}
+     * @param provider the upload target; codec-derived fields are applied to this
+     *                 instance; must not be {@code null}
+     * @param source   the raw user-provided file path; must not be {@code null}
      * @return the encoded payload
-     * @throws WhatsAppMediaException.Processing if the selected pipeline
-     *         fails to decode, encode, or buffer the source
+     * @throws WhatsAppMediaException.Processing if the selected pipeline fails to
+     *                                           decode, encode, or buffer the
+     *                                           source
      * @throws NullPointerException              if {@code provider} or
-     *                                           {@code source} is
-     *                                           {@code null}
+     *                                           {@code source} is {@code null}
      */
     public MediaPayload transcode(MediaProvider provider, Path source)
             throws WhatsAppMediaException.Processing {
@@ -206,27 +197,24 @@ public final class MediaTranscoderService {
      * {@code provider} and applies the resulting codec metadata to
      * {@code provider} in place.
      *
-     * @apiNote
-     * Convenience entry point for callers that hold a stream rather than
-     * a file. The stream is closed by this method on every exit path.
-     * When the stream is already a {@link FileInputStream} the
-     * underlying {@link FileChannel} is used directly without spilling;
-     * otherwise the stream is drained to a delete-on-success temp file
-     * before the channel-based dispatch runs. For the
-     * {@link DocumentMessage} branch the spilled file is transferred to
-     * the returned {@link MediaPayload.OfPath} so the upload reads from
-     * the same file that PDFBox parsed.
+     * <p>This convenience entry point serves callers that hold a stream rather
+     * than a file. The stream is closed on every exit path. When the stream is
+     * already a {@link FileInputStream} the underlying {@link FileChannel} is used
+     * directly without spilling; otherwise the stream is drained to a
+     * delete-on-success temp file before the channel-based dispatch runs. For the
+     * {@link DocumentMessage} branch the spilled file is handed to the returned
+     * {@link MediaPayload.OfPath} so the upload reads the same file the document
+     * pipeline parsed.
      *
-     * @param provider the upload target; codec-derived fields are applied
-     *                 to this instance, never {@code null}
-     * @param source   the raw user-provided stream; closed before this
-     *                 method returns, never {@code null}
+     * @param provider the upload target; codec-derived fields are applied to this
+     *                 instance; must not be {@code null}
+     * @param source   the raw user-provided stream; closed before this method
+     *                 returns; must not be {@code null}
      * @return the encoded payload
-     * @throws WhatsAppMediaException.Processing if buffering, decoding,
-     *         encoding, or muxing fails
+     * @throws WhatsAppMediaException.Processing if buffering, decoding, encoding,
+     *                                           or muxing fails
      * @throws NullPointerException              if {@code provider} or
-     *                                           {@code source} is
-     *                                           {@code null}
+     *                                           {@code source} is {@code null}
      */
     public MediaPayload transcode(MediaProvider provider, InputStream source)
             throws WhatsAppMediaException.Processing {
@@ -243,11 +231,18 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Drains {@code source} into a temp file and dispatches the path or
-     * channel form depending on the provider.
+     * Drains {@code source} into a temp file and dispatches the path or channel
+     * form depending on the provider.
+     *
+     * <p>For {@link DocumentMessage} and the pass-through providers the spilled
+     * temp file becomes an owning {@link MediaPayload.OfPath} so the upload reads
+     * from it directly; for the encoded-output providers the spill is opened as a
+     * read channel for dispatch and deleted in the {@code finally} block once
+     * dispatch returns. The temp file is retained only on the branches that
+     * transfer its ownership to the returned payload.
      *
      * @param provider the upload target
-     * @param source   the source stream (not yet drained)
+     * @param source   the source stream, not yet drained
      * @return the encoded payload
      * @throws IOException                       if the spill fails
      * @throws WhatsAppMediaException.Processing if the pipeline fails
@@ -286,7 +281,13 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Routes a channel-backed source to the matching pipeline.
+     * Routes a channel-backed source to the matching encoded-output pipeline.
+     *
+     * <p>Reachable only for providers that have a channel-based pipeline. The
+     * {@link DocumentMessage} and pass-through branches are unreachable here
+     * because the {@link InputStream} entry point routes them through the path
+     * form, so they fail fast with an {@link IllegalStateException} to surface any
+     * future routing mistake.
      *
      * @param provider the upload target
      * @param channel  the source channel
@@ -314,13 +315,14 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Opens {@code source} and dispatches to the channel-based pipeline.
+     * Opens {@code source} as a read channel and dispatches it to the matching
+     * channel-based pipeline.
      *
      * @param provider the upload target
      * @param source   the path to open
      * @return the encoded payload
-     * @throws WhatsAppMediaException.Processing if opening or pipeline
-     *         fails
+     * @throws WhatsAppMediaException.Processing if opening the source or the
+     *                                           pipeline fails
      */
     private MediaPayload dispatchToPipeline(MediaProvider provider, Path source)
             throws WhatsAppMediaException.Processing {
@@ -332,7 +334,17 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Dispatches to the channel-based pipeline that matches the provider.
+     * Dispatches a channel-backed source to the encoded-output pipeline that
+     * matches the provider.
+     *
+     * <p>Resolves the media-upload quality preference from the store, defaulting
+     * to {@link SettingsSyncAction.MediaQualitySetting#STANDARD} when unset, and
+     * passes it to the image, video, and non-voice audio pipelines that honour it.
+     * Voice notes route to {@link PttPipeline} and stickers to
+     * {@link StickerPipeline}, neither of which takes a quality argument. The
+     * {@code channel} is not closed by this method. The {@link DocumentMessage}
+     * and pass-through branches never reach this dispatch and fail fast with an
+     * {@link IllegalStateException}.
      *
      * @param provider the upload target
      * @param channel  the source channel; not closed by this method
@@ -360,13 +372,16 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Wraps a caller-provided path as a non-owning
-     * {@link MediaPayload.OfPath} for pass-through providers.
+     * Wraps a caller-provided path as a non-owning {@link MediaPayload.OfPath} for
+     * pass-through providers.
+     *
+     * <p>The payload reports the file's current size and is constructed with
+     * {@code ownsFile} false, so {@link MediaPayload#close()} never deletes the
+     * caller's file.
      *
      * @param source the caller's file
-     * @return a non-owning path payload
-     * @throws WhatsAppMediaException.Processing if the file cannot be
-     *         sized
+     * @return a non-owning path payload over {@code source}
+     * @throws WhatsAppMediaException.Processing if the file cannot be sized
      */
     private static MediaPayload passThroughPath(Path source)
             throws WhatsAppMediaException.Processing {
@@ -380,11 +395,15 @@ public final class MediaTranscoderService {
     }
 
     /**
-     * Resolves the first URL in {@code message}'s body into a rich link
-     * preview card and stamps the result onto {@code message}.
+     * Resolves the first URL in {@code message}'s body into a rich link-preview
+     * card and stamps the result onto {@code message}.
+     *
+     * <p>Delegates to {@link TextPipeline}, which mutates {@code message} in place
+     * with the resolved preview metadata. When no resolvable URL is present the
+     * message is left unchanged.
      *
      * @param chatJid the target chat JID
-     * @param message the outgoing message; mutated in place
+     * @param message the outgoing message, mutated in place
      */
     public void decorate(Jid chatJid, ExtendedTextMessage message) {
         textPipeline.run(chatJid, message);

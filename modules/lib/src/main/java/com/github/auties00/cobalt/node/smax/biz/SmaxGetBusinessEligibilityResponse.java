@@ -12,52 +12,29 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * The sealed family of inbound reply variants produced by the relay
- * in response to a {@link SmaxGetBusinessEligibilityRequest}.
- *
- * @apiNote
- * Each variant projects a distinct outcome of the SMB
- * marketing-messages and Meta-Verified gating bridge:
- * {@link Success} carries 0..3 typed eligibility projections,
- * {@link ClientError} carries a documented {@code 4xx} rejection
- * via the shared {@code IQError*MixinGroup}, and {@link ServerError}
+ * Models the sealed family of inbound reply variants produced by the relay in response to a
+ * {@link SmaxGetBusinessEligibilityRequest}.
+ * <p>
+ * Each variant projects a distinct outcome of the SMB marketing-messages and Meta-Verified
+ * gating bridge: {@link Success} carries 0 to 3 typed eligibility projections,
+ * {@link ClientError} carries a documented {@code 4xx} rejection, and {@link ServerError}
  * carries a transient {@code 5xx} relay failure.
- *
- * @implNote
- * This implementation mirrors WA Web's
- * {@code WASmaxBizMarketingMessageGetBusinessEligibilityRPC.sendGetBusinessEligibilityRPC}
- * by trying each variant in priority order via {@link #of} and
- * returning the first successful parse.
  */
 public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation.Response
         permits SmaxGetBusinessEligibilityResponse.Success, SmaxGetBusinessEligibilityResponse.ClientError, SmaxGetBusinessEligibilityResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetBusinessEligibilityResponse} variant
-     * in priority order and returns the first that parses cleanly.
+     * Tries each variant in priority order and returns the first that parses cleanly.
+     * <p>
+     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)},
+     * then {@link ServerError#of(Node, Node)}, so that a malformed success stanza falls through
+     * to an error variant rather than masking an error. An unrecognised stanza shape yields
+     * {@link Optional#empty()}.
      *
-     * @apiNote
-     * Invoked by the smax reply pump after dispatching a
-     * {@link SmaxGetBusinessEligibilityRequest}; the priority order
-     * matches WA Web's {@code parsing} dispatch table so that a
-     * malformed {@code Success} stanza falls through to
-     * {@link ClientError} rather than masking an error.
-     *
-     * @implNote
-     * This implementation invokes {@link Success#of(Node, Node)}
-     * first, then {@link ClientError#of(Node, Node)}, then
-     * {@link ServerError#of(Node, Node)}; an unrecognised stanza
-     * shape returns {@link Optional#empty()}.
-     *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza, used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound stanza, used to validate echoed identifiers; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizMarketingMessageGetBusinessEligibilityRPC",
             exports = "sendGetBusinessEligibilityRPC",
@@ -77,14 +54,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
     }
 
     /**
-     * The {@code Success} reply variant carrying 0..3 optional
-     * feature-eligibility projections.
-     *
-     * @apiNote
-     * Projected by {@link SmaxGetBusinessEligibilityResponse#of(Node, Node)}
-     * when the relay returns the documented success envelope; each
-     * sub-projection is present only when the corresponding
-     * feature toggle was set on the outbound
+     * Carries 0 to 3 optional feature-eligibility projections.
+     * <p>
+     * Projected when the relay returns the documented success envelope; each sub-projection is
+     * present only when the corresponding feature toggle was set on the outbound
      * {@link SmaxGetBusinessEligibilityRequest}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess")
@@ -105,19 +78,11 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         private final Genai genai;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply from the three already-parsed optional projections.
          *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the relay's
-         * three optional projection children have been parsed
-         * individually.
-         *
-         * @param metaVerified      the optional Meta-Verified
-         *                          projection; may be {@code null}
-         * @param marketingMessages the optional marketing-messages
-         *                          projection; may be {@code null}
-         * @param genai             the optional GenAI projection;
-         *                          may be {@code null}
+         * @param metaVerified      the optional Meta-Verified projection; may be {@code null}
+         * @param marketingMessages the optional marketing-messages projection; may be {@code null}
+         * @param genai             the optional GenAI projection; may be {@code null}
          */
         public Success(MetaVerified metaVerified,
                        MarketingMessages marketingMessages,
@@ -130,9 +95,7 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         /**
          * Returns the optional Meta-Verified projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <meta_verified/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <meta_verified/>} child
          */
         public Optional<MetaVerified> metaVerified() {
             return Optional.ofNullable(metaVerified);
@@ -141,9 +104,7 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         /**
          * Returns the optional marketing-messages projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <marketing_messages/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <marketing_messages/>} child
          */
         public Optional<MarketingMessages> marketingMessages() {
             return Optional.ofNullable(marketingMessages);
@@ -152,34 +113,27 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         /**
          * Returns the optional GenAI projection.
          *
-         * @return an {@link Optional} carrying the projection, or
-         *         empty when the relay omitted the
-         *         {@code <genai/>} child
+         * @return an {@link Optional} carrying the projection, or empty when the relay omitted the {@code <genai/>} child
          */
         public Optional<Genai> genai() {
             return Optional.ofNullable(genai);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
+         * <p>
+         * Enforces the {@link SmaxIqResultResponseMixin#validate(Node, Node)} envelope check
+         * first, then dispatches the three optional projection children to
+         * {@link MetaVerified#of(Node)}, {@link MarketingMessages#of(Node)} and
+         * {@link Genai#of(Node)}; a present child that fails to parse fails the whole parse
+         * while a missing child is admitted.
          *
-         * @implNote
-         * This implementation enforces the
-         * {@code SmaxIqResultResponseMixin} envelope check first,
-         * then dispatches the three optional projection children
-         * to {@link MetaVerified#of(Node)},
-         * {@link MarketingMessages#of(Node)} and
-         * {@link Genai#of(Node)}; if any of those sub-parses fails
-         * the success parse fails as a whole (unlike the
-         * {@code GetLinkedAccounts} mixins which silently swallow
-         * sub-parse failures).
-         *
+         * @implNote This implementation fails the success parse on any present-but-malformed
+         * sub-projection, unlike the {@code GetLinkedAccounts} mixins which silently swallow
+         * sub-parse failures.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess",
                 exports = "parseGetBusinessEligibilityResponseSuccess",
@@ -221,7 +175,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across the three projections.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with equal projections
          */
         @Override
         public boolean equals(Object obj) {
@@ -238,7 +195,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the three projections.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -246,7 +205,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the three projections.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -256,65 +217,37 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * The {@code <meta_verified/>} child projection carrying
-         * the Meta-Verified eligibility status and optional
-         * onboarding-flow toggles.
-         *
-         * @apiNote
-         * Drives the WA Web Meta-Verified compose-banner and
-         * privacy-interstitial onboarding flows; the
-         * {@link #additionalParams()} string is an opaque relay
-         * payload propagated to Meta's onboarding endpoint.
+         * Carries the Meta-Verified eligibility status plus optional onboarding-flow toggles.
+         * <p>
+         * Drives the Meta-Verified compose-banner and privacy-interstitial onboarding flows;
+         * the {@link #additionalParams()} string is an opaque relay payload propagated verbatim
+         * to Meta's onboarding endpoint.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess")
         public static final class MetaVerified {
             /**
-             * The mandatory {@code status} attribute on the
-             * {@code <meta_verified/>} child.
+             * The mandatory {@code status} attribute on the {@code <meta_verified/>} child.
              */
             private final SmaxGetBusinessEligibilityFailSuccessStatus status;
 
             /**
-             * The optional
-             * {@code should_show_privacy_interstitial_to_new_users}
-             * attribute.
+             * The optional {@code should_show_privacy_interstitial_to_new_users} attribute.
              */
             private final SmaxGetBusinessEligibilityFalseTrueFlag shouldShowPrivacyInterstitialToNewUsers;
 
             /**
-             * The optional {@code additional_params} attribute; an
-             * opaque relay-side payload that the WA Web
-             * Meta-Verified onboarding flow forwards verbatim to
-             * Meta's endpoint.
+             * The optional {@code additional_params} attribute; an opaque relay-side payload
+             * forwarded verbatim to Meta's onboarding endpoint.
              */
             private final String additionalParams;
 
             /**
-             * Constructs a new projection.
+             * Constructs a projection from the validated status and the two optional toggles.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <meta_verified/>} child has been validated.
-             *
-             * @param status                                  the
-             *                                                eligibility
-             *                                                status;
-             *                                                never
-             *                                                {@code null}
-             * @param shouldShowPrivacyInterstitialToNewUsers the
-             *                                                optional
-             *                                                privacy-interstitial
-             *                                                toggle; may
-             *                                                be
-             *                                                {@code null}
-             * @param additionalParams                        the
-             *                                                optional
-             *                                                opaque
-             *                                                params; may
-             *                                                be
-             *                                                {@code null}
-             * @throws NullPointerException if {@code status} is
-             *                              {@code null}
+             * @param status                                  the eligibility status; never {@code null}
+             * @param shouldShowPrivacyInterstitialToNewUsers the optional privacy-interstitial toggle; may be {@code null}
+             * @param additionalParams                        the optional opaque params; may be {@code null}
+             * @throws NullPointerException if {@code status} is {@code null}
              */
             public MetaVerified(SmaxGetBusinessEligibilityFailSuccessStatus status,
                                 SmaxGetBusinessEligibilityFalseTrueFlag shouldShowPrivacyInterstitialToNewUsers,
@@ -336,8 +269,7 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             /**
              * Returns the optional privacy-interstitial toggle.
              *
-             * @return an {@link Optional} carrying the toggle, or
-             *         empty when the relay omitted the attribute
+             * @return an {@link Optional} carrying the toggle, or empty when the relay omitted the attribute
              */
             public Optional<SmaxGetBusinessEligibilityFalseTrueFlag> shouldShowPrivacyInterstitialToNewUsers() {
                 return Optional.ofNullable(shouldShowPrivacyInterstitialToNewUsers);
@@ -346,8 +278,7 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             /**
              * Returns the optional opaque onboarding params.
              *
-             * @return an {@link Optional} carrying the params, or
-             *         empty when the relay omitted the attribute
+             * @return an {@link Optional} carrying the params, or empty when the relay omitted the attribute
              */
             public Optional<String> additionalParams() {
                 return Optional.ofNullable(additionalParams);
@@ -355,21 +286,16 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
 
             /**
              * Tries to parse the projection from the given node.
+             * <p>
+             * Asserts the {@code meta_verified} tag, projects the mandatory {@code status}
+             * attribute through {@link SmaxGetBusinessEligibilityFailSuccessStatus#of(String)},
+             * and only then optionally projects the privacy-interstitial flag through
+             * {@link SmaxGetBusinessEligibilityFalseTrueFlag#of(String)}.
              *
-             * @implNote
-             * This implementation asserts the {@code meta_verified}
-             * tag, projects the mandatory {@code status} attribute
-             * through {@link SmaxGetBusinessEligibilityFailSuccessStatus#of(String)},
-             * and only then optionally projects the
-             * privacy-interstitial flag through
-             * {@link SmaxGetBusinessEligibilityFalseTrueFlag#of(String)};
-             * a present-but-malformed flag attribute is a
-             * parse failure rather than a silent ignore.
-             *
+             * @implNote This implementation treats a present-but-malformed privacy-interstitial
+             * attribute as a parse failure rather than a silent ignore.
              * @param node the {@code <meta_verified/>} node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess",
                     exports = "parseGetBusinessEligibilityResponseSuccessMetaVerified",
@@ -397,7 +323,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality across all three fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is a {@link MetaVerified} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -415,7 +344,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from all three fields.
+             *
+             * @return the combined hash code
              */
             @Override
             public int hashCode() {
@@ -423,7 +354,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the status, the privacy-interstitial toggle and the opaque params.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -435,45 +368,30 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * The {@code <marketing_messages/>} child projection
-         * carrying the marketing-messages eligibility plus the
-         * optional expiration timestamp.
-         *
-         * @apiNote
-         * Drives the SMB marketing-messages broadcast-compose
-         * gating; the {@link #expiration()} timestamp is the
-         * epoch-seconds deadline at which the eligibility window
-         * closes and the caller should re-issue
-         * {@link SmaxGetBusinessEligibilityRequest}.
+         * Carries the marketing-messages eligibility plus the optional expiration timestamp.
+         * <p>
+         * Drives the SMB marketing-messages broadcast-compose gating; the {@link #expiration()}
+         * timestamp is the epoch-seconds deadline at which the eligibility window closes and the
+         * caller should re-issue {@link SmaxGetBusinessEligibilityRequest}.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess")
         public static final class MarketingMessages {
             /**
-             * The mandatory {@code status} attribute on the
-             * {@code <marketing_messages/>} child.
+             * The mandatory {@code status} attribute on the {@code <marketing_messages/>} child.
              */
             private final SmaxGetBusinessEligibilityMarketingMessagesStatus status;
 
             /**
-             * The optional {@code expiration} attribute (epoch
-             * seconds).
+             * The optional {@code expiration} attribute, in epoch seconds.
              */
             private final Integer expiration;
 
             /**
-             * Constructs a new projection.
+             * Constructs a projection from the validated status and optional expiration.
              *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <marketing_messages/>} child has been
-             * validated.
-             *
-             * @param status     the marketing-messages status;
-             *                   never {@code null}
-             * @param expiration the optional expiration timestamp;
-             *                   may be {@code null}
-             * @throws NullPointerException if {@code status} is
-             *                              {@code null}
+             * @param status     the marketing-messages status; never {@code null}
+             * @param expiration the optional expiration timestamp; may be {@code null}
+             * @throws NullPointerException if {@code status} is {@code null}
              */
             public MarketingMessages(SmaxGetBusinessEligibilityMarketingMessagesStatus status, Integer expiration) {
                 this.status = Objects.requireNonNull(status, "status cannot be null");
@@ -490,15 +408,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * Returns the optional expiration timestamp.
+             * Returns the optional expiration timestamp in epoch seconds.
              *
-             * @apiNote
-             * Empty when the relay omitted the {@code expiration}
-             * attribute; the value is epoch seconds.
-             *
-             * @return an {@link OptionalInt} carrying the
-             *         timestamp, or empty when the relay omitted
-             *         the attribute
+             * @return an {@link OptionalInt} carrying the timestamp, or empty when the relay omitted the attribute
              */
             public OptionalInt expiration() {
                 if (expiration == null) {
@@ -509,20 +421,14 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
 
             /**
              * Tries to parse the projection from the given node.
-             *
-             * @implNote
-             * This implementation asserts the
-             * {@code marketing_messages} tag, projects the
-             * mandatory {@code status} through
-             * {@link SmaxGetBusinessEligibilityMarketingMessagesStatus#of(String)},
-             * and then optionally parses the {@code expiration}
-             * attribute as a non-negative {@code int}; a malformed
-             * or negative value causes a parse failure.
+             * <p>
+             * Asserts the {@code marketing_messages} tag, projects the mandatory {@code status}
+             * through {@link SmaxGetBusinessEligibilityMarketingMessagesStatus#of(String)}, and
+             * then optionally parses the {@code expiration} attribute as a non-negative
+             * {@code int}; a malformed or negative value is a parse failure.
              *
              * @param node the {@code <marketing_messages/>} node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess",
                     exports = "parseGetBusinessEligibilityResponseSuccessMarketingMessages",
@@ -554,7 +460,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality across both fields.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is a {@link MarketingMessages} with equal fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -569,7 +478,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from both fields.
+             *
+             * @return the combined hash code
              */
             @Override
             public int hashCode() {
@@ -577,7 +488,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the status and expiration.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -587,32 +500,22 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * The {@code <genai/>} child projection carrying the GenAI
-         * per-broadcast eligibility status.
-         *
-         * @apiNote
-         * Drives the WA Web SMB GenAI-text broadcast-compose
-         * gating consulted from
-         * {@code WAWebBizBroadcastGenAIGating.isGenAITextEnabled}.
+         * Carries the GenAI per-broadcast eligibility status.
+         * <p>
+         * Drives the SMB GenAI-text broadcast-compose gating.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess")
         public static final class Genai {
             /**
-             * The mandatory {@code status} attribute on the
-             * {@code <genai/>} child.
+             * The mandatory {@code status} attribute on the {@code <genai/>} child.
              */
             private final SmaxGetBusinessEligibilityFailSuccessStatus status;
 
             /**
-             * Constructs a new projection.
-             *
-             * @apiNote
-             * Invoked by {@link #of(Node)} after the
-             * {@code <genai/>} child has been validated.
+             * Constructs a projection from the validated status.
              *
              * @param status the GenAI status; never {@code null}
-             * @throws NullPointerException if {@code status} is
-             *                              {@code null}
+             * @throws NullPointerException if {@code status} is {@code null}
              */
             public Genai(SmaxGetBusinessEligibilityFailSuccessStatus status) {
                 this.status = Objects.requireNonNull(status, "status cannot be null");
@@ -629,17 +532,13 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
 
             /**
              * Tries to parse the projection from the given node.
-             *
-             * @implNote
-             * This implementation asserts the {@code genai} tag
-             * and projects the mandatory {@code status} through
-             * {@link SmaxGetBusinessEligibilityFailSuccessStatus#of(String)};
-             * a missing or malformed status is a parse failure.
+             * <p>
+             * Asserts the {@code genai} tag and projects the mandatory {@code status} through
+             * {@link SmaxGetBusinessEligibilityFailSuccessStatus#of(String)}; a missing or
+             * malformed status is a parse failure.
              *
              * @param node the {@code <genai/>} node
-             * @return an {@link Optional} carrying the projection,
-             *         or empty when the node does not match the
-             *         documented schema
+             * @return an {@link Optional} carrying the projection, or empty when the node does not match the documented schema
              */
             @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseSuccess",
                     exports = "parseGetBusinessEligibilityResponseSuccessGenai",
@@ -658,7 +557,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Compares this projection to another object for value equality on the status.
+             *
+             * @param obj the object to compare against; may be {@code null}
+             * @return {@code true} when {@code obj} is a {@link Genai} with an equal status
              */
             @Override
             public boolean equals(Object obj) {
@@ -673,7 +575,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a hash code derived from the status.
+             *
+             * @return the hash code
              */
             @Override
             public int hashCode() {
@@ -681,7 +585,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
             }
 
             /**
-             * {@inheritDoc}
+             * Returns a debug rendering listing the status.
+             *
+             * @return the string representation
              */
             @Override
             public String toString() {
@@ -691,41 +597,29 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
     }
 
     /**
-     * The {@code ClientError} reply variant carrying a documented
-     * {@code 4xx} rejection.
-     *
-     * @apiNote
-     * Surfaced when the relay rejected the
-     * {@code GetBusinessEligibility} request via one of the
-     * BadRequest / Forbidden / NotAllowed mixin arms; the WA Web
-     * {@code WAWebRefreshBusinessEligibility} loop typically halts
-     * the backoff on a {@code 4xx}.
+     * Carries a documented {@code 4xx} rejection.
+     * <p>
+     * Surfaced when the relay rejected the request via one of the BadRequest, Forbidden or
+     * NotAllowed mixin arms.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageIQErrorBadRequestOrForbiddenOrInternalServerErrorOrServiceUnavailableMixinGroup")
     final class ClientError implements SmaxGetBusinessEligibilityResponse {
         /**
-         * The numeric server-side error code in the {@code 4xx}
-         * range.
+         * The numeric server-side error code in the {@code 4xx} range.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 4xx} envelope has been validated.
+         * Constructs a client-error reply from a validated {@code 4xx} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -744,33 +638,25 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
+         * <p>
+         * Routes the error extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} and admits the entire
+         * {@code 4xx} range as a catch-all.
          *
-         * @implNote
-         * This implementation routes the {@code <iq>}/{@code <error>}
-         * extraction through
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)};
-         * unlike
-         * {@link SmaxGetAccountNonceResponse.ClientError} this
-         * variant does not enforce a literal-pair disjunction
-         * because the WA Web
-         * {@code IQErrorBadRequestOrForbiddenOrInternalServerErrorOrServiceUnavailableMixinGroup}
-         * admits the entire {@code 4xx} range as a catch-all.
-         *
+         * @implNote Unlike {@link SmaxGetAccountNonceResponse.ClientError} this variant does not
+         * enforce a literal-pair disjunction, because the WA Web mixin group admits the entire
+         * {@code 4xx} range as a catch-all.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseError",
                 exports = "parseGetBusinessEligibilityResponseError",
@@ -787,7 +673,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -802,7 +691,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -810,7 +701,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -820,40 +713,29 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
     }
 
     /**
-     * The {@code ServerError} reply variant carrying a transient
-     * {@code 5xx} relay failure.
-     *
-     * @apiNote
-     * Surfaced when the relay returned a transient internal
-     * failure; the WA Web
-     * {@code WAWebRefreshBusinessEligibility} loop re-invokes the
-     * request with exponential backoff for this case.
+     * Carries a transient {@code 5xx} relay failure.
+     * <p>
+     * Surfaced when the relay returned a transient internal failure; callers can re-issue the
+     * request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageIQErrorBadRequestOrForbiddenOrInternalServerErrorOrServiceUnavailableMixinGroup")
     final class ServerError implements SmaxGetBusinessEligibilityResponse {
         /**
-         * The numeric server-side error code in the {@code 5xx}
-         * range.
+         * The numeric server-side error code in the {@code 5xx} range.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text, when the relay supplied one.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the
-         * {@code 5xx} envelope has been validated.
+         * Constructs a server-error reply from a validated {@code 5xx} envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -872,29 +754,22 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
-         *
-         * @implNote
-         * This implementation delegates the {@code 5xx} range check
-         * to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
-         * a stanza outside the {@code 5xx} range yields
-         * {@link Optional#empty()}.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
+         * <p>
+         * Delegates the {@code 5xx} range check to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}; a stanza outside the
+         * {@code 5xx} range yields {@link Optional#empty()}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageGetBusinessEligibilityResponseError",
                 exports = "parseGetBusinessEligibilityResponseError",
@@ -911,7 +786,10 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with equal fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -926,7 +804,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the combined hash code
          */
         @Override
         public int hashCode() {
@@ -934,7 +814,9 @@ public sealed interface SmaxGetBusinessEligibilityResponse extends SmaxOperation
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug rendering listing the error code and text.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

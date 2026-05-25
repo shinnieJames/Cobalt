@@ -18,17 +18,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * Builds the deterministic franking content that backs the reporting-token
  * HMAC.
  *
- * @apiNote
- * Counterpart of WA Web's {@code WAWebReportingTokenContent.ReportingTokenContentCalculator}
- * on the send side: the bytes returned by {@link #compute(byte[], int)} are
- * the second argument to {@link ReportingToken#generate}. The output is a
- * sparse copy of the serialised {@link com.github.auties00.cobalt.model.message.MessageContainer}
- * protobuf carrying only the field numbers that the {@link ReportingConfig}
- * for the current sender version whitelists. Computing the HMAC over the
- * full payload instead of this sparse copy makes the server-side check fail
- * with a {@code reporting-token-validation-failure}, even when every other
- * stanza field is correct, because the server walks the same config when it
- * replays the HMAC.
+ * <p>The bytes returned by {@link #compute(byte[], int)} are the second argument
+ * to {@link ReportingToken#generate}. The output is a sparse copy of the
+ * serialised {@link com.github.auties00.cobalt.model.message.MessageContainer}
+ * protobuf carrying only the field numbers that the {@link ReportingConfig} for
+ * the current sender version whitelists. HMACing the full payload instead of
+ * this sparse copy makes the server-side check fail with a
+ * {@code reporting-token-validation-failure}, even when every other stanza field
+ * is correct, because the server walks the same config when it replays the HMAC.
  */
 @WhatsAppWebModule(moduleName = "WAWebReportingTokenConfig")
 @WhatsAppWebModule(moduleName = "WAWebReportingTokenContent")
@@ -78,13 +75,11 @@ public final class ReportingTokenContent {
      * The Base64-encoded {@code Config} protobuf shipped inline in the WA Web
      * bundle.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebReportingTokenConfig.REPORTING_TOKEN_CONFIG_BASE64}
-     * literal verbatim; decoded against {@link ReportingConfigSpec} the first
-     * time {@link #getConfig(int)} is consulted. Bumping this value out of
-     * lockstep with the server-side whitelist makes every locally-generated
-     * reporting token fail validation, so it should only change when WA Web
-     * ships a new bundle.
+     * <p>Decoded against {@link ReportingConfigSpec} the first time
+     * {@link #getConfig(int)} is consulted. Bumping this value out of lockstep
+     * with the server-side whitelist makes every locally-generated reporting
+     * token fail validation, so it should only change when WA Web ships a new
+     * bundle.
      */
     @WhatsAppWebExport(moduleName = "WAWebReportingTokenConfig", exports = "REPORTING_TOKEN_CONFIG_BASE64",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -116,11 +111,9 @@ public final class ReportingTokenContent {
     /**
      * The cache keyed by sender version.
      *
-     * @apiNote
-     * The decoded {@link ReportingConfig} does not currently vary with the
-     * version; the cache is keyed for API symmetry with WA Web and to leave
-     * room for version-specific pruning if the bundle later ships per-version
-     * configs.
+     * <p>The decoded {@link ReportingConfig} does not currently vary with the
+     * version; the cache is keyed for symmetry with WA Web and to leave room for
+     * version-specific pruning if the bundle later ships per-version configs.
      */
     private static final Map<Integer, ReportingConfig> CONFIG_CACHE = new ConcurrentHashMap<>();
 
@@ -137,16 +130,16 @@ public final class ReportingTokenContent {
      * Returns the decoded reporting-token configuration for the given sender
      * version.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code getReportingTokenConfig}: looked up once per
-     * {@link #compute(byte[], int)} call so the version-pruning step inside
-     * the walker can consult the per-rule {@code minVersion}/{@code maxVersion}
-     * bracket without redecoding the base64 blob.
+     * <p>Looked up once per {@link #compute(byte[], int)} call so the
+     * version-pruning step inside the walker can consult the per-rule
+     * {@link ReportingField#minVersion()} and {@link ReportingField#maxVersion()}
+     * bracket without redecoding the Base64 blob.
+     *
      * @implNote
      * This implementation returns the same {@link ReportingConfig} for every
-     * version because the per-version filter is fused into the byte walker
-     * (see {@link #versionMatches}). The {@code senderVersion} parameter is
-     * kept to preserve API symmetry with WA Web.
+     * version because the per-version filter is fused into the byte walker (see
+     * {@link #versionMatches}). The {@code senderVersion} parameter is kept to
+     * preserve symmetry with WA Web.
      *
      * @param senderVersion the {@code rt_sender_reporting_token_version}
      *                      currently in effect
@@ -159,34 +152,32 @@ public final class ReportingTokenContent {
     }
 
     /**
-     * Computes the deterministic franking content over which the
-     * reporting-token HMAC must be applied.
+     * Computes the deterministic franking content over which the reporting-token
+     * HMAC must be applied.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code ReportingTokenContentCalculator.getReportingTokenContent}:
-     * walks the protobuf wire format of {@code messageBytes} field-by-field,
-     * retains only the fields the config whitelists for
-     * {@code senderVersion}, recurses on sub-messages, sorts the retained
-     * fields by ascending field number, and concatenates each retained
-     * field's raw bytes. The output is bound to the encoded layout of the
-     * source: reordering a kept field or re-encoding it changes the HMAC,
-     * which is intentional because the server replays the same algorithm on
-     * its own copy of the message.
+     * <p>Walks the protobuf wire format of {@code messageBytes} field-by-field,
+     * retains only the fields the config whitelists for {@code senderVersion},
+     * recurses on sub-messages, sorts the retained fields by ascending field
+     * number, and concatenates each retained field's raw bytes. The output is
+     * bound to the encoded layout of the source: reordering a kept field or
+     * re-encoding it changes the HMAC, which is intentional because the server
+     * replays the same algorithm on its own copy of the message.
+     *
      * @implNote
-     * This implementation runs in two passes: an extraction pass that builds
-     * a tree of {@link KeptNode} carriers and sums each subtree's emit size,
+     * This implementation runs in two passes: an extraction pass that builds a
+     * tree of {@link KeptNode} carriers and sums each subtree's emit size,
      * followed by a write pass that materialises the tree into a single
      * pre-sized {@code byte[]}. Carrying lengths through the tree avoids the
-     * intermediate {@code Binary} allocations the WA Web implementation
-     * performs at every recursion level.
+     * intermediate allocations the WA Web implementation performs at every
+     * recursion level.
      *
      * @param messageBytes  the serialised
      *                      {@link com.github.auties00.cobalt.model.message.MessageContainer}
      *                      protobuf
      * @param senderVersion the {@code rt_sender_reporting_token_version}
      *                      currently in effect
-     * @return the franking content; possibly empty when no field of the
-     *         message survives the filter
+     * @return the franking content; possibly empty when no field of the message
+     *         survives the filter
      * @throws NullPointerException     if {@code messageBytes} is {@code null}
      * @throws IllegalArgumentException if {@code messageBytes} is malformed
      */
@@ -219,24 +210,22 @@ public final class ReportingTokenContent {
      * Recursively walks the protobuf region {@code [start, end)} and appends
      * every whitelisted field into {@code out}.
      *
-     * @apiNote
-     * Internal helper for {@link #compute(byte[], int)}; the
-     * {@code topRules} parameter is consulted when a kept length-delimited
-     * field carries {@code isMessage = true}, indicating that the sub-message
-     * is parsed against the top-level rule set rather than the local
-     * {@code subfield} map.
+     * <p>The {@code topRules} parameter is consulted when a kept length-delimited
+     * field has {@link ReportingField#isMessage()} returning {@code true},
+     * indicating that the sub-message is parsed against the top-level rule set
+     * rather than the local {@link ReportingField#subfield()} map.
      *
      * @param src           the raw protobuf bytes containing the sub-region
      * @param start         the inclusive start offset of the sub-region
      * @param end           the exclusive end offset of the sub-region
      * @param rules         the rule map applicable at this level
-     * @param topRules      the top-level rule map, consulted when a kept
-     *                      field carries {@code isMessage = true}
+     * @param topRules      the top-level rule map, consulted when a kept field
+     *                      has {@link ReportingField#isMessage()} returning
+     *                      {@code true}
      * @param senderVersion the {@code rt_sender_reporting_token_version}
      *                      currently in effect
      * @param out           the accumulator for the kept nodes at this level
-     * @return the total emit size, in bytes, of the nodes appended at this
-     *         level
+     * @return the total emit size, in bytes, of the nodes appended at this level
      * @throws IllegalArgumentException if {@code src} is malformed
      */
     private static int extract(byte[] src, int start, int end,
@@ -290,17 +279,15 @@ public final class ReportingTokenContent {
     /**
      * Returns whether a rule applies at the given sender version.
      *
-     * @apiNote
-     * Matches the version-bracket check WA Web applies via the
-     * {@code minVersion}/{@code maxVersion}/{@code notReportableMinVersion}
-     * triplet on each {@link ReportingField}: a rule is excluded when
-     * {@code version < minVersion}, when {@code version > maxVersion}, or
-     * when {@code version >= notReportableMinVersion} (the inclusive lower
-     * bound for deprecation).
+     * <p>A rule is excluded when {@code version} is below
+     * {@link ReportingField#minVersion()}, when {@code version} is above
+     * {@link ReportingField#maxVersion()}, or when {@code version} is at or
+     * above {@link ReportingField#notReportableMinVersion()} (the inclusive
+     * lower bound for deprecation).
      *
      * @param rule    the rule from {@link ReportingField}
-     * @param version the {@code rt_sender_reporting_token_version} currently
-     *                in effect
+     * @param version the {@code rt_sender_reporting_token_version} currently in
+     *                effect
      * @return {@code true} when {@code rule} applies for {@code version}
      */
     private static boolean versionMatches(ReportingField rule, int version) {
@@ -314,13 +301,12 @@ public final class ReportingTokenContent {
     }
 
     /**
-     * Decodes the bundled {@link #REPORTING_TOKEN_CONFIG_BASE64} on first
-     * use and returns the cached {@link ReportingConfig} thereafter.
+     * Decodes the bundled {@link #REPORTING_TOKEN_CONFIG_BASE64} on first use and
+     * returns the cached {@link ReportingConfig} thereafter.
      *
-     * @apiNote
-     * Internal initialiser for {@link #getConfig(int)}; the double-checked
-     * locking pattern guarantees a single decode even under concurrent
-     * first-touch.
+     * @implNote
+     * This implementation uses double-checked locking on {@link #CONFIG} to
+     * guarantee a single decode even under concurrent first-touch.
      *
      * @return the singleton {@link ReportingConfig}
      */
@@ -339,14 +325,11 @@ public final class ReportingTokenContent {
     }
 
     /**
-     * Advances {@code cursor} past one wire-format value of the given wire
-     * type.
+     * Advances {@code cursor} past one wire-format value of the given wire type.
      *
-     * @apiNote
-     * Internal helper for {@link #extract}; consumes exactly the bytes of one
-     * value (varint, fixed-32, fixed-64, or length-delimited blob) and
-     * returns the post-value position so the caller can decide whether to
-     * keep the surrounding field.
+     * <p>Consumes exactly the bytes of one value (varint, fixed-32, fixed-64, or
+     * length-delimited blob) and returns the post-value position so the caller
+     * can decide whether to keep the surrounding field.
      *
      * @param src      the source bytes
      * @param cursor   the position pointing at the first value byte
@@ -389,19 +372,16 @@ public final class ReportingTokenContent {
     /**
      * Reads a single LEB128-encoded varint starting at {@code cursor}.
      *
-     * @apiNote
-     * Internal helper for {@link #extract} and {@link #skipValue}; rejects
-     * varints longer than 10 bytes (the maximum that can fit a 64-bit
-     * unsigned integer) so a malformed source cannot cause an unbounded
-     * loop.
+     * <p>Rejects varints longer than 10 bytes (the maximum that can fit a 64-bit
+     * unsigned integer) so a malformed source cannot cause an unbounded loop.
      *
      * @param src    the source bytes
      * @param cursor the position pointing at the first varint byte
      * @param end    the exclusive end of the sub-region
-     * @return the decoded value paired with the position immediately after
-     *         the varint
-     * @throws IllegalArgumentException if the varint is truncated or longer
-     *                                  than 10 bytes
+     * @return the decoded value paired with the position immediately after the
+     *         varint
+     * @throws IllegalArgumentException if the varint is truncated or longer than
+     *                                  10 bytes
      */
     private static VarInt readVarInt(byte[] src, int cursor, int end) {
         var value = 0L;
@@ -425,14 +405,14 @@ public final class ReportingTokenContent {
      * Returns the number of bytes a non-negative {@code value} occupies when
      * LEB128-encoded.
      *
-     * @apiNote
-     * Used by {@link #extract} to pre-size the output buffer; the chain of
+     * <p>Used by {@link #extract} to pre-size the output buffer; the chain of
      * power-of-two compares avoids the per-value loop the protobuf reference
      * implementation runs.
+     *
      * @implNote
-     * This implementation treats negative values as 10-byte sign extensions
-     * to match the protobuf wire format, even though the walker never
-     * produces negative inner-message lengths in practice.
+     * This implementation treats negative values as 10-byte sign extensions to
+     * match the protobuf wire format, even though the walker never produces
+     * negative inner-message lengths in practice.
      *
      * @param value the integer to encode
      * @return the number of bytes the LEB128 encoding occupies
@@ -462,12 +442,11 @@ public final class ReportingTokenContent {
     }
 
     /**
-     * Writes {@code value} as a LEB128-encoded varint into {@code out}
-     * starting at {@code cursor}.
+     * Writes {@code value} as a LEB128-encoded varint into {@code out} starting
+     * at {@code cursor}.
      *
-     * @apiNote
-     * Internal helper for {@link KeptNode.Branch#write}; the caller must
-     * have pre-sized {@code out} using {@link #getVarIntSize}.
+     * <p>The caller must have pre-sized {@code out} using
+     * {@link #getVarIntSize}.
      *
      * @param out    the destination buffer (must be pre-sized)
      * @param cursor the offset at which to start writing
@@ -486,8 +465,7 @@ public final class ReportingTokenContent {
     }
 
     /**
-     * Carrier returned by {@link #readVarInt} pairing the decoded value with
-     * the cursor advanced past the varint.
+     * Pairs the decoded value of a varint with the cursor advanced past it.
      *
      * @param value  the decoded value
      * @param cursor the position immediately after the varint
@@ -496,13 +474,12 @@ public final class ReportingTokenContent {
     }
 
     /**
-     * A protobuf field that survived the whitelist filter, plus the logic to
-     * write it into the output buffer.
+     * Holds a protobuf field that survived the whitelist filter, plus the logic
+     * to write it into the output buffer.
      *
-     * @apiNote
-     * Internal carrier used by {@link #compute(byte[], int)} to defer writing
-     * until the entire tree has been built and totals are known; instances
-     * are never exposed outside this class.
+     * <p>Used by {@link #compute(byte[], int)} to defer writing until the entire
+     * tree has been built and totals are known; instances are never exposed
+     * outside this class.
      */
     private sealed interface KeptNode {
         /**
@@ -513,11 +490,16 @@ public final class ReportingTokenContent {
         int fieldNumber();
 
         /**
-         * Writes this node's bytes into {@code out} starting at
-         * {@code cursor}.
+         * Writes this node's bytes into {@code out} starting at {@code cursor}.
          *
-         * @param src    the original source bytes (verbatim slices are
-         *               copied straight from here)
+         * @implSpec
+         * Implementations must write exactly the bytes accounted for in the emit
+         * size computed during extraction and return {@code cursor} advanced by
+         * that count, so that successive nodes pack contiguously into the
+         * pre-sized buffer.
+         *
+         * @param src    the original source bytes (verbatim slices are copied
+         *               straight from here)
          * @param out    the destination buffer (must be pre-sized)
          * @param cursor the offset at which to start writing
          * @return the offset immediately after the written bytes
@@ -525,24 +507,21 @@ public final class ReportingTokenContent {
         int write(byte[] src, byte[] out, int cursor);
 
         /**
-         * A field that is kept verbatim from the source.
+         * Holds a field that is kept verbatim from the source.
          *
-         * @apiNote
-         * Used for non-recursing kept fields (varint, fixed-32, fixed-64,
-         * length-delimited where the rule has no {@code subfield} map and is
-         * not marked {@code isMessage}); the writer copies the tag plus the
-         * value bytes straight out of the source.
+         * <p>Used for non-recursing kept fields (varint, fixed-32, fixed-64, or
+         * length-delimited where the rule has no {@link ReportingField#subfield()}
+         * map and {@link ReportingField#isMessage()} returns {@code false}); the
+         * writer copies the tag plus the value bytes straight out of the source.
          *
          * @param fieldNumber the protobuf field number used for sort order
-         * @param sourceStart the offset into the source where the tag bytes
-         *                    begin
-         * @param length      the number of bytes spanning the tag plus the
-         *                    value
+         * @param sourceStart the offset into the source where the tag bytes begin
+         * @param length      the number of bytes spanning the tag plus the value
          */
         record Leaf(int fieldNumber, int sourceStart, int length) implements KeptNode {
             /**
-             * Copies {@link #length} bytes starting at {@link #sourceStart}
-             * into {@code out} at {@code cursor}.
+             * Copies {@link #length} bytes starting at {@link #sourceStart} into
+             * {@code out} at {@code cursor}.
              *
              * @param src    the original source bytes
              * @param out    the destination buffer
@@ -557,16 +536,15 @@ public final class ReportingTokenContent {
         }
 
         /**
-         * A length-delimited field whose body was recursively pruned.
+         * Holds a length-delimited field whose body was recursively pruned.
          *
-         * @apiNote
-         * Used for kept sub-messages: the original tag is reused verbatim,
-         * but the inner length prefix is freshly emitted because the pruned
-         * body's size differs from the source body's size.
+         * <p>Used for kept sub-messages: the original tag is reused verbatim, but
+         * the inner length prefix is freshly emitted because the pruned body's
+         * size differs from the source body's size.
          *
          * @param fieldNumber the protobuf field number used for sort order
-         * @param tagStart    the offset into the source where the original
-         *                    tag bytes begin
+         * @param tagStart    the offset into the source where the original tag
+         *                    bytes begin
          * @param tagLength   the number of bytes spanning the original tag
          * @param innerSize   the total byte size of {@link #children} when
          *                    written

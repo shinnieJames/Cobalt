@@ -25,39 +25,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link WamPrivateStatsTokenIssuer}'s IQ orchestration
- * against the captured live-bundle vectors.
+ * Exercises {@link WamPrivateStatsTokenIssuer}'s IQ orchestration against the captured live-bundle
+ * vectors.
  *
- * @apiNote
- * Pins the outbound {@code <iq xmlns="privatestats" type="get">}
- * stanza shape, the response parsing path, and the resulting
- * {@link WamPrivateStatsToken} bytes against the
- * {@code ed25519-live-bundle-vectors.json} KAT so issuance is
- * byte-validated against the same vectors that
- * {@code Ed25519LiveBundleKatTest} pins for the blind and unblind
- * primitives in isolation.
- *
- * @implNote
- * This implementation feeds a deterministic {@link SecureRandom} into
- * the package-private constructor so the {@code token} and
- * {@code blindingFactor} draws line up with the captured vector.
+ * <p>The suite feeds a deterministic {@link SecureRandom} into the package-private constructor so
+ * the token and blinding-factor draws line up with the captured vector, then pins the outbound
+ * {@code <iq xmlns="privatestats" type="get">} stanza shape, the response parsing path, and the
+ * resulting {@link WamPrivateStatsToken} bytes against the {@code ed25519-live-bundle-vectors.json}
+ * known-answer fixture. Those are the same vectors {@code Ed25519LiveBundleKatTest} pins for the
+ * blind and unblind primitives in isolation.
  */
 @DisplayName("WamPrivateStatsTokenIssuer behavioural")
 class WamPrivateStatsTokenIssuerTest {
-    /**
-     * The classpath path of the ed25519 KAT vectors fixture, reused
-     * as the source of the deterministic token, blinding factor,
-     * and response-payload bytes.
-     */
     private static final String VECTORS_FIXTURE = "/fixtures/wam/ed25519-live-bundle-vectors.json";
 
-    /**
-     * Verifies that {@link WamPrivateStatsTokenIssuer#issue()}
-     * produces an IQ whose blinded-credential bytes match the
-     * captured {@code blind(msg, scalar)} output and returns a
-     * token whose {@code token()} and {@code sharedSecret()} bytes
-     * match the captured vector.
-     */
     @Test
     @DisplayName("issue round-trip produces the captured unblinded token")
     void issueRoundTripMatchesLiveKat() {
@@ -105,11 +86,6 @@ class WamPrivateStatsTokenIssuerTest {
         }
     }
 
-    /**
-     * Verifies that a server-side error response (an IQ with
-     * {@code type="error"}) raises
-     * {@code WhatsAppPrivateStatsTokenIssuerException}.
-     */
     @Test
     @DisplayName("server error response throws WhatsAppPrivateStatsTokenIssuerException")
     void serverErrorThrows() {
@@ -125,10 +101,6 @@ class WamPrivateStatsTokenIssuerTest {
         assertThrows(WhatsAppException.class, issuer::issue);
     }
 
-    /**
-     * Verifies that a response missing the {@code <signed_credential>}
-     * child throws rather than returning a malformed token.
-     */
     @Test
     @DisplayName("response missing signed_credential throws")
     void missingSignedCredentialThrows() {
@@ -153,10 +125,6 @@ class WamPrivateStatsTokenIssuerTest {
                 "missing signed_credential must raise an exception, not return a malformed token");
     }
 
-    /**
-     * Verifies that a wrong-length {@code <signed_credential>}
-     * payload throws.
-     */
     @Test
     @DisplayName("wrong-length signed_credential throws")
     void wrongLengthSignedCredentialThrows() {
@@ -184,19 +152,7 @@ class WamPrivateStatsTokenIssuerTest {
         assertThrows(Exception.class, issuer::issue);
     }
 
-    /**
-     * Builds a successful IQ response shaped like the live server's
-     * {@code sign_credential} reply.
-     *
-     * @apiNote
-     * Used by the round-trip and edge-case tests to canned-respond
-     * to the issuer's {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode}
-     * call.
-     *
-     * @param signed the signed-credential bytes
-     * @param pk     the ACS public key bytes
-     * @return the synthetic IQ result node
-     */
+    // A success IQ shaped like the live server's sign_credential reply.
     private static Node successResponse(byte[] signed, byte[] pk) {
         return new NodeBuilder()
                 .description("iq")
@@ -216,16 +172,7 @@ class WamPrivateStatsTokenIssuerTest {
                 .build();
     }
 
-    /**
-     * Loads the first ed25519 KAT vector from the fixture file.
-     *
-     * @apiNote
-     * Every test reuses the same vector so the captured bytes are
-     * easy to cross-reference with the ones pinned by
-     * {@code Ed25519LiveBundleKatTest}.
-     *
-     * @return the deserialised first vector
-     */
+    // Every test reuses vector 0 so the captured bytes cross-reference with Ed25519LiveBundleKatTest.
     private static Vector loadFirstVector() {
         try (var stream = WamPrivateStatsTokenIssuerTest.class.getResourceAsStream(VECTORS_FIXTURE)) {
             if (stream == null) {
@@ -246,21 +193,8 @@ class WamPrivateStatsTokenIssuerTest {
         }
     }
 
-    /**
-     * Returns a {@link SecureRandom} that delivers exactly two
-     * scripted byte sequences and refuses a third call.
-     *
-     * @apiNote
-     * The token issuer draws from {@code nextBytes} exactly twice
-     * per {@link WamPrivateStatsTokenIssuer#issue()} (once for the
-     * token, once for the blinding factor); failing loudly on a
-     * third call ensures the test breaks if the production code's
-     * draw count drifts.
-     *
-     * @param first  the first byte sequence to deliver
-     * @param second the second byte sequence to deliver
-     * @return the scripted {@link SecureRandom}
-     */
+    // issue() draws from nextBytes exactly twice (token, then blinding factor); failing loud on a
+    // third call breaks the suite if the production draw count drifts.
     private static SecureRandom scriptedRandom(byte[] first, byte[] second) {
         return new SecureRandom() {
             private int call;
@@ -282,15 +216,6 @@ class WamPrivateStatsTokenIssuerTest {
         };
     }
 
-    /**
-     * Verifies that the scripted {@link SecureRandom} fails loudly on
-     * a third call.
-     *
-     * @apiNote
-     * Defends the surrounding tests against the production code
-     * drifting to call {@code nextBytes} more than twice without
-     * the helper being updated.
-     */
     @Test
     @DisplayName("scripted SecureRandom rejects a third call (issue must use exactly two random sequences)")
     void scriptedRandomFailsLoudOnExtraCall() {
@@ -301,17 +226,7 @@ class WamPrivateStatsTokenIssuerTest {
         assertTrue(true);
     }
 
-    /**
-     * Computes {@code SHA-512(a || b)}.
-     *
-     * @apiNote
-     * Mirrors {@code WAACSTokenUtils.getSharedSecret(token, unblindedSignedToken)}
-     * for use as the assertion oracle.
-     *
-     * @param a the first input
-     * @param b the second input
-     * @return the 64-byte SHA-512 digest
-     */
+    // SHA-512(a || b); the assertion oracle for sharedSecret, mirroring WAACSTokenUtils.getSharedSecret.
     private static byte[] sha512Concat(byte[] a, byte[] b) {
         try {
             var md = MessageDigest.getInstance("SHA-512");
@@ -323,17 +238,7 @@ class WamPrivateStatsTokenIssuerTest {
         }
     }
 
-    /**
-     * A compact holder for the per-vector hex strings consumed by
-     * the tests.
-     *
-     * @param msg       the message hex
-     * @param scalar    the blinding-factor hex
-     * @param blinded   the captured blinded-credential hex
-     * @param pk        the captured ACS public-key hex
-     * @param signed    the captured signed-credential hex
-     * @param unblinded the captured unblinded hex
-     */
+    // Per-vector hex strings from the KAT fixture.
     private record Vector(String msg, String scalar, String blinded, String pk, String signed, String unblinded) {
     }
 }

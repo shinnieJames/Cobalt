@@ -16,30 +16,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the {@link ProtocolMessage.Type} enum's protobuf-index contract,
- * which drives the {@code edit}, {@code decrypt-fail}, and target-sender
- * selection branches across the send pipeline.
- *
- * @apiNote
- * Asserts that every enum value carries a unique non-negative index, that
- * the well-known indices documented by WA Web's
- * {@code Message$ProtocolMessage$Type} are present, and that every value
- * round-trips through {@code index()}. The full per-subtype dispatch
- * behaviour (edit-attribute resolution, decrypt-fail attribute, recipient
- * device list) lives inside the package-private senders and is covered by
- * the live-corpus oracle tests.
- *
- * @implNote
- * This implementation exercises the enum directly rather than the
- * dispatch end-to-end so the cells are independent of the full DI graph
- * that the orchestrator's constructor wires up.
+ * Covers the {@link ProtocolMessage.Type} protobuf-index contract that drives
+ * the edit, decrypt-fail, and target-sender selection branches: every value
+ * carries a unique non-negative index, the well-known WA Web indices are
+ * present, and every value round-trips through {@code index()}. The enum is
+ * exercised directly; the full per-subtype dispatch behaviour lives in the
+ * package-private senders and is covered by the live-corpus oracle.
  */
 @DisplayName("ProtocolMessage.Type dispatch")
 class ProtocolMessageDispatchTest {
 
-    /**
-     * Asserts that every value carries a non-blank enum name.
-     */
     @ParameterizedTest(name = "{0} has non-null name")
     @EnumSource(ProtocolMessage.Type.class)
     @DisplayName("every value carries a stable enum name (regression guard)")
@@ -48,9 +34,6 @@ class ProtocolMessageDispatchTest {
         assertFalse(type.name().isBlank());
     }
 
-    /**
-     * Asserts that every protobuf index is non-negative and unique.
-     */
     @Test
     @DisplayName("every value has a unique protobuf index")
     void indicesAreUnique() {
@@ -66,9 +49,6 @@ class ProtocolMessageDispatchTest {
                 "every value must contribute a distinct index");
     }
 
-    /**
-     * Asserts that the well-known WA Web protobuf indices are present.
-     */
     @Test
     @DisplayName("well-known WA Web protobuf indices are present")
     void wellKnownIndicesPresent() {
@@ -84,10 +64,6 @@ class ProtocolMessageDispatchTest {
                 "MESSAGE_EDIT must be 14; the wire stanza's edit=1 marker comes from this branch");
     }
 
-    /**
-     * Asserts a lower bound on the enum value count, guarding against a
-     * regression that drops a chunk of values.
-     */
     @Test
     @DisplayName("count of values matches the WA Web wire enum (at least 20 documented subtypes)")
     void valueCountLowerBound() {
@@ -98,10 +74,6 @@ class ProtocolMessageDispatchTest {
                 "ProtocolMessage.Type must enumerate at least 20 subtypes, got " + values.length);
     }
 
-    /**
-     * Asserts that every value round-trips through {@code index()} into a
-     * distinct enum value.
-     */
     @Test
     @DisplayName("enum values resolve back via index() so each yields a distinct value")
     void everyValueRoundTripsViaIndex() {
@@ -112,9 +84,6 @@ class ProtocolMessageDispatchTest {
                 "every protobuf index must map back to a unique enum value");
     }
 
-    /**
-     * Asserts that REVOKE and MESSAGE_EDIT are distinct values.
-     */
     @Test
     @DisplayName("REVOKE and MESSAGE_EDIT are distinct values (used for edit=7 vs edit=1 on wire)")
     void revokeAndEditAreDistinct() {

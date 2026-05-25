@@ -6,61 +6,57 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <content/>} child of the CTWA banner-suggestion {@code <banner/>},
- * carrying the banner copy (locale plus heading, body, highlight) and the
- * three optional localised parallels.
- *
- * @apiNote
+ * Models the {@code <content/>} child of the CTWA banner-suggestion
+ * {@code <banner/>}, carrying the banner copy (locale plus heading, body,
+ * highlight) and the three optional localised parallels.
+ * <p>
  * Drives the headline, body, and highlight text rendered by the WhatsApp
- * Business "suggested banner" panel. WA Web's
- * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion} forwards
- * {@link #heading()}, {@link #body()}, {@link #highlight()}, and
- * {@link #locale()} straight to the banner-view value object; the three
- * {@code localised_*} parallels are passed to translation telemetry by
- * downstream consumers.
+ * Business "suggested banner" panel via {@link #heading()}, {@link #body()},
+ * {@link #highlight()}, and {@link #locale()}; the three {@code localised_*}
+ * parallels carry the same copy after localisation plus the metadata downstream
+ * translation telemetry needs.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
 public final class SmaxBannerSuggestionContent {
     /**
-     * The mandatory {@code locale} attribute.
+     * Holds the mandatory {@code locale} attribute.
      */
     private final String locale;
 
     /**
-     * The text content of the mandatory {@code <heading/>} child.
+     * Holds the text content of the mandatory {@code <heading/>} child.
      */
     private final String heading;
 
     /**
-     * The text content of the mandatory {@code <body/>} child.
+     * Holds the text content of the mandatory {@code <body/>} child.
      */
     private final String body;
 
     /**
-     * The text content of the mandatory {@code <highlight/>} child.
+     * Holds the text content of the mandatory {@code <highlight/>} child.
      */
     private final String highlight;
 
     /**
-     * The optional {@code <localised_heading/>} parallel.
+     * Holds the optional {@code <localised_heading/>} parallel.
      */
     private final SmaxBannerSuggestionLocalisedString localisedHeading;
 
     /**
-     * The optional {@code <localised_body/>} parallel.
+     * Holds the optional {@code <localised_body/>} parallel.
      */
     private final SmaxBannerSuggestionLocalisedString localisedBody;
 
     /**
-     * The optional {@code <localised_highlight/>} parallel.
+     * Holds the optional {@code <localised_highlight/>} parallel.
      */
     private final SmaxBannerSuggestionLocalisedString localisedHighlight;
 
     /**
      * Constructs a projection from already-validated wire values.
-     *
-     * @apiNote
-     * Cobalt callers normally obtain a projection by parsing a node via
+     * <p>
+     * Callers normally obtain a projection by parsing a node via
      * {@link #of(Node)}; this constructor is exposed for tests and for
      * hand-built fixtures.
      *
@@ -87,11 +83,10 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the locale identifier.
-     *
-     * @apiNote
-     * Forwarded to the banner-view component as the {@code bannerLocale}
-     * field; downstream CTWA understand-banner telemetry compares it to
-     * the client locale to flag translation mismatches.
+     * <p>
+     * Forwarded to the banner-view component as the banner locale; downstream
+     * CTWA understand-banner telemetry compares it to the client locale to flag
+     * translation mismatches.
      *
      * @return the locale; never {@code null}
      */
@@ -101,8 +96,7 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the heading copy.
-     *
-     * @apiNote
+     * <p>
      * Rendered as the bold heading line of the banner panel.
      *
      * @return the heading text; never {@code null}
@@ -113,8 +107,7 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the body copy.
-     *
-     * @apiNote
+     * <p>
      * Rendered as the main paragraph below the heading.
      *
      * @return the body text; never {@code null}
@@ -125,8 +118,7 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the highlight copy.
-     *
-     * @apiNote
+     * <p>
      * Rendered as the accented call-to-action snippet inside the body.
      *
      * @return the highlight text; never {@code null}
@@ -137,12 +129,11 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the optional {@code <localised_heading/>} parallel.
-     *
-     * @apiNote
+     * <p>
      * Carries the heading copy with full
      * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}
-     * (translation uid plus parameters). Empty when the relay omitted
-     * the parallel.
+     * (translation uid plus parameters). Empty when the relay omitted the
+     * parallel.
      *
      * @return an {@link Optional} carrying the parallel, or empty
      */
@@ -152,8 +143,7 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the optional {@code <localised_body/>} parallel.
-     *
-     * @apiNote
+     * <p>
      * Carries the body copy with full
      * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}.
      * Empty when the relay omitted the parallel.
@@ -166,8 +156,7 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Returns the optional {@code <localised_highlight/>} parallel.
-     *
-     * @apiNote
+     * <p>
      * Carries the highlight copy with full
      * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}.
      * Empty when the relay omitted the parallel.
@@ -180,20 +169,16 @@ public final class SmaxBannerSuggestionContent {
 
     /**
      * Parses the projection from a {@code <content/>} node.
+     * <p>
+     * Returns empty when the node tag is wrong, when any mandatory copy element
+     * ({@code locale}, {@code <heading>}, {@code <body>}, {@code <highlight>})
+     * is missing or carries empty content, or when an optional
+     * {@code <localised_*>} child is present but fails parsing.
      *
-     * @apiNote
-     * Returns empty when the node tag is wrong, when any mandatory copy
-     * element ({@code locale}, {@code <heading>}, {@code <body>},
-     * {@code <highlight>}) is missing or empty-content, or when an
-     * optional {@code <localised_*>} child is present but fails parsing.
-     *
-     * @implNote
-     * This implementation walks the children in WA Web's documented
-     * order; each {@code <localised_*>} parallel is delegated to
-     * {@link SmaxBannerSuggestionLocalisedString#of(Node, String)} with
-     * the matching expected tag so a mis-shaped parallel aborts the
-     * whole content parse (matching the WA Web error propagation).
-     *
+     * @implNote This implementation delegates each {@code <localised_*>}
+     * parallel to {@link SmaxBannerSuggestionLocalisedString#of(Node, String)}
+     * with the matching expected tag so a mis-shaped parallel aborts the whole
+     * content parse.
      * @param node the candidate {@code <content/>} node; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty when
      *         parsing fails at any step
@@ -264,13 +249,13 @@ public final class SmaxBannerSuggestionContent {
     }
 
     /**
-     * Compares this projection to {@code obj} for structural equality on
-     * all seven slots.
+     * Compares this projection to {@code obj} for structural equality on all
+     * seven slots.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionContent}
-     *         with matching {@link #locale()}, mandatory copy fields,
-     *         and the three localised parallels
+     *         with matching {@link #locale()}, mandatory copy fields, and the
+     *         three localised parallels
      */
     @Override
     public boolean equals(Object obj) {

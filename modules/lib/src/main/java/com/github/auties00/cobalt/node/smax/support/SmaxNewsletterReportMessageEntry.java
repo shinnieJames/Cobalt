@@ -16,62 +16,46 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Single {@code <message>} child of a {@link SmaxNewsletterReportRequest} payload, describing
- * one offending newsletter message harvested from the local cache.
+ * Describes one offending newsletter message embedded as a {@code <message>} child of a
+ * {@link SmaxNewsletterReportRequest} payload.
  *
- * @apiNote
- * Built by callers of {@link SmaxNewsletterReportRequest} (typically WA Web's
- * {@code WAWebNewsletterReportUtils.sendNewsletterReport}) to enumerate the offending messages
- * attached to a newsletter spam report; supply either the scalar {@code (messageFrom, t, id)}
- * fields or a fully pre-built {@link Node}.
+ * <p>An entry is built either from the minimal scalar fields {@code (messageFrom, t, id)} or from
+ * a fully pre-built {@link Node}; {@link SmaxNewsletterReportRequest} enumerates one entry per
+ * offending message harvested from the local cache.
  *
  * @implNote
- * This implementation models WA Web's {@code WASmaxOutSpamMessageMixin.makeMessageRaw}
- * minimal-attribute shape ({@code from}, {@code t}, {@code id}); the optional {@code raw} field
- * lets callers bypass scalar reconstruction when WA Web has already produced a richer node.
+ * This implementation models the minimal-attribute shape ({@code from}, {@code t}, {@code id});
+ * the optional {@link #raw} field lets callers bypass scalar reconstruction when a richer node is
+ * already available.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamMessageMixin")
 public final class SmaxNewsletterReportMessageEntry {
     /**
-     * The sender JID of the offending message.
-     *
-     * @apiNote
-     * Routed into {@code <message from="..."/>} via WA Web's {@code JID} marshaller.
+     * Holds the sender JID of the offending message, routed into {@code <message from="..."/>}.
      */
     private final Jid messageFrom;
 
     /**
-     * The message timestamp in Unix seconds.
-     *
-     * @apiNote
-     * Routed into {@code <message t="..."/>}.
+     * Holds the message timestamp in Unix seconds, routed into {@code <message t="..."/>}.
      */
     private final long messageTimestamp;
 
     /**
-     * The message stanza id.
-     *
-     * @apiNote
-     * Routed into {@code <message id="..."/>} via WA Web's {@code STANZA_ID} marshaller.
+     * Holds the message stanza id, routed into {@code <message id="..."/>}.
      */
     private final String messageId;
 
     /**
-     * The optional pre-built {@code <message>} node.
+     * Holds the optional pre-built {@code <message>} node.
      *
-     * @apiNote
-     * When set, the entry's {@link #toNode()} returns this node verbatim and ignores the scalar
-     * fields; suitable when WA Web has already produced a richer node carrying additional
-     * mixin payloads.
+     * <p>When set, {@link #toNode()} returns this node verbatim and ignores the scalar fields.
      */
     private final Node raw;
 
     /**
      * Constructs an entry from the minimal scalar fields.
      *
-     * @apiNote
-     * Convenience overload for callers that have only the three required attributes; equivalent
-     * to {@code this(messageFrom, messageTimestamp, messageId, null)}.
+     * <p>Equivalent to {@code this(messageFrom, messageTimestamp, messageId, null)}.
      *
      * @param messageFrom      the sender JID; never {@code null}
      * @param messageTimestamp the timestamp in Unix seconds
@@ -85,10 +69,8 @@ public final class SmaxNewsletterReportMessageEntry {
     /**
      * Constructs an entry that prefers a pre-built node over the scalar fields.
      *
-     * @apiNote
-     * Use when WA Web has already produced a richer {@code <message>} node carrying additional
-     * mixin payloads; the scalar fields are still retained for {@link #equals(Object)} /
-     * {@link #hashCode()} / {@link #toString()} parity.
+     * <p>The scalar fields are retained for {@link #equals(Object)}, {@link #hashCode()} and
+     * {@link #toString()} even when {@code raw} is supplied.
      *
      * @param messageFrom      the sender JID; never {@code null}
      * @param messageTimestamp the timestamp in Unix seconds
@@ -104,10 +86,7 @@ public final class SmaxNewsletterReportMessageEntry {
     }
 
     /**
-     * Returns the sender JID.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message from>}.
+     * Returns the sender JID routed into {@code <message from>}.
      *
      * @return the JID; never {@code null}
      */
@@ -116,10 +95,7 @@ public final class SmaxNewsletterReportMessageEntry {
     }
 
     /**
-     * Returns the message timestamp.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message t>}.
+     * Returns the message timestamp in Unix seconds routed into {@code <message t>}.
      *
      * @return the timestamp in Unix seconds
      */
@@ -128,10 +104,7 @@ public final class SmaxNewsletterReportMessageEntry {
     }
 
     /**
-     * Returns the message stanza id.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message id>}.
+     * Returns the message stanza id routed into {@code <message id>}.
      *
      * @return the id; never {@code null}
      */
@@ -142,8 +115,7 @@ public final class SmaxNewsletterReportMessageEntry {
     /**
      * Returns the optional pre-built {@code <message>} node.
      *
-     * @apiNote
-     * Empty when {@link #toNode()} should reconstruct the envelope from the scalar fields.
+     * <p>Empty when {@link #toNode()} reconstructs the envelope from the scalar fields.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -155,8 +127,7 @@ public final class SmaxNewsletterReportMessageEntry {
      * Builds the {@code <message>} child suitable for embedding into a
      * {@link SmaxNewsletterReportRequest} payload.
      *
-     * @apiNote
-     * Returns the pre-built {@link #raw} node when set; otherwise reconstructs the minimal
+     * <p>Returns the pre-built {@link #raw} node when set; otherwise reconstructs the minimal
      * {@code (from, t, id)} envelope.
      *
      * @return the built node; never {@code null}
@@ -173,6 +144,12 @@ public final class SmaxNewsletterReportMessageEntry {
                 .build();
     }
 
+    /**
+     * Compares this entry to another for value equality across all fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxNewsletterReportMessageEntry}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -188,11 +165,21 @@ public final class SmaxNewsletterReportMessageEntry {
                 && Objects.equals(this.raw, that.raw);
     }
 
+    /**
+     * Returns a hash code derived from all fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(messageFrom, messageTimestamp, messageId, raw);
     }
 
+    /**
+     * Returns a debug string listing the scalar fields.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxNewsletterReportMessageEntry[messageFrom=" + messageFrom

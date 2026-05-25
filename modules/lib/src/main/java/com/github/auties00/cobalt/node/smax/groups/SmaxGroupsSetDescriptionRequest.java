@@ -14,13 +14,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that replaces, sets, or clears a group's description.
+ * Models the outbound {@code <iq type="set" xmlns="w:g2">} stanza that replaces, sets, or clears a group's
+ * description.
  *
- * @apiNote Drives the "Edit group description" affordance on the group-info screen. The {@code descriptionId} and
- * {@code descriptionPrev} attributes implement the relay's revision-chain check: the client must pass the
- * existing revision id as {@code descriptionPrev} and the freshly minted revision id as {@code descriptionId} so
- * the relay can detect concurrent edits. Setting {@link #delete()} clears the description; the {@link #body()}
- * carries the new text on a replace.
+ * <p>This request backs editing a group's description. The {@link #descriptionId()} and
+ * {@link #descriptionPrev()} attributes implement the relay's revision-chain check: the client passes the
+ * existing revision id as {@code prev} and the freshly minted revision id as {@code id} so the relay can detect
+ * concurrent edits. Setting {@link #delete()} clears the description; {@link #body()} carries the new text on a
+ * replace.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetDescriptionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -53,10 +54,10 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
     /**
      * Constructs a set-description request.
      *
-     * @apiNote The relay enforces the revision-chain semantics: a concurrent edit (a {@code descriptionPrev}
-     * that no longer matches the server-side current revision) produces a
-     * {@link SmaxGroupsSetDescriptionResponse.ClientError}. Setting {@code delete} clears the description and
-     * the relay ignores any {@code body}; on a replace, {@code body} carries the UTF-8 text.
+     * <p>The relay enforces the revision-chain semantics: a concurrent edit (a {@code descriptionPrev} that no
+     * longer matches the server-side current revision) produces a
+     * {@link SmaxGroupsSetDescriptionResponse.ClientError}. Setting {@code delete} clears the description and the
+     * relay ignores any {@code body}; on a replace, {@code body} carries the UTF-8 text.
      *
      * @param groupJid        the group {@link Jid}
      * @param descriptionId   the new revision identifier; may be {@code null} when only {@code prev} is supplied
@@ -77,7 +78,7 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
     /**
      * Returns the target group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -97,8 +98,8 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
     /**
      * Returns the previous description revision identifier being replaced.
      *
-     * @apiNote The relay rejects the mutation with a {@link SmaxGroupsSetDescriptionResponse.ClientError} when
-     * the value disagrees with the server-side current revision.
+     * <p>The relay rejects the mutation with a {@link SmaxGroupsSetDescriptionResponse.ClientError} when the
+     * value disagrees with the server-side current revision.
      *
      * @return an {@link Optional} carrying the previous revision id, or empty when no chain check is requested
      */
@@ -127,7 +128,7 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <description id="<descriptionId>" prev="<descriptionPrev>" delete="true">
@@ -135,8 +136,8 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
      *         </description>
      *     </iq>
      * }
-     * the {@code id}, {@code prev}, and {@code delete} attributes are emitted only when the corresponding fields
-     * are populated; the {@code <body>} child is omitted when {@link #body()} is empty.
+     * The {@code id}, {@code prev}, and {@code delete} attributes are emitted only when the corresponding fields
+     * are populated, and the {@code <body>} child is omitted when {@link #body()} is empty.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <description>} payload
      */

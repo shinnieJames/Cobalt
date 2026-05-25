@@ -10,25 +10,28 @@ import java.util.Optional;
  * Sealed root for failures while sending or receiving an individual
  * WhatsApp message.
  *
+ * <p>The hierarchy splits into two halves. {@link Receive} subtypes cover
+ * everything that can go wrong while decrypting and validating an incoming
+ * message: missing Signal sessions, invalid keys, replayed counters, MAC
+ * failures, sender-key issues for group messages, multi-device validation
+ * problems, device-verification failures, protobuf validation, and a small
+ * number of WhatsApp-specific protocol errors. {@link Send} subtypes cover
+ * the equivalent problems on the outgoing side: session and key bring-up
+ * failures, stale device lists, server rejections with their numeric error
+ * code, recipient-level problems, oversize payloads, expired messages,
+ * monthly send caps, timeouts, duplicate sends, and authorization
+ * failures.
+ *
  * @apiNote
- * The hierarchy splits into two halves. {@link Receive} subtypes
- * describe everything that can go wrong while decrypting and validating
- * an incoming message: missing Signal sessions, invalid keys, replayed
- * counters, MAC failures, sender-key issues for group messages,
- * multi-device validation problems, ADV failures, protobuf validation,
- * and a small number of WhatsApp-specific protocol errors.
- * {@link Send} subtypes describe the equivalent problems on the
- * outgoing side: session and key bring-up failures, stale device lists,
- * server NACKs with their numeric error code, recipient-level problems,
- * payload too large, expired messages, monthly send caps, timeouts,
- * duplicate sends, and authorization failures.
+ * Raised for a single message; {@link #isFatal()} reports {@code false}
+ * for every subtype, so a configured {@code WhatsAppClientErrorHandler}
+ * can leave the session running while it sends a retry receipt (for
+ * receives), retries the send, or surfaces the failure to the caller.
  *
  * @implNote
- * This implementation always reports the failure as non-fatal at the
- * session level: a single failed message does not bring the connection
- * down. The configurable error handler decides whether to send a retry
- * receipt (for receives), retry the send, or surface the failure to the
- * caller.
+ * This implementation classifies every message failure as non-fatal at
+ * the session level so that one failed message never brings the
+ * connection down.
  *
  * @see Receive
  * @see Send
@@ -80,16 +83,20 @@ public sealed class WhatsAppMessageException extends WhatsAppException
      * Sealed root for failures during the decryption and validation of
      * an incoming WhatsApp message.
      *
-     * @apiNote
-     * Most of these failures cause Cobalt to send a retry receipt back
+     * <p>Most of these failures cause Cobalt to send a retry receipt back
      * to the sender so the message can be retransmitted with fresh
-     * cryptographic material; mirrors WA Web's
-     * {@code WAWebSendRetryReceiptJob.RetryReason} contract. The retry
-     * reason is exposed through {@link #retryReason()};
-     * {@link #shouldSendRetryReceipt()} indicates whether the receipt
-     * should be sent at all (duplicates do not warrant a retry); and
+     * cryptographic material. The retry reason that accompanies the
+     * receipt is exposed through {@link #retryReason()};
+     * {@link #shouldSendRetryReceipt()} reports whether a receipt should
+     * be sent at all (duplicates do not warrant a retry); and
      * {@link #errorCode()} carries the optional NACK error code used for
      * validation-style failures.
+     *
+     * @apiNote
+     * Raised on the receive path; a configured
+     * {@code WhatsAppClientErrorHandler} reads {@link #retryReason()} and
+     * {@link #shouldSendRetryReceipt()} to decide whether to ask the
+     * sender to retransmit.
      *
      * @see RetryReason
      */
@@ -128,9 +135,8 @@ public sealed class WhatsAppMessageException extends WhatsAppException
          * for this failure.
          *
          * @implSpec
-         * Each concrete subtype returns the {@link RetryReason} value
-         * that corresponds to the WA Web {@code RetryReason} enum member
-         * for the same condition.
+         * Each concrete subtype returns the {@link RetryReason} value that
+         * corresponds to its failure condition.
          *
          * @return the retry reason, never {@code null}
          */
@@ -168,13 +174,12 @@ public sealed class WhatsAppMessageException extends WhatsAppException
         /**
          * The retry reason codes WhatsApp defines for retry receipts.
          *
-         * @apiNote
-         * The numeric value carried in the receipt tells the sender what
+         * <p>The numeric value carried in the receipt tells the sender what
          * kind of failure happened so it can pick the right corrective
          * action (resend the message, redeliver the key bundle,
-         * redistribute the sender key, and so on). Mirrors WA Web's
-         * {@code WAWebSendRetryReceiptJob.RetryReason} enum 1:1, with
-         * the same protocol values.
+         * redistribute the sender key, and so on). The constants and their
+         * {@link #protocolValue()} integers match the wire protocol
+         * one-for-one.
          */
         public enum RetryReason {
             /**
@@ -308,12 +313,13 @@ public sealed class WhatsAppMessageException extends WhatsAppException
          * Thrown when no Signal session exists with the sender of an
          * incoming message.
          *
+         * <p>Happens when the contact is new, when the local session was
+         * evicted, or when the sender just registered a new device.
+         *
          * @apiNote
-         * Can happen when the contact is new, when the local session
-         * was evicted, or when the sender just registered a new device.
-         * The retry receipt asks the sender to retransmit the message
-         * as a {@code pkmsg} that carries the prekey material needed to
-         * start a session.
+         * Raised when an inbound message cannot be decrypted for lack of a
+         * session; the retry receipt asks the sender to retransmit as a
+         * prekey message that carries the material needed to start one.
          */
         public static final class NoSession extends Receive {
             /**
@@ -881,15 +887,11 @@ public sealed class WhatsAppMessageException extends WhatsAppException
          * Thrown when the HMAC over an incoming Signal message does not
          * validate.
          *
-         * @apiNote
-         * The {@link MacErrorType} narrows down the failure mode:
-         * whether decryption produced plaintext anyway
-         * ({@code errInvalidMacWithDecryptedPlaintext} in WA Web),
-         * whether the cipher key derivation failed
-         * ({@code errInvalidMacInvalidCipherKey}), or whether the
-         * failure happened on a fresh ratchet chain
-         * ({@code errInvalidMacInvalidCipherKeyNewChain}). All three
-         * map to {@code SignalErrorBadMac} on the retry receipt.
+         * <p>The {@link MacErrorType} narrows down the failure mode:
+         * whether decryption produced plaintext anyway, whether the cipher
+         * key derivation failed, or whether the failure happened on a
+         * freshly created ratchet chain. All three carry the same
+         * {@link RetryReason#SIGNAL_ERROR_BAD_MAC} on the retry receipt.
          */
         public static final class BadMac extends Receive {
             /**
@@ -1125,10 +1127,9 @@ public sealed class WhatsAppMessageException extends WhatsAppException
          * Thrown when a Device Sent Message (DSM, the multi-device
          * synchronization envelope) does not pass validation.
          *
-         * @apiNote
-         * The {@link DsmErrorType} disambiguates whether the incoming
-         * envelope should not have been a DSM, should have been one, or
-         * had a malformed structure.
+         * <p>The {@link DsmErrorType} disambiguates whether the incoming
+         * envelope should not have been a DSM, should have been one, or had
+         * a malformed structure.
          */
         public static final class InvalidDeviceSentMessage extends Receive {
             /**
@@ -1263,15 +1264,13 @@ public sealed class WhatsAppMessageException extends WhatsAppException
         }
 
         /**
-         * Thrown when the sender's Advanced Device Verification chain
-         * does not validate during decryption of an incoming message.
+         * Thrown when the sender's Advanced Device Verification chain does
+         * not validate during decryption of an incoming message.
          *
-         * @apiNote
-         * The decryption pipeline turns an underlying
+         * <p>The decryption pipeline turns an underlying
          * {@link WhatsAppAdvValidationException} into this receive-side
-         * exception so the configurable error handler can emit the
-         * {@link RetryReason#ADV_FAILURE} retry receipt without losing
-         * the original cause.
+         * exception, preserving the original cause while carrying the
+         * {@link RetryReason#ADV_FAILURE} retry reason.
          *
          * @see WhatsAppAdvValidationException
          */
@@ -1319,12 +1318,17 @@ public sealed class WhatsAppMessageException extends WhatsAppException
          * Thrown when the protobuf body of a successfully decrypted
          * message cannot be deserialized or fails validation.
          *
+         * <p>The {@link ProtobufErrorReason} pinpoints which check failed:
+         * a generic parse error, a mismatch between the advertised stanza
+         * type and the protobuf body, or the presence of multiple message
+         * bodies where one is expected.
+         *
          * @apiNote
-         * The {@link ProtobufErrorReason} pinpoints which check failed:
-         * a generic parse error, a mismatch between the advertised
-         * stanza type and the protobuf body, or the presence of
-         * multiple message bodies where one is expected. Surfaces as a
-         * NACK on the wire; the error code defaults to {@code "400"}.
+         * Raised on the receive path as a NACK-only condition;
+         * {@link #errorCode()} returns the code captured at construction,
+         * defaulting to {@code "400"}, and {@link #retryReason()} reports
+         * {@link RetryReason#UNKNOWN_ERROR} since no Signal-level retry
+         * applies.
          */
         public static final class InvalidProtobuf extends Receive {
             /**
@@ -1459,10 +1463,6 @@ public sealed class WhatsAppMessageException extends WhatsAppException
         /**
          * Thrown when the encrypted ephemeral-message settings of a
          * broadcast list cannot be decrypted or validated.
-         *
-         * @apiNote
-         * Equivalent to WA Web's {@code BroadcastEphSettingsError}
-         * raised by {@code WAWebEphemeralDecodeBroadcastSetting}.
          */
         public static final class BroadcastEphemeralSettings extends Receive {
             /**
@@ -1609,18 +1609,18 @@ public sealed class WhatsAppMessageException extends WhatsAppException
     /**
      * Sealed root for failures while sending a WhatsApp message.
      *
+     * <p>Each subtype describes a different stage of the send pipeline:
+     * missing or invalid Signal sessions, missing or expired sender keys
+     * for groups, stale device lists detected by the participant-hash
+     * check ({@link PhashMismatch}), identity key changes that need user
+     * confirmation, server rejections with their numeric error code,
+     * invalid recipients, oversize payloads, expired messages, monthly
+     * caps, timeouts, duplicate sends, and authorization errors.
+     *
      * @apiNote
-     * Each subtype describes a different stage of the send pipeline:
-     * missing or invalid Signal sessions, missing or expired sender
-     * keys for groups, stale device lists (the participant-hash check
-     * WA Web reports as "phash mismatch" in
-     * {@code WAWebSendUserMsgJob}/{@code WAWebSendGroupDirectJob}),
-     * identity key changes that need user confirmation, server NACK
-     * rejections (with their numeric error code), invalid recipients,
-     * oversize payloads, expired messages, monthly caps, timeouts,
-     * duplicate sends, and authorization errors.
-     * {@link #isRetryable()} indicates whether the caller can retry the
-     * send after applying the corrective action implied by the subtype.
+     * Raised on the send path; {@link #isRetryable()} reports whether the
+     * caller can retry the send after applying the corrective action
+     * implied by the subtype.
      */
     public sealed static abstract class Send extends WhatsAppMessageException
             permits Send.NoSession, Send.InvalidKey, Send.NoSenderKey, Send.SenderKeyExpired,
@@ -1871,16 +1871,16 @@ public sealed class WhatsAppMessageException extends WhatsAppException
         }
 
         /**
-         * Thrown when the participant hash (the hash of all the
-         * recipient device JIDs) the client computed does not match
-         * the value the server expects.
+         * Thrown when the participant hash (the hash of all the recipient
+         * device JIDs) the client computed does not match the value the
+         * server expects.
+         *
+         * <p>A mismatch means the local device list is out of date.
          *
          * @apiNote
-         * Equivalent to the "phash mismatch" condition WA Web logs in
-         * {@code WAWebSendUserMsgJob}, {@code WAWebSendGroupDirectJob},
-         * and {@code WAWebSendGroupSkmsgJob}. The local device list is
-         * out of date; refreshing it produces a matching hash and the
-         * send can be retried.
+         * Raised when a send is rejected for a stale device list;
+         * refreshing the list produces a matching hash so the send can be
+         * retried.
          */
         public static final class PhashMismatch extends Send {
             /**
@@ -2033,16 +2033,15 @@ public sealed class WhatsAppMessageException extends WhatsAppException
         }
 
         /**
-         * Thrown when the server explicitly rejects a message with a
-         * NACK response.
+         * Thrown when the server explicitly rejects a message with a NACK
+         * response.
          *
-         * @apiNote
-         * The numeric {@link #errorCode()} narrows down the reason:
-         * stale group addressing, monthly cap, parsing failure,
-         * invalid protobuf, missing message secret, stale Signal
-         * counter, deletion on the peer, generic unhandled error,
-         * unsupported admin revoke, unsupported LID group, server-side
-         * database failure, and a few others.
+         * <p>The numeric {@link #errorCode()} narrows down the reason:
+         * stale group addressing, monthly cap, parsing failure, invalid
+         * protobuf, missing message secret, stale Signal counter, deletion
+         * on the peer, generic unhandled error, unsupported admin revoke,
+         * unsupported LID group, server-side database failure, and a few
+         * others. {@link #isRetryable()} dispatches on that code.
          */
         public static final class ServerNack extends Send {
             /**

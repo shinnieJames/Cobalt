@@ -14,12 +14,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code detectedOutcomeStatus} app-state sync action that
  * carries the click-to-WhatsApp-ad detected-outcome onboarding flag.
  *
- * @apiNote
- * Drives the CTWA "detected outcome" onboarding banner on companion
- * devices: when a business completes the primary-device onboarding flow
- * the resulting {@code isEnabled} bit fans out across the
- * {@link SyncPatchType#REGULAR} collection so every linked surface can
- * render the matching state.
+ * <p>This handler drives the CTWA "detected outcome" onboarding banner on
+ * companion devices: when a business completes the primary-device onboarding
+ * flow the resulting {@code isEnabled} bit fans out across the
+ * {@link SyncPatchType#REGULAR} collection so every linked surface can render
+ * the matching state.
  *
  * @implNote
  * This implementation persists the bit through

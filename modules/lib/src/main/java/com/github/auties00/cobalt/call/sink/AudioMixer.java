@@ -10,81 +10,75 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * A fan-in mixer that combines N peer-specific
- * {@link AudioSource}s (one per group-call participant) into one
- * mixed stream the application can play through a single
- * {@link AudioSink} (the speaker).
+ * Combines several per-peer audio streams into one mixed stream for a group call.
  *
- * <h2>Why this lives here, not in the core call layer</h2>
+ * <p>A WhatsApp group call delivers each remote participant's audio as a separate decoded stream
+ * rather than a single server-mixed stream. This mixer fans those streams in: an application
+ * registers one {@link AudioSink} per peer through {@link #addPeer(Object)}, writes each peer's
+ * decoded frames into the sink it gets back, and reads a single combined {@link AudioSource} from
+ * {@link #mixedOutput()} that it can render through one speaker. Each peer has its own bounded queue;
+ * a mixed frame is emitted only once every currently-registered peer has contributed at least one
+ * queued frame, at which point one frame is drained from each queue, the samples are summed, and the
+ * result is published to the output queue. Frames are paired in queue order and the emitted frame
+ * carries the presentation timestamp of the first peer's contributing frame.
  *
- * <p>WhatsApp's group-call SFU forwards per-peer audio streams;
- * it does not server-side-mix. The {@code GroupCallSession}
- * surfaces each peer's decoded PCM via a per-peer listener so
- * apps can do fancy things (talker indication, per-peer volume,
- * spatialisation). The simple-path "I just want one speaker
- * stream" use case is what this mixer covers.
+ * <p>The summed mixed signal is also the correct far-end reference for acoustic echo cancellation in
+ * a group call, because the echo to be removed is whatever the speaker actually plays, which is the
+ * combination of all peers rather than any single one.
  *
- * <h2>Echo-cancellation reference</h2>
+ * <p>{@link #addPeer(Object)} and {@link #removePeer(Object)} are safe to call from any thread, as is
+ * writing frames through the returned sinks; {@link AudioSource#next()} on {@link #mixedOutput()}
+ * blocks until a mixed frame is ready.
  *
- * <p>{@link #mixedOutput()} is also the right signal to feed as
- * the AEC far-end reference in a group call (the AEC needs to
- * subtract what the speaker is actually playing, which is the mix
- * of all peers, not any single one).
- *
- * <h2>Mixing rule</h2>
- *
- * <p>Sums int16 PCM samples and clips at the int16 boundary. For
- * a small number of peers (the typical group-call case is &lt; 8)
- * this is fine; if you need higher fidelity, pre-attenuate
- * per-peer sources by {@code 1/N}.
- *
- * <h2>Threading</h2>
- *
- * <p>{@link #addPeer} / {@link #removePeer} are safe to call from
- * any thread. {@link #write} (called once per peer per frame, by
- * the group-call listener) is also thread-safe — frames are
- * matched on timestamp to assemble the mixed output.
- * {@link #mixedOutput()}'s {@code next()} blocks until a frame is
- * ready.
+ * @apiNote Use this only for the simple single-speaker group-call case. An application that wants
+ * per-peer volume, talker indication, or spatialisation should render each peer stream itself rather
+ * than collapsing them here.
+ * @implNote This implementation sums signed 16-bit samples and clips at the signed 16-bit boundary,
+ * which is adequate for the typical group-call size of fewer than eight peers. For higher fidelity
+ * with many peers, pre-attenuate each peer source by {@code 1/N} before writing.
  */
 public final class AudioMixer implements AudioSink {
     /**
-     * Capacity of the internal per-peer queues — big enough to
-     * absorb a few hundred ms of jitter, small enough to not OOM
-     * if a peer goes silent and the others keep arriving.
+     * Bounds each per-peer queue.
+     *
+     * @implNote This implementation caps each queue at sixty-four frames, large enough to absorb a
+     * few hundred milliseconds of jitter yet small enough that a silent peer cannot let memory grow
+     * without bound while the other peers keep arriving.
      */
     private static final int PER_PEER_QUEUE_CAPACITY = 64;
 
     /**
-     * Frames per peer keyed on the peer id.
+     * Holds one bounded frame queue per peer, keyed on the peer identifier.
      */
     private final ConcurrentHashMap<Object, LinkedBlockingDeque<AudioFrame>> peerQueues =
             new ConcurrentHashMap<>();
 
     /**
-     * Output queue the mixer publishes mixed frames into.
+     * Holds the mixed frames produced by the mixer, drained by {@link #mixedOutput()}.
      */
     private final LinkedBlockingDeque<AudioFrame> mixed = new LinkedBlockingDeque<>(PER_PEER_QUEUE_CAPACITY);
 
     /**
-     * Default queue key when callers use {@link #write(AudioFrame)}
-     * without specifying a peer.
+     * Identifies the implicit peer used when frames are written through {@link #write(AudioFrame)}
+     * without naming a peer.
      */
     private final Object defaultPeerKey = new Object();
 
     /**
-     * Number of frames mixed and emitted, monotonic.
+     * Counts the mixed frames emitted so far, monotonically increasing.
      */
     private final AtomicLong mixedFrameCount = new AtomicLong();
 
     /**
-     * Adds a peer's audio queue to the mixer. Idempotent: calling
-     * twice with the same key replaces nothing — the existing
-     * queue is preserved.
+     * Registers a peer and returns the sink its decoded frames are written into.
      *
-     * @param peerKey the peer identifier (typically a {@code Jid})
-     * @return an {@link AudioSink} the per-peer listener writes
-     *         decoded frames into
+     * <p>If the peer is already registered its existing queue is preserved and the same logical
+     * stream continues. The returned sink routes every frame written to it into the peer's queue and
+     * then attempts to assemble and emit a mixed frame.
+     *
+     * @param peerKey the peer identifier, typically a participant's identifier; never {@code null}
+     * @return a sink the caller writes the peer's decoded frames into
+     * @throws NullPointerException if {@code peerKey} is {@code null}
      */
     public AudioSink addPeer(Object peerKey) {
         Objects.requireNonNull(peerKey, "peerKey cannot be null");
@@ -94,11 +88,13 @@ public final class AudioMixer implements AudioSink {
     }
 
     /**
-     * Removes a peer from the mixer — its queue is discarded and
-     * subsequent {@link #write} calls for the peer will start a
-     * fresh queue.
+     * Unregisters a peer and discards its queued frames.
      *
-     * @param peerKey the peer identifier
+     * <p>Any frame subsequently written for the peer starts a fresh queue, so removing a peer that
+     * has left the call stops it from blocking emission of further mixed frames.
+     *
+     * @param peerKey the peer identifier; never {@code null}
+     * @throws NullPointerException if {@code peerKey} is {@code null}
      */
     public void removePeer(Object peerKey) {
         Objects.requireNonNull(peerKey, "peerKey cannot be null");
@@ -106,11 +102,11 @@ public final class AudioMixer implements AudioSink {
     }
 
     /**
-     * Returns the mixer's mixed output as an {@link AudioSource}.
-     * Each {@link AudioSource#next()} call blocks until a mixed
-     * frame is ready (i.e. every currently-registered peer has
-     * contributed a frame). Use the same source as the AEC
-     * far-end reference.
+     * Returns the combined output of the mixer as a single source.
+     *
+     * <p>Each {@link AudioSource#next()} call on the returned source blocks until a mixed frame is
+     * ready, that is until every currently-registered peer has contributed a frame. The same source
+     * is the correct far-end reference to feed an echo canceller.
      *
      * @return the mixed source
      */
@@ -119,10 +115,9 @@ public final class AudioMixer implements AudioSink {
     }
 
     /**
-     * Returns the number of mixed frames emitted so far —
-     * useful for diagnostics.
+     * Returns the number of mixed frames emitted so far.
      *
-     * @return the count
+     * @return the monotonically increasing emitted-frame count
      */
     public long mixedFrameCount() {
         return mixedFrameCount.get();
@@ -131,9 +126,10 @@ public final class AudioMixer implements AudioSink {
     /**
      * {@inheritDoc}
      *
-     * <p>Equivalent to {@code addPeer(defaultKey).write(frame)}
-     * for apps that have only one inbound stream and just want a
-     * write-side handle.
+     * <p>Routes the frame into the implicit default peer's queue, equivalent to writing it through
+     * the sink returned by {@link #addPeer(Object)} for a single unnamed stream. This is the
+     * convenience path for an application that has only one inbound stream and just wants a
+     * write handle.
      */
     @Override
     public void write(AudioFrame frame) throws InterruptedException {
@@ -141,14 +137,15 @@ public final class AudioMixer implements AudioSink {
     }
 
     /**
-     * Routes one peer-specific frame into its queue, then attempts
-     * to assemble + emit a mixed frame if every peer has at least
-     * one queued.
+     * Routes one frame into the named peer's queue and then attempts to emit a mixed frame.
+     *
+     * <p>Creates the peer's queue on first use, blocks while that queue is full to propagate
+     * backpressure, and triggers an emission attempt after the frame is queued.
      *
      * @param peerKey the peer identifier
-     * @param frame   the frame
-     * @throws InterruptedException if the calling thread is
-     *                              interrupted while waiting
+     * @param frame   the frame to enqueue; never {@code null}
+     * @throws NullPointerException if {@code frame} is {@code null}
+     * @throws InterruptedException if the calling thread is interrupted while the peer queue is full
      */
     private void writeFor(Object peerKey, AudioFrame frame) throws InterruptedException {
         Objects.requireNonNull(frame, "frame cannot be null");
@@ -159,11 +156,15 @@ public final class AudioMixer implements AudioSink {
     }
 
     /**
-     * If every peer's queue has a head frame, drains one from
-     * each, sums them, and pushes the result to {@link #mixed}.
+     * Emits one mixed frame when every peer queue has a head frame to contribute.
      *
-     * @throws InterruptedException if the put on {@link #mixed} is
-     *                              interrupted
+     * <p>Returns without emitting while any registered peer queue is empty, so a single lagging peer
+     * holds back the mix until it catches up. When every queue is ready, drains one frame from each,
+     * sums the overlapping samples into a wider accumulator, clips each summed sample to the signed
+     * 16-bit range, and publishes the result with the first contributing frame's presentation
+     * timestamp.
+     *
+     * @throws InterruptedException if the calling thread is interrupted while the output queue is full
      */
     private synchronized void tryEmit() throws InterruptedException {
         if (peerQueues.isEmpty()) {

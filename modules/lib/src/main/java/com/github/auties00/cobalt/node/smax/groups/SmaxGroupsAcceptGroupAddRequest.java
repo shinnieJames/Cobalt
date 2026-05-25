@@ -13,43 +13,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that accepts a v4 group invite ("Accept Group Add").
+ * Outbound {@code <iq type="set" xmlns="w:g2">} stanza that accepts a v4 group invite.
  *
- * @apiNote Drives the "Join via v4 invite link" flow surfaced by {@code WAWebGroupInviteV4Job.joinGroupViaInviteV4}.
- * Build one with {@link #SmaxGroupsAcceptGroupAddRequest(Jid, String, long, Jid)} using the {@code code},
- * {@code expiration} and {@code admin} attributes copied verbatim from the originating
- * {@code <add_request/>} payload, then dispatch it through the matching
- * {@link SmaxGroupsAcceptGroupAddResponse} parser to land in the group.
+ * This request drives the join-via-v4-invite-link flow. The {@link #acceptCode()}, {@link #acceptExpiration()} and
+ * {@link #acceptAdmin()} values are copied verbatim from the originating {@code <add_request/>} payload; the relay
+ * only matches the pending invite when all three echo exactly. The reply is parsed by
+ * {@link SmaxGroupsAcceptGroupAddResponse#of(Node, Node)}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsAcceptGroupAddRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsAcceptGroupAddRequest implements SmaxOperation.Request {
     /**
-     * The group {@link Jid} hosting the pending {@code <add_request/>}.
+     * Holds the group {@link Jid} hosting the pending {@code <add_request/>}.
      */
     private final Jid groupJid;
 
     /**
-     * The {@code code} attribute echoed verbatim from the pending {@code <add_request/>}.
+     * Holds the {@code code} attribute echoed verbatim from the pending {@code <add_request/>}.
      */
     private final String acceptCode;
 
     /**
-     * The {@code expiration} attribute (seconds since epoch) echoed verbatim from the pending {@code <add_request/>}.
+     * Holds the {@code expiration} attribute, in seconds since epoch, echoed verbatim from the pending
+     * {@code <add_request/>}.
      */
     private final long acceptExpiration;
 
     /**
-     * The {@link Jid} of the admin who issued the pending {@code <add_request/>}.
+     * Holds the {@link Jid} of the admin who issued the pending {@code <add_request/>}.
      */
     private final Jid acceptAdmin;
 
     /**
      * Constructs a fully-parametrised accept-group-add request.
      *
-     * @apiNote Pass {@code code}, {@code expiration} and {@code admin} straight from the {@code <add_request/>}
-     * the caller is responding to; the relay only matches when all three echo exactly.
+     * The {@code acceptCode}, {@code acceptExpiration} and {@code acceptAdmin} values must be passed straight from
+     * the {@code <add_request/>} the caller is responding to; the relay only matches the pending invite when all
+     * three echo exactly.
      *
      * @param groupJid         the {@link Jid} of the group hosting the pending invite
      * @param acceptCode       the {@code code} attribute from the pending {@code <add_request/>}
@@ -67,7 +68,7 @@ public final class SmaxGroupsAcceptGroupAddRequest implements SmaxOperation.Requ
     /**
      * Returns the group {@link Jid} hosting the pending invite.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -78,7 +79,7 @@ public final class SmaxGroupsAcceptGroupAddRequest implements SmaxOperation.Requ
     /**
      * Returns the {@code code} attribute being echoed.
      *
-     * @apiNote Surfaced verbatim under {@code <accept code="..."/>}.
+     * The value is surfaced verbatim under {@code <accept code="..."/>}.
      *
      * @return the accept code; never {@code null}
      */
@@ -89,7 +90,7 @@ public final class SmaxGroupsAcceptGroupAddRequest implements SmaxOperation.Requ
     /**
      * Returns the {@code expiration} attribute being echoed.
      *
-     * @apiNote Surfaced verbatim as {@code <accept expiration="..."/>}; carries seconds since epoch.
+     * The value is surfaced verbatim as {@code <accept expiration="..."/>} and carries seconds since epoch.
      *
      * @return the expiration timestamp in seconds since epoch
      */
@@ -100,7 +101,7 @@ public final class SmaxGroupsAcceptGroupAddRequest implements SmaxOperation.Requ
     /**
      * Returns the inviting admin's {@link Jid}.
      *
-     * @apiNote Surfaced verbatim as {@code <accept admin="..."/>}.
+     * The value is surfaced verbatim as {@code <accept admin="..."/>}.
      *
      * @return the admin {@link Jid}; never {@code null}
      */
@@ -111,7 +112,7 @@ public final class SmaxGroupsAcceptGroupAddRequest implements SmaxOperation.Requ
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <accept code="<acceptCode>" expiration="<acceptExpiration>" admin="<acceptAdmin>"/>

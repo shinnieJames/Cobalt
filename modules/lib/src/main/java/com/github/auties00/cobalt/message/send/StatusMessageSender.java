@@ -29,7 +29,7 @@ import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.PrekeysFetchContext;
-import com.github.auties00.cobalt.wam.type.WamSizeBuckets;
+import com.github.auties00.cobalt.wam.type.SizeBucket;
 
 import java.util.*;
 
@@ -39,46 +39,43 @@ import java.util.*;
  * <p>Status broadcasts share the sender-key (SKMSG) pipeline used for group
  * sends but resolve the audience from the user's status privacy preferences
  * rather than from a group's participant list. The outgoing stanza carries a
- * {@code <meta status_setting="...">} child that mirrors the configured
- * privacy mode (suppressed for revokes). Revokes whose original audience
- * is no longer covered by the current privacy preference take a dedicated
- * per-device direct path so the revoke reaches the original recipients even
- * if they would not normally see new status updates.
+ * {@code <meta status_setting="...">} child that mirrors the configured privacy
+ * mode (suppressed for revokes). Revokes whose original audience is no longer
+ * covered by the current privacy preference take a dedicated per-device direct
+ * path so the revoke reaches the original recipients even if they would not
+ * normally see new status updates.
  */
 @WhatsAppWebModule(moduleName = "WAWebEncryptAndSendStatusMsg")
 final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     /**
-     * The {@link System.Logger} used for status-send diagnostics.
+     * Surfaces status-send diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(StatusMessageSender.class.getName());
 
     /**
-     * The {@link MessageEncryption} service used for both the SKMSG group
-     * encryption and the per-device path taken by direct revokes.
+     * Performs both the SKMSG group encryption and the per-device path taken by
+     * direct revokes.
      */
     private final MessageEncryption encryption;
 
     /**
-     * The {@link DeviceService} used to resolve the audience fanout and
-     * manage Signal sessions to audience devices.
+     * Resolves the audience fanout and manages Signal sessions to audience
+     * devices.
      */
     private final DeviceService deviceService;
 
     /**
-     * The {@link SenderKeyDistribution} service used to encrypt the
-     * per-device sender-key distribution payloads.
+     * Encrypts the per-device sender-key distribution payloads.
      */
     private final SenderKeyDistribution senderKeyDistribution;
 
     /**
-     * The {@link MetaStanza} builder responsible for the
-     * {@code status_setting} and other meta attributes on the stanza.
+     * Builds the {@code status_setting} and other meta attributes on the stanza.
      */
     private final MetaStanza metaStanza;
 
     /**
-     * The {@link ReportingStanza} builder responsible for generating the
-     * {@code <reporting>} child payload.
+     * Builds the {@code <reporting>} child payload.
      */
     private final ReportingStanza reportingStanza;
 
@@ -86,22 +83,21 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
      * Constructs a {@link StatusMessageSender} bound to the supplied
      * dependencies.
      *
-     * @apiNote
-     * Constructed once by {@link MessageSendingService}; embedders should
-     * not instantiate directly.
+     * <p>Constructed once by {@link MessageSendingService}; embedders should not
+     * instantiate directly.
      *
-     * @param client                the {@link WhatsAppClient} used to
-     *                              dispatch stanzas
+     * @param client                the {@link WhatsAppClient} used to dispatch
+     *                              stanzas
      * @param encryption            the {@link MessageEncryption} service
-     * @param deviceService         the {@link DeviceService} used for
-     *                              audience fanout
-     * @param abPropsService        the {@link ABPropsService} consulted by
-     *                              the base sender
+     * @param deviceService         the {@link DeviceService} used for audience
+     *                              fanout
+     * @param abPropsService        the {@link ABPropsService} consulted by the
+     *                              base sender
      * @param senderKeyDistribution the {@link SenderKeyDistribution} service
      * @param metaStanza            the {@link MetaStanza} builder
      * @param reportingStanza       the {@link ReportingStanza} builder
-     * @param wamService            the {@link WamService} shared with the
-     *                              base sender
+     * @param wamService            the {@link WamService} shared with the base
+     *                              sender
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
@@ -127,11 +123,10 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Encrypts the payload with the status sender key, distributes the
-     * sender key to audience devices that do not yet hold it, and dispatches
-     * the SKMSG stanza. Revokes that cover an audience subset which is no
-     * longer reachable by SKMSG fall back to the per-device direct path via
+     * <p>Encrypts the payload with the status sender key, distributes the sender
+     * key to audience devices that do not yet hold it, and dispatches the SKMSG
+     * stanza. Revokes that cover an audience subset which is no longer reachable
+     * by SKMSG fall back to the per-device direct path via
      * {@link #sendDirectRevoke(Jid, ChatMessageInfo, Collection)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
@@ -263,19 +258,18 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Returns the {@code status_setting} meta attribute value derived from
-     * the user's status privacy preference.
+     * Returns the {@code status_setting} meta attribute value derived from the
+     * user's status privacy preference.
      *
-     * @apiNote
-     * The mapping mirrors WA Web's enum-to-string table: {@code Contact} to
+     * <p>The mapping mirrors WA Web's enum-to-string table: {@code Contact} to
      * {@code "contacts"}, {@code AllowList} to {@code "allowlist"},
      * {@code DenyList} to {@code "denylist"}.
      *
      * @implNote
-     * This implementation returns {@code null} (rather than throwing) on
-     * unknown preference values, departing from WA Web on the
-     * exhaustive-match branch; the caller treats a {@code null} the same as
-     * an absent preference and drops the attribute.
+     * This implementation returns {@code null} (rather than throwing) on unknown
+     * preference values, departing from WA Web on the exhaustive-match branch;
+     * the caller treats a {@code null} the same as an absent preference and
+     * drops the attribute.
      *
      * @return the {@code status_setting} value, or {@code null}
      */
@@ -296,15 +290,14 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Resolves the target device list and dispatch path for the given
-     * outgoing container.
+     * Resolves the target device list and dispatch path for the given outgoing
+     * container.
      *
-     * @apiNote
-     * Non-revokes return the current audience unchanged on the SKMSG path.
-     * Revokes attempt to narrow the audience to the original recipients
-     * recorded against the revoked message; if at least one original
-     * recipient is no longer part of the current audience, the union is
-     * returned with the direct-path flag set so the caller dispatches via
+     * <p>Non-revokes return the current audience unchanged on the SKMSG path.
+     * Revokes attempt to narrow the audience to the original recipients recorded
+     * against the revoked message; if at least one original recipient is no
+     * longer part of the current audience, the union is returned with the
+     * direct-path flag set so the caller dispatches via
      * {@link #sendDirectRevoke(Jid, ChatMessageInfo, Collection)}.
      *
      * @param container       the outbound {@link MessageContainer}
@@ -369,10 +362,8 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Carries the outcome of resolving the device list for a status revoke.
      *
-     * @apiNote
-     * Internal carrier for {@link #resolveRevokeDevices}; the boolean
-     * {@code useDirect} flag selects the GROUP_DIRECT dispatch path on the
-     * caller side.
+     * <p>Internal carrier for {@link #resolveRevokeDevices}; the {@code useDirect}
+     * flag selects the GROUP_DIRECT dispatch path on the caller side.
      *
      * @param useDirect {@code true} when the revoke must use the per-device
      *                  direct path
@@ -386,19 +377,17 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
      * Dispatches a status revoke via the per-device fanout (GROUP_DIRECT)
      * branch.
      *
-     * @apiNote
-     * Taken when {@link #resolveRevokeDevices} detects that at least one
-     * original recipient is no longer covered by the current status
-     * audience; the stanza is built via {@link ChatFanoutStanza#build} with
-     * a per-device payload list rather than a sender-key payload.
+     * <p>Taken when {@link #resolveRevokeDevices} detects that at least one
+     * original recipient is no longer covered by the current status audience;
+     * the stanza is built via {@link ChatFanoutStanza#build} with a per-device
+     * payload list rather than a sender-key payload.
      *
      * @param statusJid   the status broadcast {@link Jid}
      * @param messageInfo the outgoing revoke {@link ChatMessageInfo}
-     * @param allDevices  the union of original recipients and current
-     *                    audience
+     * @param allDevices  the union of original recipients and current audience
      * @return the parsed server {@link AckResult}
-     * @throws WhatsAppMessageException.Send.Unknown if encryption fails for
-     *                                               every device
+     * @throws WhatsAppMessageException.Send.Unknown if encryption fails for every
+     *                                               device
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusDirectMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -456,14 +445,13 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Commits one {@link com.github.auties00.cobalt.wam.event.PrekeysDepletionEvent}
-     * per depleted one-time pre-key reported by the last
-     * {@code ensureSessions} call.
+     * Commits one
+     * {@link com.github.auties00.cobalt.wam.event.PrekeysDepletionEvent} per
+     * depleted one-time pre-key reported by the last
+     * {@link DeviceService#ensureSessions(java.util.Collection)} call.
      *
-     * @apiNote
-     * No-op when {@code depletedPrekeyCount} is not positive. Mirrors WA
-     * Web's {@code maybePostPrekeysDepletionMetric}; the audience size
-     * drives the {@code deviceSizeBucket} slot.
+     * <p>No-op when {@code depletedPrekeyCount} is not positive. The audience
+     * size drives the {@code deviceSizeBucket} slot.
      *
      * @param depletedPrekeyCount the number of depleted one-time pre-keys
      * @param messageType         the WAM {@link MessageType} for this send
@@ -478,7 +466,7 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
         if (depletedPrekeyCount <= 0) {
             return;
         }
-        var bucket = deviceCount == null ? null : WamSizeBuckets.numberToSizeBucket(deviceCount);
+        var bucket = deviceCount == null ? null : numberToSizeBucket(deviceCount);
         for (var i = 0; i < depletedPrekeyCount; i++) {
             wamService.commit(new PrekeysDepletionEventBuilder()
                     .prekeysFetchReason(PrekeysFetchContext.SEND_MESSAGE)
@@ -486,5 +474,38 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
                     .deviceSizeBucket(bucket)
                     .build());
         }
+    }
+
+    /**
+     * Maps a fanout device count to the matching {@link SizeBucket} carried by
+     * the {@code deviceSizeBucket} WAM property.
+     *
+     * <p>Buckets are exclusive upper bounds: {@code count=31} returns
+     * {@link SizeBucket#LT32}, {@code count=1024} returns
+     * {@link SizeBucket#LT1500}, and any {@code count >= 5000} returns
+     * {@link SizeBucket#LARGEST_BUCKET}.
+     *
+     * @param count the device count to classify
+     * @return the matching {@link SizeBucket}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamNumberToSizeBucket",
+            exports = "default",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static SizeBucket numberToSizeBucket(int count) {
+        if (count < 32) return SizeBucket.LT32;
+        if (count < 64) return SizeBucket.LT64;
+        if (count < 128) return SizeBucket.LT128;
+        if (count < 256) return SizeBucket.LT256;
+        if (count < 512) return SizeBucket.LT512;
+        if (count < 1024) return SizeBucket.LT1024;
+        if (count < 1500) return SizeBucket.LT1500;
+        if (count < 2000) return SizeBucket.LT2000;
+        if (count < 2500) return SizeBucket.LT2500;
+        if (count < 3000) return SizeBucket.LT3000;
+        if (count < 3500) return SizeBucket.LT3500;
+        if (count < 4000) return SizeBucket.LT4000;
+        if (count < 4500) return SizeBucket.LT4500;
+        if (count < 5000) return SizeBucket.LT5000;
+        return SizeBucket.LARGEST_BUCKET;
     }
 }

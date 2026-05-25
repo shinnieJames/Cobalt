@@ -228,8 +228,7 @@ public final class WhatsAppClientSixPartsKeys {
      * Compares this credentials record to another object for structural
      * equality.
      *
-     * @apiNote
-     * Two records are equal when their phone number, Noise key pair,
+     * <p>Two records are equal when their phone number, Noise key pair,
      * Signal identity key pair, and identity ID all match.
      *
      * @param o the object to compare with

@@ -12,159 +12,152 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Fluent builder for the outbound {@code <ack>} stanza shipped in
- * response to an inbound stanza.
+ * Assembles and dispatches the outbound {@code <ack>} stanza shipped in response to an inbound
+ * stanza.
  *
- * @apiNote
- * Obtain a builder through {@link AckSender#ack(AckClass, Node)}, layer
- * the per-call overrides on top of the per-class defaults, and ship the
- * stanza by calling {@link #send()}. The builder honours per-class
- * attribute defaults so the common shapes ({@code <ack class="message">},
- * {@code <ack class="notification" type="xxx">}) require zero override
- * calls; consult {@link AckSender#ack(AckClass, Node)} for the per-class
- * defaults applied to each {@code type} and {@code participant}
- * attribute.
+ * <p>An instance is obtained through {@link AckSender#ack(AckClass, Node)}, bound to a target
+ * {@link AckClass} and the inbound {@link Node} being acknowledged. The fluent setters layer
+ * per-call overrides on top of the per-class defaults, and {@link #send()} resolves the final
+ * attribute set, builds the stanza, and dispatches it through the owning {@link AckSender}. The
+ * per-class defaults make the common shapes ({@code <ack class="message">},
+ * {@code <ack class="notification" type="xxx">}) require zero override calls; the resolution rules
+ * for the {@code type} and {@code participant} attributes are spelled out on {@link #resolveType()}
+ * and {@link #resolveParticipant(Jid)}.
  *
- * @implNote
- * This implementation mirrors WA Web's
- * {@code WAWebHandleMsgSendAck.sendAck},
- * {@code WAWebReceiptAck.buildReceiptAck} and the
- * {@code <meta failure_reason=...>} append on
- * {@code WAWebCreateNackFromStanza}'s {@code InvalidProtobuf} path; the
- * builder collapses all four call shapes into a single override matrix
- * so consumers no longer hand-roll a {@link NodeBuilder} per call site.
- * The builder is not thread-safe; create a fresh instance per ack.
+ * <p>The builder is not thread-safe and is intended for single use: create one instance per ack and
+ * call {@link #send()} once.
+ *
+ * @implNote This implementation collapses four WA Web call shapes ({@code sendAck},
+ * {@code buildReceiptAck}, the synthesised nack, and the {@code <meta failure_reason=...>} append on
+ * the {@code InvalidProtobuf} path) into a single override matrix so consumers no longer hand-roll a
+ * {@link NodeBuilder} per call site.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgSendAck")
 @WhatsAppWebModule(moduleName = "WAWebReceiptAck")
 @WhatsAppWebModule(moduleName = "WAWebCreateNackFromStanza")
 public final class AckBuilder {
     /**
-     * The {@link AckSender} that dispatches the assembled stanza on
-     * {@link #send()}.
+     * The {@link AckSender} that dispatches the assembled stanza on {@link #send()}.
      */
     private final AckSender owner;
 
     /**
-     * The class of stanza this ack acknowledges. Drives the
-     * {@code class} attribute and the per-class default behaviour of
-     * {@code type} and {@code participant} when not overridden.
+     * The class of stanza this ack acknowledges.
+     *
+     * <p>Drives the {@code class} attribute and the per-class default behaviour of {@code type} and
+     * {@code participant} when those attributes are not overridden.
      */
     private final AckClass ackClass;
 
     /**
-     * The inbound stanza being acknowledged. Used to source the
-     * {@code id} attribute, the {@code to} attribute (from inbound
-     * {@code from}), and to look up the inherited {@code type} and
-     * {@code participant} when the per-class default is INHERIT.
+     * The inbound stanza being acknowledged.
+     *
+     * <p>Sources the {@code id} attribute, the {@code to} attribute (from the inbound {@code from}),
+     * and the inherited {@code type} and {@code participant} values when the per-class default
+     * inherits from the inbound stanza.
      */
     private final Node inbound;
 
     /**
-     * Tracks whether {@link #type(String)} has been called so the
-     * resolver can distinguish "not set" (fall back to the per-class
-     * default) from "explicitly set to {@code null}" (force the
-     * attribute to be omitted).
+     * Tracks whether {@link #type(String)} has been called.
+     *
+     * <p>Distinguishes "not set" (fall back to the per-class default) from "explicitly set to
+     * {@code null}" (force the {@code type} attribute to be omitted).
      */
     private boolean typeOverrideSet = false;
 
     /**
-     * Holds the explicit {@code type} override; only meaningful when
-     * {@link #typeOverrideSet} is {@code true}. A {@code null} value
-     * combined with {@code typeOverrideSet=true} forces the attribute
-     * to be omitted.
+     * Holds the explicit {@code type} override.
+     *
+     * <p>Only meaningful when {@link #typeOverrideSet} is {@code true}. A {@code null} value
+     * combined with {@code typeOverrideSet == true} forces the attribute to be omitted.
      */
     private String typeOverride = null;
 
     /**
      * Tracks whether {@link #participant(Jid)} has been called.
-     * Mutually exclusive with {@link #participantIfDifferentSet}.
+     *
+     * <p>Mutually exclusive with {@link #participantIfDifferentSet}.
      */
     private boolean participantOverrideSet = false;
 
     /**
-     * Holds the explicit {@code participant} override; only
-     * meaningful when {@link #participantOverrideSet} is {@code true}.
+     * Holds the explicit {@code participant} override.
+     *
+     * <p>Only meaningful when {@link #participantOverrideSet} is {@code true}.
      */
     private Jid participantOverride = null;
 
     /**
-     * Tracks whether {@link #participantIfDifferent(Jid)} has been
-     * called so the if-different branch can distinguish "not set"
-     * from "set to {@code null}". Mutually exclusive with
-     * {@link #participantOverrideSet}.
+     * Tracks whether {@link #participantIfDifferent(Jid)} has been called.
+     *
+     * <p>Distinguishes "not set" from "set to {@code null}" for the if-different branch. Mutually
+     * exclusive with {@link #participantOverrideSet}.
      */
     private boolean participantIfDifferentSet = false;
 
     /**
-     * Holds the conditional {@code participant} value to be written
-     * only when it differs from the resolved {@code to} value,
-     * mirroring {@code WAWebReceiptAck.buildReceiptAck}'s
-     * {@code participant !== to} guard. Only meaningful when
-     * {@link #participantIfDifferentSet} is {@code true}.
+     * Holds the conditional {@code participant} value, written only when it differs from the
+     * resolved {@code to} value.
+     *
+     * <p>Only meaningful when {@link #participantIfDifferentSet} is {@code true}.
      */
     private Jid participantIfDifferent = null;
 
     /**
-     * Tracks whether {@link #to(Jid)} has been called so the resolver
-     * can distinguish "fall back to the inbound stanza's {@code from}
-     * attribute" from "the caller forced an explicit {@code to}".
+     * Tracks whether {@link #to(Jid)} has been called.
+     *
+     * <p>Distinguishes "fall back to the inbound stanza's {@code from} attribute" from "the caller
+     * forced an explicit {@code to}".
      */
     private boolean toOverrideSet = false;
 
     /**
-     * Holds the explicit {@code to} override; only meaningful when
-     * {@link #toOverrideSet} is {@code true}. The default {@code to}
-     * value is the inbound stanza's {@code from} attribute.
+     * Holds the explicit {@code to} override.
+     *
+     * <p>Only meaningful when {@link #toOverrideSet} is {@code true}. When no override is set the
+     * {@code to} value defaults to the inbound stanza's {@code from} attribute.
      */
     private Jid toOverride = null;
 
     /**
-     * Optional {@code from} attribute on the outbound ack. WA Web
-     * defaults this to the local device JID for class
-     * {@code message}; Cobalt leaves it omitted unless explicitly set
-     * by a caller (notably {@code CallReceiptReceiver}, which forces
-     * the local user PN).
+     * The optional {@code from} attribute on the outbound ack.
+     *
+     * <p>Left omitted unless explicitly set by a caller, in which case it is written verbatim. The
+     * server fills the attribute in when it is absent.
+     *
+     * @implNote This implementation diverges from WA Web, which defaults the {@code from} attribute
+     * to the local device JID for class {@code message}; Cobalt instead requires the caller to set
+     * it (notably the call-receipt path, which forces the local user PN).
      */
     private Jid fromAttribute = null;
 
     /**
-     * The {@link NackReason} that drives the {@code error} attribute,
-     * or {@code null} when the stanza is a plain ack.
+     * The {@link NackReason} that drives the {@code error} attribute, or {@code null} when the
+     * stanza is a plain ack.
      */
     private NackReason error = null;
 
     /**
-     * The {@code failure_reason} string carried on a child
-     * {@code <meta>} node for the {@link NackReason#INVALID_PROTOBUF}
-     * nack, or {@code null} when no such child is required.
+     * The {@code failure_reason} string carried on a child {@code <meta>} node for the
+     * {@link NackReason#INVALID_PROTOBUF} nack, or {@code null} when no such child is required.
      */
     private String failureReason = null;
 
     /**
-     * Optional list of arbitrary child nodes appended to the
-     * outbound ack stanza, in insertion order.
-     *
-     * @apiNote
-     * Used by the business-notification ack path to append a
-     * {@code <user side_list="out"/>} hint to the server.
+     * The list of arbitrary child nodes appended to the outbound ack stanza, in insertion order, or
+     * {@code null} when no children have been added.
      */
     private List<Node> children = null;
 
     /**
-     * Constructs a new builder bound to the given {@link AckSender},
-     * stanza class and inbound stanza.
+     * Constructs a builder bound to the given {@link AckSender}, stanza class, and inbound stanza.
      *
-     * @apiNote
-     * Cobalt callers obtain a builder via
-     * {@link AckSender#ack(AckClass, Node)}; this constructor is
-     * package-private to keep instance creation centralised on
-     * {@code AckSender}.
+     * <p>Package-private so instance creation stays centralised on {@link AckSender}; callers obtain
+     * a builder through {@link AckSender#ack(AckClass, Node)}.
      *
-     * @param owner    the {@link AckSender} that will dispatch the
-     *                 assembled stanza on {@link #send()}
-     * @param ackClass the {@link AckClass} written into the
-     *                 {@code class} attribute
+     * @param owner    the {@link AckSender} that dispatches the assembled stanza on {@link #send()}
+     * @param ackClass the {@link AckClass} written into the {@code class} attribute
      * @param inbound  the inbound stanza being acknowledged
      */
     AckBuilder(AckSender owner, AckClass ackClass, Node inbound) {
@@ -176,15 +169,10 @@ public final class AckBuilder {
     /**
      * Overrides the {@code type} attribute on the outbound ack.
      *
-     * @apiNote
-     * Pass an explicit value (for example {@code "retry"} on a
-     * retry-receipt ack, or {@code "account_sync"} on an account-sync
-     * notification ack) to write that exact value. Pass {@code null}
-     * to force the attribute to be omitted even when the per-class
-     * default would inherit it from the inbound stanza.
+     * <p>An explicit value is written verbatim; a {@code null} value forces the attribute to be
+     * omitted even when the per-class default would inherit it from the inbound stanza.
      *
-     * @param type the explicit {@code type} value, or {@code null} to
-     *             omit the attribute entirely
+     * @param type the explicit {@code type} value, or {@code null} to omit the attribute entirely
      * @return this builder for chaining
      */
     public AckBuilder type(String type) {
@@ -196,16 +184,12 @@ public final class AckBuilder {
     /**
      * Overrides the {@code participant} attribute on the outbound ack.
      *
-     * @apiNote
-     * Pass an explicit {@link Jid} to write that exact value, or
-     * {@code null} to force the attribute to be omitted even when the
-     * per-class default would inherit it from the inbound stanza.
-     * Mutually exclusive with
-     * {@link #participantIfDifferent(Jid)}: calling either clears the
-     * other.
+     * <p>An explicit {@link Jid} is written verbatim; a {@code null} value forces the attribute to
+     * be omitted even when the per-class default would inherit it from the inbound stanza. This call
+     * is mutually exclusive with {@link #participantIfDifferent(Jid)}: invoking it clears any pending
+     * if-different value.
      *
-     * @param participant the explicit {@link Jid}, or {@code null} to
-     *                    omit the attribute
+     * @param participant the explicit {@link Jid}, or {@code null} to omit the attribute
      * @return this builder for chaining
      */
     public AckBuilder participant(Jid participant) {
@@ -217,18 +201,15 @@ public final class AckBuilder {
     }
 
     /**
-     * Sets the {@code participant} attribute to {@code participant}
-     * only when it differs from the resolved {@code to} value.
+     * Sets the {@code participant} attribute to the given value only when it differs from the
+     * resolved {@code to} value.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebReceiptAck.buildReceiptAck} guard
-     * where the participant attribute is dropped when it would equal
-     * the {@code to} attribute. Mutually exclusive with
-     * {@link #participant(Jid)}: calling either clears the other.
+     * <p>The attribute is omitted when {@code participant} is {@code null} or equal to the resolved
+     * {@code to} value. This call is mutually exclusive with {@link #participant(Jid)}: invoking it
+     * clears any pending unconditional override.
      *
-     * @param participant the candidate {@link Jid}; when {@code null}
-     *                    or equal to the resolved {@code to}, the
-     *                    attribute is omitted
+     * @param participant the candidate {@link Jid}; omitted when {@code null} or equal to the
+     *                    resolved {@code to}
      * @return this builder for chaining
      */
     @WhatsAppWebExport(moduleName = "WAWebReceiptAck", exports = "buildReceiptAck",
@@ -244,18 +225,13 @@ public final class AckBuilder {
     /**
      * Overrides the {@code to} attribute on the outbound ack.
      *
-     * @apiNote
-     * The default behaviour is to set {@code to} to the inbound
-     * stanza's {@code from} attribute. Pass an explicit {@link Jid}
-     * when the target identity differs from the inbound sender (for
-     * example {@code WAWebHandleDeviceNotification}, which echoes the
-     * user-level form of the inbound device JID rather than the raw
-     * device JID). Passing {@code null} forces the {@code to}
-     * attribute to be unset, in which case {@link #send()} will drop
-     * the ack as if the inbound {@code from} were missing.
+     * <p>When no override is set the {@code to} value defaults to the inbound stanza's {@code from}
+     * attribute. An explicit {@link Jid} is written verbatim, which is needed when the target
+     * identity differs from the inbound sender. A {@code null} value clears the {@code to} value
+     * entirely, in which case {@link #send()} drops the ack as if the inbound {@code from} were
+     * missing.
      *
-     * @param to the explicit {@link Jid} for the {@code to} attribute,
-     *           or {@code null} to clear
+     * @param to the explicit {@link Jid} for the {@code to} attribute, or {@code null} to clear
      * @return this builder for chaining
      */
     public AckBuilder to(Jid to) {
@@ -267,16 +243,11 @@ public final class AckBuilder {
     /**
      * Sets the {@code from} attribute on the outbound ack.
      *
-     * @apiNote
-     * Only needed for stanza classes where the client must echo a
-     * specific identity back to the server. The current Cobalt
-     * caller is {@code CallReceiptReceiver}, which sets the local
-     * user PN explicitly; all other call sites omit {@code from} so
-     * the server fills it in.
+     * <p>Needed only for stanza classes where the client must echo a specific identity back to the
+     * server; all other call sites omit {@code from} so the server fills it in.
      *
-     * @param from the {@link Jid} to write as the {@code from}
-     *             attribute, or {@code null} to clear a previous
-     *             override
+     * @param from the {@link Jid} to write as the {@code from} attribute, or {@code null} to clear a
+     *             previous override
      * @return this builder for chaining
      */
     public AckBuilder from(Jid from) {
@@ -285,20 +256,15 @@ public final class AckBuilder {
     }
 
     /**
-     * Marks the outbound ack as a NACK with the given
-     * {@link NackReason}.
+     * Marks the outbound ack as a NACK with the given {@link NackReason}.
      *
-     * @apiNote
-     * Writes the integer error code returned by
-     * {@link NackReason#code()} into the {@code error} attribute. For
-     * {@link NackReason#INVALID_PROTOBUF} the caller should also
-     * provide an {@code e2eFailureReason} via
-     * {@link #failureReason(String)} so the server receives the
-     * mandatory {@code <meta failure_reason="..."/>} child node.
+     * <p>Writes the integer error code returned by {@link NackReason#code()} into the {@code error}
+     * attribute. For {@link NackReason#INVALID_PROTOBUF} the caller should also supply a failure
+     * reason via {@link #failureReason(String)} so the server receives the mandatory
+     * {@code <meta failure_reason="..."/>} child node.
      *
-     * @param reason the {@link NackReason} stamped into the
-     *               {@code error} attribute, or {@code null} to clear
-     *               a previous error
+     * @param reason the {@link NackReason} stamped into the {@code error} attribute, or {@code null}
+     *               to clear a previous error
      * @return this builder for chaining
      */
     @WhatsAppWebExport(moduleName = "WAWebCreateNackFromStanza",
@@ -309,17 +275,15 @@ public final class AckBuilder {
     }
 
     /**
-     * Appends a {@code <meta failure_reason="..."/>} child node to the
-     * outbound NACK.
+     * Records the failure-reason hint carried on the {@code <meta failure_reason="..."/>} child node
+     * of the outbound NACK.
      *
-     * @apiNote
-     * Required by WA Web only when the NACK reason is
-     * {@link NackReason#INVALID_PROTOBUF}; the server logs the value
-     * against the offending stanza. Passing {@code null} clears any
-     * previous failure reason.
+     * <p>The child node is emitted by {@link #send()} only when the NACK reason is
+     * {@link NackReason#INVALID_PROTOBUF} and a non-{@code null} reason is present; the server logs
+     * the value against the offending stanza. A {@code null} value clears any previous failure
+     * reason.
      *
-     * @param e2eFailureReason the textual failure-reason hint, or
-     *                         {@code null} to clear
+     * @param e2eFailureReason the textual failure-reason hint, or {@code null} to clear
      * @return this builder for chaining
      */
     @WhatsAppWebExport(moduleName = "WAWebCreateNackFromStanza",
@@ -332,10 +296,7 @@ public final class AckBuilder {
     /**
      * Appends an arbitrary child node to the outbound ack stanza.
      *
-     * @apiNote
-     * Used by the business-notification ack path to append a
-     * {@code <user side_list="out"/>} hint. Multiple calls preserve
-     * insertion order. A {@code null} argument is ignored.
+     * <p>Multiple calls preserve insertion order. A {@code null} argument is ignored.
      *
      * @param child the {@link Node} to append, or {@code null} to skip
      * @return this builder for chaining
@@ -352,30 +313,23 @@ public final class AckBuilder {
     }
 
     /**
-     * Builds the outbound ack stanza and dispatches it through the
-     * owning {@link AckSender}.
+     * Builds the outbound ack stanza and dispatches it through the owning {@link AckSender}.
      *
-     * @apiNote
-     * The stanza is shipped fire-and-forget. When the inbound stanza
-     * lacks either the {@code id} or the {@code from} attribute the
-     * ack is silently dropped and this method returns {@code false};
-     * this matches WA Web's
-     * {@code WAWebCreateNackFromStanza}, which also fast-paths to
-     * {@code NO_ACK} on the same precondition.
+     * <p>Resolves the {@code id} from the inbound stanza and the {@code to} value from the
+     * {@link #to(Jid)} override or, failing that, the inbound {@code from} attribute. When either
+     * the {@code id} or the {@code to} value is missing the ack is silently dropped and the method
+     * returns {@code false}. Otherwise the per-class defaults for {@code type} and
+     * {@code participant} are resolved, the {@code error} attribute and any
+     * {@code <meta failure_reason=...>} and arbitrary child nodes are appended, and the assembled
+     * stanza is shipped fire-and-forget.
      *
-     * @implNote
-     * This implementation resolves the per-class defaults for
-     * {@code type} and {@code participant} before applying the
-     * fluent overrides, then writes the {@code error} and
-     * {@code <meta failure_reason=...>} child when present. For
-     * {@link NackReason#INVALID_PROTOBUF} without a failure reason,
-     * the {@code <meta>} child is omitted to match WA Web's
-     * {@code invalid-protobuf-nack-missing-failure-reason}
+     * @implNote This implementation resolves the per-class defaults before applying the fluent
+     * overrides. For {@link NackReason#INVALID_PROTOBUF} without a failure reason the {@code <meta>}
+     * child is omitted and the bare ack is still shipped, matching WA Web's missing-failure-reason
      * fallback.
      *
-     * @return {@code true} when the stanza was dispatched,
-     *         {@code false} when it was dropped due to a missing
-     *         {@code id} or {@code from} on the inbound stanza
+     * @return {@code true} when the stanza was dispatched, {@code false} when it was dropped due to
+     *         a missing {@code id} or {@code to} on the inbound stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendAck",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -421,20 +375,15 @@ public final class AckBuilder {
     }
 
     /**
-     * Resolves the value to write for the {@code type} attribute,
-     * applying the per-class default when no override has been
-     * specified.
+     * Resolves the value to write for the {@code type} attribute, applying the per-class default
+     * when no override has been specified.
      *
-     * @apiNote
-     * The default is INHERIT for every {@link AckClass} today: the
-     * value of the {@code type} attribute on the inbound stanza is
-     * copied verbatim when present. Callers override via
-     * {@link #type(String)} when the desired type is computed
-     * elsewhere (for example, the call-payload tag echoed back by
-     * {@code CallReceiver}).
+     * <p>When {@link #type(String)} has been called the override value is returned verbatim,
+     * including {@code null} to omit the attribute. Otherwise the value of the {@code type}
+     * attribute on the inbound stanza is copied verbatim when present, and {@code null} is returned
+     * when it is absent.
      *
-     * @return the resolved {@code type} value, or {@code null} to
-     *         omit the attribute
+     * @return the resolved {@code type} value, or {@code null} to omit the attribute
      */
     private String resolveType() {
         if (typeOverrideSet) {
@@ -444,21 +393,19 @@ public final class AckBuilder {
     }
 
     /**
-     * Resolves the value to write for the {@code participant}
-     * attribute, applying the per-class default when no override has
-     * been specified.
+     * Resolves the value to write for the {@code participant} attribute, applying the per-class
+     * default when no override has been specified.
      *
-     * @apiNote
-     * Defaults per {@link AckClass}: MESSAGE inherits from inbound,
-     * RECEIPT inherits from inbound but drops the attribute when the
-     * value equals the resolved {@code to}, NOTIFICATION omits, and
-     * CALL omits.
+     * <p>When an if-different value is pending it is returned only if it is non-{@code null} and
+     * differs from {@code to}, otherwise {@code null} is returned. When an unconditional override is
+     * pending it is returned verbatim. With no override the per-class default applies:
+     * {@link AckClass#MESSAGE} inherits the inbound {@code participant};
+     * {@link AckClass#RECEIPT} inherits it but drops the attribute when the inherited value equals
+     * {@code to}; {@link AckClass#NOTIFICATION} and {@link AckClass#CALL} omit it.
      *
-     * @param to the resolved {@code to} value, used by the RECEIPT
-     *           default to enforce the {@code participant !== to}
-     *           guard
-     * @return the resolved {@code participant} value, or {@code null}
-     *         to omit the attribute
+     * @param to the resolved {@code to} value, used by the {@link AckClass#RECEIPT} default to drop
+     *           the attribute when it would equal {@code to}
+     * @return the resolved {@code participant} value, or {@code null} to omit the attribute
      */
     private Jid resolveParticipant(Jid to) {
         if (participantIfDifferentSet) {
@@ -482,18 +429,13 @@ public final class AckBuilder {
     }
 
     /**
-     * Builds the optional {@code <meta failure_reason="..."/>} child
-     * node, or returns {@code null} when no such child is needed.
+     * Builds the optional {@code <meta failure_reason="..."/>} child node.
      *
-     * @apiNote
-     * WA Web only adds the {@code <meta>} child for the
-     * {@link NackReason#INVALID_PROTOBUF} reason and only when a
-     * non-{@code null} failure reason was supplied. The validation
-     * system logs a missing failure reason as
-     * {@code invalid-protobuf-nack-missing-failure-reason} but still
-     * ships the bare ack without the child.
+     * <p>Returns {@code null} unless the NACK reason is {@link NackReason#INVALID_PROTOBUF} and a
+     * non-{@code null} failure reason was supplied via {@link #failureReason(String)}, in which case
+     * the value is written into the {@code failure_reason} attribute of the child node.
      *
-     * @return the {@code <meta>} child, or {@code null}
+     * @return the {@code <meta>} child, or {@code null} when no such child is needed
      */
     private Node buildMetaChild() {
         if (error != NackReason.INVALID_PROTOBUF || failureReason == null) {

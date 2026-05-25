@@ -14,42 +14,27 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Round-trip tests for the paired {@link RtpSender} +
- * {@link RtpReceiver} — Opus payloads sent by one side appear at the
- * other side's downstream listener with timestamps and sequence
- * numbers preserved, packet loss surfaced as PLC triggers, and SSRC
- * filtering applied.
+ * Round-trip coverage for the paired {@link RtpSender} and {@link RtpReceiver}: Opus payloads
+ * sent by one side reach the other side's listener with timestamps and sequence numbers
+ * preserved, packet loss surfaces as a missing marker driving packet loss concealment, SSRC
+ * filtering is applied, backward presentation timestamps are rejected, and sequence numbers
+ * wrap cleanly. Each pair is keyed from one shared random keying-material block, with the
+ * sender as the SRTP client and the receiver as the SRTP server.
  */
 public class RtpSenderReceiverTest {
 
-    /**
-     * Test SSRC.
-     */
     private static final int SSRC = 0x12345678;
 
-    /**
-     * Opus payload type per WebRTC convention.
-     */
     private static final int OPUS_PAYLOAD_TYPE = 111;
 
-    /**
-     * Opus clock rate.
-     */
     private static final int OPUS_CLOCK_RATE = 48_000;
 
-    /**
-     * Builds a fresh keying-material block for the SRTP pair.
-     */
     private static byte[] randomKeying() {
         var k = new byte[SrtpEndpoint.KEYING_MATERIAL_LENGTH];
         new SecureRandom().nextBytes(k);
         return k;
     }
 
-    /**
-     * Sender encodes one payload, receiver decodes it byte-exact —
-     * verifies the SRTP-protect / unprotect / RTP header round-trip.
-     */
     @Test
     public void singlePayloadRoundTrips() {
         var keying = randomKeying();
@@ -72,10 +57,6 @@ public class RtpSenderReceiverTest {
         }
     }
 
-    /**
-     * Multiple payloads in monotonic-ptsMs order arrive in the same
-     * order on the receiver side.
-     */
     @Test
     public void multiplePayloadsArriveInOrder() {
         var keying = randomKeying();
@@ -99,10 +80,6 @@ public class RtpSenderReceiverTest {
         }
     }
 
-    /**
-     * RTP timestamps step by {@code clockRate * frameDurationMs /
-     * 1000} per frame.
-     */
     @Test
     public void timestampsScaleByClockRate() {
         var keying = randomKeying();
@@ -116,27 +93,23 @@ public class RtpSenderReceiverTest {
                     senderSrtp, receiver::onSrtpPacket, random);
 
             sender.send("a".getBytes(), 0L, false);
-            sender.send("b".getBytes(), 20L, false);  // 20ms later
+            sender.send("b".getBytes(), 20L, false);
             receiver.drain();
 
-            // Difference between consecutive timestamps =
-            // clockRate * 20ms / 1000 = 48000 * 20 / 1000 = 960.
+            // Consecutive timestamps differ by clockRate * 20ms / 1000 = 48000 * 20 / 1000 = 960
             var diff = (inbound.get(1).timestamp() - inbound.get(0).timestamp()) & 0xFFFFFFFFL;
             assertEquals(960L, diff);
         }
     }
 
-    /**
-     * Lost packets (gap in the sequence) surface as a missing
-     * marker on the receiver — the codec's PLC trigger.
-     */
     @Test
     public void packetLossSurfacesAsPlcTrigger() {
         var keying = randomKeying();
         try (var senderSrtp = SrtpEndpoint.fromDtlsKeyingMaterial(keying, SrtpRole.CLIENT);
              var receiverSrtp = SrtpEndpoint.fromDtlsKeyingMaterial(keying, SrtpRole.SERVER)) {
             var inbound = new ArrayList<RtpReceiver.InboundRtp>();
-            // Capture sender output so we can selectively drop.
+            // The sender writes into this list instead of the receiver so the middle packet
+            // can be withheld, simulating loss.
             var dropped = new ArrayList<byte[]>();
             var receiver = new RtpReceiver(receiverSrtp, SSRC, OPUS_PAYLOAD_TYPE,
                     inbound::add);
@@ -146,12 +119,12 @@ public class RtpSenderReceiverTest {
             sender.send("first".getBytes(), 0L, false);
             sender.send("lost".getBytes(), 20L, false);
             sender.send("third".getBytes(), 40L, false);
-            // Deliver only first and third; drop the middle one.
+            // Deliver the first and third packets only, withholding the middle one
             receiver.onSrtpPacket(dropped.get(0));
             receiver.onSrtpPacket(dropped.get(2));
             receiver.drain();
 
-            // Expect: first (real), missing-marker, third (real).
+            // first (real), a missing marker for the withheld packet, then third (real)
             assertEquals(3, inbound.size());
             assertArrayEquals("first".getBytes(), inbound.get(0).payload());
             assertFalse(inbound.get(0).missing());
@@ -161,10 +134,6 @@ public class RtpSenderReceiverTest {
         }
     }
 
-    /**
-     * Packets carrying the wrong SSRC are dropped — the receiver
-     * only accepts the configured SSRC.
-     */
     @Test
     public void wrongSsrcIsDropped() {
         var keying = randomKeying();
@@ -173,7 +142,7 @@ public class RtpSenderReceiverTest {
             var inbound = new ArrayList<RtpReceiver.InboundRtp>();
             var receiver = new RtpReceiver(receiverSrtp, SSRC, OPUS_PAYLOAD_TYPE,
                     inbound::add);
-            // Sender uses a DIFFERENT ssrc.
+            // Sender uses an SSRC that differs from the one the receiver is configured to accept
             var otherSsrc = 0xCAFEBABE;
             var sender = new RtpSender(OPUS_PAYLOAD_TYPE, otherSsrc, OPUS_CLOCK_RATE,
                     senderSrtp, receiver::onSrtpPacket);
@@ -184,9 +153,6 @@ public class RtpSenderReceiverTest {
         }
     }
 
-    /**
-     * Sending with a backward {@code ptsMs} is rejected.
-     */
     @Test
     public void backwardsPtsRejected() {
         var keying = randomKeying();
@@ -200,16 +166,13 @@ public class RtpSenderReceiverTest {
         }
     }
 
-    /**
-     * Sequence numbers wrap modulo 65536 and don't break.
-     */
     @Test
     public void sequenceWrapsAroundCleanly() {
         var keying = randomKeying();
         try (var senderSrtp = SrtpEndpoint.fromDtlsKeyingMaterial(keying, SrtpRole.CLIENT);
              var receiverSrtp = SrtpEndpoint.fromDtlsKeyingMaterial(keying, SrtpRole.SERVER)) {
             var inbound = new ArrayList<RtpReceiver.InboundRtp>();
-            // Force the initial sequence to 65530 so we wrap quickly.
+            // Pin the initial sequence number to 65530 so the 10-packet run crosses the wrap
             var random = new SecureRandom() {
                 @Override
                 public int nextInt(int bound) {

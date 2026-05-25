@@ -23,66 +23,51 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Applies the {@code pin_v1} app-state action that pins or unpins chats
- * and newsletters across linked devices.
+ * Applies the {@code pin_v1} app-state action that pins or unpins chats and
+ * newsletters across linked devices.
  *
- * @apiNote
- * Drives the chat-list "Pin to top" affordance: when the primary device
- * pins or unpins a conversation the resulting timestamp fans out across
- * the {@link SyncPatchType#REGULAR_LOW} collection. Pinning enforces
- * the per-account caps {@value #MAX_PINNED_CHATS} for chats and
- * {@value #MAX_PINNED_NEWSLETTERS} for newsletters: when the cap would
- * be exceeded, the oldest pin is kicked out (when its timestamp is
- * older than the incoming pin) or the incoming pin itself is rejected
- * (when the oldest pin is newer); in either case a pending unpin is
- * queued so the rejection propagates back to other devices. The
- * mutation index keys each entry by the chat or newsletter JID,
- * formatted as {@snippet :
+ * <p>When the primary device pins or unpins a conversation the resulting
+ * timestamp fans out across the {@link SyncPatchType#REGULAR_LOW} collection.
+ * Pinning enforces the per-account caps {@value #MAX_PINNED_CHATS} for chats
+ * and {@value #MAX_PINNED_NEWSLETTERS} for newsletters: when the cap would be
+ * exceeded the oldest pin is evicted (when its timestamp is older than the
+ * incoming pin) or the incoming pin itself is rejected (when the oldest pin is
+ * newer); in either case a pending unpin is queued so the rejection propagates
+ * back to other devices. The mutation index keys each entry by the chat or
+ * newsletter JID, formatted as {@snippet :
  *     ["pin_v1", chatOrNewsletterJid]
  * }
  *
  * @implNote
  * This implementation splits WA Web's unified
- * {@code WAWebPinChatSync.applyMutation} into two arms based on the
- * JID server: chat pins live as {@code pinnedTimestamp} on the
+ * {@code WAWebPinChatSync.applyMutation} into two arms based on the JID
+ * server: chat pins live as {@code pinnedTimestamp} on the
  * {@link com.github.auties00.cobalt.model.chat.Chat} model directly;
- * newsletter pins live in a dedicated
- * {@link NewsletterPin}-keyed map on the store because Cobalt's
- * {@link com.github.auties00.cobalt.model.newsletter.Newsletter}
- * model has no {@code pinnedTimestamp} field. The
- * {@link MdFeatureCode#UNPIN_4TH_CHAT_MUTATION} dogfooding WAM event
- * is committed when the cap-eviction path is taken (mirroring WA
- * Web's {@code gkx 26258} branch). The exception-propagation
+ * newsletter pins live in a dedicated {@link NewsletterPin}-keyed map on the
+ * store because Cobalt's
+ * {@link com.github.auties00.cobalt.model.newsletter.Newsletter} model has no
+ * {@code pinnedTimestamp} field. The
+ * {@link MdFeatureCode#UNPIN_4TH_CHAT_MUTATION} dogfooding WAM event is
+ * committed when the cap-eviction path is taken. The exception-propagation
  * boundary differs from WA Web: per-mutation exceptions surface as
- * {@link MutationApplicationResult#failed()} for callers, not as a
- * silent {@code Failed} result inside the batch.
+ * {@link MutationApplicationResult#failed()} for callers, not as a silent
+ * {@code Failed} result inside the batch.
  */
 public final class PinChatHandler implements WebAppStateActionHandler {
     /**
-     * The per-account cap on pinned chats.
-     *
-     * @apiNote
-     * Internal constant consumed by
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * to decide when to evict the oldest pin on cap saturation.
+     * Holds the per-account cap on pinned chats.
      *
      * @implNote
      * This implementation hardcodes the WA Web
      * {@code WAWebPinChatLimits.MAX_PINNED_CHATS = 3}; the
      * {@code WAWebChatPinBridge.getPinLimit} helper also consults a
-     * premium-benefit gating function
-     * ({@code cr:12224.getPinnedChatsBenefitLimit}) which Cobalt does
-     * not implement, so the literal value is used directly.
+     * premium-benefit gating function which Cobalt does not implement, so the
+     * literal value is used directly.
      */
     private static final int MAX_PINNED_CHATS = 3;
 
     /**
-     * The per-account cap on pinned newsletters.
-     *
-     * @apiNote
-     * Internal constant consumed by
-     * {@link #applyNewsletterPinMutation(WhatsAppClient, Jid, PinAction, Instant)}
-     * to decide when to evict the oldest pin on cap saturation.
+     * Holds the per-account cap on pinned newsletters.
      *
      * @implNote
      * This implementation hardcodes the WA Web
@@ -91,39 +76,23 @@ public final class PinChatHandler implements WebAppStateActionHandler {
     private static final int MAX_PINNED_NEWSLETTERS = 2;
 
     /**
-     * The WAM telemetry service used to commit the dogfooding feature
+     * Holds the WAM telemetry service used to commit the dogfooding feature
      * usage event when cap-eviction occurs.
-     *
-     * @apiNote
-     * Internal collaborator injected at construction; never accessed
-     * outside the cap-eviction paths in
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * and
-     * {@link #applyNewsletterPinMutation(WhatsAppClient, Jid, PinAction, Instant)}.
      */
     private final WamService wamService;
 
     /**
-     * Constructs the pin-chat sync handler bound to the given WAM
-     * telemetry service.
-     *
-     * @apiNote
-     * Used by the sync handler registry; the WAM service is consulted
-     * on every cap-eviction event to commit the
-     * {@link MdFeatureCode#UNPIN_4TH_CHAT_MUTATION} dogfooding event.
+     * Constructs the pin-chat sync handler bound to the given WAM telemetry
+     * service.
      *
      * @implNote
-     * This implementation mirrors the WA Web {@code WAWebPinChatSync}
-     * constructor: it sets {@code chatJidIndex = 1} and
-     * {@code collectionName = RegularLow} on the prototype and inherits
-     * from {@code ChatSyncdActionBase}. WA Web wires the WAM commit
-     * directly to the global
-     * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} singleton;
-     * Cobalt injects {@link WamService} so the dogfooding emission is
+     * WA Web wires the WAM commit directly to the global
+     * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} singleton; this
+     * implementation injects {@link WamService} so the dogfooding emission is
      * testable.
      *
-     * @param wamService the WAM telemetry service used by the
-     *                   cap-eviction paths
+     * @param wamService the WAM telemetry service used by the cap-eviction
+     *                   paths
      */
     public PinChatHandler(WamService wamService) {
         this.wamService = wamService;
@@ -158,23 +127,20 @@ public final class PinChatHandler implements WebAppStateActionHandler {
      *
      * @implNote
      * This implementation walks the per-mutation arms of WA Web's
-     * {@code WAWebPinChatSync.applyMutation}: only
-     * {@link SyncdOperation#SET} is accepted (REMOVE is unsupported);
-     * a chat JID without an {@code @} server is treated as
-     * {@link SyncdIndexUtils#malformedActionIndex(String, String)}
-     * (mirroring {@code WAWebWid.isWid}); newsletter JIDs are routed
-     * to {@link #applyNewsletterPinMutation(WhatsAppClient, Jid, PinAction, Instant)}
-     * because Cobalt stores newsletters separately from chats; the
-     * unpin path zeros the chat's {@code pinnedTimestamp}; the pin
-     * path early-outs on already-pinned chats, accepts when the cap is
-     * not yet reached, and otherwise picks the oldest pin to evict
-     * (when its timestamp is older than the incoming pin) or rejects
-     * the incoming pin (queueing a pending unpin in either case).
-     * Cobalt's {@link PinAction#pinned()} accessor coalesces a
-     * {@code null} flag to {@code false} per the project nullable
-     * boolean rule, so a missing {@code pinned} field is interpreted
-     * as "unpin" rather than as
-     * {@link MutationApplicationResult#malformed()}.
+     * {@code WAWebPinChatSync.applyMutation}: only {@link SyncdOperation#SET}
+     * is accepted; a chat JID without an {@code @} server is treated as
+     * {@link SyncdIndexUtils#malformedActionIndex(String, String)}; newsletter
+     * JIDs are routed to
+     * {@link #applyNewsletterPinMutation(WhatsAppClient, Jid, PinAction, Instant)}
+     * because Cobalt stores newsletters separately from chats; the unpin path
+     * zeros the chat's {@code pinnedTimestamp}; the pin path early-outs on
+     * already-pinned chats, accepts when the cap is not yet reached, and
+     * otherwise picks the oldest pin to evict (when its timestamp is older than
+     * the incoming pin) or rejects the incoming pin (queueing a pending unpin
+     * in either case). Cobalt's {@link PinAction#pinned()} accessor coalesces a
+     * {@code null} flag to {@code false} per the project nullable boolean rule,
+     * so a missing {@code pinned} field is interpreted as "unpin" rather than
+     * as {@link MutationApplicationResult#malformed()}.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
@@ -269,23 +235,17 @@ public final class PinChatHandler implements WebAppStateActionHandler {
     /**
      * Applies a pin mutation targeting a newsletter JID.
      *
-     * @apiNote
-     * Internal helper consumed by
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * when the resolved JID has the newsletter server. Mirrors the
-     * cap-eviction behaviour of the chat path but against the
-     * separate newsletter-pin store.
+     * <p>Mirrors the cap-eviction behaviour of the chat path
+     * (already-pinned passthrough, cap check, oldest-vs-incoming eviction,
+     * pending-unpin queue) but against the separate newsletter-pin store.
      *
      * @implNote
      * This implementation tracks newsletter pin state via a dedicated
      * {@code newsletterPinStates} map on
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} keyed by
-     * the newsletter JID, because Cobalt's
-     * {@link com.github.auties00.cobalt.model.newsletter.Newsletter}
-     * model has no {@code pinnedTimestamp} field. The semantic ordering
-     * (already-pinned passthrough, cap check, oldest-vs-incoming
-     * eviction, pending-unpin queue) mirrors the WA Web chat path
-     * exactly.
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} keyed by the
+     * newsletter JID, because Cobalt's
+     * {@link com.github.auties00.cobalt.model.newsletter.Newsletter} model has
+     * no {@code pinnedTimestamp} field.
      *
      * @param client            the {@link WhatsAppClient} whose store is mutated
      * @param newsletterJid     the newsletter JID
@@ -341,23 +301,15 @@ public final class PinChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Queues a pending unpin mutation so the rejection propagates to
-     * other linked devices.
-     *
-     * @apiNote
-     * Internal helper consumed by the cap-eviction paths in
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * and
-     * {@link #applyNewsletterPinMutation(WhatsAppClient, Jid, PinAction, Instant)};
-     * not used outside this class.
+     * Queues a pending unpin mutation so the rejection propagates to other
+     * linked devices.
      *
      * @implNote
      * This implementation mirrors the WA Web
-     * {@code WAWebPinChatSync.createPendingUnpin}: builds a pin
-     * mutation with {@code pinned = false} via
-     * {@link #getPinMutation(Instant, boolean, Jid)} and appends it to
-     * the pending mutations table via
-     * {@code WhatsAppStore.addPendingMutations}.
+     * {@code WAWebPinChatSync.createPendingUnpin}: it builds a pin mutation
+     * with {@code pinned = false} via
+     * {@link #getPinMutation(Instant, boolean, Jid)} and appends it to the
+     * pending mutations table.
      *
      * @param client    the {@link WhatsAppClient} whose store receives the queued mutation
      * @param chatJid   the chat or newsletter JID to unpin
@@ -371,24 +323,18 @@ public final class PinChatHandler implements WebAppStateActionHandler {
     /**
      * Builds a single pin mutation for the given chat or newsletter JID.
      *
-     * @apiNote
-     * Internal helper consumed by
-     * {@link #queueUnpinMutation(WhatsAppClient, Jid, Instant)} and
-     * {@link #getMutationsForPin(Instant, boolean, Jid)}; not used
-     * outside this class. The public outgoing-mutation factory
-     * equivalent of this method lives on
-     * {@link com.github.auties00.cobalt.sync.factory.PinChatMutationFactory}.
+     * <p>The public outgoing-mutation factory equivalent of this method lives
+     * on {@link com.github.auties00.cobalt.sync.factory.PinChatMutationFactory}.
      *
      * @implNote
      * This implementation mirrors the WA Web
-     * {@code WAWebPinChatSync.getPinMutation}: it builds a
-     * {@link PinAction} with the requested {@code pinned} flag, wraps
-     * it in a {@link com.github.auties00.cobalt.model.sync.SyncActionValue},
-     * and serialises the mutation index as the JSON array
-     * {@code ["pin_v1", chatJid]}. The WA Web LID 1:1 migration
-     * ({@code WAWebSyncdGetChat.warnIfPnMutationWithForcedLid}) is not
-     * implemented, so the chat-jid index resolves to the JID's
-     * canonical string form.
+     * {@code WAWebPinChatSync.getPinMutation}: it builds a {@link PinAction}
+     * with the requested {@code pinned} flag, wraps it in a
+     * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}, and
+     * serialises the mutation index as the JSON array
+     * {@code ["pin_v1", chatJid]}. The WA Web LID 1:1 migration is not
+     * implemented, so the chat-jid index resolves to the JID's canonical
+     * string form.
      *
      * @param timestamp the mutation timestamp
      * @param pinned    whether the chat should be pinned ({@code true}) or unpinned ({@code false})
@@ -415,26 +361,21 @@ public final class PinChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Builds the set of pending mutations needed to pin or unpin a chat
-     * or newsletter.
+     * Builds the set of pending mutations needed to pin or unpin a chat or
+     * newsletter.
      *
-     * @apiNote
-     * Used by callers (e.g. {@code WhatsAppClient.pinChat}) that emit
-     * a pin from the local device. Returns a single-element list when
-     * unpinning, and a single-element list (just the pin mutation)
-     * when pinning. Callers that need WA Web's pin+unarchive sequence
-     * must explicitly invoke
-     * {@code ArchiveChatHandler.getArchiveChatMutation} after this
-     * method.
+     * <p>Returns a single-element list carrying just the pin (or unpin)
+     * mutation. Callers that need WA Web's pin+unarchive sequence must
+     * explicitly build and append an archive mutation after this method.
      *
      * @implNote
      * This implementation diverges from WA Web's
      * {@code WAWebPinChatSync.getMutationsForPin} in two ways: the
-     * {@link MdFeatureCode#PIN_MUTATION} WAM emission is moved to
-     * the caller (the static helper has no {@link WamService} handle),
-     * and the pin+unarchive append is not bundled here because building
-     * an archive mutation requires a message range that the caller
-     * must construct via the higher-level archive sync infrastructure.
+     * {@link MdFeatureCode#PIN_MUTATION} WAM emission is moved to the caller
+     * (the static helper has no {@link WamService} handle), and the
+     * pin+unarchive append is not bundled here because building an archive
+     * mutation requires a message range that the caller must construct via the
+     * higher-level archive sync infrastructure.
      *
      * @param timestamp the mutation timestamp
      * @param pinned    whether the chat should be pinned

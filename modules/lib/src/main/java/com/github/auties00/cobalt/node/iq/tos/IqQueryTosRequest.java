@@ -12,37 +12,32 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="tos" type="get">} stanza that fetches the per-user
- * accepted-state for a batch of TOS / disclosure notice ids.
+ * Models the outbound {@code <iq xmlns="tos" type="get">} stanza that fetches the per-user accepted
+ * state for a batch of terms-of-service or disclosure notice ids.
  *
- * @apiNote
- * Use this to back WA Web's {@code WAWebTos.TosManager.run} state-pull loop: the
- * caller passes the notice ids known to the local {@code TosManager} (the 3P
- * disclosure, bot agent / invoke / shortcut TOS, biz-bot TOS, MM signal-sharing
- * disclosure, newsletter producer / consumer / admin-invite TOS, biz-broadcast TOS,
- * etc.) and the relay returns the current accepted state plus a refresh interval
- * driving the loop cadence. The reply is parsed by {@link IqQueryTosResponse}.
+ * <p>The caller passes the notice ids it tracks locally (for example the 3P disclosure, bot agent,
+ * invoke and shortcut terms, business-bot terms, Meta-messaging signal-sharing disclosure,
+ * newsletter producer, consumer and admin-invite terms, or business-broadcast terms). The relay
+ * returns the current accepted state for each id plus a refresh interval that drives the cadence of
+ * the local state-pull loop. The reply is parsed by {@link IqQueryTosResponse}.
  *
- * @implNote
- * This implementation mirrors WA Web's {@code WAWebTosJob.queryTosState} verbatim:
- * the outbound payload is a single {@code <request>} child carrying one
- * {@code <notice id="..."/>} grandchild per requested id.
+ * @implNote The outbound payload is a single {@code <request>} child carrying one
+ *           {@code <notice id="..."/>} grandchild per requested id.
  */
 @WhatsAppWebModule(moduleName = "WAWebTosJob")
 public final class IqQueryTosRequest implements IqOperation.Request {
     /**
-     * Holds the notice ids being queried; routed verbatim into one
-     * {@code <notice/>} child per entry.
+     * Holds the notice ids being queried, routed verbatim into one {@code <notice/>} child per
+     * entry.
      */
     private final List<String> noticeIds;
 
     /**
-     * Constructs a new query-tos request bound to the given notice ids.
+     * Constructs a query-tos request bound to the given notice ids.
      *
-     * @apiNote
-     * An empty list produces a {@code <request>} child with no grandchildren; the
-     * relay returns an empty notice list inside a still-valid envelope, which the
-     * caller treats as a no-op.
+     * <p>An empty list produces a {@code <request>} child with no grandchildren; the relay then
+     * returns an empty notice list inside a still-valid envelope, which the caller treats as a
+     * no-op.
      *
      * @param noticeIds the notice ids to query; never {@code null}, may be empty
      * @throws NullPointerException if {@code noticeIds} is {@code null}
@@ -62,15 +57,12 @@ public final class IqQueryTosRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza wrapping the {@code <request>}
-     * payload.
+     * Builds the outbound {@code <iq>} stanza wrapping the {@code <request>} payload.
      *
-     * @apiNote
-     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
-     * attribute, which the dispatch layer assigns.
+     * <p>The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id} attribute,
+     * which the dispatch layer assigns.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <request>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <request>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
@@ -96,6 +88,15 @@ public final class IqQueryTosRequest implements IqOperation.Request {
                 .content(requestNode);
     }
 
+    /**
+     * Compares this request to the given object for equality.
+     *
+     * <p>Two requests are equal when they bind the same notice ids in the same order.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an {@link IqQueryTosRequest} with equal notice ids,
+     *         {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -108,11 +109,21 @@ public final class IqQueryTosRequest implements IqOperation.Request {
         return Objects.equals(this.noticeIds, that.noticeIds);
     }
 
+    /**
+     * Returns a hash code derived from the bound notice ids.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(noticeIds);
     }
 
+    /**
+     * Returns a debug string carrying the bound notice ids.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "IqQueryTosRequest[noticeIds=" + noticeIds + ']';

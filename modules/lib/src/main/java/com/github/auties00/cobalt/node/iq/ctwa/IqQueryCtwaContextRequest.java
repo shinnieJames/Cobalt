@@ -9,52 +9,47 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza requesting the relay-side
- * context record for a Click-To-WhatsApp (CTWA) ad click.
+ * Requests the relay-side context record for a Click-To-WhatsApp (CTWA) ad click.
  *
- * @apiNote
- * Used by the CTWA chat-open flow: when a user taps a "Chat on WhatsApp" ad on Facebook or
- * Instagram, the ad funnel hands the client a {@code (account_number, code,
- * expected_source_url)} triple identifying the ad creative; this request asks the relay to
- * resolve that triple to the headline, body, thumbnail, and (when integrated) WAMO automated
- * greeting message that the chat composer should render. WA Web invokes it from
- * {@code WAWebBizQueryCtwaContextBridge.fetchCtwaContextData}.
+ * <p>This is the outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza for the CTWA
+ * chat-open flow: when a user taps a "Chat on WhatsApp" ad on Facebook or Instagram, the ad
+ * funnel hands the client an {@code (account_number, code, expected_source_url)} triple that
+ * identifies the ad creative. This request asks the relay to resolve that triple into the
+ * headline, body, thumbnail, and (when integrated) the WAMO automated greeting message that
+ * the chat composer should render. The reply is parsed by {@link IqQueryCtwaContextResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryCtwaContextJob")
 public final class IqQueryCtwaContextRequest implements IqOperation.Request {
     /**
-     * Business account's phone number as a legacy-formatted JID string.
+     * Holds the business account's phone number as a legacy-formatted JID string.
      *
-     * @apiNote
-     * WA Web builds this via {@code WAWebWidFactory.createWid(...).toString({legacy:true})};
-     * Cobalt accepts a pre-formatted string so callers may use whichever JID factory they
-     * already have wired up.
+     * <p>Cobalt accepts a pre-formatted string so callers may use whichever JID factory they
+     * already have wired up; the value is serialised verbatim into the {@code <account_number>}
+     * grandchild.
      */
     private final String accountNumber;
 
     /**
-     * CTWA redirect code carried by the originating ad funnel.
+     * Holds the CTWA redirect code carried by the originating ad funnel.
      */
     private final String code;
 
     /**
-     * Expected source URL the client received from the ad funnel.
+     * Holds the expected source URL the client received from the ad funnel.
      *
-     * @apiNote
-     * The relay echoes this back to confirm anti-spoofing: a mismatch between the URL the
-     * relay knows for {@code (code, accountNumber)} and the URL the client received causes
-     * the relay to refuse the query.
+     * <p>The relay echoes this back as an anti-spoofing check: a mismatch between the URL the
+     * relay knows for {@code (code, accountNumber)} and the URL the client received causes the
+     * relay to refuse the query.
      */
     private final String expectedSourceUrl;
 
     /**
-     * Constructs a new query-CTWA-context request.
+     * Constructs a new query-CTWA-context request from the three ad-funnel fields.
      *
-     * @apiNote
-     * All three arguments come from the ad funnel; the request fails relay-side if any of
-     * them is empty or otherwise fails the relay's anti-spoofing check.
+     * <p>All three arguments originate from the ad funnel; the request fails relay-side if any
+     * of them is empty or otherwise fails the relay's anti-spoofing check.
      *
-     * @param accountNumber     the business phone (legacy JID string)
+     * @param accountNumber     the business phone as a legacy JID string
      * @param code              the redirect code
      * @param expectedSourceUrl the expected source URL
      * @throws NullPointerException if any argument is {@code null}
@@ -66,7 +61,7 @@ public final class IqQueryCtwaContextRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the business phone (legacy JID string).
+     * Returns the business phone as a legacy JID string.
      *
      * @return the account number, never {@code null}
      */
@@ -95,10 +90,9 @@ public final class IqQueryCtwaContextRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Produces a {@code <iq xmlns="fb:thrift_iq" type="get">} envelope addressed to
+     * <p>Produces an {@code <iq xmlns="fb:thrift_iq" type="get">} envelope addressed to
      * {@link JidServer#user()} and wrapping three grandchildren in fixed order:
-     * {@code <account_number>}, {@code <code>}, {@code <expected_source_url>}.
+     * {@code <account_number>}, {@code <code>}, and {@code <expected_source_url>}.
      *
      * @implNote
      * This implementation omits the {@code smax_id="CtwaGetContext"} attribute that WA Web
@@ -133,7 +127,11 @@ public final class IqQueryCtwaContextRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to another object for value equality across all three fields.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is an {@link IqQueryCtwaContextRequest} with equal
+     *         {@code accountNumber}, {@code code}, and {@code expectedSourceUrl}
      */
     @Override
     public boolean equals(Object obj) {
@@ -150,7 +148,9 @@ public final class IqQueryCtwaContextRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code derived from all three fields.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -158,7 +158,9 @@ public final class IqQueryCtwaContextRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug string listing all three fields.
+     *
+     * @return the string representation
      */
     @Override
     public String toString() {

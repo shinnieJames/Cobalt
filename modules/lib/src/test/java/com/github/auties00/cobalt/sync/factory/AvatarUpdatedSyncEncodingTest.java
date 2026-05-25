@@ -7,13 +7,11 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Tests the wire-shape parity of Cobalt's {@code avatar_updated_action}
- * encoding against captured WhatsApp Web
- * {@code WAWebStickersAvatarUpdatedSyncAction} encode payloads. The handler
- * itself owns no outbound factory, so this test exists as the encode-side
- * companion to
- * {@link com.github.auties00.cobalt.sync.handler.AvatarUpdatedHandler}
- * whose incoming-side coverage lives in {@code AvatarUpdatedHandlerTest}.
+ * Covers the wire-shape parity of Cobalt's {@code avatar_updated_action}
+ * encoding against the captured WhatsApp Web encode oracle for
+ * {@code handler/avatar-updated/encode}. The check is gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so it no-ops cleanly until
+ * the fixture is present.
  */
 @DisplayName("AvatarUpdated sync encoding")
 class AvatarUpdatedSyncEncodingTest {

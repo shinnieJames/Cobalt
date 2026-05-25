@@ -21,23 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link NewsletterMessageSender}'s SMAX plaintext publish
- * shape against the
- * {@code WAWebNewsletterSendMessageQueryJob.querySendNewsletterMessage}
- * contract.
- *
- * @apiNote
- * Newsletters bypass the Signal envelope; the payload travels in clear
- * inside a {@code <plaintext>} child of the outer {@code <message>}. The
- * tests assert the outer attributes ({@code id}, {@code to}, {@code type},
- * optional {@code media_id}) and that no {@code <enc>} or
- * {@code <participants>} children leak through from the chat send path.
- *
- * @implNote
- * This implementation drives the sender through a captured
- * {@link TestWhatsAppClient} that
- * records the first emitted stanza into an {@link AtomicReference} and
- * returns a synthetic success ack.
+ * Covers the {@link NewsletterMessageSender} plaintext publish shape:
+ * newsletters bypass the Signal envelope, so the payload travels in clear
+ * inside a {@code <plaintext>} child of the outer {@code <message>} with no
+ * {@code <enc>} or {@code <participants>} children. The sender runs against a
+ * {@link TestWhatsAppClient} that captures the first emitted stanza into an
+ * {@link AtomicReference} and returns a synthetic success ack.
  */
 @DisplayName("NewsletterMessageSender")
 class NewsletterMessageSenderTest {
@@ -45,11 +34,6 @@ class NewsletterMessageSenderTest {
     private static final Jid SELF = Jid.of("12025550100@s.whatsapp.net");
     private static final Jid NEWSLETTER = Jid.of("120363402045452944@newsletter");
 
-    /**
-     * Asserts that an ExtendedTextMessage emits a
-     * {@code <message type="text">} with a single {@code <plaintext>}
-     * child and no Signal envelope.
-     */
     @Test
     @DisplayName("send: ExtendedTextMessage -> <message type=\"text\"> with <plaintext> child")
     void textMessage() {

@@ -29,16 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastListHandler} - Cobalt's adapter for
- * {@code WAWebBroadcastListSync}.
- *
- * <p>The handler upserts business broadcast lists keyed by
- * {@code indexParts[1]} and supports both SET (replace) and REMOVE
- * (drop) operations. The batch override mirrors WA Web's malformed-count
- * logging. These tests pin down the wire metadata, the SET / REMOVE
- * behaviours, the malformed-input fallbacks, the default timestamp-based
- * conflict resolution, the batch-level result fan-out, and the static
- * outbound-mutation builders.
+ * Covers {@link BusinessBroadcastListHandler}, which upserts business broadcast lists keyed by
+ * {@code indexParts[1]} and supports both SET (replace) and REMOVE (drop). The batch override
+ * preserves each per-mutation result while tallying a malformed count.
  */
 @DisplayName("BusinessBroadcastListHandler")
 class BusinessBroadcastListHandlerTest {
@@ -59,15 +52,6 @@ class BusinessBroadcastListHandlerTest {
         factory = new BusinessBroadcastListMutationFactory();
     }
 
-    /**
-     * Builds a trusted mutation whose value carries the given broadcast list action.
-     *
-     * @param indexId   the broadcast list id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action    the broadcast list action payload, may be {@code null}
-     * @param operation the sync operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted buildMutation(String indexId, BusinessBroadcastListAction action,
                                                     SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);

@@ -31,21 +31,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link SubscriptionHandler}'s parity with
- * {@code WAWebSubscriptionsSyncV2Sync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the rewrite semantics of a happy
- * {@code SET} (stale subscriptions and feature flags must be cleared
- * before the new snapshot lands), the malformed-value branch when the
- * action is missing, the {@link SyncdOperation#REMOVE} no-op-success
- * branch, the batch-level REMOVE counter logging, and the default
- * conflict-resolution tiebreaker.
- *
- * @implNote
- * The fixture pre-populates a stale subscription and feature flag so
- * the rewrite-semantics test can observe both being wiped on the next
- * {@code SET}; tests that exercise empty payloads omit the seed.
+ * Verifies {@link SubscriptionHandler}: applying an incoming
+ * subscriptions-sync mutation and asserting the subscription and
+ * feature-flag store side-effects, including the rewrite semantics where a
+ * {@code SET} clears stale entries before the new snapshot lands. The
+ * rewrite test pre-populates a stale subscription and feature flag so it
+ * can observe both being wiped; empty-payload tests omit the seed.
  */
 @DisplayName("SubscriptionHandler")
 class SubscriptionHandlerTest {
@@ -54,35 +45,13 @@ class SubscriptionHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
-     * subscription and feature-flag maps start empty.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given subscription and feature-flag lists into a
-     * trusted mutation under the canonical
-     * {@code ["subscriptions_sync_v2"]} index.
-     *
-     * @apiNote
-     * Callers passing {@code null} for either list get an empty list
-     * substituted so the per-mutation rewrite still runs.
-     *
-     * @param op       the mutation operation
-     * @param ts       the mutation timestamp
-     * @param subs     the new subscriptions list, or {@code null} for empty
-     * @param features the new paid-features list, or {@code null} for empty
-     * @return the trusted mutation
-     */
+    // A null subs or features list is substituted with an empty list.
     private static DecryptedMutation.Trusted setMutation(SyncdOperation op, Instant ts,
                                                          List<SubscriptionInfo> subs,
                                                          List<PaidFeature> features) {
@@ -122,7 +91,6 @@ class SubscriptionHandlerTest {
         @Test
         @DisplayName("SET rewrites the subscription table and the feature-flag table")
         void rewritesTables() {
-            // Pre-populate one stale subscription and one stale feature flag
             client.store().putBusinessSubscription(new BusinessSubscriptionBuilder().id("STALE").build());
             client.store().putBusinessFeatureFlag(new BusinessFeatureFlagBuilder().name("stale_feature").enabled(true).build());
 

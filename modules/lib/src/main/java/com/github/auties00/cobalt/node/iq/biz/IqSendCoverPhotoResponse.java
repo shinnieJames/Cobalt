@@ -9,14 +9,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants the relay produces in response
- * to an {@link IqSendCoverPhotoRequest}.
+ * Models the inbound reply the relay produces in response to an {@link IqSendCoverPhotoRequest}.
  *
- * @apiNote
- * Pattern-match the returned variant to drive the cover-photo edit
- * surface: {@link Success} carries no payload, {@link ClientError}
- * surfaces a rejected mutation and {@link ServerError} surfaces a
- * transient internal failure.
+ * <p>The sealed family is pattern-matched to drive the cover-photo edit surface: {@link Success}
+ * carries no payload, {@link ClientError} surfaces a rejected mutation and {@link ServerError}
+ * surfaces a transient internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
@@ -25,10 +22,8 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
     /**
      * Tries each variant in priority order until one matches.
      *
-     * @apiNote
-     * Use this entry point on every IQ stanza ack-ing a cover-photo
-     * upload; the order is {@link Success}, then {@link ClientError},
-     * then {@link ServerError}.
+     * <p>The order is {@link Success}, then {@link ClientError}, then {@link ServerError}; call this
+     * on every IQ stanza acking a cover-photo upload.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -50,37 +45,28 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} variant carrying no payload.
+     * Models the {@code Success} variant, which carries no payload.
      *
-     * @apiNote
-     * The relay echoes a bare {@code <iq type="result"/>} envelope when
-     * the cover-photo update lands; the cover photo itself is then
-     * surfaced via the next business-profile fetch.
+     * <p>The relay echoes a bare {@code <iq type="result"/>} envelope when the cover-photo update
+     * lands; the cover photo itself is then surfaced via the next business-profile fetch.
      */
     final class Success implements IqSendCoverPhotoResponse {
         /**
-         * Constructs a successful reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * success variant has no payload to carry.
+         * Constructs an empty success reply; called from {@link #of(Node, Node)}.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method validates
-         * the {@code <iq type="result">} envelope and returns the
-         * empty success.
+         * <p>The method validates the {@code <iq type="result">} envelope and returns the empty
+         * success; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the success schema
          */
         public static Optional<Success> of(Node node, Node request) {
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
@@ -90,7 +76,10 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another; all {@link Success} instances are equal.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success}
          */
         @Override
         public boolean equals(Object obj) {
@@ -101,7 +90,9 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a constant hash code, since the variant carries no state.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -109,7 +100,9 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string for the empty success.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -118,37 +111,29 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} variant emitted when the relay rejects
-     * the mutation as malformed or referencing an unknown upload.
+     * Models the {@code ClientError} variant, emitted when the relay rejects the mutation as
+     * malformed or referencing an unknown upload.
      *
-     * @apiNote
-     * Use this variant to surface a user-facing 4xx-class error to the
-     * cover-photo edit surface; the relay returns this shape when the
-     * upload artefact has expired or the token does not match.
+     * <p>The relay returns this shape when the upload artefact has expired or the token does not
+     * match; surface it as a user-facing 4xx-class error on the cover-photo edit surface.
      */
     final class ClientError implements IqSendCoverPhotoResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a client-error reply from the relay's {@code <error/>} envelope; called from
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -156,12 +141,7 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to dispatch on the relay-side error code
-         * when surfacing a localised message to the cover-photo edit
-         * surface.
+         * Returns the numeric error code, used to dispatch on the relay-side rejection reason.
          *
          * @return the error code
          */
@@ -172,9 +152,8 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging; the text is server-localised
-         * and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots, so it is suitable for
+         * logging only.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -183,18 +162,15 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>The method delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to
+         * extract the (code, text) envelope; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -205,7 +181,10 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal client error
          */
         @Override
         public boolean equals(Object obj) {
@@ -220,7 +199,9 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -228,7 +209,9 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the error code and text.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -238,37 +221,29 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} variant emitted when the relay returns a
-     * transient internal-failure status while processing the mutation.
+     * Models the {@code ServerError} variant, emitted when the relay returns a transient
+     * internal-failure status while processing the mutation.
      *
-     * @apiNote
-     * Use this variant to drive a backoff-and-retry path in the
-     * cover-photo edit surface; the relay returns this shape when the
-     * business-profile backend is temporarily unavailable.
+     * <p>The relay returns this shape when the business-profile backend is temporarily unavailable;
+     * use it to drive a backoff-and-retry path on the cover-photo edit surface.
      */
     final class ServerError implements IqSendCoverPhotoResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a server-error reply from the relay's {@code <error/>} envelope; called from
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -276,11 +251,7 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to log the relay-side error code; a 5xx-class
-         * value is the canonical retry trigger.
+         * Returns the numeric error code; a 5xx-class value is the canonical retry trigger.
          *
          * @return the error code
          */
@@ -291,9 +262,8 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging only; the text is server-localised
-         * and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots, so it is suitable for
+         * logging only.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -302,18 +272,15 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>The method delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to
+         * extract the (code, text) envelope; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -324,7 +291,10 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal server error
          */
         @Override
         public boolean equals(Object obj) {
@@ -339,7 +309,9 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -347,7 +319,9 @@ public sealed interface IqSendCoverPhotoResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the error code and text.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {

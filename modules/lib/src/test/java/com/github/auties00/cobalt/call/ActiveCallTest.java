@@ -24,28 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.auties00.cobalt.call.internal.CallService;
 
 /**
- * Unit tests for {@link ActiveCall}'s state machine and lifecycle —
- * verifies transitions to {@link CallState#ENDED}, the
- * {@link CallEndReason} mapping, mute toggles, the four media-port
- * sentinels, and the {@link IncomingCall#markResponded()} one-shot
- * gate that {@code WhatsAppClient.acceptCall}/{@code rejectCall} rely
- * on.
- *
- * <p>These tests drive a real {@link CallService} against a
- * {@link TestWhatsAppClient}. The previous {@code RecordingEngine}
- * subclass-stub has been removed — outgoing stanzas are asserted on
- * the {@code TestWhatsAppClient}'s {@code onNodeSent} pipeline instead.
+ * Covers {@link ActiveCall}'s state machine and lifecycle: transitions to
+ * {@link CallState#ENDED}, the {@link CallEndReason} mapping, mute toggles,
+ * the media-port sentinels, and the {@link IncomingCall#markResponded()}
+ * one-shot gate. Each test drives a real {@link CallService} against a
+ * {@link TestWhatsAppClient} and asserts outgoing stanzas on that client's
+ * {@code onNodeSent} pipeline.
  */
 public class ActiveCallTest {
 
     private static final Jid PEER = Jid.of("12345@s.whatsapp.net");
     private static final Jid SELF = Jid.of("99999@s.whatsapp.net");
 
-    /**
-     * Wires a real {@link CallService} + {@link TestWhatsAppClient} +
-     * outgoing-stanza recorder. Owned by each test; tests inspect
-     * {@link #sentNodes} to assert wire behaviour.
-     */
     private static final class Wiring {
         final TestWhatsAppClient client;
         final CallService service;
@@ -60,6 +50,7 @@ public class ActiveCallTest {
             this.service = new CallService(client, null);
         }
 
+        // Counts dispatched <description><childTag/></description> stanzas.
         long count(String description, String childTag) {
             return sentNodes.stream()
                     .filter(n -> description.equals(n.description()))
@@ -80,11 +71,10 @@ public class ActiveCallTest {
 
         assertEquals(CallState.ENDED, call.state());
         assertEquals(CallEndReason.HANGUP, call.endReason().orElseThrow());
-        // Exactly one outgoing <call><terminate/></call>.
         assertEquals(1, w.count("call", "terminate"),
                 "hangup must emit one <call><terminate/></call>");
 
-        // remoteAudioSource.next() must not block once the call has ended.
+        // next() must not block once the call has ended.
         assertNull(call.remoteAudioSource().next());
     }
 
@@ -97,7 +87,6 @@ public class ActiveCallTest {
 
         assertEquals(CallState.ENDED, call.state());
         assertEquals(CallEndReason.HANGUP, call.endReason().orElseThrow());
-        // Peer ended; we did NOT send a terminate stanza.
         assertEquals(0, w.count("call", "terminate"),
                 "peer-driven end must not send our own terminate");
     }
@@ -209,12 +198,10 @@ public class ActiveCallTest {
         var w = new Wiring();
         var call = new ActiveCall(w.service, "id-tx", PEER, PEER, SELF, true, CallOptions.audio());
 
-        // Fresh call → transport is IDLE.
         assertEquals(
                 ActiveCallTransport.State.IDLE,
                 call.transport().state());
 
-        // hangup → call → ENDED → transport closes.
         call.hangup();
         assertEquals(CallState.ENDED, call.state());
         assertEquals(

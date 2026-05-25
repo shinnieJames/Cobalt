@@ -18,39 +18,36 @@ import java.util.SequencedCollection;
  * Sealed family of inbound reply variants produced by the relay in response to an
  * {@link IqSyncdServerSyncRequest}.
  *
- * @apiNote
- * Switch on the returned variant to discriminate the relay outcome: a {@link Success}
+ * <p>The returned variant discriminates the relay outcome: a {@link Success}
  * carries the typed per-collection projections (state, version, patches and
- * snapshot), a {@link ClientError} carries the global {@code SyncdFatalError} codes
- * ({@code 400, 404, 405, 406}) that WA Web treats as non-retryable, and a
- * {@link ServerError} carries the transient codes that WA Web wraps as
- * {@code SyncdRetryableError} and retries with exponential backoff plus the relay's
- * optional backoff hint.
+ * snapshot), a {@link ClientError} carries the global error codes ({@code 400},
+ * {@code 404}, {@code 405}, {@code 406}) WA Web treats as non-retryable, and a
+ * {@link ServerError} carries the transient codes WA Web retries with exponential
+ * backoff plus the relay's optional backoff hint.
  *
  * @implNote
- * This implementation mirrors WA Web's {@code WAWebSyncdResponseParser.syncResponseParser}
- * verbatim for the per-collection projection, except the {@code <patch>} and
- * {@code <snapshot>} payloads are surfaced as raw byte arrays (Cobalt decodes the
- * {@code SyncdPatch} / {@code ExternalBlobReference} protobufs at a higher layer
- * rather than inline in the parser).
+ * This implementation surfaces the per-collection {@code <patch>} and
+ * {@code <snapshot>} payloads as raw byte arrays; Cobalt decodes the
+ * {@code SyncdPatch} and {@code ExternalBlobReference} protobufs at a higher layer
+ * rather than inline in the parser.
  */
 public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
         permits IqSyncdServerSyncResponse.Success, IqSyncdServerSyncResponse.ClientError, IqSyncdServerSyncResponse.ServerError {
 
     /**
-     * Parses the inbound stanza into the first matching {@link IqSyncdServerSyncResponse}
-     * variant.
+     * Parses the inbound stanza into the first matching
+     * {@link IqSyncdServerSyncResponse} variant.
      *
-     * @apiNote
-     * Try this once per inbound reply; the priority ordering (success, then
-     * client-error, then server-error) matches the wire shape and never returns
-     * ambiguous matches.
+     * <p>The priority ordering (success, then client-error, then server-error)
+     * matches the wire shape and never returns ambiguous matches; the method is
+     * called once per inbound reply.
      *
      * @implNote
      * This implementation calls each variant's {@code of(node, request)} in turn
      * and returns the first present result.
      *
-     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param node    the inbound IQ stanza received from the relay; never
+     *                {@code null}
      * @param request the original outbound stanza; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or empty when no
      *         documented variant matched
@@ -73,11 +70,10 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
     }
 
     /**
-     * Success variant. The relay returned per-collection projections inside the
-     * {@code <sync>} envelope.
+     * Success variant carrying the per-collection projections returned by the relay
+     * inside the {@code <sync>} envelope.
      *
-     * @apiNote
-     * Inspect {@link #collections()} to drive the per-collection apply pipeline;
+     * <p>The {@link #collections()} list drives the per-collection apply pipeline;
      * each entry's {@link IqSyncdServerSyncResponseCollection#state() state} drives
      * the next-iteration decision (apply, reconcile, retry or stop) per
      * {@link IqSyncdServerSyncCollectionState}.
@@ -114,25 +110,23 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
         }
 
         /**
-         * Parses the inbound stanza into a {@link Success} variant when it
-         * matches the success schema.
+         * Parses the inbound stanza into a {@link Success} variant when it matches
+         * the success schema.
          *
-         * @apiNote
-         * Returns empty when the SMAX result-envelope check fails or when the
-         * {@code <sync>} child is absent. {@code <collection>} children missing
-         * the {@code name} attribute are silently skipped (WA Web throws a
-         * {@code SyncdFatalError} for the same condition; see implementation note
-         * below).
+         * <p>Returns empty when the result-envelope check in
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} fails or when the
+         * {@code <sync>} child is absent. {@code <collection>} children missing the
+         * {@code name} attribute are silently skipped.
          *
          * @implNote
-         * This implementation silently drops nameless {@code <collection>}
-         * children instead of throwing, deferring fatal-collection-name handling
-         * to the caller's apply pipeline rather than the parser.
+         * This implementation silently drops nameless {@code <collection>} children
+         * instead of throwing, deferring fatal-collection-name handling to the
+         * caller's apply pipeline rather than the parser.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty when
-         *         the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the
+         *         stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSyncdResponseParser",
                 exports = "syncResponseParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -155,20 +149,19 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
          * Projects a single {@code <collection/>} child into a typed
          * {@link IqSyncdServerSyncResponseCollection}.
          *
-         * @apiNote
-         * Internal helper for {@link #of(Node, Node)}; not exposed because the
-         * surrounding success-envelope assertions belong to the caller.
+         * <p>The {@code <collection/>} child lacking a {@code name} attribute yields
+         * an empty result and is skipped by {@link #of(Node, Node)}.
          *
          * @implNote
-         * This implementation mirrors WA Web's {@code state-of-collection} branch
-         * inside {@code syncResponseParser}: {@code 409} maps to
-         * {@link IqSyncdServerSyncCollectionState#CONFLICT} or
-         * {@link IqSyncdServerSyncCollectionState#CONFLICT_HAS_MORE} depending on
-         * the {@code has_more_patches} attribute, {@code 400/404/405} map to
-         * {@link IqSyncdServerSyncCollectionState#ERROR_FATAL}, any other code
-         * maps to {@link IqSyncdServerSyncCollectionState#ERROR_RETRY}, and the
-         * absence of an error maps to {@link IqSyncdServerSyncCollectionState#SUCCESS}
-         * or {@link IqSyncdServerSyncCollectionState#SUCCESS_HAS_MORE}.
+         * This implementation derives the state from the error branch: code
+         * {@code 409} maps to {@link IqSyncdServerSyncCollectionState#CONFLICT} or
+         * {@link IqSyncdServerSyncCollectionState#CONFLICT_HAS_MORE} depending on the
+         * {@code has_more_patches} attribute, codes {@code 400}, {@code 404} and
+         * {@code 405} map to {@link IqSyncdServerSyncCollectionState#ERROR_FATAL},
+         * any other code maps to {@link IqSyncdServerSyncCollectionState#ERROR_RETRY},
+         * and the absence of an error maps to
+         * {@link IqSyncdServerSyncCollectionState#SUCCESS} or
+         * {@link IqSyncdServerSyncCollectionState#SUCCESS_HAS_MORE}.
          *
          * @param child the {@code <collection/>} node; never {@code null}
          * @return an {@link Optional} carrying the projection, or empty when the
@@ -214,6 +207,14 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
                     name, state, version, patches, snapshot));
         }
 
+        /**
+         * Compares this success reply to another for equality across the
+         * per-collection projections.
+         *
+         * @param obj the object to compare against, or {@code null}
+         * @return {@code true} when {@code obj} is a {@link Success} with an equal
+         *         collection list
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -226,11 +227,23 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
             return Objects.equals(this.collections, that.collections);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)} over the
+         * per-collection projections.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(collections);
         }
 
+        /**
+         * Returns a debugging representation listing the per-collection projections.
+         *
+         * @return a string of the form
+         *         {@code IqSyncdServerSyncResponse.Success[collections=...]}
+         */
         @Override
         public String toString() {
             return "IqSyncdServerSyncResponse.Success[collections=" + collections + ']';
@@ -238,14 +251,12 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
     }
 
     /**
-     * Client-error variant. The relay rejected the whole sync with a code WA Web
-     * treats as fatal ({@code 400, 404, 405, 406}).
+     * Client-error variant produced when the relay rejects the whole sync with a
+     * code WA Web treats as fatal ({@code 400}, {@code 404}, {@code 405},
+     * {@code 406}).
      *
-     * @apiNote
-     * WA Web wraps each code in a {@code SyncdFatalError} after reporting the
-     * specific {@code SyncdFatalErrorType} WAM event (e.g.
-     * {@code XMPP_BAD_REQUEST_GLOBAL_ERROR} for 400). Treat the same way; the
-     * sync iteration is not retryable.
+     * <p>The sync iteration is not retryable; the caller surfaces the error rather
+     * than rescheduling.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdServerSync")
     final class ClientError implements IqSyncdServerSyncResponse {
@@ -255,7 +266,8 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text, or {@code null} when the
+         * relay omitted it.
          */
         private final String errorText;
 
@@ -293,14 +305,14 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
          * Parses the inbound stanza into a {@link ClientError} variant when it
          * matches the standard SMAX client-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails, delegating the envelope
+         * and code-range validation entirely to
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the
+         *         stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSyncdServerSync",
                 exports = "serverSync", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -312,6 +324,14 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this client-error reply to another for equality across the error
+         * code and text.
+         *
+         * @param obj the object to compare against, or {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with an
+         *         equal code and text
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -325,11 +345,23 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)} over the error
+         * code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debugging representation of the error code and text.
+         *
+         * @return a string of the form
+         *         {@code IqSyncdServerSyncResponse.ClientError[errorCode=..., errorText=...]}
+         */
         @Override
         public String toString() {
             return "IqSyncdServerSyncResponse.ClientError[errorCode=" + errorCode
@@ -338,13 +370,11 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
     }
 
     /**
-     * Server-error variant. The relay encountered a transient internal failure
-     * (typically a code outside the fatal set) processing the sync.
+     * Server-error variant produced when the relay encounters a transient internal
+     * failure (typically a code outside the fatal set) processing the sync.
      *
-     * @apiNote
-     * WA Web wraps this in a {@code SyncdRetryableError} carrying the relay's
-     * backoff hint and reschedules the sync iteration through the standard
-     * exponential-backoff loop.
+     * <p>The sync iteration is rescheduled through the standard exponential-backoff
+     * loop using the relay's optional backoff hint.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdServerSync")
     final class ServerError implements IqSyncdServerSyncResponse {
@@ -354,7 +384,8 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * Holds the optional human-readable error text.
+         * Holds the optional human-readable error text, or {@code null} when the
+         * relay omitted it.
          */
         private final String errorText;
 
@@ -392,14 +423,14 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
          * Parses the inbound stanza into a {@link ServerError} variant when it
          * matches the standard SMAX server-error envelope.
          *
-         * @apiNote
-         * Returns empty when the envelope check fails; delegates entirely to
+         * <p>Returns empty when the envelope check fails, delegating the envelope
+         * and code-range validation entirely to
          * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or empty
-         *         when the stanza does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the
+         *         stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSyncdServerSync",
                 exports = "serverSync", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -411,6 +442,14 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this server-error reply to another for equality across the error
+         * code and text.
+         *
+         * @param obj the object to compare against, or {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with an
+         *         equal code and text
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -424,11 +463,23 @@ public sealed interface IqSyncdServerSyncResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)} over the error
+         * code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debugging representation of the error code and text.
+         *
+         * @return a string of the form
+         *         {@code IqSyncdServerSyncResponse.ServerError[errorCode=..., errorText=...]}
+         */
         @Override
         public String toString() {
             return "IqSyncdServerSyncResponse.ServerError[errorCode=" + errorCode

@@ -15,67 +15,57 @@ import java.io.UncheckedIOException;
  * Outbound MEX mutation that transfers ownership of a community from the
  * current owner to another admin.
  *
- * @apiNote Drives the "transfer ownership" action in the community settings.
- * The mutation updates the server-side role mapping for the group; the
- * response echoes the affected group id and the resulting LID migration
- * state (addressing mode) so callers can update their local view of the
- * community before replaying cached actions. Surfaced from
- * {@code WAWebTransferCommunityOwnershipAction} via
- * {@code WAWebMexTransferCommunityOwnershipJob.mexTransferCommunityOwnershipJob};
- * WA Web follows the mutation with
- * {@code WAWebGroupQueryJob.queryAndUpdateGroupMetadataById} when the
- * addressing mode actually changed.
+ * <p>This mutation backs the transfer-ownership action in the community
+ * settings. It updates the server-side role mapping for the group; the reply,
+ * modelled by {@link TransferCommunityOwnershipMexResponse}, echoes the
+ * affected group id and the resulting LID migration state (addressing mode) so
+ * callers can update their local view of the community before replaying cached
+ * actions. WA Web follows the mutation with a group-metadata refresh only when
+ * the addressing mode actually changed.
  *
- * @implNote This implementation accepts the GraphQL {@code input} variable
- * as a single opaque pre-serialised JSON string rather than modelling its
- * inner shape ({@code community_id}, the {@code users_role} update list and
- * the {@code localParentGroupAddressingMode} flag). Callers serialise the
- * input themselves and pass the resulting JSON; the field is dropped from
- * the wire payload when {@code null}.
+ * @implNote This implementation accepts the GraphQL {@code input} variable as a
+ * single opaque pre-serialised JSON string rather than modelling its inner
+ * shape ({@code community_id}, the {@code users_role} update list and the
+ * {@code localParentGroupAddressingMode} flag). Callers serialise the input
+ * themselves and pass the resulting JSON; the field is dropped from the wire
+ * payload when {@code null}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexTransferCommunityOwnershipJob")
 public final class TransferCommunityOwnershipMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
-     * {@code WAWebMexTransferCommunityOwnershipJobMutation} document.
+     * Compiled GraphQL query identifier for the transfer-ownership document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebMexTransferCommunityOwnershipJobMutation.graphql}. The
-     * relay maps this id to its persisted operation; the GraphQL text is
-     * never sent on the wire.
+     * <p>The relay maps this id to its persisted operation; the GraphQL text
+     * is never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexTransferCommunityOwnershipJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "29643783178598899";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this mutation is
-     * dispatched.
-     *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the mutation in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * GraphQL operation name carried by this mutation.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexTransferCommunityOwnershipJob", exports = "mexTransferCommunityOwnershipJob",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexTransferCommunityOwnershipJob";
 
+    /**
+     * Pre-serialised GraphQL {@code input} variable, or {@code null} to omit
+     * it.
+     */
     private final String input;
 
     /**
-     * Constructs a new request carrying the serialised input payload with
-     * the community id and the new owner's id.
+     * Constructs a new request carrying the serialised input payload with the
+     * community id and the new owner's id.
      *
-     * @apiNote The WA Web {@code input} variable nests
-     * {@code community_id}, a {@code users_role} array (the new
-     * {@code "SUPERADMIN_MEMBER"} promotion) and the
-     * {@code localParentGroupAddressingMode} flag. Callers serialise this
-     * themselves and pass the resulting JSON string; passing {@code null}
-     * omits the field entirely.
+     * <p>The WA Web {@code input} variable nests {@code community_id}, a
+     * {@code users_role} array (the new {@code "SUPERADMIN_MEMBER"} promotion)
+     * and the {@code localParentGroupAddressingMode} flag. Callers serialise
+     * this themselves and pass the resulting JSON string; passing {@code null}
+     * omits the field entirely from the wire payload.
      *
-     * @param input the serialised input variable, may be {@code null} to
-     *              omit
+     * @param input the serialised input variable, may be {@code null}
      */
     public TransferCommunityOwnershipMexRequest(String input) {
         this.input = input;
@@ -101,12 +91,9 @@ public final class TransferCommunityOwnershipMexRequest implements MexOperation.
      * {@inheritDoc}
      *
      * @implNote This implementation streams the GraphQL variables through
-     * fastjson2's {@link JSONWriter} and only emits the {@code input} field
-     * when the constructor argument is non-null. The wrapped envelope is
-     * built through
+     * fastjson2's {@link JSONWriter} and emits the {@code input} field only
+     * when the constructor argument is non-null. The envelope is built through
      * {@link MexOperation.Request.Json#createMexNode(String, String)}.
-     *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
      */
     @WhatsAppWebExport(moduleName = "WAWebMexTransferCommunityOwnershipJob", exports = "mexTransferCommunityOwnershipJob",
             adaptation = WhatsAppAdaptation.ADAPTED)

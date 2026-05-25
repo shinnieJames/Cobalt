@@ -17,13 +17,9 @@ import java.util.Optional;
  * The outbound stanza that asks the relay for a silent CTWA biz
  * access-token nonce.
  *
- * @apiNote
- * Used by the CTWA (click-to-WhatsApp) biz-token-nonce flow in
- * {@code WAWebCTWABizAccessTokenNonceManager.fetchNonce}, which
- * polls the relay during ad-account flows that need to call into
- * the Meta token-exchange surface. Carries no payload of its own;
- * the optional {@code from} attribute is the only knob and is
- * normally left {@code null}.
+ * <p>The click-to-WhatsApp biz-token-nonce flow polls the relay during ad-account flows that need
+ * to call into the Meta token-exchange surface. The request carries no payload of its own; the
+ * optional {@code from} attribute is the only knob and is normally left {@code null}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizAccessTokenRequestSilentNonceRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizAccessTokenHackBaseIQGetRequestMixin")
@@ -38,9 +34,7 @@ public final class SmaxRequestSilentNonceRequest implements SmaxOperation.Reques
     /**
      * Constructs a request with no {@code from} echo.
      *
-     * @apiNote
-     * The default form expected by {@code fetchNonce}, which calls
-     * {@code sendRequestSilentNonceRPC({})} with no arguments.
+     * <p>This is the default form for the standard silent-nonce fetch, which carries no arguments.
      */
     public SmaxRequestSilentNonceRequest() {
         this(null);
@@ -50,10 +44,8 @@ public final class SmaxRequestSilentNonceRequest implements SmaxOperation.Reques
      * Constructs a request optionally echoing the supplied user JID
      * onto the {@code from} attribute.
      *
-     * @apiNote
-     * Reserved for multi-device callers that need the outbound IQ
-     * to look like it originated from a specific linked user JID;
-     * standard CTWA callers pass {@code null}.
+     * <p>Reserved for multi-device callers that need the outbound IQ to look like it originated
+     * from a specific linked user JID; standard CTWA callers pass {@code null}.
      *
      * @param fromUserJid the optional user JID; may be {@code null}
      */
@@ -64,10 +56,8 @@ public final class SmaxRequestSilentNonceRequest implements SmaxOperation.Reques
     /**
      * Returns the optional {@code from} echo.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the request was built
-     * without a {@code from} echo (the standard {@code fetchNonce}
-     * case).
+     * <p>Returns {@link Optional#empty()} when the request was built without a {@code from} echo
+     * (the standard silent-nonce fetch case).
      *
      * @return an {@link Optional} carrying the user JID
      */
@@ -78,10 +68,10 @@ public final class SmaxRequestSilentNonceRequest implements SmaxOperation.Reques
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Stamps {@code xmlns="fb:thrift_iq"}, {@code type="get"},
-     * {@code to="s.whatsapp.net"} and the optional {@code from}
-     * echo. The IQ {@code id} is assigned by the dispatcher.
+     * @implNote
+     * This implementation stamps {@code xmlns="fb:thrift_iq"}, {@code type="get"},
+     * {@code to="s.whatsapp.net"} and the optional {@code from} echo. The IQ {@code id} is assigned
+     * by the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizAccessTokenRequestSilentNonceRequest",
@@ -102,6 +92,9 @@ public final class SmaxRequestSilentNonceRequest implements SmaxOperation.Reques
         return builder;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -114,11 +107,17 @@ public final class SmaxRequestSilentNonceRequest implements SmaxOperation.Reques
         return Objects.equals(this.fromUserJid, that.fromUserJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(fromUserJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxRequestSilentNonceRequest[fromUserJid=" + fromUserJid + ']';

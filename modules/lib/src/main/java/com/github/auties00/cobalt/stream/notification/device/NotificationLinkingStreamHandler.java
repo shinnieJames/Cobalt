@@ -26,27 +26,19 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * Handles the companion-linking and per-feature push notification family
- * dispatched by {@link NotificationDeviceDispatcher}.
+ * Handles the companion-linking and per-feature push notification family dispatched by
+ * {@link NotificationDeviceDispatcher}.
  *
- * @apiNote
- * One Cobalt handler covers seven WA Web modules:
- * {@code WAWebHandleCompanionReqRefreshNotification},
- * {@code WAWebAltDeviceLinkingHandleNotification},
- * {@code WAWebAccountLinkingNotificationHandler},
- * {@code WAWebHandleHostedNotification},
- * {@code WAWebHandleGrowthNotification},
- * {@code WAWebHandlePsa},
- * and {@code WAWebHandleNewsletterNotification} (with the QP-surface and
- * wa_chat sub-cases reachable from {@code WAWebCommsHandleLoggedInStanza}
- * dispatching to {@code WAWebHandlePsa}). The {@code type} attribute
- * selects the branch.
+ * <p>The {@code type} attribute selects the branch. The handler covers the companion pairing-code
+ * refresh ({@code link_code_companion_reg}, {@code companion_reg_refresh}), the Meta account-linking
+ * {@code waffle} event, the {@code hosted} CTWA coexistence notification, the {@code w:growth}
+ * invite notification, the {@code psa} announcement notification, and the {@code newsletter}
+ * live-update notification. Every supported stanza is acknowledged at the end of {@link #handle(Node)}
+ * even when its mutation throws; unsupported types return without side-effects.
  *
- * @implNote
- * This implementation collapses the seven WA Web modules into one
- * Cobalt class because they share the same per-stanza ack pattern
- * (read {@code type}, branch, ACK in {@code finally}) and so live more
- * comfortably under one type than under seven near-empty ones.
+ * @implNote This implementation collapses ten WA Web modules into one Cobalt class because they
+ * share the same per-stanza ack pattern (read {@code type}, branch, ACK in {@code finally}) and so
+ * live more comfortably under one type than under ten near-empty ones.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleCompanionReqRefreshNotification")
 @WhatsAppWebModule(moduleName = "WAWebAltDeviceLinkingHandleNotification")
@@ -61,19 +53,15 @@ import java.util.function.Consumer;
 final class NotificationLinkingStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger used for warnings about parse failures and debug messages
-     * about ignored sub-types.
+     * Logs warnings about parse failures and debug messages about ignored sub-types.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationLinkingStreamHandler.class.getName());
 
     /**
-     * Set of notification {@code type} values routed to this handler by
-     * the dispatcher.
+     * Holds the notification {@code type} values routed to this handler by the dispatcher.
      *
-     * @apiNote
-     * Used by {@link #handle(Node)} as the first-line filter; any
-     * stanza whose type is outside this set returns without
-     * side-effects.
+     * <p>Consulted by {@link #handle(Node)} as the first-line filter; any stanza whose type is
+     * outside this set returns without side-effects.
      */
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "link_code_companion_reg",
@@ -86,80 +74,70 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     );
 
     /**
-     * The {@code notification_metadata.event} integer that WA Web's
-     * {@code WAWebAccountLinkingConstants.AccountLinkingNotificationEvent}
-     * enum names {@code ACCOUNT_LINKED}.
+     * Holds the {@code notification_metadata.event} integer that WA Web's
+     * {@code AccountLinkingNotificationEvent} enum names {@code ACCOUNT_LINKED}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_ACCOUNT_LINKED = 1;
 
     /**
-     * The {@code notification_metadata.event} integer that WA Web's
-     * {@code AccountLinkingNotificationEvent} enum names
-     * {@code ACCOUNT_UNLINKED}.
+     * Holds the {@code notification_metadata.event} integer that WA Web's
+     * {@code AccountLinkingNotificationEvent} enum names {@code ACCOUNT_UNLINKED}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_ACCOUNT_UNLINKED = 2;
 
     /**
-     * The {@code notification_metadata.event} integer that WA Web's
-     * {@code AccountLinkingNotificationEvent} enum names
-     * {@code STATE_DELETED}.
+     * Holds the {@code notification_metadata.event} integer that WA Web's
+     * {@code AccountLinkingNotificationEvent} enum names {@code STATE_DELETED}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_STATE_DELETED = 4;
 
     /**
-     * The {@code notification_metadata.event} integer that WA Web's
-     * {@code AccountLinkingNotificationEvent} enum names
-     * {@code STATE_SUSPENDED}.
+     * Holds the {@code notification_metadata.event} integer that WA Web's
+     * {@code AccountLinkingNotificationEvent} enum names {@code STATE_SUSPENDED}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_STATE_SUSPENDED = 5;
 
     /**
-     * The {@code notification_metadata.event} integer that WA Web's
-     * {@code AccountLinkingNotificationEvent} enum names
-     * {@code CLIENT_RESYNC}.
+     * Holds the {@code notification_metadata.event} integer that WA Web's
+     * {@code AccountLinkingNotificationEvent} enum names {@code CLIENT_RESYNC}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_CLIENT_RESYNC = 6;
 
     /**
-     * The {@link WhatsAppClient} used for store reads, newsletter
-     * queries, message queries, and ack sends.
+     * Provides store reads, newsletter queries, message queries, and ack sends.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The {@link CompanionPairingService} used by
-     * {@link #handleLinkCodeRefresh(Node)} to drive the
-     * {@code primary_hello} and {@code refresh_code} steps of the
-     * pairing-code handshake on the companion side.
+     * Drives the {@code primary_hello} and {@code refresh_code} steps of the pairing-code handshake
+     * on the companion side.
+     *
+     * <p>May be {@code null} when the local account is not a pairing companion, in which case
+     * {@link #handleLinkCodeRefresh(Node)} short-circuits the pairing-code branch.
      */
     private final CompanionPairingService deviceLinkingService;
 
     /**
-     * The {@link WamService} used to commit the
-     * {@code ChatMessageCounts} event after a successful invite-driven
-     * new-chat creation in {@link #handleGrowth(Node)}.
+     * Commits the {@code ChatMessageCounts} event after a successful invite-driven new-chat
+     * creation in {@link #handleGrowth(Node)}.
      */
     private final WamService wamService;
 
     /**
-     * The {@link AckSender} used to ship the post-processing
-     * {@code <ack class="notification">} stanza; the {@code type}
-     * attribute is inherited from the inbound stanza since this
-     * handler covers seven different notification types.
+     * Ships the post-processing {@code <ack class="notification">} stanza, reflecting the inbound
+     * stanza's {@code type} attribute because this handler covers several notification types.
      */
     private final AckSender ackSender;
 
     /**
      * Constructs the handler with shared dependencies.
      *
-     * @apiNote
-     * Called once by {@link NotificationDeviceDispatcher}; embedders
-     * do not instantiate this handler directly.
+     * <p>Called once by {@link NotificationDeviceDispatcher}.
      *
      * @param whatsapp             the {@link WhatsAppClient}
      * @param deviceLinkingService the {@link CompanionPairingService}, may be {@code null} when the local account is not a pairing companion
@@ -179,14 +157,12 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Routes the notification to its per-type branch and always sends
-     * the protocol-level ACK.
+     * Routes the notification to its per-type branch and always sends the protocol-level ACK.
      *
-     * @apiNote
-     * Invoked by {@link NotificationDeviceDispatcher}. Stanzas whose
-     * type is outside {@link #SUPPORTED_TYPES} return without
-     * side-effects; valid stanzas always get an ACK even when the
-     * mutation throws.
+     * <p>Stanzas whose type is outside {@link #SUPPORTED_TYPES} return without side-effects. For a
+     * supported stanza the matching branch handler runs inside a {@code try} block, any failure is
+     * caught and warning-logged, and the ACK is sent in the {@code finally} block so a valid stanza
+     * is always acknowledged even when its mutation throws.
      *
      * @param node the incoming {@code <notification>} stanza
      */
@@ -220,25 +196,18 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles {@code companion_reg_refresh} (regenerate ADV secret) and
-     * {@code link_code_companion_reg} (process pairing-code handshake)
-     * notifications.
+     * Handles the companion-registration refresh and pairing-code handshake notifications.
      *
-     * @apiNote
-     * The {@code companion_reg_refresh} branch generates a fresh
-     * 32-byte ADV secret on the companion side, mirroring WA Web's
-     * {@code WAWebHandleCompanionReqRefreshNotification.d}. The
-     * {@code link_code_companion_reg} branch reads the stage attribute
-     * and drives the pairing-code handshake step
-     * ({@code primary_hello} ships the finish IQ via
-     * {@link CompanionPairingService#handlePrimaryHello(byte[], byte[], byte[])};
+     * <p>The {@code companion_reg_refresh} branch generates a fresh 32-byte ADV secret on the
+     * companion side and returns. The {@code link_code_companion_reg} branch reads the {@code stage}
+     * attribute of the {@code <link_code_companion_reg>} child and drives the pairing-code handshake
+     * step: {@code primary_hello} ships the finish IQ via
+     * {@link CompanionPairingService#handlePrimaryHello(byte[], byte[], byte[])} once the wrapped
+     * primary ephemeral public key, primary identity public key, and pairing ref are all present;
      * {@code refresh_code} updates the cached ref via
-     * {@link CompanionPairingService#handleRefreshCode(byte[])}).
-     *
-     * @implNote
-     * This implementation skips the pairing-code branch when the
-     * embedder did not supply a pairing service, matching WA Web's
-     * own short-circuit on missing handler state.
+     * {@link CompanionPairingService#handleRefreshCode(byte[])}. Any other stage is debug-logged and
+     * ignored, and the branch returns early when no pairing service, no child, or no stage is
+     * available.
      *
      * @param node the notification stanza
      */
@@ -293,21 +262,20 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Applies the parsed {@code waffle} (Meta account-linking) event to
-     * the local linked-account state.
+     * Applies the parsed {@code waffle} Meta account-linking event to the local linked-account
+     * state.
      *
-     * @apiNote
-     * Drives the in-app affordance for the
-     * "your WhatsApp account is linked to a Meta account" UI surface.
-     * State transitions: STATE_SUSPENDED -> PAUSED, STATE_DELETED ->
-     * UNLINKED, CLIENT_RESYNC -> ACTIVE. ACCOUNT_LINKED and
-     * ACCOUNT_UNLINKED conditionally transition to ACTIVE when the
-     * {@code client_resync} attribute is {@code "true"}, matching WA
-     * Web's
-     * {@code WAWebAccountLinkingNotificationHandler.handleAccountLinkingNotification}
-     * which only re-runs
-     * {@code WAWebAccountLinkingHandler.handleResyncState} on the
-     * resync hint.
+     * <p>Reads the {@code event} integer and the {@code client_resync} flag from the
+     * {@code <notification_metadata>} child and transitions
+     * {@link WaffleAccountLinkStateAction.AccountLinkState} accordingly:
+     * {@link #WAFFLE_EVENT_STATE_SUSPENDED} maps to {@code PAUSED},
+     * {@link #WAFFLE_EVENT_STATE_DELETED} maps to {@code UNLINKED}, and
+     * {@link #WAFFLE_EVENT_CLIENT_RESYNC} maps to {@code ACTIVE}.
+     * {@link #WAFFLE_EVENT_ACCOUNT_LINKED} and {@link #WAFFLE_EVENT_ACCOUNT_UNLINKED} transition to
+     * {@code ACTIVE} only when the {@code client_resync} attribute is {@code "true"}, matching WA
+     * Web which only re-runs the resync-state handler on the resync hint. A stanza with no
+     * {@code <notification_metadata>} child, and any unhandled event integer, is debug-logged and
+     * ignored.
      *
      * @param node the notification stanza
      */
@@ -347,28 +315,19 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Applies the parsed {@code hosted} CTWA coexistence notification
-     * to the local hosted-automation flags.
+     * Applies the parsed {@code hosted} CTWA coexistence notification to the local hosted-automation
+     * flags.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleHostedNotification.handleHostedNotification}
-     * which fires the
-     * {@code ctwaDetectedOutcomeOnboardingStatusUpdate} frontend
-     * event with {@code true} on
-     * {@code <onboarding_status status="completed" product_surface="automation"/>}
-     * and with {@code false} on
-     * {@code <offboarding product_surface="automation"/>}.
+     * <p>An {@code <onboarding_status status="completed" product_surface="automation"/>} child
+     * marks hosted automation as onboarded and enables detected outcomes; an
+     * {@code <offboarding product_surface="automation"/>} child clears both flags. Any other child
+     * is debug-logged and ignored.
      *
-     * @implNote
-     * This implementation routes both child cases through the typed
-     * SMAX parsers
+     * @implNote This implementation routes both child cases through the typed SMAX parsers
      * ({@link SmaxCoexistenceOnboardingStatusNotificationResponse},
-     * {@link SmaxCoexistenceOffboardingNotificationResponse}) so the
-     * SMAX exports remain the single source of truth for envelope and
-     * field validation. WA Web throws
-     * {@code SmaxParsingFailure} on an unsupported child; Cobalt
-     * debug-logs and lets the outer ACK fire.
+     * {@link SmaxCoexistenceOffboardingNotificationResponse}) so the SMAX exports remain the single
+     * source of truth for envelope and field validation. WA Web throws {@code SmaxParsingFailure} on
+     * an unsupported child; Cobalt debug-logs and lets the outer ACK fire.
      *
      * @param node the notification stanza
      */
@@ -402,27 +361,20 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Materialises a contact and a chat for the invite recipient
-     * carried by a {@code w:growth} notification.
+     * Materialises a contact and a chat for the invite recipient carried by a {@code w:growth}
+     * notification.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleGrowthNotification._(receiverId, reason === "clicked_invite_link")}
-     * which calls
-     * {@code WAWebChatFindBridge.findLocal} / {@code WAWebCreateChat.createChat}
-     * then synthesises a {@code sender_invite} stub message. Cobalt
-     * persists the contact and the chat but does not synthesise the
-     * stub message because Cobalt's message-generation pipeline runs
-     * from a different stream. Fires
-     * {@link WhatsAppClientListener#onNewContact} when the contact
-     * was created.
+     * <p>Resolves the recipient JID from {@code <invite><receiver user="..."/></invite>} and
+     * returns early when it is absent. An existing contact and chat are reused; otherwise a new
+     * contact and chat are created. The contact's chosen name is refreshed from a name query (best
+     * effort; failures are debug-logged), and {@link WhatsAppClientListener#onNewContact} fires when
+     * the contact did not previously exist.
      *
-     * @implNote
-     * This implementation also commits a
-     * {@code ChatMessageCounts} WAM event with
-     * {@code isInviteCreatedThread=true} when a new chat was created,
-     * matching WA Web's commit after the
-     * {@code handleSingleMsg} call.
+     * @implNote This implementation commits a {@code ChatMessageCounts} WAM event with
+     * {@code isInviteCreatedThread=true} when a new chat was created, matching WA Web's commit after
+     * its {@code handleSingleMsg} call. Unlike WA Web, Cobalt does not synthesise the
+     * {@code sender_invite} stub message because Cobalt's message-generation pipeline runs from a
+     * different stream.
      *
      * @param node the notification stanza
      */
@@ -466,24 +418,17 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Logs and drops {@code psa} notifications because Cobalt has no
-     * local quick-promotion or in-app PSA campaign pipeline.
+     * Logs and drops {@code psa} notifications because Cobalt has no local quick-promotion or in-app
+     * PSA campaign pipeline.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandlePsa} which only sends the ACK and lets the
-     * frontend-side QP and PSA pipelines consume the stanza via
-     * their own queues. When the {@code from} attribute is the
-     * announcements account, WA Web inspects the first child tag to
-     * route to {@code WAWebHandleQPSurfacesNotification},
-     * {@code WAWebHandleQPPrefetchTimestampNotification}, or
-     * {@code WAWebHandleWaChat}; Cobalt logs the chosen branch and
-     * acknowledges.
+     * <p>When the {@code from} attribute is the announcements account, the first child tag selects a
+     * sub-case ({@code surfaces} for QP surfaces, {@code reset_smb_last_qp_prefetch_timestamp} for
+     * the QP prefetch timestamp reset, or any other tag for the PSA campaign and wa_chat path); each
+     * sub-case is debug-logged and dropped. Stanzas from any other sender are also debug-logged and
+     * dropped.
      *
-     * @implNote
-     * This implementation never produces a side-effect because none
-     * of the three sub-cases (QP surfaces, QP prefetch timestamp,
-     * wa_chat) have a Cobalt store equivalent.
+     * @implNote This implementation never produces a side-effect because none of the three sub-cases
+     * (QP surfaces, QP prefetch timestamp, wa_chat) have a Cobalt store equivalent.
      *
      * @param node the notification stanza
      */
@@ -519,22 +464,18 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes newsletter metadata and recent messages when a
-     * {@code newsletter} notification carries the {@code live_updates}
-     * child.
+     * Refreshes newsletter metadata and recent messages when a {@code newsletter} notification
+     * carries the {@code live_updates} child.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleNewsletterNotification} parser + dispatch to
-     * {@code WAWebNewsletterHandleLiveUpdatesNotification.handleNewsletterLiveUpdatesNotification}.
+     * <p>Returns early when the {@code from} JID is absent or is not a newsletter-server JID. When
+     * the {@code <live_updates>} child is present, the newsletter metadata is refreshed and the most
+     * recent twenty messages are re-queried; both steps are best effort and their failures are
+     * debug-logged.
      *
-     * @implNote
-     * This implementation processes synchronously on the calling
-     * virtual thread; WA Web serialises via
-     * {@code WAWebNewsletterNotificationQueue.enqueue} so a slow
-     * refresh cannot stack notifications on top of each other. The
-     * Cobalt store's per-newsletter merge is idempotent and serial,
-     * so the queue is not strictly required.
+     * @implNote This implementation processes synchronously on the calling virtual thread, whereas
+     * WA Web serialises via a notification queue so a slow refresh cannot stack notifications on top
+     * of each other. The Cobalt store's per-newsletter merge is idempotent and serial, so the queue
+     * is not strictly required.
      *
      * @param node the notification stanza
      */
@@ -566,13 +507,11 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Returns the description (tag name) of the first child, or
-     * {@code null} when the node has no children.
+     * Returns the description (tag name) of the first child, or {@code null} when the node has no
+     * children.
      *
-     * @apiNote
-     * Internal helper used by {@link #handleHosted(Node)} and
-     * {@link #handlePsa(Node)} to log the unsupported child without
-     * pulling its full content.
+     * <p>Used by {@link #handleHosted(Node)} and {@link #handlePsa(Node)} to log the unsupported
+     * child without pulling its full content.
      *
      * @param node the parent node
      * @return the first child's description, or {@code null}
@@ -582,11 +521,9 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Returns the newsletter for the given JID, creating a blank record
-     * when none exists.
+     * Returns the newsletter for the given JID, creating a blank record when none exists.
      *
-     * @apiNote
-     * Internal helper used only by {@link #refreshNewsletter(Jid)}.
+     * <p>Used only by {@link #refreshNewsletter(Jid)}.
      *
      * @param newsletterJid the newsletter JID
      * @return the matching {@link Newsletter}
@@ -598,13 +535,14 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes a newsletter's state, metadata, viewer metadata,
-     * unread count, and timestamp by re-querying it from the server.
+     * Refreshes a newsletter's state, metadata, viewer metadata, unread count, and timestamp by
+     * re-querying it from the server.
      *
-     * @apiNote
-     * Preserves the existing viewer role across the refresh by
-     * passing it as the query parameter so a non-guest viewer is not
-     * downgraded to guest on stale server responses.
+     * <p>The existing viewer role is preserved across the refresh by passing it as the query
+     * parameter (defaulting to {@link NewsletterViewerRole#GUEST} when the current role is
+     * {@link NewsletterViewerRole#UNKNOWN}) so a non-guest viewer is not downgraded to guest on a
+     * stale server response. When the re-query yields no newsletter, the cached record is left
+     * unchanged.
      *
      * @param newsletterJid the newsletter JID to refresh
      */
@@ -627,12 +565,9 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Fans the given callback out to every registered listener on its
-     * own virtual thread.
+     * Fans the given callback out to every registered listener on its own virtual thread.
      *
-     * @apiNote
-     * Internal helper used only by {@link #handleGrowth(Node)} for
-     * the {@code onNewContact} listener fan-out.
+     * <p>Used only by {@link #handleGrowth(Node)} for the {@code onNewContact} listener fan-out.
      *
      * @param consumer the callback to invoke against each listener
      */
@@ -645,11 +580,8 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     /**
      * Sends the protocol-level ACK for the processed notification.
      *
-     * @apiNote
-     * Fire-and-forget; the {@code type} attribute is reflected from
-     * the original stanza because this handler covers seven
-     * different notification types and the WA Web ack-builders all
-     * pin the type to their own module's value.
+     * <p>The ACK reflects the {@code type} attribute from the original stanza because this handler
+     * covers several different notification types.
      *
      * @param node the original {@code <notification>} stanza
      */

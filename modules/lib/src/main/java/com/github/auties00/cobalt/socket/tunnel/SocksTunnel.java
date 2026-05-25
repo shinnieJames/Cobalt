@@ -14,191 +14,178 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Establishes a TCP tunnel through a SOCKS proxy on an
- * already-connected {@link Socket}.
+ * Establishes a TCP tunnel through a SOCKS proxy on an already-connected {@link Socket}.
  *
- * @apiNote
- * The transport-layer hook used when the WhatsApp connection must
- * traverse a {@link WhatsAppProxy.Socks} proxy. Supports SOCKS4 (local
- * DNS, IPv4 only), SOCKS4a (remote DNS via the {@code 0.0.0.x}
- * sentinel IP), SOCKS5 with local DNS resolution (RFC 1928) and
- * SOCKS5h with remote DNS resolution; SOCKS5 authentication uses the
- * RFC 1929 username and password sub-negotiation. The tunnel runs
- * entirely on the supplied socket's
- * {@link InputStream}/{@link OutputStream}; no intermediate
- * {@link java.nio.ByteBuffer} wrappers, no layer plumbing. On return
- * the socket is positioned past the SOCKS reply, ready for the next
- * protocol layer.
+ * <p>This is the transport-layer hop used when a WhatsApp connection must traverse a
+ * {@link WhatsAppProxy.Socks} proxy. It supports SOCKS4 (local DNS, IPv4 only), SOCKS4a (remote DNS
+ * via the {@code 0.0.0.x} sentinel IP), SOCKS5 with local DNS resolution (RFC 1928) and SOCKS5h
+ * with remote DNS resolution; SOCKS5 authentication uses the RFC 1929 username and password
+ * sub-negotiation. The tunnel runs entirely on the supplied socket's
+ * {@link InputStream}/{@link OutputStream}, with no intermediate {@link java.nio.ByteBuffer}
+ * wrappers and no layer plumbing. On successful return the socket is positioned past the SOCKS
+ * reply, ready for the next protocol layer.
  *
  * @implNote
- * This implementation depends on the {@link WhatsAppProxy.Socks}
- * variant to decide whether the destination address is resolved
- * locally and sent as raw bytes (V4 / V5 Local) or passed to the
- * proxy as a domain name for remote resolution (V4a / V5h Remote);
- * the sealed-class shape carries the choice rather than a separate
- * flag.
+ * This implementation relies on the {@link WhatsAppProxy.Socks} variant to decide whether the
+ * destination address is resolved locally and sent as raw bytes (V4 or V5 Local) or passed to the
+ * proxy as a domain name for remote resolution (V4a or V5h Remote); the sealed-class shape carries
+ * that choice rather than a separate flag.
  */
 public final class SocksTunnel {
 
     /**
-     * The SOCKS protocol version 4 byte.
+     * Holds the SOCKS protocol version 4 byte.
      */
     private static final byte SOCKS_VERSION_4 = 0x04;
 
     /**
-     * The SOCKS protocol version 5 byte.
+     * Holds the SOCKS protocol version 5 byte.
      */
     private static final byte SOCKS_VERSION_5 = 0x05;
 
     /**
-     * The SOCKS {@code CONNECT} command byte.
+     * Holds the SOCKS {@code CONNECT} command byte.
      */
     private static final byte CMD_CONNECT = 0x01;
 
     /**
-     * The SOCKS5 method byte indicating "no authentication
-     * required".
+     * Holds the SOCKS5 method byte indicating "no authentication required".
      */
     private static final byte METHOD_NO_AUTH = 0x00;
 
     /**
-     * The SOCKS5 marker indicating that the proxy refused every
-     * offered method.
+     * Holds the SOCKS5 marker indicating that the proxy refused every offered method.
      */
     private static final int METHOD_NO_ACCEPTABLE = 0xFF;
 
     /**
-     * The SOCKS5 address type byte for IPv4.
+     * Holds the SOCKS5 address type byte for IPv4.
      */
     private static final byte ADDR_TYPE_IPV4 = 0x01;
 
     /**
-     * The SOCKS5 address type byte for a domain name.
+     * Holds the SOCKS5 address type byte for a domain name.
      */
     private static final byte ADDR_TYPE_DOMAIN = 0x03;
 
     /**
-     * The SOCKS5 address type byte for IPv6.
+     * Holds the SOCKS5 address type byte for IPv6.
      */
     private static final byte ADDR_TYPE_IPV6 = 0x04;
 
     /**
-     * The RFC 1929 sub-negotiation version 1 byte.
+     * Holds the RFC 1929 sub-negotiation version 1 byte.
      */
     private static final byte AUTH_VERSION_1 = 0x01;
 
     /**
-     * The RFC 1929 success byte.
+     * Holds the RFC 1929 success byte.
      */
     private static final byte AUTH_SUCCESS = 0x00;
 
     /**
-     * The SOCKS5 reply byte for a successful CONNECT.
+     * Holds the SOCKS5 reply byte for a successful {@code CONNECT}.
      */
     private static final byte SOCKS5_REPLY_SUCCESS = 0x00;
 
     /**
-     * The SOCKS5 reply byte for a general server failure.
+     * Holds the SOCKS5 reply byte for a general server failure.
      */
     private static final int SOCKS5_REPLY_GENERAL_FAILURE = 0x01;
 
     /**
-     * The SOCKS5 reply byte for "connection not allowed by ruleset".
+     * Holds the SOCKS5 reply byte for "connection not allowed by ruleset".
      */
     private static final int SOCKS5_REPLY_CONNECTION_NOT_ALLOWED = 0x02;
 
     /**
-     * The SOCKS5 reply byte for "network unreachable".
+     * Holds the SOCKS5 reply byte for "network unreachable".
      */
     private static final int SOCKS5_REPLY_NETWORK_UNREACHABLE = 0x03;
 
     /**
-     * The SOCKS5 reply byte for "host unreachable".
+     * Holds the SOCKS5 reply byte for "host unreachable".
      */
     private static final int SOCKS5_REPLY_HOST_UNREACHABLE = 0x04;
 
     /**
-     * The SOCKS5 reply byte for "connection refused".
+     * Holds the SOCKS5 reply byte for "connection refused".
      */
     private static final int SOCKS5_REPLY_CONNECTION_REFUSED = 0x05;
 
     /**
-     * The SOCKS5 reply byte for "TTL expired".
+     * Holds the SOCKS5 reply byte for "TTL expired".
      */
     private static final int SOCKS5_REPLY_TTL_EXPIRED = 0x06;
 
     /**
-     * The SOCKS5 reply byte for "command not supported".
+     * Holds the SOCKS5 reply byte for "command not supported".
      */
     private static final int SOCKS5_REPLY_COMMAND_NOT_SUPPORTED = 0x07;
 
     /**
-     * The SOCKS5 reply byte for "address type not supported".
+     * Holds the SOCKS5 reply byte for "address type not supported".
      */
     private static final int SOCKS5_REPLY_ADDRESS_TYPE_UNSUPPORTED = 0x08;
 
     /**
-     * The SOCKS5 reserved byte that always carries a zero value on
-     * the wire.
+     * Holds the SOCKS5 reserved byte that always carries a zero value on the wire.
      */
     private static final byte SOCKS5_RESERVED = 0x00;
 
     /**
-     * The SOCKS4 reply version byte (always zero per the spec).
+     * Holds the SOCKS4 reply version byte, which is always zero per the spec.
      */
     private static final int SOCKS4_REPLY_VERSION = 0x00;
 
     /**
-     * The SOCKS4 status code for "request granted".
+     * Holds the SOCKS4 status code for "request granted".
      */
     private static final int SOCKS4_REQUEST_GRANTED = 0x5A;
 
     /**
-     * The SOCKS4 status code for "request rejected or failed".
+     * Holds the SOCKS4 status code for "request rejected or failed".
      */
     private static final int SOCKS4_REQUEST_REJECTED = 0x5B;
 
     /**
-     * The SOCKS4 status code for "identd unreachable".
+     * Holds the SOCKS4 status code for "identd unreachable".
      */
     private static final int SOCKS4_REQUEST_NO_IDENTD = 0x5C;
 
     /**
-     * The SOCKS4 status code for "identd reported a different user
-     * id".
+     * Holds the SOCKS4 status code for "identd reported a different user id".
      */
     private static final int SOCKS4_REQUEST_IDENTD_MISMATCH = 0x5D;
 
     /**
-     * The null byte used to terminate SOCKS4 user-id and domain
-     * fields.
+     * Holds the null byte used to terminate SOCKS4 user-id and domain fields.
      */
     private static final byte SOCKS4_NULL_TERMINATOR = 0x00;
 
     /**
-     * The sentinel IP {@code 0.0.0.1} that signals to a SOCKS4a
-     * proxy that the destination is supplied as a domain name
-     * instead of an IPv4 address.
+     * Holds the sentinel IP {@code 0.0.0.1} that signals to a SOCKS4a proxy that the destination is
+     * supplied as a domain name instead of an IPv4 address.
      */
     private static final byte[] SOCKS4A_SENTINEL_IP = {0x00, 0x00, 0x00, 0x01};
 
     /**
-     * The length of an IPv4 address in bytes.
+     * Holds the length of an IPv4 address in bytes.
      */
     private static final int IPV4_ADDR_LENGTH = 4;
 
     /**
-     * The length of an IPv6 address in bytes.
+     * Holds the length of an IPv6 address in bytes.
      */
     private static final int IPV6_ADDR_LENGTH = 16;
 
     /**
-     * The length of the SOCKS port field in bytes.
+     * Holds the length of the SOCKS port field in bytes.
      */
     private static final int PORT_LENGTH = 2;
 
     /**
-     * The maximum domain length permitted by SOCKS5.
+     * Holds the maximum domain length permitted by SOCKS5.
      */
     private static final int MAX_DOMAIN_LENGTH = 255;
 
@@ -210,23 +197,20 @@ public final class SocksTunnel {
     }
 
     /**
-     * Establishes a SOCKS tunnel through {@code proxy} on the
-     * already-connected socket.
+     * Establishes a SOCKS tunnel through {@code proxy} on the already-connected socket.
      *
-     * @apiNote
-     * Dispatches to the SOCKS variant matching {@code proxy} (V4,
-     * V4a, V5 or V5h) and returns once the proxy has signalled that
-     * the tunnel to {@code targetHost:targetPort} is open. On return
-     * the socket streams are ready for the next protocol layer.
+     * <p>Dispatches to the handshake matching the SOCKS variant of {@code proxy} (V4, V4a, V5 or
+     * V5h) and returns once the proxy has signalled that the tunnel to
+     * {@code targetHost:targetPort} is open. On return the socket streams are ready for the next
+     * protocol layer. The same {@code raw} socket is returned to mirror the
+     * {@link HttpTunnel#tunnel} signature.
      *
      * @param raw        the already-connected proxy socket
      * @param targetHost the host the tunnel is meant to reach
      * @param targetPort the port the tunnel is meant to reach
      * @param proxy      the SOCKS proxy configuration
-     * @return the connected socket (the same {@code raw}); returned
-     *         to mirror the {@link HttpTunnel#tunnel} signature
-     * @throws IOException if any phase of the handshake fails or the
-     *         proxy rejects the request
+     * @return the connected socket, which is the same {@code raw} that was passed in
+     * @throws IOException if any phase of the handshake fails or the proxy rejects the request
      */
     public static Socket tunnel(Socket raw, String targetHost, int targetPort,
                                 WhatsAppProxy.Socks proxy) throws IOException {
@@ -246,17 +230,21 @@ public final class SocksTunnel {
     }
 
     /**
-     * Performs a SOCKS4 handshake: resolves the host locally to an
-     * IPv4 address, sends the CONNECT request with the optional user
-     * id, and validates the reply.
+     * Performs a SOCKS4 handshake by resolving the host locally to an IPv4 address, sending the
+     * {@code CONNECT} request with the optional user id, and validating the reply.
+     *
+     * <p>The host is resolved through {@link InetAddress#getByName(String)} and the request is
+     * rejected unless the result is an {@link Inet4Address}, since SOCKS4 carries only IPv4
+     * destinations. The optional user id from the {@link WhatsAppProxy.Socks.V4} authenticator is
+     * ISO 8859-1 encoded and appended before the null terminator.
      *
      * @param in   the proxy input stream
      * @param out  the proxy output stream
      * @param v4   the SOCKS4 proxy configuration
      * @param host the target host
      * @param port the target port
-     * @throws IOException if DNS resolution fails, the host is not
-     *                     IPv4, or the proxy rejects the request
+     * @throws IOException if DNS resolution fails, the host is not IPv4, or the proxy rejects the
+     *         request
      */
     private static void performSocks4Handshake(InputStream in, OutputStream out,
                                                WhatsAppProxy.Socks.V4.Local v4,
@@ -288,13 +276,18 @@ public final class SocksTunnel {
     }
 
     /**
-     * Performs a SOCKS4a handshake: sends a CONNECT request with the
-     * sentinel IP and the domain name for remote DNS resolution.
+     * Performs a SOCKS4a handshake by sending a {@code CONNECT} request with the sentinel IP and
+     * the domain name for remote DNS resolution.
+     *
+     * <p>The request carries {@link #SOCKS4A_SENTINEL_IP} in place of an IPv4 address, instructing
+     * the proxy to resolve the trailing null-terminated domain name itself. The optional user id
+     * from the {@link WhatsAppProxy.Socks.V4} authenticator is ISO 8859-1 encoded and inserted
+     * between the sentinel IP and the domain name.
      *
      * @param in   the proxy input stream
      * @param out  the proxy output stream
      * @param v4a  the SOCKS4a proxy configuration
-     * @param host the target host (a domain name)
+     * @param host the target host, a domain name
      * @param port the target port
      * @throws IOException if the proxy rejects the request
      */
@@ -328,9 +321,12 @@ public final class SocksTunnel {
     /**
      * Reads and validates the eight-byte SOCKS4 or SOCKS4a reply.
      *
+     * <p>The reply version byte must be {@link #SOCKS4_REPLY_VERSION} and the status byte must be
+     * {@link #SOCKS4_REQUEST_GRANTED}; any other status is mapped to a reason string by
+     * {@link #getSocks4ReplyReason(int)} and reported as a failure carrying the raw code.
+     *
      * @param in the proxy input stream
-     * @throws IOException if the reply version is invalid or the
-     *                     request was rejected
+     * @throws IOException if the reply version is invalid or the request was rejected
      */
     private static void handleSocks4Reply(InputStream in) throws IOException {
         var reply = readNBytes(in, 8);
@@ -348,10 +344,12 @@ public final class SocksTunnel {
     }
 
     /**
-     * Maps a SOCKS4 reply status code to a human-readable reason
-     * string.
+     * Maps a SOCKS4 reply status code to a human-readable reason string.
      *
-     * @param status the SOCKS4 reply status byte (unsigned)
+     * <p>Recognised codes are translated to their RFC 1928 descriptions; an unrecognised code
+     * yields {@code "Unknown failure"}.
+     *
+     * @param status the SOCKS4 reply status byte, unsigned
      * @return a description of the failure reason
      */
     private static String getSocks4ReplyReason(int status) {
@@ -364,23 +362,23 @@ public final class SocksTunnel {
     }
 
     /**
-     * Performs the full SOCKS5 handshake: method negotiation,
-     * optional RFC 1929 authentication sub-negotiation, and the
-     * CONNECT request.
+     * Performs the full SOCKS5 handshake comprising method negotiation, optional RFC 1929
+     * authentication sub-negotiation, and the {@code CONNECT} request.
      *
-     * @apiNote
-     * For {@link WhatsAppProxy.Socks.V5.Local} the host is resolved
-     * locally and sent as an IPv4 or IPv6 address; for
-     * {@link WhatsAppProxy.Socks.V5.Remote} the domain name is sent
-     * for remote resolution by the proxy.
+     * <p>The greeting advertises "no authentication" and, when an authenticator is configured, that
+     * authenticator's method id. If the proxy selects a method other than "no authentication" the
+     * configured credentials must be present and match the selected method, after which the
+     * username and password sub-negotiation runs. The destination is then encoded for the
+     * {@code CONNECT} request: for {@link WhatsAppProxy.Socks.V5.Local} the host is resolved locally
+     * and sent as an IPv4 or IPv6 address, while for {@link WhatsAppProxy.Socks.V5.Remote} the
+     * domain name is sent for remote resolution by the proxy.
      *
      * @param in    the proxy input stream
      * @param out   the proxy output stream
      * @param socks the SOCKS5 proxy configuration
      * @param host  the target host
      * @param port  the target port
-     * @throws IOException if negotiation, authentication, or the
-     *                     CONNECT request fails
+     * @throws IOException if negotiation, authentication, or the {@code CONNECT} request fails
      */
     private static void performSocks5Handshake(InputStream in, OutputStream out,
                                                WhatsAppProxy.Socks.V5 socks,
@@ -449,14 +447,17 @@ public final class SocksTunnel {
     }
 
     /**
-     * Builds a SOCKS5 CONNECT request that carries the destination
-     * as a domain name for remote DNS resolution.
+     * Builds a SOCKS5 {@code CONNECT} request that carries the destination as a domain name for
+     * remote DNS resolution.
      *
-     * @param host the target host (a domain name)
+     * <p>The domain name is ISO 8859-1 encoded, length-prefixed, and tagged with
+     * {@link #ADDR_TYPE_DOMAIN}; names longer than {@link #MAX_DOMAIN_LENGTH} bytes cannot be
+     * represented and are rejected.
+     *
+     * @param host the target host, a domain name
      * @param port the target port
-     * @return the serialized CONNECT request, ready to send
-     * @throws IOException if the domain name exceeds
-     *                     {@value #MAX_DOMAIN_LENGTH} bytes
+     * @return the serialized {@code CONNECT} request, ready to send
+     * @throws IOException if the domain name exceeds {@value #MAX_DOMAIN_LENGTH} bytes
      */
     private static byte[] buildDomainConnectRequest(String host, int port) throws IOException {
         var destHostBytes = host.getBytes(StandardCharsets.ISO_8859_1);
@@ -478,14 +479,17 @@ public final class SocksTunnel {
     }
 
     /**
-     * Builds a SOCKS5 CONNECT request that carries the destination
-     * as a locally-resolved IP address.
+     * Builds a SOCKS5 {@code CONNECT} request that carries the destination as a locally-resolved IP
+     * address.
      *
-     * @param host the target host (resolved locally)
+     * <p>The host is resolved through {@link InetAddress#getByName(String)} and tagged with
+     * {@link #ADDR_TYPE_IPV4} or {@link #ADDR_TYPE_IPV6} according to the resolved address family;
+     * any other address class is unsupported and rejected.
+     *
+     * @param host the target host, resolved locally
      * @param port the target port
-     * @return the serialized CONNECT request, ready to send
-     * @throws IOException if DNS resolution fails or yields an
-     *                     unsupported address type
+     * @return the serialized {@code CONNECT} request, ready to send
+     * @throws IOException if DNS resolution fails or yields an unsupported address type
      */
     private static byte[] buildResolvedConnectRequest(String host, int port) throws IOException {
         var address = InetAddress.getByName(host);
@@ -509,12 +513,17 @@ public final class SocksTunnel {
     }
 
     /**
-     * Reads and validates the SOCKS5 reply, then drains the
-     * variable-length bound address and port fields.
+     * Reads and validates the SOCKS5 reply, then drains the variable-length bound address and port
+     * fields.
+     *
+     * <p>The reply version must be {@link #SOCKS_VERSION_5} and the reply code must be
+     * {@link #SOCKS5_REPLY_SUCCESS}; any other code is mapped to a reason string by
+     * {@link #getSocks5ReplyReason(int)} and reported as a failure. The trailing bound address is
+     * consumed according to its address type byte (IPv4, IPv6, or a length-prefixed domain) so the
+     * stream is left positioned for the next protocol layer.
      *
      * @param in the proxy input stream
-     * @throws IOException if the reply version is invalid or the
-     *                     request was rejected
+     * @throws IOException if the reply version is invalid or the request was rejected
      */
     private static void handleSocks5Reply(InputStream in) throws IOException {
         var replyInfo = readNBytes(in, 2);
@@ -547,7 +556,10 @@ public final class SocksTunnel {
     /**
      * Maps a SOCKS5 reply code to a human-readable reason string.
      *
-     * @param replyCode the SOCKS5 reply code byte (unsigned)
+     * <p>Recognised codes are translated to their RFC 1928 descriptions; an unrecognised code
+     * yields {@code "Unknown failure"}.
+     *
+     * @param replyCode the SOCKS5 reply code byte, unsigned
      * @return a description of the failure reason
      */
     private static String getSocks5ReplyReason(int replyCode) {
@@ -565,14 +577,15 @@ public final class SocksTunnel {
     }
 
     /**
-     * Reads exactly {@code n} bytes from {@code in} and returns them
-     * as a fresh array.
+     * Reads exactly {@code n} bytes from {@code in} and returns them as a fresh array.
+     *
+     * <p>Delegates to {@link InputStream#readNBytes(int)} and treats a short read, which signals an
+     * early end of stream, as a handshake failure.
      *
      * @param in the input stream
      * @param n  the exact number of bytes to read
      * @return a fresh {@code byte[n]} holding the read bytes
-     * @throws IOException if the stream ends before {@code n} bytes
-     *                     have been read
+     * @throws IOException if the stream ends before {@code n} bytes have been read
      */
     private static byte[] readNBytes(InputStream in, int n) throws IOException {
         var buffer = in.readNBytes(n);

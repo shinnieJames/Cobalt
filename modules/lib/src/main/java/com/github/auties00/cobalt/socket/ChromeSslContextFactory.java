@@ -11,15 +11,13 @@ import java.security.NoSuchAlgorithmException;
  * Chrome's TLS client hello, so JA3-fingerprinting endpoints accept
  * the connection.
  *
- * @apiNote
- * Returned by {@link WhatsAppSslContextFactory#chrome()} and used for
- * every outbound WhatsApp TLS hop unless the caller supplies a custom
- * factory. The parameters advertise ALPN {@code http/1.1}, enable
- * HTTPS hostname verification, and pin the cipher suite ordering to
- * the live Chrome 147 list (minus GREASE, which the JDK cannot emit,
- * and minus the legacy {@code TLS_RSA_*} suites, which the JDK pins on
- * {@code jdk.tls.disabledAlgorithms} too early to override
- * reliably).
+ * <p>This factory is returned by {@link WhatsAppSslContextFactory#chrome()}
+ * and is used for every outbound WhatsApp TLS hop unless the caller supplies
+ * a custom factory. The parameters advertise ALPN {@code http/1.1}, enable
+ * HTTPS hostname verification, and pin the cipher suite ordering to the live
+ * Chrome 147 list, minus GREASE (which the JDK cannot emit) and minus the
+ * legacy {@code TLS_RSA_*} suites (which the JDK pins on
+ * {@code jdk.tls.disabledAlgorithms} too early to override reliably).
  *
  * @implNote
  * This implementation initialises the {@link SSLContext} once at
@@ -34,12 +32,11 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
      * {@code https://www.howsmyssl.com/a/check}, with the four
      * deprecated {@code TLS_RSA_*} entries dropped.
      *
-     * @apiNote
-     * Chrome's hello also offers the legacy {@code TLS_RSA_WITH_AES_*}
-     * suites for backward compatibility with old servers; WhatsApp's
-     * edge negotiates ECDHE in practice so the legacy entries are
-     * never actually used and dropping them keeps the wire and the
-     * configuration in agreement.
+     * <p>Chrome's hello also offers the legacy {@code TLS_RSA_WITH_AES_*}
+     * suites for backward compatibility with old servers; WhatsApp's edge
+     * negotiates ECDHE in practice so the legacy entries are never actually
+     * used, and dropping them keeps the wire and the configuration in
+     * agreement.
      *
      * @implNote
      * This implementation must not sort or otherwise reorder the
@@ -68,8 +65,7 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
     /**
      * The ALPN protocol identifier advertised inside the client hello.
      *
-     * @apiNote
-     * WhatsApp's edge only accepts {@code http/1.1}; HTTP/2 was not
+     * <p>WhatsApp's edge only accepts {@code http/1.1}; HTTP/2 was not
      * adopted in the public web bundle.
      */
     private static final String[] ALPN_PROTOCOLS = {"http/1.1"};
@@ -78,10 +74,9 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
      * The endpoint identification algorithm used for hostname
      * verification against the server certificate.
      *
-     * @apiNote
-     * {@code "HTTPS"} engages the JDK's RFC 2818 / RFC 6125 logic so
-     * leaf certificates are matched against the SNI server name; not
-     * setting this would skip hostname verification entirely.
+     * <p>The value {@code "HTTPS"} engages the JDK's RFC 2818 / RFC 6125
+     * logic so leaf certificates are matched against the SNI server name;
+     * leaving it unset would skip hostname verification entirely.
      */
     private static final String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
 
@@ -98,13 +93,12 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
     private final SSLContext sslContext;
 
     /**
-     * Constructs the singleton.
+     * Constructs the singleton, pre-initialising the {@link SSLContext}.
      *
-     * @apiNote
-     * Private so callers obtain the factory through
-     * {@link #INSTANCE}; the constructor pre-initialises the
-     * {@link SSLContext} so {@link #sslContext()} can return without
-     * re-throwing checked exceptions.
+     * <p>The constructor is private so callers obtain the factory through
+     * {@link #INSTANCE}. It pre-initialises the {@link SSLContext} with the
+     * JDK default trust and key managers so {@link #sslContext()} can return
+     * without re-throwing checked exceptions.
      *
      * @throws IllegalStateException if the JDK cannot provide a TLS
      *         {@link SSLContext}

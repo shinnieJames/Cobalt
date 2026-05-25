@@ -34,8 +34,7 @@ public enum WhatsAppClientDisconnectReason {
      * A transient teardown that the library follows with a fresh connect.
      *
      * @apiNote
-     * Driven by recoverable stream errors and socket-level closes raised
-     * by {@link com.github.auties00.cobalt.socket.WhatsAppSocketClient}.
+     * Driven by recoverable stream errors and socket-level closes.
      * Listeners typically log the event and let the client reconnect on
      * its own; persisted state remains intact.
      */

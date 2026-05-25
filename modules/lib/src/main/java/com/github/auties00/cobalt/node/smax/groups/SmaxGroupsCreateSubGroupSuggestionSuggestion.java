@@ -16,22 +16,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed alternation modelling the suggestion-body oneof carried inside a
- * {@link SmaxGroupsCreateSubGroupSuggestionRequest}.
+ * Models the suggestion-body oneof carried inside a {@link SmaxGroupsCreateSubGroupSuggestionRequest} as a
+ * sealed alternation.
  *
- * @apiNote
- * Pick {@link NewGroup} to ask the relay to spin up a fresh sub-group with caller-chosen subject and policy
- * markers, or {@link ExistingGroups} to ask the relay to link one or more existing groups in as sub-groups
- * of the parent community.
+ * <p>{@link NewGroup} asks the relay to spin up a fresh sub-group with caller-chosen subject and policy markers;
+ * {@link ExistingGroups} asks the relay to link one or more existing groups in as sub-groups of the parent
+ * community.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSuggestionForCreateSubGroupSuggestionNewGroupOrCreateSubGroupSuggestionExistingGroupsMixinGroup")
 public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits SmaxGroupsCreateSubGroupSuggestionSuggestion.NewGroup, SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups {
     /**
-     * Contributes this suggestion's children and attributes to the supplied
-     * {@code <sub_group_suggestion/>} builder.
+     * Contributes this suggestion's children and attributes to the supplied {@code <sub_group_suggestion/>}
+     * builder.
      *
-     * @apiNote
-     * Called by {@link SmaxGroupsCreateSubGroupSuggestionRequest#toNode()} so each variant can stamp the
+     * <p>Called by {@link SmaxGroupsCreateSubGroupSuggestionRequest#toNode()} so each variant can stamp the
      * branch-specific shape without exposing its private state to the request envelope.
      *
      * @implSpec
@@ -43,61 +41,62 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
     void contributeTo(NodeBuilder builder);
 
     /**
-     * Suggestion body that asks the relay to spin up a brand-new sub-group inside the parent community.
+     * Asks the relay to spin up a brand-new sub-group inside the parent community.
      *
-     * @apiNote
-     * Carries the new sub-group's subject and the same policy markers exposed on
+     * <p>Carries the new sub-group's subject and the same policy markers exposed on
      * {@link SmaxGroupsCreateRequest} ({@code locked}, {@code announcement}, {@code hidden_group},
-     * membership-approval and member-mode mixins); pair with a {@link SmaxGroupsCreateSubGroupSuggestionRequest}
-     * to dispatch.
+     * membership-approval and member-mode markers); callers pair it with a
+     * {@link SmaxGroupsCreateSubGroupSuggestionRequest} to dispatch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionSuggestionForNewGroupMixin")
     final class NewGroup implements SmaxGroupsCreateSubGroupSuggestionSuggestion {
         /**
-         * The subject (display name) of the proposed sub-group, emitted as a {@code <subject/>} child.
+         * Holds the subject (display name) of the proposed sub-group, emitted as a {@code <subject/>} child.
          */
         private final String subject;
 
         /**
-         * The optional description body; emitted as {@code <description><body/></description>} when present,
-         * omitted entirely when {@code null}.
+         * Holds the optional description body; emitted as {@code <description><body/></description>} when
+         * present, omitted entirely when {@code null}.
          */
         private final String descriptionBody;
 
         /**
-         * Whether to attach a {@code <locked/>} marker so chat-info edits become admin-only.
+         * Holds whether to attach a {@code <locked/>} marker so chat-info edits become admin-only.
          */
         private final boolean locked;
 
         /**
-         * Whether to attach an {@code <announcement/>} marker so only admins may post.
+         * Holds whether to attach an {@code <announcement/>} marker so only admins may post.
          */
         private final boolean announcement;
 
         /**
-         * Whether to attach a {@code <hidden_group/>} marker so the sub-group is hidden from the community
-         * directory.
+         * Holds whether to attach a {@code <hidden_group/>} marker so the sub-group is hidden from the
+         * community directory.
          */
         private final boolean hiddenGroup;
 
         /**
-         * The optional {@code group_join_mode} attribute stamped on a {@code <membership_approval_mode/>}
+         * Holds the optional {@code group_join_mode} attribute stamped on a {@code <membership_approval_mode/>}
          * child; {@code null} omits the child entirely.
          */
         private final String membershipApprovalGroupJoinMode;
 
         /**
-         * The optional {@code member_add_mode} attribute stamped on the {@code <sub_group_suggestion/>} root.
+         * Holds the optional {@code member_add_mode} attribute stamped on the {@code <sub_group_suggestion/>}
+         * root.
          */
         private final String memberAddMode;
 
         /**
-         * The optional {@code member_link_mode} attribute stamped on the {@code <sub_group_suggestion/>} root.
+         * Holds the optional {@code member_link_mode} attribute stamped on the {@code <sub_group_suggestion/>}
+         * root.
          */
         private final String memberLinkMode;
 
         /**
-         * The optional {@code member_share_group_history_mode} attribute stamped on the
+         * Holds the optional {@code member_share_group_history_mode} attribute stamped on the
          * {@code <sub_group_suggestion/>} root.
          */
         private final String memberShareGroupHistoryMode;
@@ -105,9 +104,8 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Constructs a new-group suggestion body.
          *
-         * @apiNote
-         * Every parameter except {@code subject} is optional; pass {@code null} (or {@code false} for
-         * booleans) to omit the corresponding child or attribute.
+         * <p>Every parameter except {@code subject} is optional; passing {@code null} (or {@code false} for
+         * booleans) omits the corresponding child or attribute.
          *
          * @param subject                          the subject; never {@code null}
          * @param descriptionBody                  the optional description body; may be {@code null}
@@ -162,8 +160,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Returns whether the {@code <locked/>} marker is attached.
          *
-         * @apiNote
-         * When {@code true} the server pins chat-info editing to admins.
+         * <p>When {@code true} the server pins chat-info editing to admins.
          *
          * @return {@code true} when the marker is emitted
          */
@@ -174,8 +171,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Returns whether the {@code <announcement/>} marker is attached.
          *
-         * @apiNote
-         * When {@code true} the server restricts posting to admins.
+         * <p>When {@code true} the server restricts posting to admins.
          *
          * @return {@code true} when the marker is emitted
          */
@@ -186,8 +182,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Returns whether the {@code <hidden_group/>} marker is attached.
          *
-         * @apiNote
-         * When {@code true} the sub-group is hidden from the community directory.
+         * <p>When {@code true} the sub-group is hidden from the community directory.
          *
          * @return {@code true} when the marker is emitted
          */
@@ -206,8 +201,8 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Returns the optional {@code member_add_mode} attribute stamped on the {@code <sub_group_suggestion/>}
-         * root.
+         * Returns the optional {@code member_add_mode} attribute stamped on the
+         * {@code <sub_group_suggestion/>} root.
          *
          * @return an {@link Optional} carrying the value, or empty when omitted
          */
@@ -216,8 +211,8 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Returns the optional {@code member_link_mode} attribute stamped on the {@code <sub_group_suggestion/>}
-         * root.
+         * Returns the optional {@code member_link_mode} attribute stamped on the
+         * {@code <sub_group_suggestion/>} root.
          *
          * @return an {@link Optional} carrying the value, or empty when omitted
          */
@@ -291,6 +286,12 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
             builder.content(children);
         }
 
+        /**
+         * Compares this body to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link NewGroup} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -311,6 +312,11 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
                     && Objects.equals(this.memberShareGroupHistoryMode, that.memberShareGroupHistoryMode);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(subject, descriptionBody, locked, announcement, hiddenGroup,
@@ -318,6 +324,11 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
                     memberShareGroupHistoryMode);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateSubGroupSuggestionSuggestion.NewGroup[subject=" + subject
@@ -333,26 +344,23 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
     }
 
     /**
-     * Suggestion body that asks the relay to link one or more already-existing groups into the parent
-     * community as sub-groups.
+     * Asks the relay to link one or more already-existing groups into the parent community as sub-groups.
      *
-     * @apiNote
-     * Each candidate is rendered as a {@code <group jid="..."/>} child of {@code <sub_group_suggestion/>}
-     * with an optional {@code <hidden_group/>} sub-child; per-candidate verdicts surface on the response
-     * side as {@link SmaxGroupsCreateSubGroupSuggestionResponse.ExistingGroupsSuggestionSuccess.Candidate}.
+     * <p>Each candidate is rendered as a {@code <group jid="..."/>} child of {@code <sub_group_suggestion/>}
+     * with an optional {@code <hidden_group/>} sub-child; per-candidate verdicts surface on the response side as
+     * {@link SmaxGroupsCreateSubGroupSuggestionResponse.ExistingGroupsSuggestionSuccess.Candidate}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionSuggestionForExistingGroupsMixin")
     final class ExistingGroups implements SmaxGroupsCreateSubGroupSuggestionSuggestion {
         /**
-         * The candidate groups to propose; the server accepts between {@code 1} and {@code 1000} entries.
+         * Holds the candidate groups to propose; the server accepts between {@code 1} and {@code 1000} entries.
          */
         private final List<Candidate> groups;
 
         /**
          * Constructs an existing-groups suggestion body.
          *
-         * @apiNote
-         * Each entry must address a group the caller has permission to link as a sub-group; per-candidate
+         * <p>Each entry must address a group the caller has permission to link as a sub-group; per-candidate
          * permission failures surface as error tags on the response side.
          *
          * @param groups the list of candidate groups; never {@code null} and must be non-empty
@@ -403,6 +411,12 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
             builder.content(groupNodes);
         }
 
+        /**
+         * Compares this body to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is an {@link ExistingGroups} with identical candidate groups
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -415,32 +429,41 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
             return Objects.equals(this.groups, that.groups);
         }
 
+        /**
+         * Returns a hash composed of the candidate groups.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(groups);
         }
 
+        /**
+         * Returns a debug string carrying the candidate groups.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups[groups=" + groups + ']';
         }
 
         /**
-         * Single candidate sub-group entry inside an {@link ExistingGroups} suggestion.
+         * Carries a single candidate sub-group entry inside an {@link ExistingGroups} suggestion.
          *
-         * @apiNote
-         * Carries the candidate {@link Jid} and an optional hidden-from-directory flag; the relay surfaces
+         * <p>Holds the candidate {@link Jid} and an optional hidden-from-directory flag; the relay surfaces
          * per-candidate permission failures separately on the response side.
          */
         @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionSuggestionForExistingGroupsMixin")
         public static final class Candidate {
             /**
-             * The candidate sub-group {@link Jid} stamped on the {@code <group jid="...">} attribute.
+             * Holds the candidate sub-group {@link Jid} stamped on the {@code <group jid="...">} attribute.
              */
             private final Jid jid;
 
             /**
-             * Whether to nest a {@code <hidden_group/>} marker under the {@code <group/>} child so the
+             * Holds whether to nest a {@code <hidden_group/>} marker under the {@code <group/>} child so the
              * candidate is hidden from the community directory.
              */
             private final boolean hiddenGroup;
@@ -448,8 +471,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
             /**
              * Constructs a candidate entry.
              *
-             * @apiNote
-             * Pass {@code hiddenGroup=true} to keep this sub-group out of the community directory listing
+             * <p>Passing {@code hiddenGroup=true} keeps this sub-group out of the community directory listing
              * after the link is accepted.
              *
              * @param jid         the candidate {@link Jid}; never {@code null}
@@ -479,6 +501,12 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
                 return hiddenGroup;
             }
 
+            /**
+             * Compares this entry to {@code obj} for value equality across both fields.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is a {@link Candidate} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -492,11 +520,21 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
                         && Objects.equals(this.jid, that.jid);
             }
 
+            /**
+             * Returns a hash composed of both fields.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, hiddenGroup);
             }
 
+            /**
+             * Returns a debug string carrying both fields.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups.Candidate[jid=" + jid

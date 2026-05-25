@@ -13,76 +13,63 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound live-updates notification pushed by the relay to a
- * client previously subscribed via
+ * Represents the inbound live-updates notification pushed by the relay
+ * to a client previously subscribed via
  * {@link SmaxNewslettersSubscribeToLiveUpdatesRequest}.
- *
- * @apiNote
- * Drives WA Web's
- * {@code WAWebNewsletterHandleLiveUpdatesNotification.handleNewsletterLiveUpdatesNotification}
- * fan-in: parse the inbound stanza, project {@link #messages()} into
- * the local newsletter store, then emit a
- * {@link SmaxNewslettersLiveUpdatesNotificationAcknowledgement} for the
- * relay. The acknowledgement must fire even when the gating
- * (newsletter-reaction enable check) rejects the delivery, otherwise
- * the relay re-pushes the same notification.
+ * The receive pipeline parses the inbound stanza, projects
+ * {@link #messages()} into the local newsletter store, then emits a
+ * {@link SmaxNewslettersLiveUpdatesNotificationAcknowledgement}. The
+ * acknowledgement must fire even when the delivery is rejected,
+ * otherwise the relay re-pushes the same notification.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInNewslettersLiveUpdatesNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInNewslettersCommonNotificationMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageResponsePayloadMixin")
 public final class SmaxNewslettersLiveUpdatesNotificationResponse implements SmaxOperation.Response {
     /**
-     * The notification stanza id, echoed verbatim into the
+     * Holds the notification stanza id, echoed verbatim into the
      * {@link SmaxNewslettersLiveUpdatesNotificationAcknowledgement}.
      */
     private final String notificationId;
 
     /**
-     * The newsletter {@link Jid} that produced the notification.
+     * Holds the newsletter {@link Jid} that produced the notification.
      */
     private final Jid notificationFrom;
 
     /**
-     * The optional newsletter {@link Jid} echoed on the
+     * Holds the optional newsletter {@link Jid} echoed on the
      * {@code <messages>} payload.
      */
     private final Jid messagesJid;
 
     /**
-     * The optional unix-second timestamp echoed on the
+     * Holds the optional unix-second timestamp echoed on the
      * {@code <messages>} payload.
      */
     private final Long messagesTimestamp;
 
     /**
-     * The list of newsletter messages carried in the live-updates
+     * Holds the list of newsletter messages carried in the live-updates
      * delta.
      */
     private final List<NewsletterMessage> messages;
 
     /**
      * Constructs a new inbound projection.
-     *
-     * @apiNote
-     * {@code messagesJid} and {@code messagesTimestamp} are optional
+     * The {@code messagesJid} and {@code messagesTimestamp} are optional
      * because the relay only echoes them when the corresponding
-     * attributes were present on the wire; the outer
-     * {@code notificationId} and {@code notificationFrom} are
-     * mandatory because the {@link SmaxNewslettersLiveUpdatesNotificationAcknowledgement}
+     * attributes were present on the wire; {@code notificationId} and
+     * {@code notificationFrom} are mandatory because the
+     * {@link SmaxNewslettersLiveUpdatesNotificationAcknowledgement}
      * echoes them verbatim.
      *
      * @param notificationId    the notification id; never {@code null}
-     * @param notificationFrom  the notification sender {@link Jid};
-     *                          never {@code null}
-     * @param messagesJid       the optional echoed {@link Jid}; may be
-     *                          {@code null}
-     * @param messagesTimestamp the optional echoed timestamp; may be
-     *                          {@code null}
-     * @param messages          the message entries; never {@code null}
-     *                          (empty allowed)
-     * @throws NullPointerException if {@code notificationId} or
-     *                              {@code notificationFrom} is
-     *                              {@code null}
+     * @param notificationFrom  the notification sender {@link Jid}; never {@code null}
+     * @param messagesJid       the optional echoed {@link Jid}; may be {@code null}
+     * @param messagesTimestamp the optional echoed timestamp; may be {@code null}
+     * @param messages          the message entries; never {@code null} (empty allowed)
+     * @throws NullPointerException if {@code notificationId} or {@code notificationFrom} is {@code null}
      */
     public SmaxNewslettersLiveUpdatesNotificationResponse(String notificationId, Jid notificationFrom,
                    Jid messagesJid, Long messagesTimestamp,
@@ -115,8 +102,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
     /**
      * Returns the optional echoed newsletter {@link Jid}.
      *
-     * @return an {@link Optional} carrying the {@link Jid}, or empty
-     *         when the relay omitted it
+     * @return an {@link Optional} carrying the {@link Jid}, or empty when the relay omitted it
      */
     public Optional<Jid> messagesJid() {
         return Optional.ofNullable(messagesJid);
@@ -125,8 +111,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
     /**
      * Returns the optional echoed timestamp.
      *
-     * @return an {@link Optional} carrying the unix-second timestamp,
-     *         or empty when the relay omitted it
+     * @return an {@link Optional} carrying the unix-second timestamp, or empty when the relay omitted it
      */
     public Optional<Long> messagesTimestamp() {
         return Optional.ofNullable(messagesTimestamp);
@@ -135,30 +120,25 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
     /**
      * Returns the message entries.
      *
-     * @return an unmodifiable {@link List} of entries; never
-     *         {@code null}
+     * @return an unmodifiable {@link List} of entries; never {@code null}
      */
     public List<NewsletterMessage> messages() {
         return messages;
     }
 
     /**
-     * Tries to parse a notification projection from a
-     * {@code <notification/>} {@link Node}.
-     *
-     * @apiNote
+     * Parses a notification projection from a {@code <notification/>}
+     * {@link Node}.
      * Returns {@link Optional#empty()} when the description is not
      * {@code notification}, the {@code type} attribute is not
      * {@code "newsletter"}, the required {@code id} or {@code from}
      * attributes are missing, the {@code <live_updates>} or
-     * {@code <messages>} envelope is absent, the {@code t} attribute
-     * on {@code <messages>} is negative, or any nested
-     * {@code <message>} fails its own
-     * {@link NewsletterMessage#of(Node)} parse.
+     * {@code <messages>} envelope is absent, the {@code t} attribute on
+     * {@code <messages>} is negative, or any nested {@code <message>}
+     * fails its own {@link NewsletterMessage#of(Node)} parse.
      *
      * @param node the inbound notification stanza; never {@code null}
-     * @return an {@link Optional} carrying the projection, or empty on
-     *         no-match
+     * @return an {@link Optional} carrying the projection, or empty on no-match
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInNewslettersLiveUpdatesNotificationRequest",
@@ -213,8 +193,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
      * Compares two notifications for value equality on every field.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a notification with
-     *         equal field values
+     * @return {@code true} when {@code obj} is a notification with equal field values
      */
     @Override
     public boolean equals(Object obj) {
@@ -257,61 +236,52 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
     }
 
     /**
-     * One typed projection of a {@code <message>} entry carried by a
-     * live-updates notification.
+     * Represents one typed projection of a {@code <message>} entry
+     * carried by a live-updates notification.
      *
-     * @apiNote
-     * Shares the wire shape and parser export name with
-     * {@link SmaxNewslettersGetNewsletterMessagesResponse.NewsletterMessage},
-     * but is declared independently here to keep the live-updates
-     * payload self-contained and avoid coupling the receive handler
-     * to the history-fetch type.
+     * @implNote This implementation declares its own message projection rather than reusing {@link SmaxNewslettersGetNewsletterMessagesResponse.NewsletterMessage}, even though the two share the wire shape and parser export name, to keep the live-updates payload self-contained and decouple the receive handler from the history-fetch type.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageHistoryWithAddOnsMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageHistoryMixin")
     public static final class NewsletterMessage {
         /**
-         * The optional client-supplied stanza id of the message.
+         * Holds the optional client-supplied stanza id of the message.
          */
         private final String stanzaId;
 
         /**
-         * The server-assigned monotonic message id within the
+         * Holds the server-assigned monotonic message id within the
          * newsletter.
          */
         private final long serverId;
 
         /**
-         * The optional unix-second timestamp of the message.
+         * Holds the optional unix-second timestamp of the message.
          */
         private final Long timestamp;
 
         /**
-         * Whether the message was authored by the connected client.
+         * Holds whether the message was authored by the connected client.
          */
         private final boolean fromSelf;
 
         /**
-         * The underlying {@link Node} exposing the variable-shape
+         * Holds the underlying {@link Node} exposing the variable-shape
          * add-on children.
          */
         private final Node raw;
 
         /**
          * Constructs a new newsletter-message projection.
-         *
-         * @apiNote
-         * {@code stanzaId} and {@code timestamp} are optional because
+         * The {@code stanzaId} and {@code timestamp} are optional because
          * the relay only emits them when the message carries those
          * attributes on the wire.
          *
          * @param stanzaId  the optional stanza id; may be {@code null}
          * @param serverId  the server-assigned id
-         * @param timestamp the optional unix-second timestamp; may be
-         *                  {@code null}
+         * @param timestamp the optional unix-second timestamp; may be {@code null}
          * @param fromSelf  whether the message was authored by self
-         * @param raw       the underlying {@link Node}; never
-         *                  {@code null}
+         * @param raw       the underlying {@link Node}; never {@code null}
          * @throws NullPointerException if {@code raw} is {@code null}
          */
         public NewsletterMessage(String stanzaId, long serverId, Long timestamp, boolean fromSelf, Node raw) {
@@ -325,8 +295,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
         /**
          * Returns the optional client-supplied stanza id.
          *
-         * @return an {@link Optional} carrying the stanza id, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the stanza id, or empty when the relay omitted it
          */
         public Optional<String> stanzaId() {
             return Optional.ofNullable(stanzaId);
@@ -344,8 +313,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
         /**
          * Returns the optional unix-second timestamp.
          *
-         * @return an {@link Optional} carrying the timestamp, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the timestamp, or empty when the relay omitted it
          */
         public Optional<Long> timestamp() {
             return Optional.ofNullable(timestamp);
@@ -355,8 +323,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
          * Returns whether the message was authored by the connected
          * client.
          *
-         * @return {@code true} when {@code is_sender="true"} was
-         *         present on the wire
+         * @return {@code true} when {@code is_sender="true"} was present on the wire
          */
         public boolean fromSelf() {
             return fromSelf;
@@ -365,29 +332,23 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
         /**
          * Returns the underlying {@link Node}.
          *
-         * @return the raw {@link Node} exposing the add-on children;
-         *         never {@code null}
+         * @return the raw {@link Node} exposing the add-on children; never {@code null}
          */
         public Node raw() {
             return raw;
         }
 
         /**
-         * Tries to parse a {@link NewsletterMessage} from a
-         * {@code <message>} {@link Node}.
+         * Parses a {@link NewsletterMessage} from a {@code <message>}
+         * {@link Node}.
+         * Returns {@link Optional#empty()} when the description is not
+         * {@code message}, the {@code server_id} attribute is missing or
+         * outside the {@code [99, 2147476647]} range, or the optional
+         * {@code t} attribute is negative.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the description is
-         * not {@code message}, the {@code server_id} attribute is
-         * missing or outside the {@code [99, 2147476647]} range, or
-         * the optional {@code t} attribute is negative.
-         *
-         * @param messageNode the source {@link Node}; never
-         *                    {@code null}
-         * @return an {@link Optional} carrying the parsed entry, or
-         *         empty on no-match
-         * @throws NullPointerException if {@code messageNode} is
-         *                              {@code null}
+         * @param messageNode the source {@link Node}; never {@code null}
+         * @return an {@link Optional} carrying the parsed entry, or empty on no-match
+         * @throws NullPointerException if {@code messageNode} is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInNewslettersNewsletterMessageHistoryWithAddOnsMixin",
                 exports = "parseNewsletterMessageHistoryWithAddOnsMixin",
@@ -423,8 +384,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
          * Compares two entries for value equality on every field.
          *
          * @param obj the reference object to compare against
-         * @return {@code true} when {@code obj} is a
-         *         {@link NewsletterMessage} with equal field values
+         * @return {@code true} when {@code obj} is a {@link NewsletterMessage} with equal field values
          */
         @Override
         public boolean equals(Object obj) {
@@ -455,8 +415,7 @@ public final class SmaxNewslettersLiveUpdatesNotificationResponse implements Sma
         /**
          * Returns a debug representation including the typed fields.
          *
-         * @return a record-like rendering of this entry, excluding
-         *         the underlying {@link Node} for brevity
+         * @return a record-like rendering of this entry, excluding the underlying {@link Node} for brevity
          */
         @Override
         public String toString() {

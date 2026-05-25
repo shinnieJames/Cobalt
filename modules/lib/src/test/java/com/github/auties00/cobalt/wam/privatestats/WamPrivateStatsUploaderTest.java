@@ -41,41 +41,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link WamPrivateStatsUploader}'s request assembly and
- * status-code mapping against a recording HTTP-client stub.
+ * Exercises {@link WamPrivateStatsUploader}'s request assembly and status-code mapping against a
+ * recording HTTP-client stub.
  *
- * @apiNote
- * Pins the URL, the {@code multipart/form-data} part order, the
- * boundary shape, and the HTTP-status to
- * {@link WamPrivateStatsUploadResult.Type} mapping so any regression
+ * <p>The suite drives a {@code RecordingHttpClient} that captures the request without performing
+ * any network I/O, and the uploader's token-acquisition path uses the same scripted
+ * {@link SecureRandom} as {@code WamPrivateStatsTokenIssuerTest} so the captured known-answer bytes
+ * propagate through. It pins the URL, the {@code multipart/form-data} part order, the boundary
+ * shape, and the HTTP-status to {@link WamPrivateStatsUploadResult.Type} mapping so any regression
  * in the wire-level upload contract surfaces immediately.
- *
- * @implNote
- * This implementation drives a {@link RecordingHttpClient} that
- * captures the request without performing any network I/O; the
- * uploader's token-acquisition path uses the same scripted
- * {@link SecureRandom} as
- * {@code WamPrivateStatsTokenIssuerTest} so the captured KAT bytes
- * propagate through.
  */
 @DisplayName("WamPrivateStatsUploader behavioural")
 class WamPrivateStatsUploaderTest {
-    /**
-     * The destination URL the uploader must POST to.
-     */
     private static final String ENDPOINT = "https://dit.whatsapp.net/deidentified_telemetry";
 
-    /**
-     * The hard-coded {@code access_token} the WhatsApp Web bundle
-     * sends; tests assert the same value is sent by Cobalt.
-     */
+    // Hard-coded access_token the WhatsApp Web bundle sends; Cobalt must send the same value.
     private static final String ACCESS_TOKEN = "245118376424571|3e7d275052f1522bf3200afcf53841a7";
 
-    /**
-     * Verifies the request URL is the {@code dit.whatsapp.net}
-     * endpoint and the {@code Content-Type} carries an explicit
-     * WebKit-shaped boundary.
-     */
     @Test
     @DisplayName("request URL and Content-Type match the documented contract")
     void requestUrlAndContentType() {
@@ -92,10 +74,6 @@ class WamPrivateStatsUploaderTest {
                 "boundary must follow the WebKit convention: " + boundary);
     }
 
-    /**
-     * Verifies the multipart body carries the four expected parts
-     * in the expected order.
-     */
     @Test
     @DisplayName("multipart body has the four documented parts in the documented order")
     void multipartBodyHasFourParts() {
@@ -130,10 +108,6 @@ class WamPrivateStatsUploaderTest {
                 "meta_data 'p' is hardcoded to 0 in the WhatsApp Web bundle");
     }
 
-    /**
-     * Verifies the captured WAM buffer appears verbatim in the
-     * multipart body without transformation.
-     */
     @Test
     @DisplayName("buffer bytes appear verbatim in the multipart body")
     void bufferAppearsVerbatim() {
@@ -155,10 +129,6 @@ class WamPrivateStatsUploaderTest {
         assertTrue(matched, "buffer bytes must appear verbatim inside the multipart body");
     }
 
-    /**
-     * Verifies the HTTP-status to {@link WamPrivateStatsUploadResult.Type}
-     * mapping documented by {@link WamPrivateStatsUploader#upload(byte[])}.
-     */
     @Test
     @DisplayName("status codes map to documented result types")
     void statusCodeMapping() {
@@ -178,11 +148,6 @@ class WamPrivateStatsUploaderTest {
                 uploadCapture(new byte[]{1}, 503).result().result());
     }
 
-    /**
-     * Verifies that a token issuance failure short-circuits to
-     * {@link WamPrivateStatsUploadResult.Type#ERROR_CREDENTIAL}
-     * without contacting the HTTP layer.
-     */
     @Test
     @DisplayName("token issuer failure surfaces as ERROR_CREDENTIAL")
     void issuerFailureSurfacesAsErrorCredential() {
@@ -202,20 +167,7 @@ class WamPrivateStatsUploaderTest {
                 "HTTP client must not be invoked when the issuer fails");
     }
 
-    /**
-     * Runs one {@link WamPrivateStatsUploader#upload(byte[])} call
-     * against a scripted issuer plus a fake HTTP client, returning
-     * the captured request, body, and result.
-     *
-     * @apiNote
-     * Centralises the test setup so every behavioural test focuses
-     * on its specific assertion.
-     *
-     * @param buffer     the buffer to upload
-     * @param httpStatus the canned HTTP status the fake client must
-     *                   return
-     * @return the captured tuple
-     */
+    // Runs one upload against a scripted issuer plus fake HTTP client, returning the captured tuple.
     private static CapturedUpload uploadCapture(byte[] buffer, int httpStatus) {
         var vector = loadFirstVector();
         var msg = HexFormat.of().parseHex(vector.msg);
@@ -236,17 +188,7 @@ class WamPrivateStatsUploaderTest {
         return new CapturedUpload(capturedReq.get(), capturedBody.get(), result);
     }
 
-    /**
-     * Builds a successful sign-credential IQ response.
-     *
-     * @apiNote
-     * Used by the upload-capture helper so the issuer sees a
-     * canned-correct response.
-     *
-     * @param signed the signed-credential bytes
-     * @param pk     the ACS public key bytes
-     * @return the synthetic success node
-     */
+    // A success sign-credential IQ so the issuer sees a canned-correct response.
     private static Node issuerResponse(byte[] signed, byte[] pk) {
         return new NodeBuilder()
                 .description("iq")
@@ -266,18 +208,7 @@ class WamPrivateStatsUploaderTest {
                 .build();
     }
 
-    /**
-     * Returns a {@link SecureRandom} that delivers exactly two
-     * scripted byte sequences.
-     *
-     * @apiNote
-     * The token issuer draws from {@code nextBytes} once for the
-     * token and once for the blinding factor.
-     *
-     * @param first  the first byte sequence to deliver
-     * @param second the second byte sequence to deliver
-     * @return the scripted {@link SecureRandom}
-     */
+    // issue() draws from nextBytes once for the token and once for the blinding factor.
     private static SecureRandom scriptedRandom(byte[] first, byte[] second) {
         return new SecureRandom() {
             private int call;
@@ -294,20 +225,8 @@ class WamPrivateStatsUploaderTest {
         };
     }
 
-    /**
-     * Extracts the request body bytes from the captured
-     * {@link HttpRequest} via the body publisher's
-     * {@link Flow.Subscriber} contract.
-     *
-     * @apiNote
-     * Needed because {@link HttpRequest.BodyPublisher} does not
-     * expose its bytes directly; the test subscribes synchronously
-     * and collects the {@link ByteBuffer} payloads into a
-     * heap buffer.
-     *
-     * @param request the captured request
-     * @return the body bytes
-     */
+    // HttpRequest.BodyPublisher does not expose its bytes directly, so subscribe synchronously and
+    // collect the ByteBuffer payloads.
     private static byte[] extractBody(HttpRequest request) {
         var publisher = request.bodyPublisher().orElseThrow();
         var collected = new ByteArrayOutputStream();
@@ -336,16 +255,8 @@ class WamPrivateStatsUploaderTest {
         return collected.toByteArray();
     }
 
-    /**
-     * Loads the first ed25519 vector from the shared fixture file.
-     *
-     * @apiNote
-     * Reuses the same vector that
-     * {@code WamPrivateStatsTokenIssuerTest} pins, so any divergence
-     * between the upload and issuance paths surfaces.
-     *
-     * @return the deserialised vector
-     */
+    // Reuses the same vector WamPrivateStatsTokenIssuerTest pins, so any divergence between the
+    // upload and issuance paths surfaces.
     private static Vector loadFirstVector() {
         var resource = "/fixtures/wam/ed25519-live-bundle-vectors.json";
         try (var stream = WamPrivateStatsUploaderTest.class.getResourceAsStream(resource)) {
@@ -362,264 +273,133 @@ class WamPrivateStatsUploaderTest {
         }
     }
 
-    /**
-     * A compact holder for an upload's captured request, body, and
-     * the uploader's classified result.
-     *
-     * @param request the captured HTTP request
-     * @param body    the captured body bytes
-     * @param result  the uploader's result
-     */
+    // An upload's captured request, body, and the uploader's classified result.
     private record CapturedUpload(HttpRequest request, byte[] body, WamPrivateStatsUploadResult result) {
     }
 
-    /**
-     * A compact holder for the ed25519 vector hex strings consumed
-     * by the tests.
-     *
-     * @param msg       the message hex
-     * @param scalar    the scalar hex
-     * @param blinded   the blinded-credential hex
-     * @param pk        the ACS public-key hex
-     * @param signed    the signed-credential hex
-     * @param unblinded the unblinded-token hex
-     */
+    // Per-vector hex strings from the KAT fixture.
     private record Vector(String msg, String scalar, String blinded, String pk, String signed, String unblinded) {
     }
 
-    /**
-     * A minimal {@link HttpClient} stub that records the request and
-     * returns a canned status code.
-     *
-     * @apiNote
-     * Sufficient for the uploader's single
-     * {@link HttpClient#send(HttpRequest, HttpResponse.BodyHandler)}
-     * call; abstract methods unrelated to that call throw to surface
-     * unintended use immediately.
-     */
+    // A minimal HttpClient stub: records the request and returns a canned status. Sufficient for the
+    // uploader's single send() call; unrelated abstract methods throw to surface unintended use.
     private static final class RecordingHttpClient extends HttpClient {
-        /**
-         * The canned HTTP status returned to the uploader.
-         */
         private final int status;
-
-        /**
-         * The hook invoked with the captured request, used by the
-         * tests to record the request bytes.
-         */
         private final Consumer<HttpRequest> onSend;
 
-        /**
-         * Constructs a recording client returning the given status.
-         *
-         * @param status the canned HTTP status
-         * @param onSend the hook to invoke with the captured request
-         */
         RecordingHttpClient(int status, Consumer<HttpRequest> onSend) {
             this.status = status;
             this.onSend = onSend;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<CookieHandler> cookieHandler() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<Duration> connectTimeout() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Redirect followRedirects() {
             return Redirect.NEVER;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<ProxySelector> proxy() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         *
-         * @implNote
-         * This implementation throws because the uploader has no
-         * legitimate reason to inspect the stub's SSL context.
-         */
         @Override
         public SSLContext sslContext() {
             throw new UnsupportedOperationException("RecordingHttpClient: sslContext() is not stubbed");
         }
 
-        /**
-         * {@inheritDoc}
-         *
-         * @implNote
-         * This implementation throws because the uploader has no
-         * legitimate reason to inspect the stub's SSL parameters.
-         */
         @Override
         public SSLParameters sslParameters() {
             throw new UnsupportedOperationException("RecordingHttpClient: sslParameters() is not stubbed");
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<Authenticator> authenticator() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Version version() {
             return Version.HTTP_2;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<Executor> executor() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         *
-         * @implNote
-         * This implementation records the request via {@link #onSend}
-         * and returns a {@link CannedResponse} carrying the
-         * preconfigured status.
-         */
         @Override
         public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
             onSend.accept(request);
             return new CannedResponse<>(request, status);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
             return CompletableFuture.completedFuture(send(request, responseBodyHandler));
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
             return sendAsync(request, responseBodyHandler);
         }
     }
 
-    /**
-     * A synthetic {@link HttpResponse} carrying only the status
-     * code, since the uploader only consults
-     * {@link HttpResponse#statusCode()}.
-     *
-     * @param <T> the body type
-     */
+    // A synthetic HttpResponse carrying only the status code, since the uploader only consults
+    // statusCode().
     private static final class CannedResponse<T> implements HttpResponse<T> {
-        /**
-         * The originating request, echoed back through {@link #request()}.
-         */
         private final HttpRequest request;
-
-        /**
-         * The HTTP status code returned to the uploader.
-         */
         private final int status;
 
-        /**
-         * Constructs a canned response for the given request and
-         * status.
-         *
-         * @param request the originating request
-         * @param status  the HTTP status code
-         */
         CannedResponse(HttpRequest request, int status) {
             this.request = request;
             this.status = status;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public int statusCode() {
             return status;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public HttpRequest request() {
             return request;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<HttpResponse<T>> previousResponse() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public HttpHeaders headers() {
             return HttpHeaders.of(Map.of(), (_, _) -> true);
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public T body() {
             return null;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public Optional<SSLSession> sslSession() {
             return Optional.empty();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public URI uri() {
             return request.uri();
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public HttpClient.Version version() {
             return HttpClient.Version.HTTP_2;

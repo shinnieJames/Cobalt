@@ -19,31 +19,23 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that perform a one-sided message delete (only on the current user's devices).
  *
- * @apiNote
- * Drives the "delete for me" UI affordance that
- * {@code WAWebChatSendDeleteMsgsBridge} and
- * {@code WAWebAddonDeleteAddons} dispatch through: the mutation describes
- * one or more messages that should disappear from the current user's
- * devices without touching the original sender or peer. The factory is the
- * outgoing-mutation counterpart of
+ * Drives the "delete for me" affordance: the mutation describes one or more messages that should
+ * disappear from the current user's devices without touching the original sender or peer. This
+ * factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.DeleteMessageForMeHandler}.
  *
  * @implNote
- * This implementation takes pre-resolved {@link MessageKey} instances and
- * parallel lists of message timestamps and group flags. WA Web's
- * {@code WAWebDeleteMessageForMeSync.getDeleteForMeMutations} reads those
- * fields off the live message model via
- * {@code WAWebMsgGetters.getSender}, {@code getT}, and
- * {@code getIsGroupMsg}; Cobalt does not run that live-message model so the
- * caller hands the data in already projected.
+ * This implementation takes pre-resolved {@link MessageKey} instances and parallel lists of message
+ * timestamps and group flags. WA Web's {@code getDeleteForMeMutations} reads those fields off the
+ * live message model via {@code WAWebMsgGetters.getSender}, {@code getT}, and {@code getIsGroupMsg};
+ * Cobalt does not run that live-message model so the caller hands the data in already projected.
  */
 public final class DeleteMessageForMeMutationFactory {
     /**
      * Creates an instance with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public DeleteMessageForMeMutationFactory() {
 
@@ -52,22 +44,19 @@ public final class DeleteMessageForMeMutationFactory {
     /**
      * Returns a SET mutation that deletes a single message for the current user.
      *
-     * @apiNote
-     * Call this when fanning out a delete for one specific
-     * {@code (remoteJid, id, fromMe, participant)} tuple. The mutation
-     * index follows
+     * Targets one specific {@code (remoteJid, id, fromMe, participant)} tuple. The mutation index
+     * follows
      * {@snippet :
      *     ["deleteMessageForMe", remoteJid.toString(), id, fromMe ? "1" : "0", participant != null && !fromMe ? participant.toString() : "0"]
      * }
-     * and the {@link DeleteMessageForMeAction} sub-message carries the
-     * {@code deleteMedia} flag plus the original message timestamp.
+     * and the {@link DeleteMessageForMeAction} sub-message carries the {@code deleteMedia} flag plus
+     * the original message timestamp.
      *
      * @implNote
-     * This implementation builds the index inline instead of delegating to
-     * a {@code WAWebSyncdActionUtils.buildMessageKey} helper; the wire shape
-     * is identical to WA Web's. The participant segment is written as
-     * {@code "0"} when the message is either non-group or sent by the
-     * current user, matching the receive-side parser's expectations in
+     * This implementation builds the index inline instead of delegating to a
+     * {@code WAWebSyncdActionUtils.buildMessageKey} helper; the wire shape is identical to WA Web's.
+     * The participant segment is written as {@code "0"} when the message is either non-group or sent
+     * by the current user, matching the receive-side parser's expectations in
      * {@code WAWebSyncdIndexUtils.syncKeyToMsgKey}.
      *
      * @param timestamp        the mutation timestamp
@@ -125,21 +114,17 @@ public final class DeleteMessageForMeMutationFactory {
     /**
      * Returns one SET mutation per message in the supplied batch, sharing a single timestamp.
      *
-     * @apiNote
-     * Use this for the multi-select "delete for me" path; the three lists
-     * are parallel arrays indexed together. Messages whose
-     * {@link MessageKey#parentJid()} is empty are skipped silently.
+     * Backs the multi-select "delete for me" path; the three lists are parallel arrays indexed
+     * together. Messages whose {@link MessageKey#parentJid()} is empty are skipped silently.
      *
      * @implNote
-     * This implementation derives the participant segment as
-     * {@code key.senderJid()} converted to its user-JID form, then includes
-     * it only when the message is a group message that the current user
-     * did not author. WA Web reads {@code getSender(msg)} from the live
-     * message model and runs the same {@code widToUserJid} conversion. A
-     * single timestamp is reused across the batch so the mutations land
-     * together on the wire, matching WA Web's
-     * {@code getDeleteForMeMutations} which calls
-     * {@code WATimeUtils.unixTimeMs()} once outside the loop.
+     * This implementation derives the participant segment as {@link MessageKey#senderJid()} converted
+     * to its user-JID form via {@link Jid#toUserJid()}, then includes it only when the message is a
+     * group message that the current user did not author. WA Web reads {@code getSender(msg)} from
+     * the live message model and runs the same {@code widToUserJid} conversion. A single timestamp is
+     * reused across the batch so the mutations land together on the wire, matching WA Web's
+     * {@code getDeleteForMeMutations} which calls {@code WATimeUtils.unixTimeMs()} once outside the
+     * loop.
      *
      * @param keys              the per-message {@link MessageKey}s; {@link MessageKey#parentJid()} is required
      * @param deleteMedia       {@code true} if the on-disk media must be deleted as well

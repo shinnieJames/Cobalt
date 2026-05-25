@@ -19,50 +19,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Builds the MEX request that fetches the reaction-sender list for a
- * specific newsletter message.
+ * Builds the MEX request that fetches the reaction-sender list for a specific newsletter message.
  *
- * @apiNote
- * Drives the admin reactions inspector where the owner taps a reaction
- * count under a newsletter message to see which subscribers used each
- * emoji; the response groups senders by {@code reactionCode}.
+ * <p>Backs the admin reactions inspector where the owner taps a reaction count under a newsletter
+ * message to see which subscribers used each emoji. The matching response, parsed by
+ * {@link FetchNewsletterMessageReactionSenderListMexResponse}, groups senders by reaction code.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterMessageReactionSenderListJob")
 public final class FetchNewsletterMessageReactionSenderListMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled persisted-query identifier of
-     * {@code WAWebMexFetchNewsletterMessageReactionSenderListJobQuery.graphql}
-     * on the WhatsApp relay.
+     * Holds the compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterMessageReactionSenderListJobQuery.graphql} on the WhatsApp
+     * relay.
      *
-     * @apiNote
-     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     * <p>Sent as the {@code query_id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "29575462448733991";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * for this query.
+     * Holds the GraphQL operation name reported by WhatsApp Web's MEX perf tracker for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterMessageReactionSenderList";
 
     /**
-     * The newsletter Jid that owns the target message.
+     * Holds the newsletter Jid that owns the target message.
      */
     private final String newsletterId;
 
     /**
-     * The server-assigned identifier of the target message.
+     * Holds the server-assigned identifier of the target message.
      */
     private final long serverId;
 
     /**
-     * Constructs a request that targets the reaction senders for the message
-     * identified by {@code (newsletterId, serverId)}.
+     * Constructs a request that targets the reaction senders for the message identified by the
+     * newsletter Jid and server id pair.
      *
-     * @apiNote
-     * Both fields are mandatory; pass the newsletter Jid string (no
-     * {@code Jid} wrapping) and the canonical server message id as
-     * returned in the message envelope.
+     * <p>Both fields are mandatory; the caller passes the newsletter Jid string with no
+     * {@code Jid} wrapping and the canonical server message id as returned in the message envelope.
      *
      * @param newsletterId the newsletter Jid
      * @param serverId     the server-assigned message identifier
@@ -76,8 +70,7 @@ public final class FetchNewsletterMessageReactionSenderListMexRequest implements
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #QUERY_ID}.
+     * <p>Returns the value of {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -87,8 +80,7 @@ public final class FetchNewsletterMessageReactionSenderListMexRequest implements
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Returns {@link #OPERATION_NAME}.
+     * <p>Returns the value of {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -96,18 +88,15 @@ public final class FetchNewsletterMessageReactionSenderListMexRequest implements
     }
 
     /**
-     * Serialises this request into a MEX IQ {@link NodeBuilder}.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * Produces the {@code {variables: {input: {id, server_id}}}} payload.
+     * <p>Produces the {@code {variables: {input: {id, server_id}}}} payload.
      *
-     * @implNote
-     * This implementation writes the GraphQL variables directly through
-     * {@link JSONWriter} and wraps any {@link IOException} from the
-     * in-memory writer in an {@link UncheckedIOException}.
+     * @implNote This implementation writes the GraphQL variables directly through a
+     * {@link JSONWriter} and wraps any {@link IOException} from the in-memory writer in an
+     * {@link UncheckedIOException}.
      *
-     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
-     *         GraphQL variables
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised GraphQL variables
      * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterMessageReactionSenderListJob", exports = "mexFetchNewsletterMessageReactionSenderList",

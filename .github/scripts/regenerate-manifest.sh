@@ -24,6 +24,7 @@ LIB_ROWS=(
     "openh264   openh264          openh264"
     "speexdsp   speexdsp          speexdsp"
     "usrsctp    usrsctp           usrsctp"
+    "libmdbx    mdbx              mdbx"
     "ffmpeg     ffmpeg-avformat   avformat"
     "ffmpeg     ffmpeg-avcodec    avcodec"
     "ffmpeg     ffmpeg-avdevice   avdevice"

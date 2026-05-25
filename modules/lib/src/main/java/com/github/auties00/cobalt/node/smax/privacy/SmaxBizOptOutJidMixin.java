@@ -10,25 +10,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The wire-level parser for the {@code BizOptOutJid} arm of an opt-out item's {@code biz_opt_out_ids} field.
+ * Parses the {@code BizOptOutJid} arm of an opt-out item's {@code biz_opt_out_ids} field.
  *
- * @apiNote
- * Invoked from {@link BizOptOutId#parse(Node)} as the fall-through arm after
- * {@link SmaxBizOptOutBrandIdMixin#parse(Node)}; reads the required {@code biz_opt_out_jid} attribute and projects
- * it as a business JID. Used by {@code WAWebGetOptOutList.getOptOutList} to attach a chat-list pill keyed directly
- * on the resolved {@code wid} without further brand-id expansion.
+ * <p>The arm reads the required {@code biz_opt_out_jid} attribute and projects it as a business JID.
+ * {@link BizOptOutId#parse(Node)} invokes this parser as the fall-through after
+ * {@link SmaxBizOptOutBrandIdMixin#parse(Node)}; on a match it lifts the JID into a {@link BizOptOutId.UserJid}
+ * that is addressable directly without any brand-id expansion.
  *
- * @implNote
- * This implementation collapses WA Web's {@code WAResultOrError} singleton to a plain {@link Optional}: empty
- * means the required JID attribute is missing or fails user-JID validation.
+ * @implNote This implementation collapses the WA Web result-or-error singleton to a plain {@link Optional}:
+ * empty means the required JID attribute is missing or fails user-JID validation.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsBizOptOutJidMixin")
 public final class SmaxBizOptOutJidMixin {
     /**
-     * The unreachable utility-class constructor.
-     *
-     * @apiNote
-     * The class only exposes static parsing helpers; instantiation is forbidden to keep the call site obvious.
+     * Prevents instantiation of this static-only parser holder.
      *
      * @throws AssertionError on every invocation
      */
@@ -39,20 +34,18 @@ public final class SmaxBizOptOutJidMixin {
     /**
      * The decoded {@code BizOptOutJid} singleton wrapping the parsed business user JID.
      *
-     * @apiNote
-     * Returned by {@link SmaxBizOptOutJidMixin#parse(Node)} when the {@code biz_opt_out_jid} attribute is present
-     * and validates as a user JID. Consumed by {@link BizOptOutId#parse(Node)} to lift the JID into the
-     * {@link BizOptOutId.UserJid} variant.
+     * <p>Returned by {@link SmaxBizOptOutJidMixin#parse(Node)} when the {@code biz_opt_out_jid} attribute is
+     * present and validates as a user JID, then lifted into the {@link BizOptOutId.UserJid} variant by
+     * {@link BizOptOutId#parse(Node)}.
      *
      * @param bizOptOutJid the parsed business user JID; never {@code null}
      */
     public record Projection(Jid bizOptOutJid) {
         /**
-         * Validates the projection payload.
+         * Validates the projection payload, rejecting a missing JID.
          *
-         * @apiNote
-         * The compact constructor rejects a missing JID up front; the calling parser has already validated the
-         * server component, so this is a defensive check against incorrect builder use.
+         * <p>The calling parser has already validated the server component, so this is a defensive check against
+         * incorrect builder use.
          *
          * @param bizOptOutJid the business JID; never {@code null}
          * @throws NullPointerException if {@code bizOptOutJid} is {@code null}
@@ -65,15 +58,12 @@ public final class SmaxBizOptOutJidMixin {
     /**
      * Parses an {@code <item>} node as a {@code BizOptOutJid} projection.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the required {@code biz_opt_out_jid} attribute is missing or fails
-     * {@link Jid#hasUserServer()}. Callers in the {@code biz_opt_out_ids} disjunction lift the projection into
-     * the {@link BizOptOutId.UserJid} arm when present.
+     * <p>The result is empty when the required {@code biz_opt_out_jid} attribute is missing or fails
+     * {@link Jid#hasUserServer()}. Callers in the {@code biz_opt_out_ids} disjunction lift the projection into the
+     * {@link BizOptOutId.UserJid} arm when present.
      *
-     * @implNote
-     * This implementation mirrors WA Web's {@code attrUserJid} validator inline: a present-but-non-user JID
-     * rejects the projection so the disjunction can fail correctly rather than silently accepting a malformed
-     * value.
+     * @implNote This implementation rejects a present-but-non-user JID so the disjunction can fail correctly
+     * rather than silently accepting a malformed value.
      *
      * @param item the source {@code <item>} node; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty when the schema does not match

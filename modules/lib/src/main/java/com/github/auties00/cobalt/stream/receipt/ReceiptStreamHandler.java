@@ -13,41 +13,25 @@ import com.github.auties00.cobalt.wam.WamService;
  * Routes an incoming {@code <receipt>} stanza to the appropriate specialised
  * {@link SocketStream.Handler}.
  *
- * @apiNote
- * Embedders do not interact with this dispatcher directly; it is registered
- * once by the {@link SocketStream} wiring and consumes every
- * {@code <receipt>} stanza coming off the socket. WhatsApp multiplexes three
- * disjoint flows onto the {@code <receipt>} tag:
- * <ul>
- * <li>VoIP signalling receipts whose first child is {@code <offer>},
- * {@code <accept>} or {@code <reject>}; these are forwarded to
- * {@link CallReceiptReceiver}.</li>
- * <li>Retry receipts whose stanza {@code type} is {@code "retry"} or
- * {@code "enc_rekey_retry"}; these request the re-send of a previously
- * failed-to-decrypt Signal message.</li>
- * <li>Delivery, read and played acknowledgements (every other receipt).</li>
- * </ul>
- * The latter two are both forwarded to {@link MessageReceiptStreamHandler},
- * which performs the secondary retry-vs-regular split inside its own
- * {@code handle} entry point.
+ * <p>WhatsApp multiplexes three disjoint flows onto the {@code <receipt>} tag,
+ * and this dispatcher is the single registered consumer for all of them. VoIP
+ * signalling receipts whose first child is {@code <offer>}, {@code <accept>}
+ * or {@code <reject>} are forwarded to {@link CallReceiptReceiver}. Every
+ * other receipt, both retry receipts (whose stanza {@code type} is
+ * {@code "retry"} or {@code "enc_rekey_retry"}) and regular delivery, read or
+ * played acknowledgements, is forwarded to
+ * {@link MessageReceiptStreamHandler}, which performs the secondary
+ * retry-vs-regular split inside its own {@link #handle(Node)} entry point.
  *
  * @implNote
  * This implementation fuses three WA Web dispatch sites onto a single Java
- * entry point.
- * <ul>
- * <li>{@code WAWebCommsHandleWorkerCompatibleStanza.handleWorkerCompatibleStanza}
- * runs the call-receipt branch via
- * {@code WAWebCommsHandleStanzaUtils.isCallReceipt} before any other
- * handler can claim the stanza.</li>
- * <li>{@code WAWebCommsHandleMessagingStanza.handleMessagingStanza}
- * handles all non-retry, non-call receipts via
- * {@code WAWebHandleMsgReceipt}.</li>
- * <li>{@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza} handles
- * retry receipts via {@code WAWebHandleMessageRetryRequest}.</li>
- * </ul>
- * Cobalt does not split per-worker / per-messaging / per-logged-in entry
- * points because it has no worker thread model, so the three branches
- * collapse into the single switch in {@link #handle(Node)}.
+ * entry point: the call-receipt branch
+ * ({@code WAWebCommsHandleWorkerCompatibleStanza}), the non-retry messaging
+ * branch ({@code WAWebCommsHandleMessagingStanza}) and the retry branch
+ * ({@code WAWebCommsHandleLoggedInStanza}). Cobalt does not split per-worker,
+ * per-messaging and per-logged-in entry points because it has no worker
+ * thread model, so the three branches collapse into the single switch in
+ * {@link #handle(Node)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleWorkerCompatibleStanza")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
@@ -70,20 +54,17 @@ public final class ReceiptStreamHandler implements SocketStream.Handler {
      * Constructs a new {@link ReceiptStreamHandler} and eagerly instantiates
      * both downstream specialised handlers.
      *
-     * @apiNote
-     * Constructed by the {@link SocketStream} wiring with the
-     * {@link WhatsAppClient}, {@link MessageService} and {@link WamService}
-     * already initialized. {@link MessageService} is forwarded to
-     * {@link MessageReceiptStreamHandler} for the retry-receipt re-send
-     * path; {@link WamService} is forwarded for the
-     * {@code ReceiptStanzaReceive} telemetry event.
+     * <p>The {@link MessageService} is forwarded to
+     * {@link MessageReceiptStreamHandler} for the retry-receipt re-send path,
+     * and the {@link WamService} is forwarded for the receipt-stanza-receive
+     * telemetry event.
      *
      * @param whatsapp       the non-{@code null} client used to send the
      *                       {@code <ack>} response and access the store
      * @param messageService the non-{@code null} service that re-sends a
      *                       message in response to a retry receipt
      * @param wamService     the non-{@code null} telemetry service that
-     *                       commits the {@code ReceiptStanzaReceive} event
+     *                       commits the receipt-stanza-receive event
      * @param ackSender      the {@link AckSender} forwarded to both
      *                       sub-handlers for emitting outbound
      *                       {@code <ack>} stanzas
@@ -96,10 +77,9 @@ public final class ReceiptStreamHandler implements SocketStream.Handler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Forwards VoIP-signalling receipts to {@link CallReceiptReceiver} and
-     * everything else (both retry receipts and regular delivery, read or
-     * played acknowledgements) to {@link MessageReceiptStreamHandler}.
+     * <p>Forwards VoIP-signalling receipts to {@link CallReceiptReceiver} and
+     * everything else, both retry receipts and regular delivery, read or
+     * played acknowledgements, to {@link MessageReceiptStreamHandler}.
      *
      * @implNote
      * This implementation defers the secondary retry-vs-regular split to
@@ -136,18 +116,17 @@ public final class ReceiptStreamHandler implements SocketStream.Handler {
      * Returns {@code true} when the first child of the receipt stanza
      * identifies a VoIP signalling acknowledgement.
      *
-     * @apiNote
-     * Used by {@link #handle(Node)} to split the call branch off before
-     * the receipt is parsed as a delivery acknowledgement. The three
-     * recognized children mirror WA Web's classification: {@code <offer>}
-     * acknowledges a VoIP call offer, {@code <accept>} acknowledges the
-     * peer's acceptance and {@code <reject>} acknowledges a rejection.
+     * <p>The split runs before the receipt is parsed as a delivery
+     * acknowledgement. The three recognized children mirror WA Web's
+     * classification: {@code <offer>} acknowledges a VoIP call offer,
+     * {@code <accept>} acknowledges the peer's acceptance and
+     * {@code <reject>} acknowledges a rejection.
      *
      * @implNote
      * This implementation mirrors WA Web's
-     * {@code WAWebCommsHandleStanzaUtils.isCallReceipt} verbatim, including
-     * the assumption that the first child alone is sufficient to
-     * discriminate the stanza class.
+     * {@code WAWebCommsHandleStanzaUtils.isCallReceipt}, including the
+     * assumption that the first child alone is sufficient to discriminate
+     * the stanza class.
      *
      * @param node the {@code <receipt>} stanza to classify
      * @return {@code true} when the first child has tag {@code offer},

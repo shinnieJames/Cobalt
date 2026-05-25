@@ -14,13 +14,12 @@ import java.util.Optional;
  * Closed family of reply variants observable on the signed pre-key rotation
  * {@link IqRotateKeyRequest} roundtrip.
  *
- * @apiNote
- * {@link Success} carries no payload beyond the envelope echo and signals that the new signed
+ * <p>{@link Success} carries no payload beyond the envelope echo and signals that the new signed
  * pre-key is now the live one server-side. {@link ClientError} surfaces the two documented
- * rejection codes ({@code 406} "rotateKey generated bad key", {@code 409} "skey did not pass
- * server validation", which WA Web treats as a hint to fall through to a
+ * rejection codes ({@code 406} "rotateKey generated bad key", {@code 409} "skey did not pass server
+ * validation", which WA Web treats as a hint to fall through to a
  * {@link IqDigestKeyRequest digest probe}). {@link ServerError} carries {@code 5xx} envelopes for
- * which WA Web's job loop "waits a day" before retrying.
+ * which WA Web's job loop waits roughly a day before retrying.
  */
 @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
 public sealed interface IqRotateKeyResponse extends IqOperation.Response
@@ -29,9 +28,8 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     /**
      * Parses the inbound stanza into the first matching {@link IqRotateKeyResponse} variant.
      *
-     * @apiNote
-     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
-     * {@link ServerError#of(Node, Node)}.
+     * <p>Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)},
+     * then {@link ServerError#of(Node, Node)}.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza
@@ -58,10 +56,8 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     /**
      * Successful echo from the relay; the new signed pre-key is now live.
      *
-     * @apiNote
-     * Carries no payload because WA Web's {@code rotateKeyResponseParser} only asserts the
-     * envelope shape and discards any body. Consumers can treat this variant as a boolean
-     * success marker.
+     * <p>Carries no payload because WA Web's {@code rotateKeyResponseParser} only asserts the
+     * envelope shape and discards any body; this variant can be treated as a boolean success marker.
      */
     @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
     final class Success implements IqRotateKeyResponse {
@@ -74,8 +70,7 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
         /**
          * Parses a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
+         * <p>Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -93,8 +88,7 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
         /**
          * Compares this success envelope to another instance for equality.
          *
-         * @apiNote
-         * All instances are interchangeable; equality reduces to a class-identity check.
+         * <p>All instances are interchangeable; equality reduces to a class-identity check.
          *
          * @param obj the candidate instance
          * @return {@code true} when {@code obj} is a non-{@code null} {@code Success}
@@ -131,11 +125,10 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     /**
      * Client-error variant; the relay rejected the rotation with a {@code 4xx} envelope.
      *
-     * @apiNote
-     * WA Web's rotation job distinguishes two codes here. {@code 406} "rotateKey generated bad
+     * <p>WA Web's rotation job distinguishes two codes here. {@code 406} "rotateKey generated bad
      * key" is logged and dropped. {@code 409} "skey did not pass server validation" is treated as a
-     * trigger to run {@link IqDigestKeyRequest} on the next job step. Cobalt surfaces both as the
-     * same variant and lets the caller branch on {@link #errorCode()}.
+     * trigger to run {@link IqDigestKeyRequest} on the next job step. Both surface as this single
+     * variant; the caller branches on {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
     final class ClientError implements IqRotateKeyResponse {
@@ -181,8 +174,7 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
         /**
          * Parses a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -242,8 +234,7 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     /**
      * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope.
      *
-     * @apiNote
-     * WA Web's rotation job logs the code and waits roughly a day before the next retry; callers
+     * <p>WA Web's rotation job logs the code and waits roughly a day before the next retry; callers
      * that mirror that policy should schedule retries accordingly.
      */
     @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
@@ -290,8 +281,7 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
         /**
          * Parses a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

@@ -16,14 +16,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Tracks whether the assigned agent has opened the assigned chat from {@code agentChatAssignmentOpenedStatus} sync mutations.
  *
- * @apiNote
- * Drives the Business inbox indicator that shows whether the agent
- * currently assigned to a chat has opened it. When the agent opens
- * the chat on another device, the server replays the resulting
- * {@link ChatAssignmentOpenedStatusAction} here. Cobalt embedders
- * observe the result via the {@code opened} flag on
- * {@link com.github.auties00.cobalt.model.chat.ChatAssignment} as
- * surfaced by
+ * <p>This handler drives the Business inbox indicator that shows whether the
+ * agent currently assigned to a chat has opened it. When the agent opens the
+ * chat on another device, the server replays the resulting
+ * {@link ChatAssignmentOpenedStatusAction} here, and the result becomes
+ * observable via the {@code opened} flag on
+ * {@link com.github.auties00.cobalt.model.chat.ChatAssignment} as surfaced by
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#findChatAssignment(Jid)}.
  *
  * @implNote
@@ -42,9 +40,8 @@ public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActio
     /**
      * Constructs the singleton chat-assignment-opened-status handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this once during client
+     * bootstrap.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatAssignmentOpenedStatusSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public ChatAssignmentOpenedStatusHandler() {
@@ -72,16 +69,15 @@ public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActio
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the JSON index
-     * {@code ["agentChatAssignmentOpenedStatus", chatJid, agentId]},
-     * resolves the chat by JID, confirms the existing assignment
-     * matches the same agent, then upserts the
-     * {@link com.github.auties00.cobalt.model.chat.ChatAssignment} with
-     * the new {@code opened} flag. Returns
+     * <p>Validates the JSON index
+     * {@code ["agentChatAssignmentOpenedStatus", chatJid, agentId]}, resolves
+     * the chat by JID, confirms the existing assignment matches the same
+     * agent, then upserts the
+     * {@link com.github.auties00.cobalt.model.chat.ChatAssignment} with the new
+     * {@code opened} flag. Returns
      * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     * operations and orphan results when the chat or its existing
-     * assignment is not in the store.
+     * operations and orphan results when the chat or its existing assignment is
+     * not in the store.
      *
      * @implNote
      * This implementation reads {@link ChatAssignmentOpenedStatusAction#chatOpened()}

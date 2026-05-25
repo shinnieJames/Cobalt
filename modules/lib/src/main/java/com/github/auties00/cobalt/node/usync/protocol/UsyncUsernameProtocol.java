@@ -13,27 +13,21 @@ import com.github.auties00.cobalt.node.usync.result.UsernameResult;
 import java.util.Optional;
 
 /**
- * USync {@code username} protocol descriptor.
+ * Describes the USync {@code username} protocol.
  *
- * @apiNote
- * Asks the relay for each peer's claimed username; added by every
- * contact-sync flow that supports username addressing (see
- * {@code WAWebContactSyncApi}, {@code WAWebContactSyncUtils}, and
- * {@code WAWebQueryExistsJob}).
+ * This descriptor asks the relay for each peer's claimed username. The
+ * descriptor is stateless and carries no per-user request payload; pair it
+ * with any {@link UsyncUser} that carries an addressing slot.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncUsername")
 public final class UsyncUsernameProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "username";
 
     /**
-     * Builds a default username-protocol descriptor.
-     *
-     * @apiNote
-     * The descriptor is stateless; pair it with any {@link UsyncUser} that
-     * carries an addressing slot.
+     * Creates a username-protocol descriptor.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "USyncUsernameProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -54,8 +48,7 @@ public final class UsyncUsernameProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits an empty {@code <username/>} element,
-     * matching the JS {@code wap("username", null)} shape.
+     * This implementation emits an empty {@code <username/>} element.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
@@ -68,10 +61,8 @@ public final class UsyncUsernameProtocol implements UsyncProtocol {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation always returns {@link Optional#empty()} because
-     * the username protocol has no per-user payload on the request side,
-     * matching the JS {@code null} return in
-     * {@code USyncUsernameProtocol.getUserElement}.
+     * This implementation always returns {@link Optional#empty()} because the
+     * username protocol has no per-user payload on the request side.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
@@ -85,8 +76,7 @@ public final class UsyncUsernameProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation reads the username from the node's inline text
-     * content, matching the JS {@code hasContent() ? contentString() : null}
-     * branch.
+     * content, yielding {@code null} when the node carries no content.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",

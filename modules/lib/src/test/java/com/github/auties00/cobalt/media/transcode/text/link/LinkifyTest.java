@@ -7,23 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the safety properties of {@link Linkify}.
- *
- * @apiNote
- * Mirrors {@code WALinkify} at the entry-point shape: the TLD-guard
- * short-circuit, {@link Linkify#hasHttpLink} scheme strictness,
- * {@link Linkify#validateEmail} mailto-only acceptance, and the
- * {@code null}-safety of every public entry. The byte-equal oracle
- * over WA Web's full corpus is exercised by the
- * link-detection live-capture harness.
+ * Exercises the safety properties of {@link Linkify}: the TLD-guard short-circuit,
+ * {@link Linkify#hasHttpLink} scheme strictness, {@link Linkify#validateEmail} mailto-only
+ * acceptance, and the {@code null}-safety of every public entry.
  */
 @DisplayName("Linkify")
 class LinkifyTest {
 
-    /**
-     * Verifies that a body lacking any TLD short-circuits before the
-     * composite pattern runs.
-     */
     @Test
     @DisplayName("input lacking any TLD is rejected by the TLD-guard short-circuit")
     void noTldRejected() {
@@ -31,10 +21,6 @@ class LinkifyTest {
                 "TLD_GUARD must short-circuit before regex matching");
     }
 
-    /**
-     * Verifies that {@link Linkify#hasHttpLink} rejects bare hosts
-     * lacking an explicit scheme.
-     */
     @Test
     @DisplayName("hasHttpLink rejects bare hosts without an explicit scheme")
     void hasHttpLinkRequiresScheme() {
@@ -42,10 +28,6 @@ class LinkifyTest {
                 "bare host must NOT count as an http link");
     }
 
-    /**
-     * Verifies that {@link Linkify#validateEmail} rejects an HTTP
-     * URL.
-     */
     @Test
     @DisplayName("validateEmail rejects an http URL")
     void validateEmailRejectsHttp() {
@@ -53,10 +35,6 @@ class LinkifyTest {
                 "validateEmail must reject non-mailto schemes");
     }
 
-    /**
-     * Verifies that {@link Linkify#validateEmail} rejects a mailto
-     * address that does not cover the input entirely.
-     */
     @Test
     @DisplayName("validateEmail rejects when text contains extra characters around the mailto")
     void validateEmailRejectsPartialCoverage() {
@@ -64,10 +42,6 @@ class LinkifyTest {
                 "validateEmail requires the candidate to cover the input entirely");
     }
 
-    /**
-     * Verifies that every public entry returns a clean empty for
-     * {@code null} input rather than raising.
-     */
     @Test
     @DisplayName("null input is a clean empty rather than NPE")
     void nullSafe() {
@@ -77,9 +51,6 @@ class LinkifyTest {
         assertTrue(Linkify.validateEmail(null).isEmpty());
     }
 
-    /**
-     * Verifies that an unknown TLD is rejected by the TLD guard.
-     */
     @Test
     @DisplayName("unknown TLD is filtered out by the TLD guard")
     void unknownTldRejected() {

@@ -15,12 +15,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsSubGroupSuggestionsActionRequest}.
+ * Models the sealed reply family for a {@link SmaxGroupsSubGroupSuggestionsActionRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in
- * {@code WASmaxGroupsSubGroupSuggestionsActionRPC}. {@link Success} aggregates per-suggestion echo rows for each
- * sub-action, so callers can detect partial failures (for example a suggestion the relay refused to approve)
- * even when the envelope is successful.
+ * <p>The three permitted variants are {@link Success}, {@link ClientError}, and {@link ServerError}.
+ * {@link Success} aggregates per-suggestion echo rows for each sub-action, so callers can detect partial failures
+ * (for example a suggestion the relay refused to approve) even when the envelope is successful.
  */
 public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends SmaxOperation.Response
         permits SmaxGroupsSubGroupSuggestionsActionResponse.Success, SmaxGroupsSubGroupSuggestionsActionResponse.ClientError, SmaxGroupsSubGroupSuggestionsActionResponse.ServerError {
@@ -29,12 +28,11 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
      * Dispatches the inbound IQ across each {@link SmaxGroupsSubGroupSuggestionsActionResponse} variant in
      * priority order and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in
-     * {@code WASmaxGroupsSubGroupSuggestionsActionRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the caller so
+     * it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsSubGroupSuggestionsActionRequest} stanza, used to
@@ -59,12 +57,12 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
     }
 
     /**
-     * The reply variant carrying per-suggestion echo rows for each sub-action.
+     * Represents the reply variant carrying per-suggestion echo rows for each sub-action.
      *
-     * @apiNote Approve rows expose the {@code (creator, jid, creator_pn?)} triple plus an optional
-     * approval-error discriminator; reject and cancel rows additionally carry an optional identity tag and a
-     * not-found marker. The envelope succeeds even when individual rows carry rejection or not-found markers,
-     * so callers must walk each list to detect partial failures.
+     * <p>Approve rows expose the {@code (creator, jid, creator_pn?)} triple plus an optional approval-error
+     * discriminator; reject and cancel rows additionally carry an optional identity tag and a not-found marker.
+     * The envelope succeeds even when individual rows carry rejection or not-found markers, so callers must walk
+     * each list to detect partial failures.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionsActionResponseSuccess")
     final class Success implements SmaxGroupsSubGroupSuggestionsActionResponse {
@@ -85,6 +83,9 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
 
         /**
          * Constructs a {@link Success}.
+         *
+         * <p>The three lists are copied so post-construction mutation of the caller's lists has no effect on the
+         * variant.
          *
          * @param approve the approve echo rows
          * @param reject  the reject echo rows
@@ -132,12 +133,11 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseSubGroupSuggestionsActionResponseSuccess}: the IQ must
-         * be a valid {@code type="result"} echo of the request, must carry a
-         * {@code <sub_group_suggestions_action>} child, and each optional {@code <approve>} /
-         * {@code <reject>} / {@code <cancel>} grand-child's entries must satisfy the matching
-         * {@link ApprovedSuggestion#of(Node)} / {@link RejectedSuggestion#of(Node)} /
-         * {@link CancelledSuggestion#of(Node)}.
+         * <p>The IQ must be a valid {@code type="result"} echo of {@code request}, validated through
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, must carry a
+         * {@code <sub_group_suggestions_action>} child, and each optional {@code <approve>}, {@code <reject>},
+         * and {@code <cancel>} grand-child's entries must satisfy the matching {@link ApprovedSuggestion#of(Node)},
+         * {@link RejectedSuggestion#of(Node)}, and {@link CancelledSuggestion#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -233,12 +233,12 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
         }
 
         /**
-         * Approve-list echo row carrying the {@code (creator, jid, creator_pn?)} triple plus an optional
-         * approval-error discriminator tag.
+         * Represents an approve-list echo row carrying the {@code (creator, jid, creator_pn?)} triple plus an
+         * optional approval-error discriminator tag.
          *
-         * @apiNote {@link #approvalErrorTag()} is one of {@code "sub_group_creation_internal_server_error"},
+         * <p>{@link #approvalErrorTag()} is one of {@code "sub_group_creation_internal_server_error"},
          * {@code "pending_group_adds_error"}, {@code "resource_constraint"}, {@code "suggestion_conflict"}, or
-         * {@code "suggestion_not_found"}. Empty when the approval committed cleanly.
+         * {@code "suggestion_not_found"}, and is empty when the approval committed cleanly.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionsApprovalErrors")
@@ -333,9 +333,9 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
             /**
              * Tries to parse an {@link ApprovedSuggestion} echo row from a {@code <sub_group_suggestion/>} node.
              *
-             * @apiNote The {@code creator} and {@code jid} attributes are mandatory; an empty {@link Optional}
-             * is returned when either is absent. The first child whose tag matches an approval-error
-             * discriminator becomes the {@link #approvalErrorTag()}.
+             * <p>The {@code creator} and {@code jid} attributes are mandatory; an empty {@link Optional} is
+             * returned when either is absent. The first child whose tag matches an approval-error discriminator
+             * becomes the {@link #approvalErrorTag()}.
              *
              * @param suggestion the {@code <sub_group_suggestion/>} node
              * @return an {@link Optional} carrying the parsed row, or empty when the node is malformed
@@ -410,12 +410,11 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
         }
 
         /**
-         * Reject-list echo row carrying the {@code (creator, jid, creator_pn?)} triple plus an optional identity
-         * tag and an optional not-found marker.
+         * Represents a reject-list echo row carrying the {@code (creator, jid, creator_pn?)} triple plus an
+         * optional identity tag and an optional not-found marker.
          *
-         * @apiNote {@link #identityTag()} is the raw discriminator tag the WA Web parser routes through
-         * {@code WASmaxInGroupsIdentityTypes}; {@link #notFound()} mirrors the presence of an inner
-         * {@code <suggestion_not_found/>} child.
+         * <p>{@link #identityTag()} is the raw discriminator tag the WA Web parser routes through its identity
+         * types; {@link #notFound()} mirrors the presence of an inner {@code <suggestion_not_found/>} child.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsIdentityMixin")
@@ -512,9 +511,9 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
             /**
              * Tries to parse a {@link RejectedSuggestion} echo row from a {@code <sub_group_suggestion/>} node.
              *
-             * @apiNote The {@code creator} and {@code jid} attributes are mandatory; an empty {@link Optional}
-             * is returned when either is absent. The first non-{@code suggestion_not_found} child contributes
-             * the {@link #identityTag()}.
+             * <p>The {@code creator} and {@code jid} attributes are mandatory; an empty {@link Optional} is
+             * returned when either is absent. The first non-{@code suggestion_not_found} child contributes the
+             * {@link #identityTag()}.
              *
              * @param suggestion the {@code <sub_group_suggestion/>} node
              * @return an {@link Optional} carrying the parsed row, or empty when the node is malformed
@@ -593,10 +592,11 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
         }
 
         /**
-         * Cancel-list echo row carrying only the {@code jid} plus optional identity tag and not-found marker.
+         * Represents a cancel-list echo row carrying only the {@code jid} plus an optional identity tag and a
+         * not-found marker.
          *
-         * @apiNote Cancel rows omit the {@code creator} attribute by parity with the request side; the
-         * cancelling caller is implicit and the relay enforces ownership server-side.
+         * <p>Cancel rows omit the {@code creator} attribute by parity with the request side; the cancelling
+         * caller is implicit and the relay enforces ownership server-side.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionWithoutCreatorMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsIdentityMixin")
@@ -659,11 +659,10 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
             }
 
             /**
-             * Tries to parse a {@link CancelledSuggestion} echo row from a {@code <sub_group_suggestion/>}
-             * node.
+             * Tries to parse a {@link CancelledSuggestion} echo row from a {@code <sub_group_suggestion/>} node.
              *
-             * @apiNote The {@code jid} attribute is mandatory; an empty {@link Optional} is returned when
-             * absent. The first non-{@code suggestion_not_found} child contributes the {@link #identityTag()}.
+             * <p>The {@code jid} attribute is mandatory; an empty {@link Optional} is returned when absent. The
+             * first non-{@code suggestion_not_found} child contributes the {@link #identityTag()}.
              *
              * @param suggestion the {@code <sub_group_suggestion/>} node
              * @return an {@link Optional} carrying the parsed row, or empty when the node is malformed
@@ -734,8 +733,8 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
-     * referencing non-existent suggestions.
+     * Represents the reply variant emitted when the relay rejected the request envelope as malformed,
+     * unauthorised, or referencing non-existent suggestions.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionsActionResponseClientError")
     final class ClientError implements SmaxGroupsSubGroupSuggestionsActionResponse {
@@ -781,8 +780,9 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -840,7 +840,7 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Represents the reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupSuggestionsActionResponseServerError")
     final class ServerError implements SmaxGroupsSubGroupSuggestionsActionResponse {
@@ -886,8 +886,9 @@ public sealed interface SmaxGroupsSubGroupSuggestionsActionResponse extends Smax
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

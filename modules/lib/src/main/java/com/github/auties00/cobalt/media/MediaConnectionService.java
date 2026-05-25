@@ -19,17 +19,12 @@ import java.util.SequencedCollection;
  * buckets, the time-to-live values for the credentials, and the retry
  * budgets the server expects. {@link #update(Node)} installs a fresh
  * handshake; the transfer methods consume the most recently installed one.
- *
- * @apiNote
- * Use this service whenever Cobalt ships or materialises a media-bearing
- * message: {@link #upload(MediaProvider, MediaPayload)} for outbound
- * attachments, {@link #download(MediaProvider)} for inbound ones, and
- * {@link #deleteHistorySyncBlob(String, byte[], String, String)} to release
- * a consumed history-sync blob. {@link DefaultMediaConnectionService} is
- * the production implementation that talks to the live CDN; tests
- * substitute {@link com.github.auties00.cobalt.media.TestMediaConnectionService}
- * when they need a {@link MediaConnectionService} dependency without the
- * network stack.
+ * This service is the entry point whenever Cobalt ships or materialises a
+ * media-bearing message: {@link #upload(MediaProvider, MediaPayload)} for
+ * outbound attachments, {@link #download(MediaProvider)} for inbound ones,
+ * and {@link #deleteHistorySyncBlob(String, byte[], String, String)} to
+ * release a consumed history-sync blob. {@link DefaultMediaConnectionService}
+ * is the production implementation that talks to the live CDN.
  *
  * @implSpec
  * Implementations are expected to be thread-safe; the success-stream
@@ -43,15 +38,16 @@ import java.util.SequencedCollection;
 public interface MediaConnectionService {
     /**
      * Atomically replaces this service's snapshot with the credentials and
-     * host list parsed from {@code response} and releases any
-     * upload/download callers blocked on the first refresh.
+     * host list parsed from {@code response} and releases any upload or
+     * download callers blocked on the first refresh.
      *
-     * @apiNote
-     * Called by the success-stream handler each time the periodic
-     * {@code media_conn} IQ reply lands. Safe to call from any thread; a
-     * concurrent transfer that captured the previous snapshot keeps using
-     * it for the duration of the operation, while new callers see the
-     * fresh snapshot.
+     * <p>Called by the success-stream handler each time the periodic
+     * {@code media_conn} IQ reply lands.
+     *
+     * @implSpec
+     * Implementations must be safe to call from any thread; a concurrent
+     * transfer that captured the previous snapshot keeps using it for the
+     * duration of the operation, while new callers see the fresh snapshot.
      *
      * @param response the {@code media_conn} IQ response node
      * @throws java.util.NoSuchElementException if {@code response} is
@@ -66,15 +62,14 @@ public interface MediaConnectionService {
      * Uploads a media payload to WhatsApp's CDN on behalf of the given
      * provider.
      *
-     * @apiNote
-     * High-level entry point for any code that ships a media-bearing
+     * <p>High-level entry point for any code that ships a media-bearing
      * message: choose the appropriate {@link MediaProvider} subtype, then
      * call this method with a transcoded {@link MediaPayload}. On success
      * the provider's media metadata (plaintext and encrypted SHA-256
-     * hashes, media key, direct path, URL, byte size, and key timestamp)
-     * is written back through the provider setters so the caller can build
-     * the outgoing message protobuf. The {@code payload} is not closed by
-     * this method; the caller owns it.
+     * hashes, media key, direct path, URL, byte size, and key timestamp) is
+     * written back through the provider setters so the caller can build the
+     * outgoing message protobuf. The {@code payload} is not closed by this
+     * method; the caller owns it.
      *
      * @param provider the media provider describing the media type and
      *                 receiving the upload metadata
@@ -91,8 +86,7 @@ public interface MediaConnectionService {
     /**
      * Downloads a media payload from WhatsApp's CDN for the given provider.
      *
-     * @apiNote
-     * High-level entry point for any code that materialises an inbound
+     * <p>High-level entry point for any code that materialises an inbound
      * attachment. Tries the provider's cached static media URL first; on a
      * retryable failure it resolves a fresh host and rotates across
      * candidate hosts on each retry. Non-retryable errors propagate
@@ -112,14 +106,12 @@ public interface MediaConnectionService {
     /**
      * Performs one HTTP GET download against a fully-formed CDN URL.
      *
-     * @apiNote
-     * Lower-level counterpart of {@link #download(MediaProvider)} for
-     * direct re-downloads against a known URL. The returned stream
-     * delivers decrypted, integrity-checked bytes and owns the underlying
-     * HTTP client, which it closes when consumed or closed by the caller.
+     * <p>Lower-level counterpart of {@link #download(MediaProvider)} for
+     * direct re-downloads against a known URL. The returned stream delivers
+     * decrypted, integrity-checked bytes and owns the underlying HTTP
+     * client, which it closes when consumed or closed by the caller.
      *
-     * @param provider    the media provider holding the decryption
-     *                    metadata
+     * @param provider    the media provider holding the decryption metadata
      * @param downloadUrl the full URL to download from
      * @return an {@link InputStream} delivering the decrypted media content
      * @throws WhatsAppMediaException.Download if the server returns a
@@ -132,10 +124,9 @@ public interface MediaConnectionService {
      * Probes the WhatsApp CDN to verify that a media file exists and is
      * still available for download.
      *
-     * @apiNote
-     * Useful before kicking off a full download for an attachment that was
-     * referenced from elsewhere (a quoted message, a forwarded sticker) to
-     * avoid wasting bandwidth on a known-missing payload. Sends an HTTP
+     * <p>Useful before kicking off a full download for an attachment that
+     * was referenced from elsewhere (a quoted message, a forwarded sticker)
+     * to avoid wasting bandwidth on a known-missing payload. Sends an HTTP
      * HEAD request; a {@code 200} response signals availability.
      *
      * @param hostname    the CDN hostname
@@ -152,8 +143,7 @@ public interface MediaConnectionService {
      * Retrieves the size in bytes of the encrypted media payload stored on
      * the WhatsApp CDN.
      *
-     * @apiNote
-     * Sends an HTTP HEAD request and reads the {@code Content-Length}
+     * <p>Sends an HTTP HEAD request and reads the {@code Content-Length}
      * header so the caller can pre-allocate buffers or estimate bandwidth
      * before invoking a full download.
      *
@@ -168,34 +158,6 @@ public interface MediaConnectionService {
      *         network error occurs
      */
     long getEncryptedMediaSize(String hostname, MediaPath mediaType, String directPath, String encFileHash) throws WhatsAppMediaException.Download;
-
-    /**
-     * Asks WhatsApp's MMS service to release the encrypted history-sync
-     * blob whose CDN coordinates were just consumed.
-     *
-     * @apiNote
-     * Called by the history-sync handler immediately after a chunk has been
-     * applied so the CDN does not retain the now-superfluous blob. When
-     * {@code encHandle} or {@code companionMmsAuthNonce} is {@code null} the
-     * {@code Companion_User_Secret} header is omitted.
-     *
-     * @param directPath            the CDN direct path of the blob to delete
-     * @param encFilehash           the raw bytes of the encrypted file
-     *                              SHA-256
-     * @param encHandle             the server-issued encryption handle, or
-     *                              {@code null}
-     * @param companionMmsAuthNonce the per-companion MMS authentication
-     *                              nonce, or {@code null}
-     * @throws WhatsAppMediaException if no host could service the delete,
-     *         the request fails with a non-retryable HTTP error, or no
-     *         hosts are available
-     * @throws InterruptedException   if the calling thread is interrupted
-     *         while waiting for the first media connection or between
-     *         retries
-     * @throws NullPointerException   if {@code directPath} or
-     *         {@code encFilehash} is {@code null}
-     */
-    void deleteHistorySyncBlob(String directPath, byte[] encFilehash, String encHandle, String companionMmsAuthNonce) throws WhatsAppMediaException, InterruptedException;
 
     /**
      * Returns the authentication token presented to the CDN on every upload
@@ -277,12 +239,11 @@ public interface MediaConnectionService {
     /**
      * Tests whether the current authentication token has expired.
      *
-     * @apiNote
-     * Returns {@code true} when no media connection has been installed yet,
-     * or when the current clock is at or past {@code timestamp + authTtl}.
-     * Callers that observe {@code true} must request a fresh
-     * {@code media_conn} via {@link #update(Node)} before issuing new CDN
-     * requests.
+     * <p>Returns {@code true} when no media connection has been installed
+     * yet, or when the current clock is at or past
+     * {@code timestamp + authTtl}. Callers that observe {@code true} must
+     * request a fresh {@code media_conn} via {@link #update(Node)} before
+     * issuing new CDN requests.
      *
      * @return {@code true} if no credentials are published or the auth
      *         token has expired
@@ -293,9 +254,8 @@ public interface MediaConnectionService {
      * Tests whether the current credentials should be proactively
      * refreshed.
      *
-     * @apiNote
-     * Returns {@code true} when no media connection has been installed yet,
-     * or when either the routes TTL has elapsed, or 80% of the
+     * <p>Returns {@code true} when no media connection has been installed
+     * yet, or when either the routes TTL has elapsed, or 80% of the
      * authentication TTL has elapsed, whichever happens first.
      *
      * @return {@code true} if no credentials are published or refresh is

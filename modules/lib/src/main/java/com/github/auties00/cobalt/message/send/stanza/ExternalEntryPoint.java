@@ -9,23 +9,15 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Records a single CTWA (Click-to-WhatsApp) external entry point captured
- * when a user opens a chat via a CTWA ad link.
+ * Records a single CTWA (Click-to-WhatsApp) external entry point captured when a user opens a chat via a CTWA ad link.
+ * <p>
+ * Stored by {@link CtwaAttributionStanza} keyed by chat JID; each entry lives at most {@link #MAX_AGE} (one week) before
+ * {@link CtwaAttributionStanza#build(com.github.auties00.cobalt.model.jid.Jid)} begins ignoring it and the save method
+ * prunes it.
  *
- * @apiNote
- * Stored by {@link CtwaAttributionStanza} keyed by chat JID; each entry
- * lives at most {@link #MAX_AGE} (one week) before
- * {@link CtwaAttributionStanza#build(com.github.auties00.cobalt.model.jid.Jid)}
- * begins ignoring it and {@link CtwaAttributionStanza}'s save method
- * prunes it. Mirrors the per-chat record shape WA Web stores under the
- * {@code WAWebUserPrefsStore} {@code EXTERNAL_ENTRY_POINT} key:
- * {@code {addedTime, deepLinkType, authSuccess, partnerName}}.
- *
- * @param deepLinkType the deep-link type token that led the user to this
- *                     chat (e.g. {@code "WA_HOOK"})
+ * @param deepLinkType the deep-link type token that led the user to this chat (e.g. {@code "WA_HOOK"})
  * @param authSuccess  whether the ad-flow authentication succeeded
- * @param partnerName  the partner or advertiser name, or {@code null} when
- *                     not provided
+ * @param partnerName  the partner or advertiser name, or {@code null} when not provided
  * @param addedTime    the {@link Instant} at which this entry was recorded
  */
 @WhatsAppWebModule(moduleName = "WAWebExternalEntryPointPrefs")
@@ -36,12 +28,8 @@ public record ExternalEntryPoint(
         Instant addedTime
 ) {
     /**
-     * The maximum age of an external entry point before it is considered
-     * expired and dropped from the entry-point cache.
-     *
-     * @apiNote
-     * Matches WA Web's {@code WATimeUtils.WEEK_MILLISECONDS} cutoff used
-     * inside {@code WAWebExternalEntryPointPrefs.u}.
+     * Holds the maximum age of an external entry point before it is considered expired and dropped from the entry-point
+     * cache.
      */
     @WhatsAppWebExport(moduleName = "WATimeUtils", exports = "WEEK_MILLISECONDS",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -49,16 +37,12 @@ public record ExternalEntryPoint(
 
     /**
      * Returns whether this entry point is older than {@link #MAX_AGE}.
+     * <p>
+     * Used both by {@link CtwaAttributionStanza#getEntryPoint(com.github.auties00.cobalt.model.jid.Jid)} to decline
+     * returning expired entries and by the in-memory pruning step on save.
      *
-     * @apiNote
-     * Used both by {@link CtwaAttributionStanza#getEntryPoint(com.github.auties00.cobalt.model.jid.Jid)}
-     * (to decline returning expired entries) and by the in-memory pruning
-     * step on save.
-     *
-     * @implNote
-     * This implementation uses a strict greater-than comparison so the
-     * boundary instant ({@code addedTime + MAX_AGE} exactly) is still
-     * considered valid; matches WA Web's {@code t - e.addedTime > WEEK_MILLISECONDS}.
+     * @implNote This implementation uses a strict greater-than comparison so the boundary instant
+     * ({@code addedTime + MAX_AGE} exactly) is still considered valid.
      *
      * @return {@code true} when this entry has expired
      */
@@ -70,11 +54,9 @@ public record ExternalEntryPoint(
 
     /**
      * Returns the partner name as an {@link Optional}.
-     *
-     * @apiNote
-     * Convenience accessor for callers that want to flat-map on the
-     * presence of a partner name rather than null-check the record
-     * component.
+     * <p>
+     * Convenience accessor for callers that want to flat-map on the presence of a partner name rather than null-check
+     * the record component.
      *
      * @return the partner name, or empty when {@code null}
      */

@@ -15,39 +15,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The reply produced by the relay for a {@link SmaxBotBotListRequest};
- * a V2 directory, a V3 directory, or an error envelope.
+ * The reply produced by the relay for a {@link SmaxBotBotListRequest}; a V2 directory, a
+ * V3 directory, or an error envelope.
  *
- * @apiNote
- * Returned by the smax send pipeline that
- * {@code WASmaxBotBotListRPC.sendBotListRPC} drives. The V2 / V3
- * arms hand the AI-bot-directory UI a structured projection of the
- * bot catalogue (sections, entries, themes, display-type hints); the
- * Error arm carries the relay's rejection code-text pair.
+ * <p>The {@link SuccessV2} and {@link SuccessV3} arms hand the AI-bot-directory UI a
+ * structured projection of the bot catalogue (sections, entries, themes, display-type
+ * hints); the {@link Error} arm carries the relay's rejection code-text pair.
  */
 public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         permits SmaxBotBotListResponse.SuccessV2, SmaxBotBotListResponse.SuccessV3, SmaxBotBotListResponse.Error {
 
     /**
-     * Resolves an inbound IQ reply into the first matching variant
-     * in V2-then-V3-then-error priority.
+     * Resolves an inbound IQ reply into the first matching variant in
+     * V2-then-V3-then-error priority.
      *
-     * @apiNote
-     * Called by the smax send pipeline after dispatching a
-     * {@link SmaxBotBotListRequest}. The dispatcher tries V2 first
-     * (matching legacy clients that pin {@code botV="2"}), then V3,
-     * then the error envelope.
+     * <p>Invoked by the smax send pipeline after dispatching a
+     * {@link SmaxBotBotListRequest}. The dispatcher tries {@link SuccessV2} first
+     * (matching legacy clients that pin {@code botV="2"}), then {@link SuccessV3}, then
+     * the {@link Error} envelope, and returns {@link Optional#empty()} when no documented
+     * variant matched.
      *
      * @implNote
-     * This implementation mirrors the WA Web
-     * {@code sendBotListRPC} disjunction's priority order.
+     * This implementation mirrors the WA Web disjunction's priority order.
      *
      * @param node    the inbound IQ stanza; never {@code null}
-     * @param request the originating outbound IQ stanza; never
-     *                {@code null}
+     * @param request the originating outbound IQ stanza; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched
+     *         {@link Optional#empty()} when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBotBotListRPC",
@@ -67,27 +61,22 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
     }
 
     /**
-     * Reports whether a JID's server domain belongs to the
-     * user-JID admit set (phone, legacy phone, interop, messenger,
-     * lid, or bot).
+     * Reports whether a JID's server domain belongs to the user-JID admit set (phone,
+     * legacy phone, interop, messenger, lid, or bot).
      *
-     * @apiNote
-     * Used by every inbound parser branch that reads a bot or
-     * default-entry JID; mirrors the WA Web
-     * {@code WAJids.validateUserJid} attribute-validator gate. The
-     * bot wire schema admits both {@code @bot} JIDs (persona
-     * entries) and standard user JIDs (the bot-of-the-day default).
+     * <p>Used by every inbound parser branch that reads a bot or default-entry JID. The
+     * bot wire schema admits both {@code @bot} JIDs (persona entries) and standard user
+     * JIDs (the bot-of-the-day default).
      *
      * @implNote
-     * This implementation tests each server-domain enum value via
-     * {@link Jid#hasServer(JidServer)} rather than allocating an
-     * intermediate {@link java.util.Set}; the call site is hot on
-     * directory replies and the linear test is faster for six
-     * entries.
+     * This implementation tests each server-domain value via
+     * {@link Jid#hasServer(JidServer)} rather than allocating an intermediate
+     * {@link java.util.Set}; the call site is hot on directory replies and the linear
+     * test is faster for six entries.
      *
      * @param jid the JID to test; never {@code null}
-     * @return {@code true} when {@code jid.server()} is one of the
-     *         admitted user-JID domains
+     * @return {@code true} when {@code jid}'s server is one of the admitted user-JID
+     *         domains
      */
     @WhatsAppWebExport(moduleName = "WAJids",
             exports = "validateUserJid", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -101,13 +90,12 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
     }
 
     /**
-     * The legacy V2 directory reply, pinned by {@code v="2"} on the
-     * top-level {@code <bot>} child.
+     * The legacy V2 directory reply, pinned by {@code v="2"} on the top-level
+     * {@code <bot>} child.
      *
-     * @apiNote
-     * Returned when the originating request asked for
-     * {@code botV="2"}; carries the bot-of-the-day default by JID
-     * and persona-id only plus a list of sections.
+     * <p>Returned when the originating request asked for {@code botV="2"}; carries the
+     * bot-of-the-day default by JID and persona-id only, plus a non-empty list of
+     * sections.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBotBotListResponseSuccessV2")
     @WhatsAppWebModule(moduleName = "WASmaxInBotIQResultResponseMixin")
@@ -118,52 +106,43 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         private final String botV;
 
         /**
-         * The JID of the "bot of the day" default entry.
+         * The JID of the bot-of-the-day default entry.
          *
-         * @apiNote
-         * Either an {@code @bot} JID or a standard user JID, per the
+         * <p>Either an {@code @bot} JID or a standard user JID, per the
          * {@link #isUserJidServer(Jid)} admit set.
          */
         private final Jid botDefaultJid;
 
         /**
-         * The persona-id of the "bot of the day" default entry.
+         * The persona-id of the bot-of-the-day default entry.
          */
         private final String botDefaultPersonaId;
 
         /**
          * The non-empty list of directory sections.
          *
-         * @apiNote
-         * V2 requires at least one section per WA Web's
-         * {@code mapChildrenWithTag(section, 1, ...)} bound.
+         * <p>V2 requires at least one section per the WA Web schema bound.
          */
         private final List<Section> botSection;
 
         /**
          * Constructs a V2 directory reply.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after a successful parse;
-         * not intended for direct caller use.
+         * <p>Invoked by {@link #of(Node, Node)} after a successful parse; not intended
+         * for direct caller use.
          *
          * @implNote
-         * This implementation defensively copies the section list,
-         * substituting an empty list for {@code null} input so the
-         * accessor never returns {@code null}.
+         * This implementation defensively copies the section list, substituting an empty
+         * list for {@code null} input so the accessor never returns {@code null}.
          *
-         * @param botV                the protocol revision (always
-         *                            {@code "2"}); never {@code null}
-         * @param botDefaultJid       the default-entry JID; never
+         * @param botV                the protocol revision (always {@code "2"}); never
          *                            {@code null}
-         * @param botDefaultPersonaId the default-entry persona id;
-         *                            never {@code null}
-         * @param botSection          the section list; may be
-         *                            {@code null}, treated as empty
-         * @throws NullPointerException if any of {@code botV},
-         *                              {@code botDefaultJid}, or
-         *                              {@code botDefaultPersonaId} is
-         *                              {@code null}
+         * @param botDefaultJid       the default-entry JID; never {@code null}
+         * @param botDefaultPersonaId the default-entry persona id; never {@code null}
+         * @param botSection          the section list; may be {@code null}, treated as
+         *                            empty
+         * @throws NullPointerException if any of {@code botV}, {@code botDefaultJid}, or
+         *                              {@code botDefaultPersonaId} is {@code null}
          */
         public SuccessV2(String botV, Jid botDefaultJid, String botDefaultPersonaId,
                          List<Section> botSection) {
@@ -185,9 +164,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the default-entry JID.
          *
-         * @apiNote
-         * Lets the bot-directory UI render the bot-of-the-day chip
-         * without scanning the sections.
+         * <p>Lets the bot-directory UI render the bot-of-the-day chip without scanning
+         * the sections.
          *
          * @return the JID; never {@code null}
          */
@@ -207,8 +185,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the directory sections.
          *
-         * @apiNote
-         * The list is non-empty per the V2 schema bound.
+         * <p>The list is non-empty per the V2 schema bound.
          *
          * @return an unmodifiable list; never {@code null}
          */
@@ -217,14 +194,12 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Parses a V2 reply from the given inbound stanza
-         * cross-checked against the originating request.
+         * Parses a V2 reply from the given inbound stanza cross-checked against the
+         * originating request.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any deviation from the
-         * documented V2 schema (missing {@code <bot>} child, wrong
-         * version literal, missing default entry, missing or
-         * malformed sections, empty section list).
+         * <p>Returns {@link Optional#empty()} for any deviation from the documented V2
+         * schema (missing {@code <bot>} child, wrong version literal, missing default
+         * entry, missing or malformed sections, empty section list).
          *
          * @implNote
          * This implementation delegates IQ-envelope validation to
@@ -278,8 +253,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
          * Compares this V2 reply to another for value equality.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a {@link SuccessV2}
-         *         with identical fields
+         * @return {@code true} when {@code obj} is a {@link SuccessV2} with identical
+         *         fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -309,9 +284,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns a debug-friendly representation of this V2 reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of the contract.
          *
          * @return the string form
          */
@@ -324,8 +297,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * A single V2 directory section, grouping {@link BotEntry}
-         * entries under a typed name.
+         * A single V2 directory section, grouping {@link BotEntry} entries under a typed
+         * name.
          */
         public static final class Section {
             /**
@@ -336,9 +309,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * The section-type discriminator.
              *
-             * @apiNote
-             * Lets the UI label the section as "all", "category", or
-             * "featured" without inspecting the name string.
+             * <p>Lets the UI label the section without inspecting the name string.
              */
             private final SmaxBotBotListSectionType type;
 
@@ -350,19 +321,17 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Constructs a V2 section.
              *
-             * @apiNote
-             * Called by {@link #of(Node)} after a successful parse.
+             * <p>Invoked by {@link #of(Node)} after a successful parse.
              *
              * @implNote
-             * This implementation defensively copies the entry list
-             * and substitutes an empty list for {@code null}.
+             * This implementation defensively copies the entry list and substitutes an
+             * empty list for {@code null}.
              *
              * @param name the section name; never {@code null}
              * @param type the section type; never {@code null}
-             * @param bot  the bot entries; may be {@code null},
-             *             treated as empty
-             * @throws NullPointerException if {@code name} or
-             *                              {@code type} is {@code null}
+             * @param bot  the bot entries; may be {@code null}, treated as empty
+             * @throws NullPointerException if {@code name} or {@code type} is
+             *                              {@code null}
              */
             public Section(String name, SmaxBotBotListSectionType type, List<BotEntry> bot) {
                 this.name = Objects.requireNonNull(name, "name cannot be null");
@@ -398,12 +367,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Parses a V2 section from the given {@code <section>}
-             * child.
+             * Parses a V2 section from the given {@code <section>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any deviation from
-             * the V2 section schema.
+             * <p>Returns {@link Optional#empty()} for any deviation from the V2 section
+             * schema.
              *
              * @param node the {@code <section>} child
              * @return an {@link Optional} carrying the parsed section
@@ -443,8 +410,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
              * Compares this section to another for value equality.
              *
              * @param obj the object to compare against
-             * @return {@code true} when {@code obj} is a
-             *         {@link Section} with identical fields
+             * @return {@code true} when {@code obj} is a {@link Section} with identical
+             *         fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -461,8 +428,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns a hash code consistent with
-             * {@link #equals(Object)}.
+             * Returns a hash code consistent with {@link #equals(Object)}.
              *
              * @return the hash code
              */
@@ -474,9 +440,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns a debug-friendly representation of this section.
              *
-             * @apiNote
-             * Intended for logging; the format is not part of the
-             * public contract.
+             * <p>The format is intended for logging and is not part of the contract.
              *
              * @return the string form
              */
@@ -508,33 +472,27 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             private final Integer count;
 
             /**
-             * The optional 0..2 theme bundles.
+             * The optional theme bundles.
              *
-             * @apiNote
-             * V2 bot entries may carry up to two themes (one dark,
-             * one light) per WA Web's
-             * {@code mapChildrenWithTag(theme, 0, 2)} bound.
+             * <p>V2 bot entries may carry up to two themes (one dark, one light) per the
+             * WA Web schema bound.
              */
             private final List<ThemeBundle> theme;
 
             /**
              * Constructs a V2 bot entry.
              *
-             * @apiNote
-             * Called by {@link #of(Node)} after a successful parse.
+             * <p>Invoked by {@link #of(Node)} after a successful parse.
              *
              * @implNote
-             * This implementation defensively copies the theme list
-             * and substitutes an empty list for {@code null}.
+             * This implementation defensively copies the theme list and substitutes an
+             * empty list for {@code null}.
              *
              * @param jid       the bot JID; never {@code null}
              * @param personaId the persona id; never {@code null}
-             * @param count     the optional usage count; may be
-             *                  {@code null}
-             * @param theme     the theme bundles; may be {@code null},
-             *                  treated as empty
-             * @throws NullPointerException if {@code jid} or
-             *                              {@code personaId} is
+             * @param count     the optional usage count; may be {@code null}
+             * @param theme     the theme bundles; may be {@code null}, treated as empty
+             * @throws NullPointerException if {@code jid} or {@code personaId} is
              *                              {@code null}
              */
             public BotEntry(Jid jid, String personaId, Integer count, List<ThemeBundle> theme) {
@@ -565,11 +523,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns the optional usage count.
              *
-             * @apiNote
-             * Drives the bot-popularity sort hint in the directory UI.
+             * <p>Drives the bot-popularity sort hint in the directory UI.
              *
-             * @return an {@link Optional} carrying the count, or
-             *         {@link Optional#empty()} when omitted
+             * @return an {@link Optional} carrying the count, or {@link Optional#empty()}
+             *         when omitted
              */
             public Optional<Integer> count() {
                 return Optional.ofNullable(count);
@@ -578,8 +535,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns the theme bundles.
              *
-             * @apiNote
-             * Up to two entries; one dark, one light.
+             * <p>Up to two entries; one dark, one light.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -588,13 +544,11 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Parses a V2 bot entry from the given {@code <bot>}
-             * child.
+             * Parses a V2 bot entry from the given {@code <bot>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any deviation from
-             * the V2 entry schema (invalid JID server, missing
-             * persona id, malformed count, more than two themes).
+             * <p>Returns {@link Optional#empty()} for any deviation from the V2 entry
+             * schema (invalid JID server, missing persona id, malformed count, more than
+             * two themes).
              *
              * @param node the {@code <bot>} child
              * @return an {@link Optional} carrying the parsed entry
@@ -641,8 +595,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
              * Compares this bot entry to another for value equality.
              *
              * @param obj the object to compare against
-             * @return {@code true} when {@code obj} is a
-             *         {@link BotEntry} with identical fields
+             * @return {@code true} when {@code obj} is a {@link BotEntry} with identical
+             *         fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -660,8 +614,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns a hash code consistent with
-             * {@link #equals(Object)}.
+             * Returns a hash code consistent with {@link #equals(Object)}.
              *
              * @return the hash code
              */
@@ -673,9 +626,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns a debug-friendly representation of this entry.
              *
-             * @apiNote
-             * Intended for logging; the format is not part of the
-             * public contract.
+             * <p>The format is intended for logging and is not part of the contract.
              *
              * @return the string form
              */
@@ -689,8 +640,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * A V2 theme bundle: a mode discriminator plus the three
-         * colour element values.
+         * A V2 theme bundle: a mode discriminator plus the three colour element values.
          */
         public static final class ThemeBundle {
             /**
@@ -716,19 +666,14 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Constructs a theme bundle.
              *
-             * @apiNote
-             * Called by {@link #of(Node)} after a successful parse.
+             * <p>Invoked by {@link #of(Node)} after a successful parse.
              *
-             * @param mode                      the mode; never
+             * @param mode                      the mode; never {@code null}
+             * @param backgroundElementValue    the background value; never {@code null}
+             * @param primaryTextElementValue   the primary-text value; never {@code null}
+             * @param secondaryTextElementValue the secondary-text value; never
              *                                  {@code null}
-             * @param backgroundElementValue    the background value;
-             *                                  never {@code null}
-             * @param primaryTextElementValue   the primary-text
-             *                                  value; never {@code null}
-             * @param secondaryTextElementValue the secondary-text
-             *                                  value; never {@code null}
-             * @throws NullPointerException if any argument is
-             *                              {@code null}
+             * @throws NullPointerException if any argument is {@code null}
              */
             public ThemeBundle(SmaxBotBotListThemeMode mode, String backgroundElementValue,
                                String primaryTextElementValue, String secondaryTextElementValue) {
@@ -778,13 +723,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Parses a theme bundle from the given {@code <theme>}
-             * child.
+             * Parses a theme bundle from the given {@code <theme>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any deviation from
-             * the theme schema (unknown mode literal, missing element
-             * children, empty element values).
+             * <p>Returns {@link Optional#empty()} for any deviation from the theme schema
+             * (unknown mode literal, missing element children, empty element values).
              *
              * @param node the {@code <theme>} child
              * @return an {@link Optional} carrying the parsed bundle
@@ -833,12 +775,11 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Compares this theme bundle to another for value
-             * equality.
+             * Compares this theme bundle to another for value equality.
              *
              * @param obj the object to compare against
-             * @return {@code true} when {@code obj} is a
-             *         {@link ThemeBundle} with identical fields
+             * @return {@code true} when {@code obj} is a {@link ThemeBundle} with
+             *         identical fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -856,8 +797,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns a hash code consistent with
-             * {@link #equals(Object)}.
+             * Returns a hash code consistent with {@link #equals(Object)}.
              *
              * @return the hash code
              */
@@ -870,9 +810,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns a debug-friendly representation of this bundle.
              *
-             * @apiNote
-             * Intended for logging; the format is not part of the
-             * public contract.
+             * <p>The format is intended for logging and is not part of the contract.
              *
              * @return the string form
              */
@@ -887,14 +825,12 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
     }
 
     /**
-     * The current V3 directory reply, pinned by {@code v="3"} on the
-     * top-level {@code <bot>} child.
+     * The current V3 directory reply, pinned by {@code v="3"} on the top-level
+     * {@code <bot>} child.
      *
-     * @apiNote
-     * Returned when the originating request did not pin a legacy
-     * revision; carries the relay-side digest (for next-fetch
-     * short-circuiting), an optional bot-of-the-day default, and a
-     * list of sections with display-type hints.
+     * <p>Returned when the originating request did not pin a legacy revision; carries the
+     * relay-side digest (for next-fetch short-circuiting), an optional bot-of-the-day
+     * default, and a list of sections with display-type hints.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBotBotListResponseSuccessV3")
     @WhatsAppWebModule(moduleName = "WASmaxInBotIQResultResponseMixin")
@@ -907,15 +843,14 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * The relay-side directory digest.
          *
-         * @apiNote
-         * Pass this back as the {@code botBhash} argument of the next
-         * {@link SmaxBotBotListRequest} to short-circuit when the
-         * server-side directory has not changed.
+         * <p>Pass this back as the {@code botBhash} argument of the next
+         * {@link SmaxBotBotListRequest} to short-circuit when the server-side directory
+         * has not changed.
          */
         private final String botBhash;
 
         /**
-         * The optional "bot of the day" default entry.
+         * The optional bot-of-the-day default entry.
          */
         private final DefaultEntry botDefault;
 
@@ -927,22 +862,18 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Constructs a V3 directory reply.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after a successful parse.
+         * <p>Invoked by {@link #of(Node, Node)} after a successful parse.
          *
          * @implNote
-         * This implementation defensively copies the section list
-         * and substitutes an empty list for {@code null}.
+         * This implementation defensively copies the section list and substitutes an
+         * empty list for {@code null}.
          *
-         * @param botV       the protocol revision (always {@code "3"});
-         *                   never {@code null}
-         * @param botBhash   the digest; never {@code null}
-         * @param botDefault the optional default entry; may be
+         * @param botV       the protocol revision (always {@code "3"}); never
          *                   {@code null}
-         * @param botSection the section list; may be {@code null},
-         *                   treated as empty
-         * @throws NullPointerException if {@code botV} or
-         *                              {@code botBhash} is
+         * @param botBhash   the digest; never {@code null}
+         * @param botDefault the optional default entry; may be {@code null}
+         * @param botSection the section list; may be {@code null}, treated as empty
+         * @throws NullPointerException if {@code botV} or {@code botBhash} is
          *                              {@code null}
          */
         public SuccessV3(String botV, String botBhash, DefaultEntry botDefault,
@@ -965,9 +896,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the relay-side directory digest.
          *
-         * @apiNote
-         * Use this as the {@code botBhash} input of the next refresh
-         * request.
+         * <p>Callers pass this as the {@code botBhash} input of the next refresh request.
          *
          * @return the digest; never {@code null}
          */
@@ -978,12 +907,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the optional default entry.
          *
-         * @apiNote
-         * The relay omits the default when no bot is featured for the
-         * current cohort.
+         * <p>The relay omits the default when no bot is featured for the current cohort.
          *
-         * @return an {@link Optional} carrying the entry, or
-         *         {@link Optional#empty()} when omitted
+         * @return an {@link Optional} carrying the entry, or {@link Optional#empty()}
+         *         when omitted
          */
         public Optional<DefaultEntry> botDefault() {
             return Optional.ofNullable(botDefault);
@@ -992,9 +919,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the directory sections.
          *
-         * @apiNote
-         * V3 admits an empty list, unlike V2 which requires at least
-         * one section.
+         * <p>V3 admits an empty list, unlike V2 which requires at least one section.
          *
          * @return an unmodifiable list; never {@code null}
          */
@@ -1003,20 +928,17 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Parses a V3 reply from the given inbound stanza
-         * cross-checked against the originating request.
+         * Parses a V3 reply from the given inbound stanza cross-checked against the
+         * originating request.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} for any deviation from the
-         * documented V3 schema (missing or wrong-version
-         * {@code <bot>}, missing digest, malformed default entry,
-         * malformed section).
+         * <p>Returns {@link Optional#empty()} for any deviation from the documented V3
+         * schema (missing or wrong-version {@code <bot>}, missing digest, malformed
+         * default entry, malformed section).
          *
          * @implNote
          * This implementation delegates IQ-envelope validation to
-         * {@link SmaxIqResultResponseMixin#validate(Node, Node)};
-         * the V3 schema admits an empty section list (in contrast to
-         * V2).
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}; the V3 schema admits an
+         * empty section list, in contrast to V2.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound IQ stanza
@@ -1063,8 +985,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
          * Compares this V3 reply to another for value equality.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a {@link SuccessV3}
-         *         with identical fields
+         * @return {@code true} when {@code obj} is a {@link SuccessV3} with identical
+         *         fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -1094,9 +1016,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns a debug-friendly representation of this V3 reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of the contract.
          *
          * @return the string form
          */
@@ -1109,8 +1029,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * The V3 "bot of the day" default entry; carries the JID and
-         * persona id only.
+         * The V3 bot-of-the-day default entry; carries the JID and persona id only.
          */
         public static final class DefaultEntry {
             /**
@@ -1126,13 +1045,11 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Constructs a V3 default entry.
              *
-             * @apiNote
-             * Called by {@link #of(Node)} after a successful parse.
+             * <p>Invoked by {@link #of(Node)} after a successful parse.
              *
              * @param jid       the JID; never {@code null}
              * @param personaId the persona id; never {@code null}
-             * @throws NullPointerException if either argument is
-             *                              {@code null}
+             * @throws NullPointerException if either argument is {@code null}
              */
             public DefaultEntry(Jid jid, String personaId) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -1158,12 +1075,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Parses a default entry from the given {@code <default>}
-             * child.
+             * Parses a default entry from the given {@code <default>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any deviation from
-             * the V3 default-entry schema.
+             * <p>Returns {@link Optional#empty()} for any deviation from the V3
+             * default-entry schema.
              *
              * @param node the {@code <default>} child
              * @return an {@link Optional} carrying the parsed entry
@@ -1188,12 +1103,11 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Compares this default entry to another for value
-             * equality.
+             * Compares this default entry to another for value equality.
              *
              * @param obj the object to compare against
-             * @return {@code true} when {@code obj} is a
-             *         {@link DefaultEntry} with identical fields
+             * @return {@code true} when {@code obj} is a {@link DefaultEntry} with
+             *         identical fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -1209,8 +1123,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns a hash code consistent with
-             * {@link #equals(Object)}.
+             * Returns a hash code consistent with {@link #equals(Object)}.
              *
              * @return the hash code
              */
@@ -1222,9 +1135,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns a debug-friendly representation of this entry.
              *
-             * @apiNote
-             * Intended for logging; the format is not part of the
-             * public contract.
+             * <p>The format is intended for logging and is not part of the contract.
              *
              * @return the string form
              */
@@ -1236,9 +1147,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * A V3 directory section, adding a
-         * {@link SmaxBotBotListSectionDisplayType} layout hint to the
-         * V2 (name, type, bot[]) shape.
+         * A V3 directory section, adding a {@link SmaxBotBotListSectionDisplayType} layout
+         * hint to the V2 (name, type, bot list) shape.
          */
         public static final class Section {
             /**
@@ -1254,9 +1164,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * The render-mode discriminator.
              *
-             * @apiNote
-             * Drives whether the UI shows this section as a list, a
-             * horizontal scroller, or omits it entirely.
+             * <p>Drives whether the UI shows this section as a list, a horizontal
+             * scroller, or omits it entirely.
              */
             private final SmaxBotBotListSectionDisplayType displayType;
 
@@ -1268,22 +1177,18 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Constructs a V3 section.
              *
-             * @apiNote
-             * Called by {@link #of(Node)} after a successful parse.
+             * <p>Invoked by {@link #of(Node)} after a successful parse.
              *
              * @implNote
-             * This implementation defensively copies the entry list
-             * and substitutes an empty list for {@code null}.
+             * This implementation defensively copies the entry list and substitutes an
+             * empty list for {@code null}.
              *
              * @param name        the section name; never {@code null}
              * @param type        the section type; never {@code null}
              * @param displayType the render mode; never {@code null}
-             * @param bot         the bot entries; may be {@code null},
-             *                    treated as empty
-             * @throws NullPointerException if {@code name},
-             *                              {@code type}, or
-             *                              {@code displayType} is
-             *                              {@code null}
+             * @param bot         the bot entries; may be {@code null}, treated as empty
+             * @throws NullPointerException if {@code name}, {@code type}, or
+             *                              {@code displayType} is {@code null}
              */
             public Section(String name, SmaxBotBotListSectionType type, SmaxBotBotListSectionDisplayType displayType,
                            List<BotEntry> bot) {
@@ -1323,9 +1228,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns the bot entries.
              *
-             * @apiNote
-             * V3 admits an empty list (e.g. for placeholder sections
-             * with {@code display_type="hidden"}).
+             * <p>V3 admits an empty list, for instance a placeholder section with
+             * {@code display_type="hidden"}.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -1334,12 +1238,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Parses a V3 section from the given {@code <section>}
-             * child.
+             * Parses a V3 section from the given {@code <section>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any deviation from
-             * the V3 section schema.
+             * <p>Returns {@link Optional#empty()} for any deviation from the V3 section
+             * schema.
              *
              * @param node the {@code <section>} child
              * @return an {@link Optional} carrying the parsed section
@@ -1387,8 +1289,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
              * Compares this section to another for value equality.
              *
              * @param obj the object to compare against
-             * @return {@code true} when {@code obj} is a
-             *         {@link Section} with identical fields
+             * @return {@code true} when {@code obj} is a {@link Section} with identical
+             *         fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -1406,8 +1308,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns a hash code consistent with
-             * {@link #equals(Object)}.
+             * Returns a hash code consistent with {@link #equals(Object)}.
              *
              * @return the hash code
              */
@@ -1419,9 +1320,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns a debug-friendly representation of this section.
              *
-             * @apiNote
-             * Intended for logging; the format is not part of the
-             * public contract.
+             * <p>The format is intended for logging and is not part of the contract.
              *
              * @return the string form
              */
@@ -1435,8 +1334,9 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * A V3 bot entry: JID, persona id, optional card title and
-         * usage count. V3 drops V2's per-entry theme overrides.
+         * A V3 bot entry: JID, persona id, optional card title and usage count.
+         *
+         * <p>V3 drops V2's per-entry theme overrides.
          */
         public static final class BotEntry {
             /**
@@ -1452,9 +1352,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * The optional card title.
              *
-             * @apiNote
-             * Used by the directory UI as the headline label for the
-             * bot card; {@code null} falls back to the persona name.
+             * <p>Used by the directory UI as the headline label for the bot card;
+             * {@code null} falls back to the persona name.
              */
             private final String cardTitle;
 
@@ -1466,17 +1365,13 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Constructs a V3 bot entry.
              *
-             * @apiNote
-             * Called by {@link #of(Node)} after a successful parse.
+             * <p>Invoked by {@link #of(Node)} after a successful parse.
              *
              * @param jid       the JID; never {@code null}
              * @param personaId the persona id; never {@code null}
-             * @param cardTitle the optional card title; may be
-             *                  {@code null}
-             * @param count     the optional usage count; may be
-             *                  {@code null}
-             * @throws NullPointerException if {@code jid} or
-             *                              {@code personaId} is
+             * @param cardTitle the optional card title; may be {@code null}
+             * @param count     the optional usage count; may be {@code null}
+             * @throws NullPointerException if {@code jid} or {@code personaId} is
              *                              {@code null}
              */
             public BotEntry(Jid jid, String personaId, String cardTitle, Integer count) {
@@ -1507,8 +1402,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns the optional card title.
              *
-             * @return an {@link Optional} carrying the title, or
-             *         {@link Optional#empty()} when omitted
+             * @return an {@link Optional} carrying the title, or {@link Optional#empty()}
+             *         when omitted
              */
             public Optional<String> cardTitle() {
                 return Optional.ofNullable(cardTitle);
@@ -1517,20 +1412,18 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns the optional usage count.
              *
-             * @return an {@link Optional} carrying the count, or
-             *         {@link Optional#empty()} when omitted
+             * @return an {@link Optional} carrying the count, or {@link Optional#empty()}
+             *         when omitted
              */
             public Optional<Integer> count() {
                 return Optional.ofNullable(count);
             }
 
             /**
-             * Parses a V3 bot entry from the given {@code <bot>}
-             * child.
+             * Parses a V3 bot entry from the given {@code <bot>} child.
              *
-             * @apiNote
-             * Returns {@link Optional#empty()} for any deviation from
-             * the V3 entry schema.
+             * <p>Returns {@link Optional#empty()} for any deviation from the V3 entry
+             * schema.
              *
              * @param node the {@code <bot>} child
              * @return an {@link Optional} carrying the parsed entry
@@ -1567,8 +1460,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
              * Compares this bot entry to another for value equality.
              *
              * @param obj the object to compare against
-             * @return {@code true} when {@code obj} is a
-             *         {@link BotEntry} with identical fields
+             * @return {@code true} when {@code obj} is a {@link BotEntry} with identical
+             *         fields
              */
             @Override
             public boolean equals(Object obj) {
@@ -1586,8 +1479,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns a hash code consistent with
-             * {@link #equals(Object)}.
+             * Returns a hash code consistent with {@link #equals(Object)}.
              *
              * @return the hash code
              */
@@ -1599,9 +1491,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
             /**
              * Returns a debug-friendly representation of this entry.
              *
-             * @apiNote
-             * Intended for logging; the format is not part of the
-             * public contract.
+             * <p>The format is intended for logging and is not part of the contract.
              *
              * @return the string form
              */
@@ -1618,21 +1508,18 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
     /**
      * The error reply variant carrying the rejection code-text pair.
      *
-     * @apiNote
-     * Surfaced when the relay rejected the directory fetch. The bot
-     * domain admits four documented variants
-     * ({@code internal-server-error/500}, {@code forbidden/403},
-     * {@code bad-request/400}, {@code not-allowed/405}); this Cobalt
-     * model collapses them into a single {@code (errorCode, errorText)}
-     * pair, leaving disambiguation to the caller.
+     * <p>Surfaced when the relay rejected the directory fetch. The bot domain admits four
+     * documented variants ({@code internal-server-error/500}, {@code forbidden/403},
+     * {@code bad-request/400}, {@code not-allowed/405}); this Cobalt model collapses them
+     * into a single {@code (errorCode, errorText)} pair, leaving disambiguation to the
+     * caller.
      *
      * @implNote
      * This implementation routes server (5xx) errors through
-     * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-     * and client (4xx) errors through
-     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)};
-     * variant identity is preserved through the code-text pair without
-     * a separate variant-name field.
+     * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} and client (4xx)
+     * errors through {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)};
+     * variant identity is preserved through the code-text pair without a separate
+     * variant-name field.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBotBotListResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBotBotListErrors")
@@ -1650,12 +1537,10 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Constructs an error reply.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after a successful parse.
+         * <p>Invoked by {@link #of(Node, Node)} after a successful parse.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public Error(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1665,9 +1550,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the numeric error code.
          *
-         * @apiNote
-         * Mirrors the WA Web HTTP-style code (one of {@code 400},
-         * {@code 403}, {@code 405}, {@code 500}).
+         * <p>One of {@code 400}, {@code 403}, {@code 405}, or {@code 500}.
          *
          * @return the code
          */
@@ -1678,8 +1561,8 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or
-         *         {@link Optional#empty()} when omitted
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
+         *         omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -1688,15 +1571,12 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Parses an {@code Error} reply from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when neither the server-
-         * nor the client-error envelope matched.
+         * <p>Returns {@link Optional#empty()} when neither the server-error nor the
+         * client-error envelope matched.
          *
          * @implNote
-         * This implementation tries the 5xx server-error envelope
-         * first, then falls through to the 4xx client-error envelope;
-         * the order matches WA Web's
-         * {@code parseBotListErrors} cascade.
+         * This implementation tries the 5xx server-error envelope first, then falls
+         * through to the 4xx client-error envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the originating outbound IQ stanza
@@ -1721,12 +1601,11 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Compares this error reply to another for value equality on
-         * the code-text pair.
+         * Compares this error reply to another for value equality on the code-text pair.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is an {@link Error}
-         *         with identical code and text
+         * @return {@code true} when {@code obj} is an {@link Error} with identical code
+         *         and text
          */
         @Override
         public boolean equals(Object obj) {
@@ -1753,9 +1632,7 @@ public sealed interface SmaxBotBotListResponse extends SmaxOperation.Response
         /**
          * Returns a debug-friendly representation of this error reply.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of the contract.
          *
          * @return the string form
          */

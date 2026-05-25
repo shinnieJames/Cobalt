@@ -8,12 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link AudioMixer}.
+ * Covers {@link AudioMixer}: per-sample summing of concurrent peer streams, int16 clipping, peer
+ * add/remove lifecycle, and null-key rejection.
  */
 class AudioMixerTest {
-    /**
-     * Two peers' frames sum at sample boundaries.
-     */
     @Test
     void mixesTwoPeers() throws InterruptedException {
         var mixer = new AudioMixer();
@@ -32,9 +30,6 @@ class AudioMixerTest {
         assertEquals(1, mixer.mixedFrameCount());
     }
 
-    /**
-     * Sums clip at int16 boundaries.
-     */
     @Test
     void clipsAtInt16() throws InterruptedException {
         var mixer = new AudioMixer();
@@ -46,28 +41,20 @@ class AudioMixerTest {
         assertEquals(Short.MAX_VALUE, mixed.pcm()[0]);
     }
 
-    /**
-     * Removing a peer drops their queue without producing a
-     * mixed frame for it.
-     */
     @Test
     void removePeerDropsQueue() throws InterruptedException {
         var mixer = new AudioMixer();
         var aSink = mixer.addPeer("A");
         mixer.addPeer("B");
         aSink.write(new AudioFrame(new short[]{42}, 0L));
-        // Without B contributing, no mix is emitted yet.
-        // Remove B and write another A frame — now A is the sole
-        // peer, the queue assembles.
+        // A mix is emitted only once every active peer has contributed a frame; with B silent,
+        // removing B leaves A as the sole peer so its queued frame can assemble.
         mixer.removePeer("B");
         aSink.write(new AudioFrame(new short[]{43}, 10L));
         var mixed = mixer.mixedOutput().next();
         assertEquals(42, mixed.pcm()[0]);
     }
 
-    /**
-     * Null peer key is rejected.
-     */
     @Test
     void rejectsNullPeerKey() {
         var mixer = new AudioMixer();

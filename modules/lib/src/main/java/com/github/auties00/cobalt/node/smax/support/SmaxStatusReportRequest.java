@@ -14,20 +14,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code spam} IQ that reports an offending status (chat-status) message.
+ * Reports an offending status (chat-status) message as an outbound {@code spam} IQ.
  *
- * @apiNote
- * Drives the "Report status" surface invoked by WA Web's {@code WAWebReportSpamJob}; pair with
- * {@link SmaxStatusReportResponse} to consume the relay's verdict. Use {@link #builder()} to
- * supply the required status owner / sender / timestamp / id triplet and the optional mixin
- * payloads (recipient, FRX, is-known-chat, biz-opt-out, biz-report).
+ * <p>A report requires the status owner, sender, timestamp and id; the recipient, is-known-chat
+ * marker, business-opt-out, business-report and FRX fields are optional. The relay's verdict is
+ * parsed by {@link SmaxStatusReportResponse}. Obtain an instance via {@link #builder()}.
  *
  * @implNote
- * This implementation flattens the WA Web mixin chain (BaseIQSetRequest, BaseReport, FRX,
- * IsKnownChat, BizOptOut, BizReport, MessageRecipient) into a single {@link NodeBuilder} that
- * pins {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. The
- * biz-opt-out and biz-report children attach to {@code <spam_list>}; only FRX attaches to the
- * outer {@code <iq>}.
+ * This implementation flattens the WA Web mixin chain into a single {@link NodeBuilder} that pins
+ * {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. The biz-opt-out and
+ * biz-report children attach to {@code <spam_list>}; only FRX attaches to the outer {@code <iq>}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamStatusReportRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamBaseReportMixin")
@@ -39,102 +35,72 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamBizReportMixin")
 public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     /**
-     * The status-owner JID.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list jid="..."/>} via WA Web's {@code JID} marshaller.
+     * Holds the status-owner JID routed into {@code <spam_list jid="..."/>}.
      */
     private final Jid spamListJid;
 
     /**
-     * The spam-flow identifier surfacing the user-facing report flow.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list spam_flow="..."/>}.
+     * Holds the spam-flow identifier routed into {@code <spam_list spam_flow="..."/>}, naming the
+     * user-facing surface that issued the report.
      */
     private final String spamListSpamFlow;
 
     /**
-     * The sender JID of the offending status message.
-     *
-     * @apiNote
-     * Routed into {@code <message from="..."/>}.
+     * Holds the sender JID of the offending status message, routed into
+     * {@code <message from="..."/>}.
      */
     private final Jid messageFrom;
 
     /**
-     * The status message timestamp in Unix seconds.
-     *
-     * @apiNote
-     * Routed into {@code <message t="..."/>}.
+     * Holds the status message timestamp in Unix seconds, routed into {@code <message t="..."/>}.
      */
     private final long messageTimestamp;
 
     /**
-     * The status message stanza id.
-     *
-     * @apiNote
-     * Routed into {@code <message id="..."/>}.
+     * Holds the status message stanza id, routed into {@code <message id="..."/>}.
      */
     private final String messageId;
 
     /**
-     * The optional recipient JID.
-     *
-     * @apiNote
-     * Routed into {@code <message to="..."/>} via
-     * {@code WASmaxOutSpamMessageRecipientMixin}; surfaces the user the status was originally
-     * sent to when reporting from a one-to-one timeline.
+     * Holds the optional recipient JID routed into {@code <message to="..."/>}, surfacing the user
+     * the status was originally sent to when reporting from a one-to-one timeline.
      */
     private final Jid messageTo;
 
     /**
-     * The optional {@code is_known_chat} marker.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list is_known_chat="..."/>}.
+     * Holds the optional {@code is_known_chat} marker routed into
+     * {@code <spam_list is_known_chat="..."/>}.
      */
     private final String spamListIsKnownChat;
 
     /**
-     * The optional pre-built {@code <biz_opt_out>} child.
-     *
-     * @apiNote
-     * Appended under {@code <spam_list>} when present.
+     * Holds the optional pre-built {@code <biz_opt_out>} child appended under {@code <spam_list>}
+     * when present.
      */
     private final Node bizOptOutChild;
 
     /**
-     * The optional pre-built {@code <biz_report>} child.
-     *
-     * @apiNote
-     * Appended under {@code <spam_list>} when present.
+     * Holds the optional pre-built {@code <biz_report>} child appended under {@code <spam_list>}
+     * when present.
      */
     private final Node bizReportChild;
 
     /**
-     * The optional pre-built {@code <frx>} child.
-     *
-     * @apiNote
-     * Appended under the outer {@code <iq>} when present.
+     * Holds the optional pre-built {@code <frx>} child appended under the outer {@code <iq>} when
+     * present.
      */
     private final Node frxChild;
 
     /**
-     * The optional pre-built {@code <message>} child.
+     * Holds the optional pre-built {@code <message>} child.
      *
-     * @apiNote
-     * When set, the entry's {@link #toNode()} embeds this node verbatim instead of synthesising
-     * the {@code (from, t, id, to)} envelope from the scalar fields.
+     * <p>When set, {@link #toNode()} embeds this node verbatim instead of synthesising the
+     * {@code (from, t, id, to)} envelope from the scalar fields.
      */
     private final Node messageChild;
 
     /**
      * Constructs a request from the assembled {@link Builder} state.
-     *
-     * @apiNote
-     * Invoked by {@link Builder#build()}; consumers use {@link #builder()} rather than calling
-     * this constructor directly.
      *
      * @param builder the source builder; never {@code null}
      */
@@ -154,10 +120,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns a new {@link Builder}.
-     *
-     * @apiNote
-     * The canonical entry point for assembling a status spam report.
+     * Returns a new {@link Builder}, the canonical entry point for assembling a status spam
+     * report.
      *
      * @return a new builder; never {@code null}
      */
@@ -166,10 +130,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the status-owner JID.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list jid>} value.
+     * Returns the status-owner JID, the {@code <spam_list jid>} value.
      *
      * @return the JID; never {@code null}
      */
@@ -178,10 +139,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the spam-flow identifier.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list spam_flow>} value naming the user-facing surface.
+     * Returns the spam-flow identifier, the {@code <spam_list spam_flow>} value.
      *
      * @return the spam-flow; never {@code null}
      */
@@ -190,10 +148,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the sender JID of the offending status message.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message from>}.
+     * Returns the sender JID of the offending status message, the {@code <message from>} value.
      *
      * @return the JID; never {@code null}
      */
@@ -202,10 +157,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the status message timestamp.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message t>} in Unix seconds.
+     * Returns the status message timestamp in Unix seconds, the {@code <message t>} value.
      *
      * @return the timestamp
      */
@@ -214,10 +166,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the status message stanza id.
-     *
-     * @apiNote
-     * Surfaces the value routed into {@code <message id>}.
+     * Returns the status message stanza id, the {@code <message id>} value.
      *
      * @return the id; never {@code null}
      */
@@ -226,11 +175,9 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional recipient JID.
+     * Returns the optional recipient JID, the {@code <message to>} value.
      *
-     * @apiNote
-     * Surfaces the {@code <message to>} value; empty when the status was reported from a
-     * surface other than a one-to-one timeline.
+     * <p>Empty when the status was reported from a surface other than a one-to-one timeline.
      *
      * @return an {@link Optional} carrying the JID, or empty when omitted
      */
@@ -239,10 +186,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional {@code is_known_chat} marker.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list is_known_chat>} value.
+     * Returns the optional {@code is_known_chat} marker, the {@code <spam_list is_known_chat>}
+     * value.
      *
      * @return an {@link Optional} carrying the marker, or empty when omitted
      */
@@ -251,10 +196,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional biz-opt-out child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <biz_opt_out>} payload appended under {@code <spam_list>}.
+     * Returns the optional pre-built {@code <biz_opt_out>} child appended under
+     * {@code <spam_list>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -263,10 +206,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional biz-report child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <biz_report>} payload appended under {@code <spam_list>}.
+     * Returns the optional pre-built {@code <biz_report>} child appended under
+     * {@code <spam_list>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -275,10 +216,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional FRX child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <frx>} payload appended under the outer {@code <iq>}.
+     * Returns the optional pre-built {@code <frx>} child appended under the outer {@code <iq>}.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -289,8 +227,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     /**
      * Returns the optional pre-built {@code <message>} child.
      *
-     * @apiNote
-     * Empty when {@link #toNode()} should synthesise the envelope from the scalar fields.
+     * <p>Empty when {@link #toNode()} synthesises the envelope from the scalar fields.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -301,15 +238,13 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Emits the outbound status-report IQ ready for
-     * {@link com.github.auties00.cobalt.node.smax} dispatch.
+     * <p>Builds the {@code <message>} child, attaches it under {@code <spam_list>} together with
+     * the optional biz-opt-out and biz-report children, and appends the optional FRX child to the
+     * outer {@code <iq>}.
      *
      * @implNote
-     * This implementation either embeds {@link #messageChild} verbatim or synthesises a
-     * {@code <message>} envelope from the {@code (from, t, id, to)} scalar fields, attaches it
-     * under {@code <spam_list>} together with the optional biz-opt-out and biz-report children,
-     * and finally appends the optional FRX child to the outer {@code <iq>}.
+     * This implementation embeds {@link #messageChild} verbatim when set, otherwise synthesises a
+     * {@code <message>} envelope from the {@code (from, t, id, to)} scalar fields.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSpamStatusReportRequest",
@@ -355,6 +290,12 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         return iqBuilder;
     }
 
+    /**
+     * Compares this request to another for value equality across all fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxStatusReportRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -377,12 +318,22 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
                 && Objects.equals(this.messageChild, that.messageChild);
     }
 
+    /**
+     * Returns a hash code derived from all fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(spamListJid, spamListSpamFlow, messageFrom, messageTimestamp, messageId,
                 messageTo, spamListIsKnownChat, bizOptOutChild, bizReportChild, frxChild, messageChild);
     }
 
+    /**
+     * Returns a debug string listing the scalar fields.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxStatusReportRequest[spamListJid=" + spamListJid
@@ -394,123 +345,86 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Step-builder that assembles a {@link SmaxStatusReportRequest} from the WA Web mixin
-     * inputs.
+     * Assembles a {@link SmaxStatusReportRequest} from the WA Web mixin inputs.
      *
-     * @apiNote
-     * The canonical entry point for callers that need to issue a status spam report; use
-     * {@link SmaxStatusReportRequest#builder()} to obtain an instance.
+     * <p>The required {@link #spamListJid}, {@link #spamListSpamFlow}, {@link #messageFrom} and
+     * {@link #messageId} are validated at setter time; the remaining fields are optional. Obtain
+     * an instance via {@link SmaxStatusReportRequest#builder()}.
      *
      * @implNote
-     * This implementation collects the optional mixin payloads into private fields and validates
-     * the required {@link #spamListJid}, {@link #spamListSpamFlow}, {@link #messageFrom} and
-     * {@link #messageId} at setter time; the resulting {@code build()} copy is immutable.
+     * This implementation collects the optional mixin payloads into private fields and produces an
+     * immutable copy from {@link #build()}.
      */
     public static final class Builder {
         /**
-         * The required status-owner JID.
-         *
-         * @apiNote
-         * Set via {@link #spamListJid(Jid)}; must be set before {@link #build()}.
+         * Holds the required status-owner JID, set via {@link #spamListJid(Jid)}.
          */
         private Jid spamListJid;
 
         /**
-         * The required spam-flow string.
-         *
-         * @apiNote
-         * Set via {@link #spamListSpamFlow(String)}; must be set before {@link #build()}.
+         * Holds the required spam-flow string, set via {@link #spamListSpamFlow(String)}.
          */
         private String spamListSpamFlow;
 
         /**
-         * The required sender JID.
-         *
-         * @apiNote
-         * Set via {@link #messageFrom(Jid)}; must be set before {@link #build()}.
+         * Holds the required sender JID, set via {@link #messageFrom(Jid)}.
          */
         private Jid messageFrom;
 
         /**
-         * The status message timestamp in Unix seconds.
-         *
-         * @apiNote
-         * Set via {@link #messageTimestamp(long)}; defaults to {@code 0} when not set.
+         * Holds the status message timestamp in Unix seconds, set via
+         * {@link #messageTimestamp(long)}; defaults to {@code 0}.
          */
         private long messageTimestamp;
 
         /**
-         * The required status message stanza id.
-         *
-         * @apiNote
-         * Set via {@link #messageId(String)}; must be set before {@link #build()}.
+         * Holds the required status message stanza id, set via {@link #messageId(String)}.
          */
         private String messageId;
 
         /**
-         * The optional recipient JID.
-         *
-         * @apiNote
-         * Set via {@link #messageTo(Jid)}; {@code null} when omitted.
+         * Holds the optional recipient JID, set via {@link #messageTo(Jid)}.
          */
         private Jid messageTo;
 
         /**
-         * The optional {@code is_known_chat} marker.
-         *
-         * @apiNote
-         * Set via {@link #spamListIsKnownChat(String)}; {@code null} when omitted.
+         * Holds the optional {@code is_known_chat} marker, set via
+         * {@link #spamListIsKnownChat(String)}.
          */
         private String spamListIsKnownChat;
 
         /**
-         * The optional pre-built {@code <biz_opt_out>} child.
-         *
-         * @apiNote
-         * Set via {@link #bizOptOutChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <biz_opt_out>} child, set via
+         * {@link #bizOptOutChild(Node)}.
          */
         private Node bizOptOutChild;
 
         /**
-         * The optional pre-built {@code <biz_report>} child.
-         *
-         * @apiNote
-         * Set via {@link #bizReportChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <biz_report>} child, set via
+         * {@link #bizReportChild(Node)}.
          */
         private Node bizReportChild;
 
         /**
-         * The optional pre-built {@code <frx>} child.
-         *
-         * @apiNote
-         * Set via {@link #frxChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built {@code <frx>} child, set via {@link #frxChild(Node)}.
          */
         private Node frxChild;
 
         /**
-         * The optional pre-built {@code <message>} child.
-         *
-         * @apiNote
-         * Set via {@link #messageChild(Node)}; {@code null} when {@link #toNode()} should
-         * synthesise the envelope from the scalar fields.
+         * Holds the optional pre-built {@code <message>} child, set via
+         * {@link #messageChild(Node)}; {@code null} when {@link #toNode()} should synthesise the
+         * envelope from the scalar fields.
          */
         private Node messageChild;
 
         /**
          * Constructs an empty builder.
-         *
-         * @apiNote
-         * Prefer {@link SmaxStatusReportRequest#builder()} over invoking this constructor
-         * directly.
          */
         public Builder() {
         }
 
         /**
-         * Sets the status-owner JID.
-         *
-         * @apiNote
-         * Required; the resulting {@code <spam_list jid>} attribute names the status owner.
+         * Sets the status-owner JID, naming the status owner through {@code <spam_list jid>}.
          *
          * @param spamListJid the JID; never {@code null}
          * @return this builder
@@ -522,11 +436,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the spam-flow identifier.
-         *
-         * @apiNote
-         * Required; the resulting {@code <spam_list spam_flow>} attribute names the user-facing
-         * surface that triggered the report.
+         * Sets the spam-flow identifier, naming the user-facing surface that triggered the report
+         * through {@code <spam_list spam_flow>}.
          *
          * @param spamListSpamFlow the spam-flow; never {@code null}
          * @return this builder
@@ -539,10 +450,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the sender JID of the offending status.
-         *
-         * @apiNote
-         * Required; routes into {@code <message from>}.
+         * Sets the sender JID of the offending status, routed into {@code <message from>}.
          *
          * @param messageFrom the JID; never {@code null}
          * @return this builder
@@ -554,10 +462,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the status message timestamp.
-         *
-         * @apiNote
-         * Routes into {@code <message t>} in Unix seconds.
+         * Sets the status message timestamp in Unix seconds, routed into {@code <message t>}.
          *
          * @param messageTimestamp the timestamp
          * @return this builder
@@ -568,10 +473,7 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the status message stanza id.
-         *
-         * @apiNote
-         * Required; routes into {@code <message id>}.
+         * Sets the status message stanza id, routed into {@code <message id>}.
          *
          * @param messageId the id; never {@code null}
          * @return this builder
@@ -583,11 +485,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional recipient JID.
-         *
-         * @apiNote
-         * Routes into {@code <message to>} when set; surfaces the user the status was
-         * originally sent to.
+         * Sets the optional recipient JID routed into {@code <message to>} when set, surfacing the
+         * user the status was originally sent to.
          *
          * @param messageTo the JID; may be {@code null}
          * @return this builder
@@ -598,10 +497,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional {@code is_known_chat} marker.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list is_known_chat>} when set.
+         * Sets the optional {@code is_known_chat} marker routed into
+         * {@code <spam_list is_known_chat>} when set.
          *
          * @param spamListIsKnownChat the marker; may be {@code null}
          * @return this builder
@@ -612,11 +509,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional pre-built {@code <biz_opt_out>} child.
-         *
-         * @apiNote
-         * Routes under {@code <spam_list>} when set; only meaningful for reports against
-         * business statuses.
+         * Sets the optional pre-built {@code <biz_opt_out>} child routed under {@code <spam_list>}
+         * when set, meaningful only for reports against business statuses.
          *
          * @param bizOptOutChild the node; may be {@code null}
          * @return this builder
@@ -627,11 +521,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional pre-built {@code <biz_report>} child.
-         *
-         * @apiNote
-         * Routes under {@code <spam_list>} when set; only meaningful for reports against
-         * business statuses.
+         * Sets the optional pre-built {@code <biz_report>} child routed under {@code <spam_list>}
+         * when set, meaningful only for reports against business statuses.
          *
          * @param bizReportChild the node; may be {@code null}
          * @return this builder
@@ -642,10 +533,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional pre-built {@code <frx>} child.
-         *
-         * @apiNote
-         * Routes under the outer {@code <iq>} when set.
+         * Sets the optional pre-built {@code <frx>} child routed under the outer {@code <iq>}
+         * when set.
          *
          * @param frxChild the node; may be {@code null}
          * @return this builder
@@ -658,10 +547,8 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
         /**
          * Sets the optional pre-built {@code <message>} child.
          *
-         * @apiNote
-         * When set, {@link #toNode()} embeds the supplied node verbatim instead of synthesising
-         * the envelope from the scalar fields; use when WA Web has already produced a richer
-         * message node carrying additional mixin payloads.
+         * <p>When set, {@link #toNode()} embeds the supplied node verbatim instead of synthesising
+         * the envelope from the scalar fields.
          *
          * @param messageChild the node; may be {@code null}
          * @return this builder
@@ -673,10 +560,6 @@ public final class SmaxStatusReportRequest implements SmaxOperation.Request {
 
         /**
          * Builds an immutable {@link SmaxStatusReportRequest} from the accumulated state.
-         *
-         * @apiNote
-         * Invoke once after all required and optional fields have been set; the resulting
-         * instance can be reused across dispatches.
          *
          * @return a new {@link SmaxStatusReportRequest}; never {@code null}
          * @throws NullPointerException if any required field was not set

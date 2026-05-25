@@ -12,41 +12,35 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="tos" type="set">} stanza that pushes a batch of
- * locally-accepted TOS / disclosure notices to the relay.
+ * Models the outbound {@code <iq xmlns="tos" type="set">} stanza that pushes a batch of
+ * locally-accepted terms-of-service or disclosure notices to the relay.
  *
- * @apiNote
- * Use this to back WA Web's {@code WAWebTos.TosManager.maybeUpdateServer} path: the
- * caller filters the locally-accepted notice ids against the set of ids the relay
- * has not yet seen and pushes them in a single batch. The relay's role is to record
- * acceptance, not to gate, so the caller can pre-mark notices as accepted before the
- * server roundtrip completes. The reply is parsed by {@link IqUpdateTosResponse}.
+ * <p>The caller filters the locally-accepted notice ids against the set the relay has not yet seen
+ * and pushes them in a single batch. The relay's role is to record acceptance, not to gate, so the
+ * caller may pre-mark notices as accepted before the server roundtrip completes. The reply is
+ * parsed by {@link IqUpdateTosResponse}.
  *
- * @implNote
- * This implementation mirrors WA Web's {@code WAWebTosJob.updateTosState} verbatim:
- * the outbound payload is a single {@code <request type="session_update">} child
- * carrying one {@code <notice id="..."/>} grandchild per accepted id; WA Web also
- * uses {@code WAExponentialBackoff} to retry the 500 arm, which Cobalt callers
- * apply at the dispatch layer rather than here.
+ * @implNote The outbound payload is a single {@code <request type="session_update">} child carrying
+ *           one {@code <notice id="..."/>} grandchild per accepted id. WhatsApp Web also retries the
+ *           500 arm via exponential backoff, which Cobalt callers apply at the dispatch layer rather
+ *           than here.
  */
 @WhatsAppWebModule(moduleName = "WAWebTosJob")
 public final class IqUpdateTosRequest implements IqOperation.Request {
     /**
-     * Holds the notice ids being acknowledged; routed verbatim into one
-     * {@code <notice/>} child per entry.
+     * Holds the notice ids being acknowledged, routed verbatim into one {@code <notice/>} child per
+     * entry.
      */
     private final List<String> noticeIds;
 
     /**
-     * Constructs a new update-tos request bound to the given notice ids.
+     * Constructs an update-tos request bound to the given notice ids.
      *
-     * @apiNote
-     * An empty list produces a {@code <request type="session_update">} child with
-     * no grandchildren; WA Web's {@code TosManager.maybeUpdateServer} skips the
-     * dispatch entirely in that case rather than emitting an empty batch.
+     * <p>An empty list produces a {@code <request type="session_update">} child with no
+     * grandchildren; WhatsApp Web skips the dispatch entirely in that case rather than emitting an
+     * empty batch.
      *
-     * @param noticeIds the notice ids being acknowledged; never {@code null}, may
-     *                  be empty
+     * @param noticeIds the notice ids being acknowledged; never {@code null}, may be empty
      * @throws NullPointerException if {@code noticeIds} is {@code null}
      */
     public IqUpdateTosRequest(List<String> noticeIds) {
@@ -64,15 +58,13 @@ public final class IqUpdateTosRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza wrapping the
-     * {@code <request type="session_update">} payload.
+     * Builds the outbound {@code <iq>} stanza wrapping the {@code <request type="session_update">}
+     * payload.
      *
-     * @apiNote
-     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
-     * attribute, which the dispatch layer assigns.
+     * <p>The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id} attribute,
+     * which the dispatch layer assigns.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <request>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <request>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
@@ -99,6 +91,15 @@ public final class IqUpdateTosRequest implements IqOperation.Request {
                 .content(requestNode);
     }
 
+    /**
+     * Compares this request to the given object for equality.
+     *
+     * <p>Two requests are equal when they bind the same notice ids in the same order.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an {@link IqUpdateTosRequest} with equal notice ids,
+     *         {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -111,11 +112,21 @@ public final class IqUpdateTosRequest implements IqOperation.Request {
         return Objects.equals(this.noticeIds, that.noticeIds);
     }
 
+    /**
+     * Returns a hash code derived from the bound notice ids.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(noticeIds);
     }
 
+    /**
+     * Returns a debug string carrying the bound notice ids.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "IqUpdateTosRequest[noticeIds=" + noticeIds + ']';

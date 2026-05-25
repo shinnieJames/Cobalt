@@ -25,27 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link PrimaryFeatureHandler} against the
- * {@code WAWebPrimaryFeatureSync.applyMutations} per-mutation flow.
- *
- * @apiNote
- * Verifies that the Cobalt handler matches WA Web's per-mutation
- * classification: a {@link SyncdOperation#SET} carrying a non-empty
- * (or empty) flags list persists the flags via
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#setPrimaryFeatures(List)};
- * a wrong-typed value surfaces as
- * {@link SyncActionState#MALFORMED};
- * {@link SyncdOperation#REMOVE} surfaces as
- * {@link SyncActionState#UNSUPPORTED};
- * {@link PrimaryFeatureHandler#applyMutationBatch} writes only the
- * latest-by-timestamp mutation's flags to the store; the default
- * {@code resolveConflicts} chooses the later timestamp. An empty
- * batch is a no-op.
- *
- * @implNote
- * This implementation builds mutations directly via the local
- * {@code primaryFeatureMutation} helper because the action carries
- * no fixed mutation factory.
+ * Covers {@link PrimaryFeatureHandler}: a {@link SyncdOperation#SET} carrying a non-empty
+ * or empty flags list persists the flags via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setPrimaryFeatures(List)}; a
+ * wrong-typed value surfaces as {@link SyncActionState#MALFORMED};
+ * {@link SyncdOperation#REMOVE} surfaces as {@link SyncActionState#UNSUPPORTED};
+ * {@link PrimaryFeatureHandler#applyMutationBatch} writes only the latest-by-timestamp
+ * mutation's flags to the store and treats an empty batch as a no-op; the default
+ * conflict resolution chooses the later timestamp.
  */
 @DisplayName("PrimaryFeatureHandler")
 class PrimaryFeatureHandlerTest {
@@ -103,7 +90,7 @@ class PrimaryFeatureHandlerTest {
         }
 
         @Test
-        @DisplayName("empty flag list is still SUCCESS â€” WA Web only rejects null")
+        @DisplayName("empty flag list is still SUCCESS - WA Web only rejects null")
         void emptyFlags() {
             var result = new PrimaryFeatureHandler().applyMutation(
                     client, primaryFeatureMutation(List.of(), SyncdOperation.SET, Instant.now()));
@@ -133,7 +120,7 @@ class PrimaryFeatureHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed index â€” n/a (singleton index)")
+    @DisplayName("applyMutation: malformed index - n/a (singleton index)")
     class MalformedIndexNa {
         @Test
         @DisplayName("the handler does not inspect indexParts[1]")
@@ -162,7 +149,7 @@ class PrimaryFeatureHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” latest by timestamp wins")
+    @DisplayName("applyMutationBatch - latest by timestamp wins")
     class BatchDedup {
         @Test
         @DisplayName("among two SET mutations, the later timestamp's flags land in the store")
@@ -209,7 +196,7 @@ class PrimaryFeatureHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")

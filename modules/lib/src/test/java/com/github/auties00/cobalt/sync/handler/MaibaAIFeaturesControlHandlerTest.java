@@ -28,26 +28,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link MaibaAIFeaturesControlHandler} forward-looking
- * adapter for {@code maiba_ai_features_control}.
+ * Covers the {@link MaibaAIFeaturesControlHandler} for the SMB
+ * {@code maiba_ai_features_control} feature-status mutation: metadata, the SET
+ * happy path that persists the status via
+ * {@link WhatsAppStore#setAiBusinessAgentStatus(MaibaAIFeatureStatus)}, the
+ * malformed branch when {@link MaibaAIFeatureStatus} is empty, the REMOVE
+ * rejection and timestamp-based conflict resolution. WA Web ships the protobuf
+ * field but does not register a corresponding sync handler, so every behavioural
+ * step is Cobalt-inferred.
  *
- * @apiNote
- * Verifies the Cobalt-inferred behaviour for the SMB Maiba AI feature
- * status mutation across metadata, the SET happy path that persists
- * the status via
- * {@link WhatsAppStore#setAiBusinessAgentStatus(MaibaAIFeatureStatus)},
- * the malformed branch when {@link MaibaAIFeatureStatus} is empty,
- * the REMOVE rejection and the inherited timestamp-based conflict
- * resolution. WA Web ships the protobuf field but does not register a
- * corresponding sync handler, so every behavioural step is
- * Cobalt-inferred.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#aiBusinessAgentStatus()} read-back can be
- * asserted directly.
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the
+ * {@link WhatsAppStore#aiBusinessAgentStatus()} read-back can be asserted
+ * directly.
  */
 @DisplayName("MaibaAIFeaturesControlHandler")
 class MaibaAIFeaturesControlHandlerTest {
@@ -65,22 +58,6 @@ class MaibaAIFeaturesControlHandlerTest {
         handler = new MaibaAIFeaturesControlHandler();
     }
 
-    /**
-     * Builds a {@link DecryptedMutation.Trusted} carrying the given
-     * action payload under the canonical
-     * {@code ["maiba_ai_features_control"]} index.
-     *
-     * @apiNote
-     * Used by every test to centralise mutation construction. The
-     * {@code action} parameter is nullable so the malformed-value
-     * path can be exercised without re-implementing the envelope.
-     *
-     * @param action the action payload, may be {@code null}
-     * @param op     the {@link SyncdOperation} to wrap
-     * @param ts     the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} with the requested
-     *         shape
-     */
     private DecryptedMutation.Trusted build(MaibaAIFeaturesControlAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {

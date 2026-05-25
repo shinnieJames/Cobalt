@@ -15,15 +15,13 @@ import java.util.Objects;
 /**
  * Outbound legacy {@code <iq xmlns="privacy" type="set"><tokens><token/>...</tokens></iq>} stanza
  * that issues a batch of pre-shared privacy tokens against the supplied peer JID.
- *
- * @apiNote
- * Cobalt embedders dispatch this to mint trusted-contact (TC) tokens for a peer; WA Web's caller
+ * <p>
+ * Dispatching this request mints trusted-contact tokens for a peer. WA Web's caller
  * {@code WAWebSendTcTokenChatAction.sendTcToken} mints one on the first reply to a peer and again
- * whenever the peer's device identity changes
- * ({@code WAWebSendTcTokenWhenDeviceIdentityChange}), and the resulting token gates downstream
- * call/messages reputation features that depend on cross-device trust pinning. The
- * {@code lid_trusted_token_issue_to_lid} AB prop selects whether the peer JID should be the
- * peer's LID or the legacy PN.
+ * whenever the peer's device identity changes ({@code WAWebSendTcTokenWhenDeviceIdentityChange}),
+ * and the resulting token gates downstream call and messages reputation features that depend on
+ * cross-device trust pinning. The {@code lid_trusted_token_issue_to_lid} AB prop selects whether the
+ * peer JID should be the peer's LID or the legacy phone-number identity.
  *
  * @implNote
  * This implementation only models the request side; the response carries no payload beyond the
@@ -52,18 +50,17 @@ public final class IqSetPrivacyTokensRequest implements IqOperation.Request {
 
     /**
      * Constructs a new request.
-     *
-     * @apiNote
+     * <p>
      * Typical callers pass a single-element list containing
-     * {@link IqSetPrivacyTokensTokenType#TRUSTED_CONTACT}; WA Web does not currently emit any
-     * other type. {@code userJid} is the peer the token is being issued against, typically the
-     * peer's LID or PN per the {@code lid_trusted_token_issue_to_lid} AB prop.
+     * {@link IqSetPrivacyTokensTokenType#TRUSTED_CONTACT}; WA Web does not currently emit any other
+     * type. {@code userJid} is the peer the token is being issued against, typically the peer's LID
+     * or phone-number identity per the {@code lid_trusted_token_issue_to_lid} AB prop.
      *
      * @implNote
      * This implementation defensively copies {@code tokenTypes} via
-     * {@link List#copyOf(java.util.Collection)} and rejects an empty list at construction time;
-     * the relay would reject an empty {@code <tokens/>} envelope at parse time but Cobalt
-     * surfaces the misuse synchronously.
+     * {@link List#copyOf(java.util.Collection)} and rejects an empty list at construction time; the
+     * relay would reject an empty {@code <tokens/>} envelope at parse time but Cobalt surfaces the
+     * misuse synchronously.
      *
      * @param userJid          the peer JID; never {@code null}
      * @param timestampSeconds the issuance timestamp in seconds since epoch
@@ -93,13 +90,11 @@ public final class IqSetPrivacyTokensRequest implements IqOperation.Request {
 
     /**
      * Returns the issuance timestamp (seconds since epoch).
-     *
-     * @apiNote
-     * Mirrors {@code WATimeUtils.unixTime()} in WA Web; the value is emitted as the {@code t}
-     * attribute on every {@code <token>} grandchild and persisted client-side as
+     * <p>
+     * The value is emitted as the {@code t} attribute on every {@code <token>} grandchild. WA Web
+     * mirrors it from {@code WATimeUtils.unixTime()} and persists it client-side as
      * {@code tcTokenSenderTimestamp} on the chat row, so the next call to
-     * {@code WAWebTrustedContactsUtils.shouldSendNewToken} can decide whether to mint a fresh
-     * token.
+     * {@code WAWebTrustedContactsUtils.shouldSendNewToken} can decide whether to mint a fresh token.
      *
      * @return the timestamp in seconds since epoch
      */
@@ -120,11 +115,12 @@ public final class IqSetPrivacyTokensRequest implements IqOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation serialises every token type into a {@code <token jid=USER_JID t=TS type=TYPE/>}
-     * grandchild and wraps the lot in a {@code <tokens>} envelope inside the canonical
+     * This implementation serialises every token type into a
+     * {@code <token jid=USER_JID t=TS type=TYPE/>} grandchild and wraps the lot in a
+     * {@code <tokens>} envelope inside the canonical
      * {@code <iq xmlns="privacy" to="s.whatsapp.net" type="set">} stanza. The
-     * {@link #timestampSeconds} field is stringified directly (decimal seconds, no padding) to
-     * match WA Web's {@code CUSTOM_STRING(String(r))} construction.
+     * {@link #timestampSeconds} field is stringified directly (decimal seconds, no padding) to match
+     * WA Web's {@code CUSTOM_STRING(String(r))} construction.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetPrivacyTokensJob",
@@ -187,8 +183,8 @@ public final class IqSetPrivacyTokensRequest implements IqOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a debug-only representation of every typed field; the format is
-     * not stable and must not be parsed.
+     * This implementation emits a debug-only representation of every typed field; the format is not
+     * stable and must not be parsed.
      */
     @Override
     public String toString() {

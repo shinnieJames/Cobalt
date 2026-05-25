@@ -15,17 +15,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a {@link SmaxUpdateBlockListRequest}.
+ * The sealed family of inbound replies to a {@link SmaxUpdateBlockListRequest}, covering the chat-info Block /
+ * Unblock action's server-confirmation step.
  *
- * @apiNote
- * Drives the chat-info Block / Unblock action's server-confirmation step; matches the six response shapes that
- * WA Web's {@code WASmaxBlocklistsUpdateBlockListRPC.sendUpdateBlockListRPC} dispatches over: cache-match
- * confirmation, PN-addressed full-list refresh, regular LID-migration refresh, Cloud-API fall-through,
- * malformed-request error, and transient server error.
+ * <p>The six variants match the six response shapes the relay can return: {@link SuccessWithMatch} confirms the
+ * action against an up-to-date cache, {@link SuccessWithMismatch} returns the refreshed PN-addressed list when the
+ * cache was stale, {@link MigratedSuccessWithMismatch} returns the refreshed LID-addressed list, {@link
+ * CAPISuccessWithMismatch} is the Cloud-API fall-through arm of the LID-addressed chain, {@link ClientError}
+ * reports a malformed request, and {@link ServerError} reports a transient relay failure. The {@link
+ * #of(Node, Node)} entry point dispatches an inbound stanza onto the first matching variant.
  *
- * @implNote
- * This implementation preserves WA Web's parser priority order in {@link #of(Node, Node)}: match before the
- * mismatch variants so the cache-match short-circuit catches first when the request and reply both reference
+ * @implNote This implementation preserves WA Web's parser priority order in {@link #of(Node, Node)}: match before
+ * the mismatch variants so the cache-match short-circuit catches first when the request and reply both reference
  * the same digest.
  */
 public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Response
@@ -37,10 +38,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         SmaxUpdateBlockListResponse.ServerError {
 
     /**
-     * Dispatches the inbound stanza onto the matching variant.
+     * Dispatches the inbound stanza onto the first matching variant.
      *
-     * @apiNote
-     * Called by the SMAX dispatcher in response to a previously-issued {@link SmaxUpdateBlockListRequest}.
+     * <p>The variants are tried in priority order ({@link SuccessWithMatch}, {@link SuccessWithMismatch}, {@link
+     * MigratedSuccessWithMismatch}, {@link CAPISuccessWithMismatch}, {@link ClientError}, {@link ServerError}); the
+     * first whose parser accepts the stanza wins. An empty result signals that none of the six shapes matched the
+     * reply correlated to {@code request}.
      *
      * @param node    the inbound {@code <iq>} stanza; never {@code null}
      * @param request the original {@link SmaxUpdateBlockListRequest} stanza; never {@code null}
@@ -78,9 +81,10 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     /**
      * The descriptor for one entry in a mismatch reply's refreshed blocklist.
      *
-     * @apiNote
-     * Surfaced through each mismatch variant's {@code listItem()}; carries the same shape as
-     * {@link SmaxGetBlockListResponse.Item} so consumers can share the rendering path.
+     * <p>The {@link #jid()} is PN-addressed on the standard variant and LID-addressed otherwise; {@link #active()}
+     * records whether the relay tagged the entry as currently blocked, and {@link #displayName()} carries the
+     * optional display-name echo. This shape mirrors {@link SmaxGetBlockListResponse.Item} so consumers can share
+     * the rendering path.
      *
      * @param jid         the blocked user JID; PN on the standard variant, LID otherwise
      * @param active      whether the relay tagged the entry as currently blocked
@@ -100,24 +104,24 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     /**
      * Parses the {@code <item/>} children of a mismatch reply into a list of {@link Item} descriptors.
      *
-     * @apiNote
-     * Shared by every mismatch variant; pass {@code requireJid=true} for the standard and regular-migration
-     * arms where the per-item JID is mandatory, {@code false} for the Cloud-API arm where it is optional.
+     * <p>Shared by every mismatch variant. When {@code requireJid} is {@code true} a per-item {@code jid} is
+     * mandatory and a missing one rejects the parse; the standard and regular-migration arms pass {@code true},
+     * the Cloud-API arm passes {@code false}. An {@code active} attribute, when present, must be the literal
+     * {@code "true"} or the parse is rejected.
      *
-     * @implNote
-     * This implementation mirrors WA Web's {@code mapChildrenWithTag} fail-the-parent semantics so the priority
-     * chain in {@link SmaxUpdateBlockListResponse#of(Node, Node)} can fall through to the Cloud-API variant
-     * when a LID-addressed reply carries a jid-less item. The {@code parseBlocklistIdentifierMixin} disjunction
-     * is collapsed: only the {@code display_name} branch is preserved, all other branches and the
-     * {@code country_code} attribute are dropped (matching
-     * {@link SmaxGetBlockListResponse#parseItems(Node, boolean)}). The {@code active} attribute is treated as a
-     * literal-only {@code "true"} on the migrated and Cloud-API arms (a non-{@code "true"} value rejects the
-     * parse) and as a boolean on the standard arm; both reduce to the same {@code activeAttr != null} branch.
+     * @implNote This implementation mirrors WA Web's {@code mapChildrenWithTag} fail-the-parent semantics so the
+     * priority chain in {@link SmaxUpdateBlockListResponse#of(Node, Node)} can fall through to the Cloud-API
+     * variant when a LID-addressed reply carries a jid-less item. The {@code parseBlocklistIdentifierMixin}
+     * disjunction is collapsed: only the {@code display_name} branch is preserved, all other branches and the
+     * {@code country_code} attribute are dropped (matching {@link SmaxGetBlockListResponse#parseItems(Node,
+     * boolean)}). The {@code active} attribute is treated as a literal-only {@code "true"} on the migrated and
+     * Cloud-API arms and as a boolean on the standard arm; both reduce to the same {@code activeAttr != null}
+     * branch.
      *
      * @param list       the {@code <list/>} node
      * @param requireJid whether the per-item {@code jid} attribute is required
-     * @return an {@link Optional} carrying the parsed list, or empty when the require-jid contract is violated
-     *         or when an {@code active} attribute carries a value other than {@code "true"}
+     * @return an {@link Optional} carrying the parsed list, or empty when the require-jid contract is violated or
+     *         when an {@code active} attribute carries a value other than {@code "true"}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseSuccessWithMismatch",
             exports = "parseUpdateBlockListResponseSuccessWithMismatchListItem",
@@ -157,9 +161,8 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     /**
      * The cache-match success reply, signalling the action was applied and the client's cached digest matched.
      *
-     * @apiNote
-     * {@code WAWebBlockUserJob.blockUnblockUser} treats this as the success path that does not require a
-     * follow-up list refresh; the new digest is still stored for the next request.
+     * <p>This is the success path that does not require a follow-up list refresh; the new {@link #listDhash()} is
+     * still stored for the next request.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseSuccessWithMatch")
     final class SuccessWithMatch implements SmaxUpdateBlockListResponse {
@@ -169,10 +172,7 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         private final String listDhash;
 
         /**
-         * Constructs a cache-match reply.
-         *
-         * @apiNote
-         * Invoked from {@link #of(Node, Node)} only.
+         * Constructs a cache-match reply from the new digest.
          *
          * @param listDhash the new server digest; never {@code null}
          * @throws NullPointerException if {@code listDhash} is {@code null}
@@ -191,14 +191,13 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Parses a cache-match variant.
+         * Parses a cache-match variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns empty when the envelope is wrong, when the {@code <list/>} child is missing, when
-         * {@code matched} is not {@code "true"}, or when the required {@code dhash} attribute is missing.
+         * <p>Returns empty when the result envelope does not validate, when the {@code <list/>} child is missing,
+         * when {@code matched} is not {@code "true"}, or when the required {@code dhash} attribute is missing.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
+         * @param node    the inbound stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
          * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseSuccessWithMatch",
@@ -222,6 +221,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Optional.of(new SuccessWithMatch(dhash));
         }
 
+        /**
+         * Compares this reply to another object for value equality on the digest.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link SuccessWithMatch} with an equal digest
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -234,11 +239,21 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Objects.equals(this.listDhash, that.listDhash);
         }
 
+        /**
+         * Returns a hash code derived from the digest.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(listDhash);
         }
 
+        /**
+         * Returns a debug rendering of the digest.
+         *
+         * @return a diagnostic string; never {@code null}
+         */
         @Override
         public String toString() {
             return "SmaxUpdateBlockListResponse.SuccessWithMatch[listDhash=" + listDhash + ']';
@@ -248,10 +263,8 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     /**
      * The PN-addressed mismatch reply, returned when the relay applied the action and the cache was stale.
      *
-     * @apiNote
-     * {@code WAWebBlockUserJob.blockUnblockUser} treats this as the success path that also requires a
-     * blocklist re-render; consumers persist the new digest and replace the local list with
-     * {@link #listItem()}.
+     * <p>This is the success path that also requires a blocklist re-render: consumers persist {@link #listDhash()}
+     * and replace the local list with {@link #listItem()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseSuccessWithMismatch")
     final class SuccessWithMismatch implements SmaxUpdateBlockListResponse {
@@ -276,11 +289,10 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         private final List<Item> listItem;
 
         /**
-         * Constructs a PN-addressed mismatch reply.
+         * Constructs a PN-addressed mismatch reply from the echo flag, the new digest, the addressing flag, and the
+         * parsed list.
          *
-         * @apiNote
-         * Invoked from {@link #of(Node, Node)} only; the {@code listItem} list is defensively copied for
-         * immutability.
+         * <p>The {@code listItem} list is defensively copied for immutability.
          *
          * @param hasListCDhash        whether the {@code c_dhash} echo was present
          * @param listDhash            the new server digest; never {@code null}
@@ -333,16 +345,15 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Parses a PN-addressed mismatch variant.
+         * Parses a PN-addressed mismatch variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns empty when the envelope is wrong, when the {@code <list/>} child is absent, when
-         * {@code matched} is not {@code "false"}, when {@code addressing_mode} is set to anything other than
-         * {@code "pn"}, when the {@code c_dhash} echo (if present) does not match the request's
-         * {@code <item dhash/>}, when {@code dhash} is missing, or when any per-item JID is missing.
+         * <p>Returns empty when the result envelope does not validate, when the {@code <list/>} child is absent,
+         * when {@code matched} is not {@code "false"}, when {@code addressing_mode} is set to anything other than
+         * {@code "pn"}, when the {@code c_dhash} echo (if present) does not match the request's {@code <item
+         * dhash/>}, when {@code dhash} is missing, or when any per-item JID is missing.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
+         * @param node    the inbound stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
          * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseSuccessWithMismatch",
@@ -382,6 +393,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Optional.of(new SuccessWithMismatch(hasListCDhash, dhash, addressingMode != null, items));
         }
 
+        /**
+         * Compares this reply to another object for value equality across every field.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link SuccessWithMismatch} with equal fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -397,11 +414,21 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
                     && Objects.equals(this.listItem, that.listItem);
         }
 
+        /**
+         * Returns a hash code derived from every field.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(hasListCDhash, listDhash, phoneNumberAddressed, listItem);
         }
 
+        /**
+         * Returns a debug rendering listing every field.
+         *
+         * @return a diagnostic string; never {@code null}
+         */
         @Override
         public String toString() {
             return "SmaxUpdateBlockListResponse.SuccessWithMismatch[hasListCDhash=" + hasListCDhash
@@ -412,11 +439,10 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The regular LID-migration mismatch reply.
+     * The regular LID-migration mismatch reply, returned for clients on the LID-addressed wire.
      *
-     * @apiNote
-     * Same caller-facing surface as {@link SuccessWithMismatch} but for clients on the LID-addressed wire; each
-     * {@link Item#jid()} is a LID JID, translated downstream via {@code WAWebJidToWid.lidUserJidToUserLid}.
+     * <p>This carries the same caller-facing surface as {@link SuccessWithMismatch} but each {@link Item#jid()} is
+     * a LID JID, translated downstream into the user-facing identity.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseMigratedSuccessWithMismatch")
     final class MigratedSuccessWithMismatch implements SmaxUpdateBlockListResponse {
@@ -436,11 +462,9 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         private final List<Item> listItem;
 
         /**
-         * Constructs a regular-migration mismatch reply.
+         * Constructs a regular-migration mismatch reply from the echo flag, the new digest, and the parsed list.
          *
-         * @apiNote
-         * Invoked from {@link #of(Node, Node)} only; the {@code listItem} list is defensively copied for
-         * immutability.
+         * <p>The {@code listItem} list is defensively copied for immutability.
          *
          * @param hasListCDhash whether the {@code c_dhash} echo was present
          * @param listDhash     the new server digest; never {@code null}
@@ -481,15 +505,14 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Parses a regular-migration mismatch variant.
+         * Parses a regular-migration mismatch variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns empty when the envelope is wrong, when {@code matched} is not {@code "false"}, when
-         * {@code addressing_mode} is not {@code "lid"}, when the {@code c_dhash} echo does not match the
+         * <p>Returns empty when the result envelope does not validate, when {@code matched} is not {@code "false"},
+         * when {@code addressing_mode} is not {@code "lid"}, when the {@code c_dhash} echo does not match the
          * request's {@code <item dhash/>}, when {@code dhash} is missing, or when any per-item JID is missing.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
+         * @param node    the inbound stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
          * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseMigratedSuccessWithMismatch",
@@ -528,6 +551,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Optional.of(new MigratedSuccessWithMismatch(hasListCDhash, dhash, items));
         }
 
+        /**
+         * Compares this reply to another object for value equality across every field.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link MigratedSuccessWithMismatch} with equal fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -542,11 +571,21 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
                     && Objects.equals(this.listItem, that.listItem);
         }
 
+        /**
+         * Returns a hash code derived from every field.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(hasListCDhash, listDhash, listItem);
         }
 
+        /**
+         * Returns a debug rendering listing every field.
+         *
+         * @return a diagnostic string; never {@code null}
+         */
         @Override
         public String toString() {
             return "SmaxUpdateBlockListResponse.MigratedSuccessWithMismatch[hasListCDhash=" + hasListCDhash
@@ -558,9 +597,8 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     /**
      * The Cloud-API mismatch reply, the fall-through arm of the LID-addressed parser priority chain.
      *
-     * @apiNote
-     * Wire-shape equivalent to {@link MigratedSuccessWithMismatch} but with the per-item JID optional; matches
-     * LID-addressed replies whose items lack {@code jid} attributes (Cloud-API server flavour).
+     * <p>This is wire-shape equivalent to {@link MigratedSuccessWithMismatch} but with the per-item JID optional;
+     * it matches LID-addressed replies whose items lack {@code jid} attributes (the Cloud-API server flavour).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseCAPISuccessWithMismatch")
     final class CAPISuccessWithMismatch implements SmaxUpdateBlockListResponse {
@@ -580,11 +618,9 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         private final List<Item> listItem;
 
         /**
-         * Constructs a Cloud-API mismatch reply.
+         * Constructs a Cloud-API mismatch reply from the echo flag, the new digest, and the parsed list.
          *
-         * @apiNote
-         * Invoked from {@link #of(Node, Node)} only; the {@code listItem} list is defensively copied for
-         * immutability.
+         * <p>The {@code listItem} list is defensively copied for immutability.
          *
          * @param hasListCDhash whether the {@code c_dhash} echo was present
          * @param listDhash     the new server digest; never {@code null}
@@ -625,17 +661,16 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Parses a Cloud-API mismatch variant.
+         * Parses a Cloud-API mismatch variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns empty when the envelope is wrong, when {@code matched} is not {@code "false"}, when
-         * {@code addressing_mode} is not {@code "lid"}, when the {@code c_dhash} echo does not match the
-         * request's {@code <item dhash/>}, when {@code dhash} is missing, or when any {@code active}
-         * attribute carries a non-{@code "true"} value. The per-item JID is optional, so a missing JID does
-         * not abort the parse.
+         * <p>Returns empty when the result envelope does not validate, when {@code matched} is not {@code "false"},
+         * when {@code addressing_mode} is not {@code "lid"}, when the {@code c_dhash} echo does not match the
+         * request's {@code <item dhash/>}, when {@code dhash} is missing, or when any {@code active} attribute
+         * carries a non-{@code "true"} value. The per-item JID is optional, so a missing JID does not abort the
+         * parse.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
+         * @param node    the inbound stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
          * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseCAPISuccessWithMismatch",
@@ -674,6 +709,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Optional.of(new CAPISuccessWithMismatch(hasListCDhash, dhash, items));
         }
 
+        /**
+         * Compares this reply to another object for value equality across every field.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link CAPISuccessWithMismatch} with equal fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -688,11 +729,21 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
                     && Objects.equals(this.listItem, that.listItem);
         }
 
+        /**
+         * Returns a hash code derived from every field.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(hasListCDhash, listDhash, listItem);
         }
 
+        /**
+         * Returns a debug rendering listing every field.
+         *
+         * @return a diagnostic string; never {@code null}
+         */
         @Override
         public String toString() {
             return "SmaxUpdateBlockListResponse.CAPISuccessWithMismatch[hasListCDhash=" + hasListCDhash
@@ -704,10 +755,9 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     /**
      * The malformed-request reply variant, optionally carrying an addressing-mode hint.
      *
-     * @apiNote
-     * {@code WAWebBlockUserJob.blockUnblockUser} maps this to the {@code (errorCode, errorText)} pair surfaced
-     * to the user as a block-failure log line; the addressing-mode hint helps the caller diagnose
-     * migration-state issues by indicating which wire the relay expected.
+     * <p>The {@link #errorCode()} and {@link #errorText()} pair is surfaced to the caller as a block-failure log
+     * line; the optional {@link #errorAddressingMode()} hint helps the caller diagnose migration-state issues by
+     * indicating which wire the relay expected. It is selected for relay error codes below {@code 500}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseInvalidRequest")
     final class ClientError implements SmaxUpdateBlockListResponse {
@@ -724,19 +774,16 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         /**
          * The optional addressing-mode hint carried on the {@code <error/>} child.
          *
-         * @apiNote
-         * Validated against the {@code WASmaxInBlocklistsEnums.ENUM_LID_PN} tuple of {@code "lid"} or
-         * {@code "pn"}; any other value rejects this variant.
+         * <p>The value is validated against the {@code (lid, pn)} literal tuple by {@link #of(Node, Node)}; any
+         * other value rejects this variant, so a non-{@code null} value is always one of {@code "lid"} or
+         * {@code "pn"}.
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsEnums",
                 exports = "ENUM_LID_PN", adaptation = WhatsAppAdaptation.ADAPTED)
         private final String errorAddressingMode;
 
         /**
-         * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Invoked from {@link #of(Node, Node)} only after the shared envelope check succeeds.
+         * Constructs a client-error reply from the relay's error code, text, and addressing-mode hint.
          *
          * @param errorCode           the numeric error code echoed by the relay
          * @param errorText           the optional human-readable text; may be {@code null}
@@ -769,9 +816,8 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         /**
          * Returns the addressing-mode hint when present.
          *
-         * @apiNote
-         * Use to diagnose migration-state mismatches; the value is always one of {@code "lid"} or {@code "pn"}
-         * when present (the parser rejects any other value).
+         * <p>The hint diagnoses migration-state mismatches; a non-{@code null} value is always one of
+         * {@code "lid"} or {@code "pn"} because {@link #of(Node, Node)} rejects any other value.
          *
          * @return an {@link Optional} carrying the hint, or empty when the relay omitted it
          */
@@ -780,20 +826,19 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Parses a malformed-request variant.
+         * Parses a malformed-request variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates the envelope check to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} and
-         * then validates the optional {@code addressing_mode} attribute on the {@code <error/>} child against
-         * the {@code (lid, pn)} literal tuple.
+         * <p>The envelope check is delegated to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
+         * which accepts only error replies whose code falls below {@code 500}. The optional {@code addressing_mode}
+         * attribute on the {@code <error/>} child is then validated against the {@code (lid, pn)} literal tuple;
+         * any other value rejects the parse.
          *
-         * @implNote
-         * This implementation inlines WA Web's {@code attrStringEnum} contract by checking explicitly against
-         * the two enum keys; the WA Web {@code ENUM_LID_PN} tuple is a closed literal map so the inlined check
-         * matches behaviour.
+         * @implNote This implementation inlines WA Web's {@code attrStringEnum} contract by checking explicitly
+         * against the two enum keys; the WA Web {@code ENUM_LID_PN} tuple is a closed literal map, so the inlined
+         * check matches behaviour.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
+         * @param node    the inbound stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
          * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseInvalidRequest",
@@ -813,6 +858,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Optional.of(new ClientError(envelope.code(), envelope.text(), addressingMode));
         }
 
+        /**
+         * Compares this reply to another object for value equality across every field.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ClientError} with equal fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -827,11 +878,21 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
                     && Objects.equals(this.errorAddressingMode, that.errorAddressingMode);
         }
 
+        /**
+         * Returns a hash code derived from every field.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText, errorAddressingMode);
         }
 
+        /**
+         * Returns a debug rendering listing every field.
+         *
+         * @return a diagnostic string; never {@code null}
+         */
         @Override
         public String toString() {
             return "SmaxUpdateBlockListResponse.ClientError[errorCode=" + errorCode
@@ -841,11 +902,10 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The transient server-error reply variant.
+     * The transient server-error reply variant, returned when the relay reports a recoverable failure.
      *
-     * @apiNote
-     * {@code WAWebBlockUserJob.blockUnblockUser} folds this into the {@code (errorCode, errorText)} pair; WA
-     * Web does not retry inline, leaving recovery to the caller.
+     * <p>The {@link #errorCode()} and {@link #errorText()} pair is surfaced to the caller; WA Web does not retry
+     * inline, leaving recovery to the caller. It is selected for relay error codes of {@code 500} or above.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseServerError")
     final class ServerError implements SmaxUpdateBlockListResponse {
@@ -860,10 +920,7 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Invoked from {@link #of(Node, Node)} only after the shared envelope check succeeds.
+         * Constructs a server-error reply from the relay's error code and text.
          *
          * @param errorCode the numeric error code echoed by the relay
          * @param errorText the optional human-readable text; may be {@code null}
@@ -892,13 +949,13 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Parses a server-error variant.
+         * Parses a server-error variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates the envelope check to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>The envelope check is delegated to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
+         * which accepts only error replies whose code is {@code 500} or above.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
+         * @param node    the inbound stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
          * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsUpdateBlockListResponseServerError",
@@ -912,6 +969,12 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply to another object for value equality across the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is a {@link ServerError} with equal fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -924,11 +987,21 @@ public sealed interface SmaxUpdateBlockListResponse extends SmaxOperation.Respon
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text.
+         *
+         * @return the hash code consistent with {@link #equals(Object)}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug rendering of the code and text.
+         *
+         * @return a diagnostic string; never {@code null}
+         */
         @Override
         public String toString() {
             return "SmaxUpdateBlockListResponse.ServerError[errorCode=" + errorCode

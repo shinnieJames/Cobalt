@@ -7,15 +7,12 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 /**
  * Enumerates the {@code mode} values the {@code <usync>} stanza accepts.
  *
- * @apiNote
- * Cobalt builders default to {@link #QUERY}; pass {@link #DELTA} from contact
- * sync jobs that ship just an add/remove diff against the relay's last-known
- * roster (see {@code WAWebContactSyncUtils.constructUsyncDeltaQuery}).
+ * <p>Builders default to {@link #QUERY}; {@link #DELTA} is used by contact-sync
+ * jobs that ship just an add/remove diff against the relay's last-known roster.
  *
  * @implNote
- * This implementation is the typed Cobalt counterpart of the free-form
- * {@code this.mode} string assigned via {@code USyncQuery.withMode} in
- * {@code WAWebUsync}; the JS surface accepts any string but only the four
+ * This implementation is the typed counterpart of the free-form {@code mode}
+ * string WA Web assigns; the JS surface accepts any string but only the four
  * literals modelled here are observed in the call graph.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
@@ -23,8 +20,7 @@ public enum UsyncMode {
     /**
      * Standard one-shot query mode.
      *
-     * @apiNote
-     * The relay inlines the requested protocol data in the response.
+     * <p>The relay inlines the requested protocol data in the response.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
@@ -33,8 +29,7 @@ public enum UsyncMode {
     /**
      * Notify mode.
      *
-     * @apiNote
-     * Asks the relay to perform a side effect without returning protocol
+     * <p>Asks the relay to perform a side effect without returning protocol
      * payloads in the response body.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
@@ -44,11 +39,10 @@ public enum UsyncMode {
     /**
      * Delta mode.
      *
-     * @apiNote
-     * Used by background contact-sync jobs that ship only the add/remove diff
-     * against the relay's last-known roster, keyed by the per-user device-list
-     * hashes attached through {@link UsyncUser#withDeviceHash(String)} and
-     * {@link UsyncUser#withTimestamp(java.time.Instant)}.
+     * <p>Used by background contact-sync jobs that ship only the add/remove
+     * diff against the relay's last-known roster, keyed by the per-user
+     * device-list hashes attached through {@link UsyncUser#withDeviceHash(String)}
+     * and {@link UsyncUser#withTimestamp(java.time.Instant)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
@@ -57,9 +51,8 @@ public enum UsyncMode {
     /**
      * Result mode.
      *
-     * @apiNote
-     * Used internally when the relay echoes a response already obtained
-     * from a peer notification.
+     * <p>Used internally when the relay echoes a response already obtained from
+     * a peer notification.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
@@ -84,8 +77,7 @@ public enum UsyncMode {
      * Returns the literal emitted on the {@code mode} attribute of the
      * {@code <usync>} stanza.
      *
-     * @apiNote
-     * Call sites that bypass {@link UsyncQuery#toNode()} to assemble a raw
+     * <p>Call sites that bypass {@link UsyncQuery#toNode()} to assemble a raw
      * {@link com.github.auties00.cobalt.node.Node} use this to match the exact
      * wire literal.
      *

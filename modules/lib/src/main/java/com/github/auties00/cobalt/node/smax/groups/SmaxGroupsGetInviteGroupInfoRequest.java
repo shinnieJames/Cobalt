@@ -11,27 +11,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:g2" type="get" to="g.us">} stanza that previews a group via its public invite code.
+ * Previews a group via its public invite code as an {@code <iq xmlns="w:g2" type="get" to="g.us">} stanza.
  *
- * @apiNote Drives the "preview group from invite link" flow surfaced by {@code WAWebGroupQueryJob.queryGroupInviteCode}.
- * Pass the suffix of a {@code chat.whatsapp.com/<code>} URL and dispatch through the matching
- * {@link SmaxGroupsGetInviteGroupInfoResponse} parser to materialise the inviting group's preview metadata before
- * the caller commits to joining.
+ * <p>The caller passes the suffix of a {@code chat.whatsapp.com/<code>} URL and dispatches through the matching
+ * {@link SmaxGroupsGetInviteGroupInfoResponse} parser to materialise the inviting group's preview metadata
+ * before committing to joining.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetInviteGroupInfoRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetServerMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQGetRequestMixin")
 public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.Request {
     /**
-     * The public invite code surfaced under the {@code <invite code="..."/>} child.
+     * Holds the public invite code surfaced under the {@code <invite code="..."/>} child.
      */
     private final String inviteCode;
 
     /**
      * Constructs a request for the given invite code.
      *
-     * @apiNote Pass the suffix of a {@code chat.whatsapp.com/<code>} URL verbatim; the relay rejects empty codes
-     * and treats unknown codes as a client error.
+     * <p>The caller passes the suffix of a {@code chat.whatsapp.com/<code>} URL verbatim; the relay rejects
+     * empty codes and treats unknown codes as a client error.
      *
      * @param inviteCode the public invite code; never {@code null}
      * @throws NullPointerException if {@code inviteCode} is {@code null}
@@ -43,7 +42,7 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
     /**
      * Returns the invite code carried by this request.
      *
-     * @apiNote Surfaced verbatim under {@code <invite code="..."/>}.
+     * <p>The value is surfaced verbatim under {@code <invite code="..."/>}.
      *
      * @return the invite code; never {@code null}
      */
@@ -52,9 +51,9 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
     }
 
     /**
-     * Materialises the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="g.us" type="get">
      *         <invite code="<inviteCode>"/>
@@ -83,7 +82,8 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
      * Compares this request to {@code obj} for value equality across every field.
      *
      * @param obj the other object
-     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetInviteGroupInfoRequest} with the same invite code
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetInviteGroupInfoRequest} with the same
+     *         invite code
      */
     @Override
     public boolean equals(Object obj) {

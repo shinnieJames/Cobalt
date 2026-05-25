@@ -16,7 +16,6 @@ import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.event.EventMessage;
 import com.github.auties00.cobalt.model.message.event.EventResponseMessage;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
-import com.github.auties00.cobalt.model.message.interactive.InteractiveMessageContent;
 import com.github.auties00.cobalt.model.message.list.ListMessage;
 import com.github.auties00.cobalt.model.message.list.ListResponseMessage;
 import com.github.auties00.cobalt.model.message.location.LiveLocationMessage;
@@ -108,17 +107,14 @@ import java.util.logging.Logger;
  * exponential backoff; permanent failures account a
  * {@code WamClientErrors} drop-counter event.
  *
- * @apiNote
- * Embedders typically do not interact with this service directly; the
- * client constructs and drives it. Direct API surface is limited to
- * the sampling-override methods
+ * <p>The client constructs and drives this service. Its direct entry
+ * points are the sampling-override methods
  * ({@link #setSamplingOverride(int, int)},
- * {@link #removeSamplingOverride(int)},
- * {@link #replaceSamplingOverrides(Map)}) for clients that
- * want to override WA-Web sampling weights at runtime, and the
- * classification helpers in the lower half of the class
- * ({@link #getWamMediaType(MessageContainer)} and friends) used by
- * other Cobalt modules building WAM events.
+ * {@link #removeSamplingOverride(int)}, {@link #replaceSamplingOverrides(Map)})
+ * for overriding WA Web sampling weights at runtime, and the classification
+ * helpers in the lower half of the class
+ * ({@link #getWamMediaType(MessageContainer)} and friends) used by other
+ * Cobalt modules building WAM events.
  *
  * @implNote
  * This implementation flushes unconditionally on every scheduler tick.
@@ -149,52 +145,47 @@ public abstract class WamService {
     private static final Logger LOGGER = Logger.getLogger(WamService.class.getName());
 
     /**
-     * The size in bytes of the fixed-shape WAM buffer header that
+     * Holds the size in bytes of the fixed-shape WAM buffer header that
      * {@link #writeHeader(WamEventEncoder, WamChannel)} prepends to
      * every flushed buffer.
      *
-     * @apiNote
-     * The wire shape is {@code "WAM"(3) + version(1) + streamId(1) +
+     * <p>The wire shape is {@code "WAM"(3) + version(1) + streamId(1) +
      * seqNum(2 LE) + channel(1)}, so the magic plus the four scalar
      * header fields together occupy exactly eight bytes.
      */
     private static final int HEADER_SIZE = 8;
 
     /**
-     * The three-byte magic prefix that opens every WAM buffer.
+     * Holds the three-byte magic prefix that opens every WAM buffer.
      *
-     * @apiNote
-     * Read by the server to recognise WAM-formatted payloads on the
+     * <p>The server reads this to recognise WAM-formatted payloads on the
      * {@code w:stats} IQ surface and on the
      * {@code /deidentified_telemetry} private endpoint.
      */
     private static final byte[] WAM_MAGIC = {'W', 'A', 'M'};
 
     /**
-     * The protocol version byte written into the WAM buffer header.
+     * Holds the protocol version byte written into the WAM buffer header.
      *
-     * @apiNote
-     * Matches the WA Web {@code WAM_PROTOCOL_VERSION} constant; bumped
+     * <p>Matches the WA Web {@code WAM_PROTOCOL_VERSION} constant; bumped
      * in lockstep with the upstream encoder when the wire shape
      * changes.
      */
     private static final int PROTOCOL_VERSION = 5;
 
     /**
-     * The stream identifier byte written into the WAM buffer header.
+     * Holds the stream identifier byte written into the WAM buffer header.
      *
-     * @apiNote
-     * Always {@code 1} for the regular client stream; the WAM wire
+     * <p>Always {@code 1} for the regular client stream; the WAM wire
      * format reserves higher stream ids for parallel encoder pipelines
      * that Cobalt does not run.
      */
     private static final int STREAM_ID = 1;
 
     /**
-     * The interval in seconds between mid-cycle serialization checks.
+     * Holds the interval in seconds between mid-cycle serialization checks.
      *
-     * @apiNote
-     * Matches the upstream {@code WAM_IN_MEMORY_BUFFERING_DURATION_IN_SECS}
+     * <p>Matches the upstream {@code WAM_IN_MEMORY_BUFFERING_DURATION_IN_SECS}
      * constant. {@link #checkMidCycleUpload()} runs on this cadence and
      * triggers an early flush for any non-realtime channel whose
      * pending aggregate has crossed {@link #MAX_BUFFER_SIZE}.
@@ -202,21 +193,19 @@ public abstract class WamService {
     private static final int SERIALIZE_INTERVAL_SECONDS = 5;
 
     /**
-     * The interval in seconds between full rotation and upload cycles.
+     * Holds the interval in seconds between full rotation and upload cycles.
      *
-     * @apiNote
-     * Matches the upstream {@code WAM_BUFFER_ROTATE_INTERVAL_IN_SECS}
+     * <p>Matches the upstream {@code WAM_BUFFER_ROTATE_INTERVAL_IN_SECS}
      * constant. {@link #flush()} runs on this cadence and drains every
      * channel unconditionally.
      */
     private static final int FLUSH_INTERVAL_SECONDS = 120;
 
     /**
-     * The size in bytes at which a buffer is closed off and a fresh
+     * Holds the size in bytes at which a buffer is closed off and a fresh
      * buffer is started during {@link #flushEventList}.
      *
-     * @apiNote
-     * Matches the upstream {@code WAM_MAX_BUFFER_SIZE} constant. The
+     * <p>Matches the upstream {@code WAM_MAX_BUFFER_SIZE} constant. The
      * rotation is a post-check: the event that pushes the buffer over
      * the threshold stays in the current buffer, and any subsequent
      * event opens a new buffer.
@@ -224,10 +213,9 @@ public abstract class WamService {
     private static final int MAX_BUFFER_SIZE = 50_000;
 
     /**
-     * The hard upper size in bytes for a buffer that may be uploaded.
+     * Holds the hard upper size in bytes for a buffer that may be uploaded.
      *
-     * @apiNote
-     * Matches the upstream {@code WAM_MAX_BUFFER_SIZE_FOR_UPLOAD}
+     * <p>Matches the upstream {@code WAM_MAX_BUFFER_SIZE_FOR_UPLOAD}
      * constant. Buffers above this size are dropped before any network
      * call and a {@code WamClientErrors} drop-counter event is
      * accounted for the loss.
@@ -235,11 +223,10 @@ public abstract class WamService {
     private static final int MAX_UPLOAD_SIZE = 64_000;
 
     /**
-     * The maximum number of retry attempts for a failed buffer upload.
+     * Holds the maximum number of retry attempts for a failed buffer upload.
      *
-     * @apiNote
-     * Three total attempts (the initial send plus two retries) on
-     * transient {@code 5xx}-class failures; permanent failures (the
+     * <p>This permits three total attempts (the initial send plus two retries)
+     * on transient {@code 5xx}-class failures; permanent failures (the
      * {@code 4xx} family on the regular channel, the per-result
      * permanent error codes on the private channel) terminate
      * immediately.
@@ -247,11 +234,10 @@ public abstract class WamService {
     private static final int MAX_RETRIES = 2;
 
     /**
-     * The minimum delay in milliseconds between successive upload
+     * Holds the minimum delay in milliseconds between successive upload
      * retries.
      *
-     * @apiNote
-     * Lower clamp of the exponential-backoff curve computed by
+     * <p>Acts as the lower clamp of the exponential-backoff curve computed by
      * {@link #computeBackoffDelay(int)}. Matches the
      * {@code WABackoffUtils.expBackoff} third argument in WA Web's
      * {@code WAWebUploadStatsBackend} call site.
@@ -259,11 +245,10 @@ public abstract class WamService {
     private static final long RETRY_BASE_DELAY_MS = 1_000;
 
     /**
-     * The maximum delay in milliseconds between successive upload
+     * Holds the maximum delay in milliseconds between successive upload
      * retries.
      *
-     * @apiNote
-     * Upper clamp of the exponential-backoff curve computed by
+     * <p>Acts as the upper clamp of the exponential-backoff curve computed by
      * {@link #computeBackoffDelay(int)}. Matches the
      * {@code WABackoffUtils.expBackoff} second argument in WA Web's
      * {@code WAWebUploadStatsBackend} call site.
@@ -271,22 +256,20 @@ public abstract class WamService {
     private static final long RETRY_MAX_DELAY_MS = 120_000;
 
     /**
-     * The inclusive upper bound of the {@code uint16} sequence number
+     * Holds the inclusive upper bound of the {@code uint16} sequence number
      * written into the buffer header before the per-channel counter
      * wraps back to {@code 1}.
      *
-     * @apiNote
-     * The wire field is a little-endian {@code uint16}; the counter
+     * <p>The wire field is a little-endian {@code uint16}; the counter
      * skips {@code 0} on wrap so that the server can use {@code 0} as
      * an unset sentinel.
      */
     private static final int MAX_SEQUENCE_NUMBER = 0xFFFF;
 
     /**
-     * The wire field id of the per-event {@code commitTime} global.
+     * Holds the wire field id of the per-event {@code commitTime} global.
      *
-     * @apiNote
-     * {@link #restorePendingBuffers()} uses this field id to recognise
+     * <p>{@link #restorePendingBuffers()} uses this field id to recognise
      * the leading entry that {@link #persistBuffer} writes before each
      * persisted event; a mismatch signals a corrupt or out-of-date
      * persisted buffer and aborts the restore loop for that file.
@@ -294,77 +277,72 @@ public abstract class WamService {
     private static final int COMMIT_TIME_FIELD_ID = 47;
 
     /**
-     * The wire value of the {@code deviceClassification} global
+     * Holds the wire value of the {@code deviceClassification} global
      * (id {@code 14507}) reported by Cobalt as DESKTOP.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code DEVICE_CLASSIFICATION.DESKTOP} enum value
-     * selected by {@code WAWebFalcoCanonicalDeviceClassification.default}
-     * returning the literal {@code "desktop"} on the desktop binary.
-     * Cobalt always reports DESKTOP regardless of host environment
-     * because there is no equivalent of WA Web's browser/native build
-     * fork.
+     * @implNote
+     * This implementation always reports DESKTOP regardless of host
+     * environment because there is no equivalent of WA Web's
+     * browser/native build fork;
+     * {@code WAWebFalcoCanonicalDeviceClassification.default} returns the
+     * literal {@code "desktop"} only on the desktop binary.
      */
     @WhatsAppWebExport(moduleName = "WAWebFalcoCanonicalDeviceClassification", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int DEVICE_CLASSIFICATION_DESKTOP = 4;
 
     /**
-     * The wire value of the {@code appBuild} global (id {@code 1657})
+     * Holds the wire value of the {@code appBuild} global (id {@code 1657})
      * reported by Cobalt as RELEASE.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code APP_BUILD_TYPE.RELEASE} enum value;
-     * Cobalt has no debug/canary build distinction at runtime so the
+     * <p>Matches WA Web's {@code APP_BUILD_TYPE.RELEASE} enum value;
+     * Cobalt has no debug or canary build distinction at runtime so the
      * value is fixed.
      */
     private static final int APP_BUILD_RELEASE = 4;
 
     /**
-     * The wire value of the {@code webcEnv} global (id {@code 633})
+     * Holds the wire value of the {@code webcEnv} global (id {@code 633})
      * reported by Cobalt as PROD.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WEBC_ENV_CODE.PROD} enum value; Cobalt
-     * has no staging/test environment to report.
+     * <p>Matches WA Web's {@code WEBC_ENV_CODE.PROD} enum value; Cobalt
+     * has no staging or test environment to report.
      */
     private static final int WEBC_ENV_PROD = 0;
 
     /**
-     * The wire value of the {@code webcWebPlatform} global
+     * Holds the wire value of the {@code webcWebPlatform} global
      * (id {@code 899}) reported by Cobalt as WEB.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WEBC_WEB_PLATFORM_TYPE.WEB} enum value;
+     * <p>Matches WA Web's {@code WEBC_WEB_PLATFORM_TYPE.WEB} enum value;
      * other values in the enum tag the upstream native-shell builds
      * that Cobalt does not embed.
      */
     private static final int PLATFORM_WEBCLIENT = 1;
 
     /**
-     * The maximum time in milliseconds that
+     * Holds the maximum time in milliseconds that
      * {@link #waitIfDisconnected()} blocks waiting for the client to
      * become connected before letting the upload attempt proceed
      * regardless.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebUploadStatsBackend.waitIfOffline}
+     * <p>Matches WA Web's {@code WAWebUploadStatsBackend.waitIfOffline}
      * 30-second timeout: the upload still fires after the deadline
-     * elapses so the retry/backoff loop drives the actual failure
+     * elapses so the retry and backoff loop drives the actual failure
      * handling rather than the connectivity wait.
      */
     private static final long CONNECTIVITY_WAIT_TIMEOUT_MS = 30_000;
 
     /**
-     * The bound WhatsApp client used to dispatch the {@code w:stats}
+     * Holds the bound WhatsApp client used to dispatch the {@code w:stats}
      * IQ stanzas and to read connectivity state for
      * {@link #waitIfDisconnected()}.
      */
     private final WhatsAppClient client;
 
     /**
-     * The AB-props service queried at {@link #initialize()} for
+     * Holds the AB-props service queried at {@link #initialize()} for
      * per-event sampling-weight overrides and for the
-     * {@link ABProp#WAM_DISABLE_ABKEY_ATTRIBUTE} /
+     * {@link ABProp#WAM_DISABLE_ABKEY_ATTRIBUTE} and
      * {@link ABProp#SERVICE_IMPROVEMENT_OPT_OUT_FLAG} feature flags
      * that gate the {@code abKey2} and {@code serviceImprovementOptOut}
      * globals.
@@ -372,10 +350,9 @@ public abstract class WamService {
     private final ABPropsService abPropsService;
 
     /**
-     * The per-channel pending-event queues keyed by {@link WamChannel}.
+     * Holds the per-channel pending-event queues keyed by {@link WamChannel}.
      *
-     * @apiNote
-     * Each value is the FIFO list of uncommitted events for that
+     * <p>Each value is the FIFO list of uncommitted events for that
      * channel; {@link #swapPending(WamChannel)} atomically detaches the
      * list inside a {@link ConcurrentMap#compute} so that concurrent
      * {@link #commit(WamEventSpec)} callers either land in the
@@ -385,11 +362,10 @@ public abstract class WamService {
     private final ConcurrentMap<WamChannel, List<WamPendingEvent>> pending;
 
     /**
-     * The per-channel sequence counters written into the WAM buffer
+     * Holds the per-channel sequence counters written into the WAM buffer
      * header.
      *
-     * @apiNote
-     * Each channel has its own counter, mirroring WA Web's
+     * <p>Each channel has its own counter, mirroring WA Web's
      * {@code WAWebWamStorage.getNextSequenceNumberForStream} which
      * keys per stream id. {@link #nextSequenceNumber(WamChannel)}
      * advances by one on every flush and wraps from
@@ -398,36 +374,33 @@ public abstract class WamService {
     private final Map<WamChannel, AtomicInteger> sequenceNumbers;
 
     /**
-     * The daily-sampled beaconing state consulted by
+     * Holds the daily-sampled beaconing state consulted by
      * {@link #flushEventList} to mint the per-event
      * {@code beaconSessionId} global (id {@code 18529}).
      *
-     * @apiNote
-     * {@link WamBeaconing#nextSequenceNumber(String)} returns an empty
+     * <p>{@link WamBeaconingService#nextSequenceNumber(String)} returns an empty
      * {@link OptionalLong} when the buffer-key bucket is unsampled for
      * the day, in which case the per-event global is omitted.
      */
-    private final WamBeaconing beaconing;
+    private final WamBeaconingService beaconing;
 
     /**
-     * The rotating-pseudonymous-id set queried for every private-channel
-     * event to mint the per-event {@code psId} global.
+     * Holds the rotating-pseudonymous-id set queried for every
+     * private-channel event to mint the per-event {@code psId} global.
      *
-     * @apiNote
-     * One id per bucket name from WA Web's
+     * <p>There is one id per bucket name from WA Web's
      * {@code WAWebWamGlobals.PrivateStatsAllIds} (DefaultPsId,
-     * GroupSafetyCheckId, IdTtlDaily, etc.); each id rotates on its
+     * GroupSafetyCheckId, IdTtlDaily, and so on); each id rotates on its
      * configured period and the rotation is reported as a
      * {@code PsIdUpdateEvent} during {@link #flushChannel(WamChannel)}.
      */
     private final WamPrivateStatsId privateStatsId;
 
     /**
-     * The HTTP uploader used by {@link #sendPrivateWithRetry(byte[])}
+     * Holds the HTTP uploader used by {@link #sendPrivateWithRetry(byte[])}
      * for private-channel buffers.
      *
-     * @apiNote
-     * Performs the Ed25519 blinded-token VOPRF round-trip
+     * <p>It performs the Ed25519 blinded-token VOPRF round-trip
      * ({@code <sign_credential>} IQ) followed by the multipart POST to
      * {@code https://dit.whatsapp.net/deidentified_telemetry}, isolating
      * the private channel from the {@code w:stats} IQ pipeline.
@@ -435,12 +408,11 @@ public abstract class WamService {
     private final WamPrivateStatsUploader privateStatsUploader;
 
     /**
-     * The runtime sampling-weight override map consulted by
+     * Holds the runtime sampling-weight override map consulted by
      * {@link #effectiveWeight(WamEventSpec)} before falling back to the
      * static {@link WamEventSpec#releaseWeight()}.
      *
-     * @apiNote
-     * Seeded at {@link #initialize()} from
+     * <p>It is seeded at {@link #initialize()} from
      * {@link ABPropsService#samplingConfigs()} (matching WA Web's
      * {@code WAWebEventSampling.getClientEventSamplingWeight}) and
      * mutated at runtime via the public sampling-override API.
@@ -448,12 +420,11 @@ public abstract class WamService {
     private final WamSamplingOverride samplingOverride;
 
     /**
-     * The per-channel snapshot of the globals written on the previous
+     * Holds the per-channel snapshot of the globals written on the previous
      * flush, consulted by {@link #encodeGlobals(WamChannel)} to skip
      * unchanged globals on subsequent flushes for the same channel.
      *
-     * @apiNote
-     * Mirrors WA Web's per-{@code WamContext} {@code prevGlobals}
+     * <p>This mirrors WA Web's per-{@code WamContext} {@code prevGlobals}
      * dirty-tracking: the first flush for a channel writes every
      * global, subsequent flushes write only the values that have
      * changed plus any field that has transitioned from a value to
@@ -462,12 +433,11 @@ public abstract class WamService {
     private final Map<WamChannel, Map<Integer, Object>> prevSessionGlobals;
 
     /**
-     * The pre-init action queue drained by
+     * Holds the pre-init action queue drained by
      * {@link #drainInitQueue()} on the first call to
      * {@link #initialize()}.
      *
-     * @apiNote
-     * Pre-init commits ({@link #commit(WamEventSpec)} and
+     * <p>Pre-init commits ({@link #commit(WamEventSpec)} and
      * {@link #commitAndWaitForFlush(WamEventSpec)}) push a re-invocation
      * lambda here rather than entering the pending list, mirroring WA
      * Web's {@code WAWebWamInitQueue.queueEvent} fallback used when
@@ -477,21 +447,20 @@ public abstract class WamService {
     private final ConcurrentLinkedQueue<Runnable> initQueue;
 
     /**
-     * The initialization gate that switches the
+     * Holds the initialization gate that switches the
      * {@link #commit(WamEventSpec)} dispatch from deferral-into-init-queue
      * to direct-into-pending.
      *
-     * @apiNote
-     * Set {@code true} by {@link #initialize()} as the second-to-last
-     * step (before the queue drain), cleared by {@link #close()}.
+     * <p>It is set {@code true} by {@link #initialize()} as the
+     * second-to-last step (before the queue drain) and cleared by
+     * {@link #close()}.
      */
     private volatile boolean initialized;
 
     /**
-     * The wire value of the {@code platform} global (id {@code 11}).
+     * Holds the wire value of the {@code platform} global (id {@code 11}).
      *
-     * @apiNote
-     * {@code 8L} when the bound client is
+     * <p>It is {@code 8L} when the bound client is
      * {@link WhatsAppClientType#WEB}, {@code 2L} otherwise; matches WA
      * Web's {@code WAWebWamPlatform.getWamPlatform()} indirection
      * through the {@code PLATFORM_TYPE} enum.
@@ -499,22 +468,21 @@ public abstract class WamService {
     private volatile long platform;
 
     /**
-     * The wire value of the {@code appVersion} global
+     * Holds the wire value of the {@code appVersion} global
      * (id {@code 17}).
      *
-     * @apiNote
-     * The stringified {@link com.github.auties00.cobalt.client.WhatsAppClientVersion}
+     * <p>It is the stringified
+     * {@link com.github.auties00.cobalt.model.device.pairing.ClientAppVersion}
      * captured at {@link #initialize()}; mirrors WA Web's
      * {@code WAWebBuildConstants.VERSION_BASE_WITH_WINDOWS_BUILD}.
      */
     private volatile String appVersion;
 
     /**
-     * The wire value of the {@code deviceName} global
+     * Holds the wire value of the {@code deviceName} global
      * (id {@code 13}).
      *
-     * @apiNote
-     * Sourced from
+     * <p>It is sourced from
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#name()} at
      * {@link #initialize()}; mirrors WA Web's
      * {@code WAWebBrowserInfo().os}.
@@ -522,13 +490,11 @@ public abstract class WamService {
     private volatile String deviceName;
 
     /**
-     * The wire value of the {@code memClass} global
+     * Holds the wire value of the {@code memClass} global
      * (id {@code 655}).
      *
-     * @apiNote
-     * Captures the JVM's
-     * {@link Runtime#maxMemory()}{@code /1MiB} at
-     * {@link #initialize()}.
+     * <p>It captures the JVM's {@link Runtime#maxMemory()} divided by one
+     * mebibyte at {@link #initialize()}.
      *
      * @implNote
      * This implementation reports JVM heap headroom in megabytes; WA
@@ -545,11 +511,10 @@ public abstract class WamService {
     private volatile int memClass;
 
     /**
-     * The wire value of the {@code numCpu} global
+     * Holds the wire value of the {@code numCpu} global
      * (id {@code 10317}).
      *
-     * @apiNote
-     * Captures {@link Runtime#availableProcessors()} at
+     * <p>It captures {@link Runtime#availableProcessors()} at
      * {@link #initialize()}.
      *
      * @implNote
@@ -566,53 +531,48 @@ public abstract class WamService {
     private volatile int numCpu;
 
     /**
-     * The wire value of the {@code browser} global
+     * Holds the wire value of the {@code browser} global
      * (id {@code 779}).
      *
-     * @apiNote
-     * Always reported as {@code "Chrome"} because the WAM regular
-     * channel is per-WA-Web-validation gated on a Chrome user-agent
+     * <p>It is always reported as {@code "Chrome"} because the WAM regular
+     * channel is, per WA Web validation, gated on a Chrome user-agent
      * shape; Cobalt has no real browser to inspect but must claim one
      * for the upload to be accepted.
      */
     private volatile String browser;
 
     /**
-     * The wire value of the {@code browserVersion} global
+     * Holds the wire value of the {@code browserVersion} global
      * (id {@code 295}).
      *
-     * @apiNote
-     * Reported as the stringified WhatsApp client version because
+     * <p>It is reported as the stringified WhatsApp client version because
      * Cobalt has no browser version of its own to surface.
      */
     private volatile String browserVersion;
 
     /**
-     * The wire value of the {@code osVersion} global
+     * Holds the wire value of the {@code osVersion} global
      * (id {@code 15}).
      *
-     * @apiNote
-     * Computed from the JVM {@code os.name} and {@code os.version}
+     * <p>It is computed from the JVM {@code os.name} and {@code os.version}
      * system properties at {@link #initialize()}.
      */
     private volatile String osVersion;
 
     /**
-     * The wire value of the {@code deviceVersion} global
+     * Holds the wire value of the {@code deviceVersion} global
      * (id {@code 4505}).
      *
-     * @apiNote
-     * Set to the same value as {@link #osVersion} because Cobalt has
-     * no separate browser-device-version concept.
+     * <p>It is set to the same value as {@link #osVersion} because Cobalt
+     * has no separate browser-device-version concept.
      */
     private volatile String deviceVersion;
 
     /**
-     * The wire value of the {@code webcTabId} global
+     * Holds the wire value of the {@code webcTabId} global
      * (id {@code 3727}).
      *
-     * @apiNote
-     * A per-session random UUID minted at {@link #initialize()};
+     * <p>It is a per-session random UUID minted at {@link #initialize()};
      * mirrors WA Web's {@code WAWebUserPrefsTabMutex.THIS_TAB} which
      * is unique per browser tab and persists for the tab's lifetime.
      * Cobalt has no tab concept so the id is unique per service
@@ -621,12 +581,11 @@ public abstract class WamService {
     private volatile String webcTabId;
 
     /**
-     * The wire value of the {@code abKey2} global
+     * Holds the wire value of the {@code abKey2} global
      * (id {@code 4473}), or {@code null} when AB-key reporting is
      * suppressed.
      *
-     * @apiNote
-     * Sourced from {@link ABPropsService#abKey()} at
+     * <p>It is sourced from {@link ABPropsService#abKey()} at
      * {@link #initialize()}; forced to {@code null} when
      * {@link ABProp#WAM_DISABLE_ABKEY_ATTRIBUTE} is enabled, mirroring
      * WA Web's {@code WAWebABProps.getABPropConfigValue("wam_disable_abkey_attribute")}
@@ -635,59 +594,53 @@ public abstract class WamService {
     private volatile String abKey2;
 
     /**
-     * The wire value of the {@code webcRevision} global
+     * Holds the wire value of the {@code webcRevision} global
      * (id {@code 18491}).
      *
-     * @apiNote
-     * The tertiary component of the client version, mirroring WA Web's
-     * {@code SiteData.client_revision}; defaults to {@code 0} when the
-     * version has no tertiary component.
+     * <p>It is the tertiary component of the client version, mirroring WA
+     * Web's {@code SiteData.client_revision}; defaults to {@code 0} when
+     * the version has no tertiary component.
      */
     private volatile int webcRevision;
 
     /**
-     * The wire value of the {@code webcPhoneAppVersion} global
+     * Holds the wire value of the {@code webcPhoneAppVersion} global
      * (id {@code 1005}).
      *
-     * @apiNote
-     * The companion device's WhatsApp version reported by the
+     * <p>It is the companion device's WhatsApp version reported by the
      * companion-pairing handshake; {@code null} when no companion is
      * paired.
      */
     private volatile String companionAppVersion;
 
     /**
-     * The wire value of the {@code psCountryCode} global
+     * Holds the wire value of the {@code psCountryCode} global
      * (id {@code 6833}), emitted only on the private channel.
      *
-     * @apiNote
-     * The ISO 3166-1 alpha-2 country code derived from the bound
-     * account's phone number via
-     * {@link #derivePsCountryCode()}; mirrors WA Web's
-     * {@code WAWebL10NCountryCodes.getCountryShortcodeByPhone}.
+     * <p>It is the ISO 3166-1 alpha-2 country code derived from the bound
+     * account's phone number via {@link #derivePsCountryCode()}; mirrors
+     * WA Web's {@code WAWebL10NCountryCodes.getCountryShortcodeByPhone}.
      */
     private volatile String psCountryCode;
 
     /**
-     * The wire value of the {@code serviceImprovementOptOut} global
+     * Holds the wire value of the {@code serviceImprovementOptOut} global
      * (id {@code 13293}).
      *
-     * @apiNote
-     * Sourced from {@link ABProp#SERVICE_IMPROVEMENT_OPT_OUT_FLAG} at
-     * {@link #initialize()}; flips when the user toggles the opt-out
+     * <p>It is sourced from {@link ABProp#SERVICE_IMPROVEMENT_OPT_OUT_FLAG}
+     * at {@link #initialize()}; flips when the user toggles the opt-out
      * preference and is observed by the server-side WAM consumers.
      */
     private volatile boolean serviceImprovementOptOut;
 
     /**
-     * The wire value of the {@code webcWebArch} global
+     * Holds the wire value of the {@code webcWebArch} global
      * (id {@code 6605}), or {@code null} when no push-phase tag
      * applies.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code getPushPhase} which maps the
+     * <p>It mirrors WA Web's {@code getPushPhase} which maps the
      * {@code WAWebBuildConstants.PUSH_PHASE} build constant through the
-     * alias table {@code sandcastle->dev}, {@code trunkstable->C1};
+     * alias table {@code sandcastle -> dev}, {@code trunkstable -> C1};
      * Cobalt has no equivalent build phase so the value is always
      * {@code null}.
      */
@@ -697,12 +650,10 @@ public abstract class WamService {
      * Constructs a new {@code WamService} bound to the given client,
      * AB-props service, and beaconing strategy.
      *
-     * @apiNote
-     * The service is constructed in the pre-init phase: any commits
-     * made before {@link #initialize()} are deferred to the init queue
-     * (mirroring WA Web's {@code WAWebWamInitQueue} fallback), and the
-     * recurring serialize and flush schedulers are not armed until
-     * {@link #initialize()} runs.
+     * <p>The service starts in the pre-init phase: any commits made before
+     * {@link #initialize()} are deferred to the init queue (mirroring WA
+     * Web's {@code WAWebWamInitQueue} fallback), and the recurring serialize
+     * and flush schedulers are not armed until {@link #initialize()} runs.
      *
      * @param client         the bound WhatsApp client, must not be
      *                       {@code null}
@@ -716,7 +667,7 @@ public abstract class WamService {
      *                       {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
-    protected WamService(WhatsAppClient client, ABPropsService abPropsService, WamBeaconing beaconing) {
+    protected WamService(WhatsAppClient client, ABPropsService abPropsService, WamBeaconingService beaconing) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
         this.pending = new ConcurrentHashMap<>();
@@ -735,8 +686,7 @@ public abstract class WamService {
     /**
      * Returns the current instant on the underlying clock.
      *
-     * @apiNote
-     * The wall-clock source consumed by the per-event
+     * <p>This is the wall-clock source consumed by the per-event
      * {@code commitTime} global (id {@code 47}), the {@code t}
      * attribute of the {@code <iq xmlns="w:stats">} upload stanza, and
      * the deadline arithmetic in {@link #waitIfDisconnected()}.
@@ -756,11 +706,10 @@ public abstract class WamService {
      * Suspends the current thread for at least the given number of
      * milliseconds.
      *
-     * @apiNote
-     * Called by the upload retry loop in
-     * {@link #sendWithRetry(byte[])} /
-     * {@link #sendPrivateWithRetry(byte[])} for backoff and by
-     * {@link #waitIfDisconnected()} for the one-second poll cadence.
+     * <p>The upload retry loop in {@link #sendWithRetry(byte[])} and
+     * {@link #sendPrivateWithRetry(byte[])} calls this for backoff, and
+     * {@link #waitIfDisconnected()} calls it for the one-second poll
+     * cadence.
      *
      * @implSpec
      * Subclasses must block the calling virtual thread for the
@@ -777,8 +726,7 @@ public abstract class WamService {
     /**
      * Schedules a recurring task on the WAM scheduler.
      *
-     * @apiNote
-     * Called twice from {@link #initialize()} to arm the five-second
+     * <p>{@link #initialize()} calls this twice to arm the five-second
      * mid-cycle check ({@link #checkMidCycleUpload()}) and the
      * 120-second rotation flush ({@link #flush()}).
      *
@@ -803,9 +751,8 @@ public abstract class WamService {
      * Cancels every recurring task previously scheduled through
      * {@link #scheduleRecurring(Runnable, long, long)}.
      *
-     * @apiNote
-     * Called from {@link #close()} to tear down the scheduler before
-     * the final {@link #flush()}.
+     * <p>{@link #close()} calls this to tear down the scheduler before the
+     * final {@link #flush()}.
      *
      * @implSpec
      * Subclasses must drop every still-running scheduled task such
@@ -819,10 +766,9 @@ public abstract class WamService {
      * Returns the number of events currently queued in the pending
      * list for the given channel.
      *
-     * @apiNote
-     * Package-private observation hook for behavioural tests; the
-     * production flush pipeline never reads this state externally and
-     * embedders have no API that surfaces pending counts.
+     * <p>This is an observation hook for behavioural tests; the production
+     * flush pipeline never reads this state externally and embedders have
+     * no API that surfaces pending counts.
      *
      * @param channel the channel to query
      * @return the number of queued events for {@code channel}, or
@@ -837,9 +783,8 @@ public abstract class WamService {
      * Returns the number of deferred actions sitting in the init
      * queue and awaiting the next {@link #drainInitQueue()}.
      *
-     * @apiNote
-     * Package-private observation hook for behavioural tests covering
-     * the pre-init {@link #commit(WamEventSpec)} /
+     * <p>This is an observation hook for behavioural tests covering the
+     * pre-init {@link #commit(WamEventSpec)} and
      * {@link #commitAndWaitForFlush(WamEventSpec)} deferral path.
      *
      * @return the init-queue size
@@ -854,10 +799,9 @@ public abstract class WamService {
      * {@link #nextSequenceNumber(WamChannel)} would observe before
      * incrementing).
      *
-     * @apiNote
-     * Package-private observation hook for behavioural tests covering
-     * the per-channel counter wrap from {@link #MAX_SEQUENCE_NUMBER}
-     * back to {@code 1} and the independence-across-channels guarantee.
+     * <p>This is an observation hook for behavioural tests covering the
+     * per-channel counter wrap from {@link #MAX_SEQUENCE_NUMBER} back to
+     * {@code 1} and the independence-across-channels guarantee.
      *
      * @param channel the channel to query
      * @return the next sequence number to be emitted on a flush
@@ -869,10 +813,9 @@ public abstract class WamService {
     /**
      * Sets the per-channel sequence counter to an arbitrary value.
      *
-     * @apiNote
-     * Package-private mutation hook for behavioural tests covering the
+     * <p>This is a mutation hook for behavioural tests covering the
      * wraparound from {@link #MAX_SEQUENCE_NUMBER} back to {@code 1}
-     * without paying for 65 535 prior flushes; no production caller
+     * without paying for 65535 prior flushes; no production caller
      * exists.
      *
      * @param channel the channel to update
@@ -886,9 +829,8 @@ public abstract class WamService {
      * Drains every deferred action sitting in the init queue and
      * re-runs each one against the now-ready service.
      *
-     * @apiNote
-     * Invoked once from {@link #initialize()} after the
-     * {@code initialized} flag is set, and exposed package-private so
+     * <p>It is invoked once from {@link #initialize()} after the
+     * {@code initialized} flag is set, and is package-private so
      * behavioural tests that bypass the full {@link #initialize()}
      * sequence can trigger the drain in isolation.
      *
@@ -913,12 +855,11 @@ public abstract class WamService {
      * Forces the {@code initialized} flag to {@code true} without
      * running the full {@link #initialize()} sequence.
      *
-     * @apiNote
-     * Package-private mutation hook for behavioural tests that drive a
-     * deterministic {@link #flushChannel(WamChannel)} or
-     * {@link #flush()} cycle without paying for the store-priming,
-     * AB-props snapshot, and scheduler-arming work that
-     * {@link #initialize()} performs in production.
+     * <p>This is a mutation hook for behavioural tests that drive a
+     * deterministic {@link #flushChannel(WamChannel)} or {@link #flush()}
+     * cycle without paying for the store-priming, AB-props snapshot, and
+     * scheduler-arming work that {@link #initialize()} performs in
+     * production.
      *
      * @implNote
      * This implementation leaves every volatile global at its
@@ -934,12 +875,11 @@ public abstract class WamService {
      * Overwrites the {@link #deviceName} global without going through
      * {@link #initialize()}.
      *
-     * @apiNote
-     * Package-private mutation hook used by
-     * {@code WamServiceGlobalsDirtyWriteTest} to mutate a single
-     * global between flushes and assert the per-channel
-     * dirty-tracking maintained by
-     * {@link #encodeGlobals(WamChannel)} via {@link #prevSessionGlobals}.
+     * <p>This is a mutation hook used by
+     * {@code WamServiceGlobalsDirtyWriteTest} to mutate a single global
+     * between flushes and assert the per-channel dirty-tracking
+     * maintained by {@link #encodeGlobals(WamChannel)} via
+     * {@link #prevSessionGlobals}.
      *
      * @param deviceName the new device name, or {@code null} to clear
      *                   it (which next flush emits as a null-transition
@@ -952,16 +892,14 @@ public abstract class WamService {
     /**
      * Activates the WAM pipeline for the bound client.
      *
-     * @apiNote
-     * Should be called once, after the client has authenticated and
-     * the store's JID, name, and client version are populated. The
-     * call snapshots every session global, loads sampling overrides
-     * from {@link ABPropsService#samplingConfigs()}, primes per-channel
-     * sequence numbers from {@link #client}'s store, restores any
-     * pending buffers persisted by a previous session, drains the
-     * pre-init queue, and arms the five-second mid-cycle and
-     * 120-second rotation schedulers. After the schedulers are armed,
-     * one {@code PsIdUpdateEvent} with action
+     * <p>This must be called once, after the client has authenticated and
+     * the store's JID, name, and client version are populated. The call
+     * snapshots every session global, loads sampling overrides from
+     * {@link ABPropsService#samplingConfigs()}, primes per-channel sequence
+     * numbers from the bound client's store, restores any pending buffers
+     * persisted by a previous session, drains the pre-init queue, and arms
+     * the five-second mid-cycle and 120-second rotation schedulers. After
+     * the schedulers are armed, one {@code PsIdUpdateEvent} with action
      * {@link PsIdAction#CREATED} is committed per private-stats id to
      * announce the freshly initialised id set.
      *
@@ -1028,9 +966,8 @@ public abstract class WamService {
      * Derives the value of the {@code psCountryCode} global from the
      * bound account's phone number.
      *
-     * @apiNote
-     * Resolves the regional ISO 3166-1 alpha-2 code via Google's
-     * {@code libphonenumber} parser; returns lowercase to match WA
+     * <p>It resolves the regional ISO 3166-1 alpha-2 code via Google's
+     * {@code libphonenumber} parser and returns it lowercased to match WA
      * Web's wire shape.
      *
      * @implNote
@@ -1067,11 +1004,10 @@ public abstract class WamService {
      * Submits a WAM event for batched transmission on its declared
      * channel.
      *
-     * @apiNote
-     * The entry point used by every internal WAM emitter (the
+     * <p>This is the entry point used by every internal WAM emitter (the
      * {@code *EventBuilder} classes in
-     * {@link com.github.auties00.cobalt.wam.event}) and by embedders
-     * that mirror WA Web telemetry surfaces. The contract has four
+     * {@link com.github.auties00.cobalt.wam.event}) and by embedders that
+     * mirror WA Web telemetry surfaces. The contract has four
      * post-conditions depending on state:
      * <ul>
      *   <li>before {@link #initialize()}, the entire commit (including
@@ -1145,9 +1081,8 @@ public abstract class WamService {
      * future that completes when the buffer carrying the event has
      * been uploaded.
      *
-     * @apiNote
-     * Used by callers that must observe upload completion (the WAM
-     * surfaces in WA Web that synchronise on a Promise return value).
+     * <p>This is used by callers that must observe upload completion (the
+     * WAM surfaces in WA Web that synchronise on a Promise return value).
      * The completion future has three terminal states:
      * <ul>
      *   <li>completes with {@code null} once the buffer that contains
@@ -1228,16 +1163,16 @@ public abstract class WamService {
      * Registers a runtime sampling-weight override for the given
      * event id.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebEventSampling.getClientEventSamplingWeight}
-     * which returns the AB-prop-supplied weight in preference to the
-     * static event {@code weight}. The override takes precedence over
+     * <p>This mirrors WA Web's
+     * {@code WAWebEventSampling.getClientEventSamplingWeight} which returns
+     * the AB-prop-supplied weight in preference to the static event
+     * {@code weight}. The override takes precedence over
      * {@link WamEventSpec#releaseWeight()} until
      * {@link #removeSamplingOverride(int)} is called or until
-     * {@link #replaceSamplingOverrides(Map)} replaces the
-     * whole map. A weight of {@code 1} means "always keep" (sampling
-     * disabled for this event); higher values keep {@code 1/weight}
-     * of commits in expectation.
+     * {@link #replaceSamplingOverrides(Map)} replaces the whole map. A
+     * weight of {@code 1} means "always keep" (sampling disabled for this
+     * event); higher values keep {@code 1/weight} of commits in
+     * expectation.
      *
      * @param eventId the numeric WAM event identifier
      * @param weight  the overridden sampling weight, expected positive
@@ -1250,10 +1185,9 @@ public abstract class WamService {
      * Removes any runtime sampling-weight override for the given
      * event id.
      *
-     * @apiNote
-     * Reverts {@link #effectiveWeight(WamEventSpec)} to the
-     * spec-declared {@link WamEventSpec#releaseWeight()} for the
-     * removed id; no-op when no override was installed.
+     * <p>This reverts {@link #effectiveWeight(WamEventSpec)} to the
+     * spec-declared {@link WamEventSpec#releaseWeight()} for the removed
+     * id; it is a no-op when no override was installed.
      *
      * @param eventId the numeric WAM event identifier
      */
@@ -1265,11 +1199,10 @@ public abstract class WamService {
      * Replaces every runtime sampling-weight override with the entries
      * from the given map.
      *
-     * @apiNote
-     * Called by {@link #initialize()} to seed the override table from
+     * <p>{@link #initialize()} calls this to seed the override table from
      * {@link ABPropsService#samplingConfigs()}; embedders that mirror a
-     * different AB-prop fetch flow can use this to swap the whole
-     * table atomically rather than installing entries one by one.
+     * different AB-prop fetch flow can use it to swap the whole table
+     * atomically rather than installing entries one by one.
      *
      * @param overrides the new event-id-to-weight map
      */
@@ -1280,13 +1213,12 @@ public abstract class WamService {
     /**
      * Flushes every channel's pending list.
      *
-     * @apiNote
-     * Bound to the 120-second rotation scheduler armed by
-     * {@link #initialize()} and called explicitly from
-     * {@link #close()} for a terminal flush. Each channel is processed
-     * via {@link #flushChannel(WamChannel)} which atomically swaps the
-     * pending list and pipes the events through the encoder, retry,
-     * and upload pipeline. No-op when the service is not initialised.
+     * <p>This is bound to the 120-second rotation scheduler armed by
+     * {@link #initialize()} and is also called explicitly from
+     * {@link #close()} for a terminal flush. Each channel is processed via
+     * {@link #flushChannel(WamChannel)} which atomically swaps the pending
+     * list and pipes the events through the encoder, retry, and upload
+     * pipeline. It is a no-op when the service is not initialised.
      */
     @WhatsAppWebExport(moduleName = "WAWebWam", exports = "sendAllLogs", adaptation = WhatsAppAdaptation.ADAPTED)
     public void flush() {
@@ -1303,14 +1235,12 @@ public abstract class WamService {
      * Triggers an early flush for any non-realtime channel whose
      * pending aggregate has crossed {@link #MAX_BUFFER_SIZE}.
      *
-     * @apiNote
-     * Bound to the five-second serialize scheduler armed by
-     * {@link #initialize()}. Exposed package-private so tests can
-     * drive a serialize check deterministically without waiting on
-     * the scheduler; {@link WamChannel#REALTIME} is skipped because
-     * its commits already trigger immediate per-event flushes in
-     * {@link #commit(WamEventSpec)}. No-op when the service is not
-     * initialised.
+     * <p>This is bound to the five-second serialize scheduler armed by
+     * {@link #initialize()}, and is package-private so tests can drive a
+     * serialize check deterministically without waiting on the scheduler.
+     * {@link WamChannel#REALTIME} is skipped because its commits already
+     * trigger immediate per-event flushes in {@link #commit(WamEventSpec)}.
+     * It is a no-op when the service is not initialised.
      */
     void checkMidCycleUpload() {
         if (!initialized) {
@@ -1346,16 +1276,14 @@ public abstract class WamService {
     /**
      * Drains and uploads every pending event for the given channel.
      *
-     * @apiNote
-     * Exposed package-private so behavioural tests can drive a single
+     * <p>This is package-private so behavioural tests can drive a single
      * channel's flush deterministically without going through the full
      * {@link #flush()} sweep. The pending list is atomically swapped
      * before encoding, so commits arriving during the flush land in a
-     * fresh list rather than being lost. For
-     * {@link WamChannel#PRIVATE}, rotation of the
-     * {@link WamPrivateStatsId} set happens first and any newly rotated
-     * id is announced with a {@code PsIdUpdateEvent} whose action is
-     * {@link PsIdAction#ROTATED}.
+     * fresh list rather than being lost. For {@link WamChannel#PRIVATE},
+     * rotation of the {@link WamPrivateStatsId} set happens first and any
+     * newly rotated id is announced with a {@code PsIdUpdateEvent} whose
+     * action is {@link PsIdAction#ROTATED}.
      *
      * @implNote
      * This implementation routes
@@ -1394,13 +1322,12 @@ public abstract class WamService {
      * Groups private events by their private-stats id hash and
      * flushes each group as a separate buffer.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code _executePendingForContext} where each
+     * <p>This mirrors WA Web's {@code _executePendingForContext} where each
      * private-channel buffer is keyed by the
-     * {@code WAWebWamPrivateStats.getPrivateStatsKeyFromInt} bucket
-     * name so the upstream {@code WamContext} stays per bucket; this
-     * keeps every {@code psId} in a buffer identical and lets the
-     * server credit metrics to the right rotation group.
+     * {@code WAWebWamPrivateStats.getPrivateStatsKeyFromInt} bucket name so
+     * the upstream {@code WamContext} stays per bucket; it keeps every
+     * {@code psId} in a buffer identical and lets the server credit metrics
+     * to the right rotation group.
      *
      * @param events the drained private events
      */
@@ -1419,12 +1346,11 @@ public abstract class WamService {
      * Flushes a list of events for the given channel, building one or
      * more buffers capped at {@link #MAX_BUFFER_SIZE}.
      *
-     * @apiNote
-     * The per-event weights and beacon sequence numbers are computed
-     * up front so that the second encoding pass in
-     * {@link #buildAndSend} sees a stable view; the dirty-globals byte
-     * sequence is also computed once per buffer so the cross-buffer
-     * dirty-tracking stays accurate even when the flush splits.
+     * <p>The per-event weights and beacon sequence numbers are computed up
+     * front so that the second encoding pass in {@link #buildAndSend} sees
+     * a stable view; the dirty-globals byte sequence is also computed once
+     * per buffer so the cross-buffer dirty-tracking stays accurate even
+     * when the flush splits.
      *
      * @implNote
      * This implementation uses a post-check rotation: the event whose
@@ -1438,7 +1364,7 @@ public abstract class WamService {
      * @param channel   the transport channel
      * @param events    the events to flush
      * @param bufferKey the beaconing buffer key used by
-     *                  {@link WamBeaconing#nextSequenceNumber(String)}
+     *                  {@link WamBeaconingService#nextSequenceNumber(String)}
      */
     private void flushEventList(WamChannel channel, List<WamPendingEvent> events, String bufferKey) {
         var beacons = new OptionalLong[events.size()];
@@ -1477,14 +1403,12 @@ public abstract class WamService {
      * single WAM buffer of the pre-computed {@code size} and dispatches
      * it on the channel's transport.
      *
-     * @apiNote
-     * The buffer layout is the {@link #HEADER_SIZE}-byte WAM header,
-     * the pre-encoded session globals, then for each event the
-     * per-event globals (commit time, optional beacon, optional
-     * private-stats id) followed by the event payload. Buffers above
-     * {@link #MAX_UPLOAD_SIZE} are dropped before any network call and
-     * a {@code WamClientErrors} drop-counter event is committed in
-     * their place.
+     * <p>The buffer layout is the {@link #HEADER_SIZE}-byte WAM header, the
+     * pre-encoded session globals, then for each event the per-event
+     * globals (commit time, optional beacon, optional private-stats id)
+     * followed by the event payload. Buffers above {@link #MAX_UPLOAD_SIZE}
+     * are dropped before any network call and a {@code WamClientErrors}
+     * drop-counter event is committed in their place.
      *
      * @implNote
      * This implementation persists the slice via
@@ -1543,11 +1467,10 @@ public abstract class WamService {
      * Completes every flush future attached to the events in the
      * {@code [from, to)} slice.
      *
-     * @apiNote
-     * Called by {@link #buildAndSend} both on a successful upload and
+     * <p>{@link #buildAndSend} calls this both on a successful upload and
      * on an oversized-buffer drop; the future is the one returned by
-     * {@link #commitAndWaitForFlush(WamEventSpec)} so the waiter
-     * unblocks in both cases.
+     * {@link #commitAndWaitForFlush(WamEventSpec)} so the waiter unblocks
+     * in both cases.
      *
      * @param events the full pending event list
      * @param from   the inclusive start index
@@ -1567,12 +1490,10 @@ public abstract class WamService {
      * only entries that have changed since the last flush on this
      * channel.
      *
-     * @apiNote
-     * The first flush for a channel writes every global because the
+     * <p>The first flush for a channel writes every global because the
      * previous snapshot is {@code null}; subsequent flushes write the
-     * dirty entries plus a null-transition entry for every field that
-     * was present in the previous snapshot but is absent from the
-     * current one.
+     * dirty entries plus a null-transition entry for every field that was
+     * present in the previous snapshot but is absent from the current one.
      *
      * @implNote
      * This implementation keeps one snapshot per
@@ -1632,13 +1553,12 @@ public abstract class WamService {
      * Builds the full session-globals snapshot for the given channel
      * keyed by field id.
      *
-     * @apiNote
-     * The map is the input to {@link #encodeGlobals(WamChannel)}'s
-     * dirty-tracking. Field-id-to-name mapping mirrors WA Web's
-     * {@code WAWebWamGlobals.defineGlobal} table: each entry is keyed
-     * by the numeric id declared there and conditionally inserted
-     * based on whether the global is declared for the channel
-     * ({@code regular} only, {@code private} only, or both).
+     * <p>The map is the input to {@link #encodeGlobals(WamChannel)}'s
+     * dirty-tracking. The field-id-to-name mapping mirrors WA Web's
+     * {@code WAWebWamGlobals.defineGlobal} table: each entry is keyed by
+     * the numeric id declared there and conditionally inserted based on
+     * whether the global is declared for the channel ({@code regular}
+     * only, {@code private} only, or both).
      *
      * @implNote
      * This implementation skips entries whose backing field is
@@ -1723,8 +1643,7 @@ public abstract class WamService {
      * optional beacon, optional private-stats id) for the given
      * pending event.
      *
-     * @apiNote
-     * Used by {@link #flushEventList} as the upfront sizing pass; the
+     * <p>{@link #flushEventList} uses this as the upfront sizing pass; the
      * matching encoder is
      * {@link #writePerEventGlobals(WamPendingEvent, WamChannel, OptionalLong, WamEventEncoder)},
      * which writes exactly this many bytes.
@@ -1752,13 +1671,11 @@ public abstract class WamService {
      * optional private-stats id) for the given pending event into the
      * encoder.
      *
-     * @apiNote
-     * The bytes written must equal
+     * <p>The bytes written must equal
      * {@link #computePerEventGlobalsSize(WamPendingEvent, WamChannel, OptionalLong)}
-     * for the size-then-encode contract in
-     * {@link #flushEventList} to hold; both methods key off the same
-     * {@code beacon.isPresent()} and {@code channel == PRIVATE} guards
-     * to keep the calculations in sync.
+     * for the size-then-encode contract in {@link #flushEventList} to
+     * hold; both methods key off the same {@code beacon.isPresent()} and
+     * {@code channel == PRIVATE} guards to keep the calculations in sync.
      *
      * @param pe      the pending event
      * @param channel the transport channel
@@ -1781,13 +1698,12 @@ public abstract class WamService {
      * Atomically swaps the pending list for the given channel with
      * {@code null} and returns the old contents.
      *
-     * @apiNote
-     * The atomic swap is the load-bearing primitive that keeps
-     * concurrent {@link #commit(WamEventSpec)} calls from appending to
-     * a list mid-flush; commits arriving during the swap either run
-     * before the {@code compute} block ({@code list} is returned in
-     * the snapshot) or after ({@code list} is freshly allocated under
-     * the same {@link ConcurrentMap} entry).
+     * <p>The atomic swap is the load-bearing primitive that keeps
+     * concurrent {@link #commit(WamEventSpec)} calls from appending to a
+     * list mid-flush; commits arriving during the swap either run before
+     * the {@code compute} block ({@code list} is returned in the snapshot)
+     * or after ({@code list} is freshly allocated under the same
+     * {@link ConcurrentMap} entry).
      *
      * @param channel the channel to drain
      * @return the drained events, never {@code null} (empty list when
@@ -1807,14 +1723,13 @@ public abstract class WamService {
     /**
      * Returns the effective sampling weight for the given event.
      *
-     * @apiNote
-     * Consults {@link #samplingOverride} first (the runtime override
-     * table seeded from AB-props at {@link #initialize()} and mutated
-     * via the public sampling-override API) and falls back to
-     * {@link WamEventSpec#releaseWeight()}. The override value is
-     * passed through {@link Math#abs(int)} to match WA Web's
-     * defensive-coercion behaviour where a negative AB-prop value is
-     * still treated as a positive weight.
+     * <p>This consults {@link #samplingOverride} first (the runtime
+     * override table seeded from AB-props at {@link #initialize()} and
+     * mutated via the public sampling-override API) and falls back to
+     * {@link WamEventSpec#releaseWeight()}. The override value is passed
+     * through {@link Math#abs(int)} to match WA Web's defensive-coercion
+     * behaviour where a negative AB-prop value is still treated as a
+     * positive weight.
      *
      * @param event the event to query
      * @return the effective sampling weight; {@code 1} means
@@ -1830,8 +1745,7 @@ public abstract class WamService {
      * Writes the eight-byte WAM buffer header for the given channel
      * into the encoder.
      *
-     * @apiNote
-     * Header layout, exactly {@link #HEADER_SIZE} bytes:
+     * <p>The header layout occupies exactly {@link #HEADER_SIZE} bytes:
      * {@snippet :
      *     // offset  field            value
      *     // 0..2    magic            "WAM"
@@ -1864,13 +1778,12 @@ public abstract class WamService {
      * Returns the next sequence number for the given channel,
      * wrapping from {@link #MAX_SEQUENCE_NUMBER} back to {@code 1}.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamStorage.getNextSequenceNumberForStream}: the
-     * returned value is the pre-increment counter value (so the first
-     * call returns {@code 1}), and the post-increment value is
-     * immediately persisted to the store so that the next session
-     * resumes the sequence rather than restarting at {@code 1}.
+     * <p>This mirrors WA Web's
+     * {@code WAWebWamStorage.getNextSequenceNumberForStream}: the returned
+     * value is the pre-increment counter value (so the first call returns
+     * {@code 1}), and the post-increment value is immediately persisted to
+     * the store so that the next session resumes the sequence rather than
+     * restarting at {@code 1}.
      *
      * @implNote
      * This implementation skips zero on wrap; the counter resets to
@@ -1895,12 +1808,11 @@ public abstract class WamService {
      * values previously persisted by
      * {@link #nextSequenceNumber(WamChannel)}.
      *
-     * @apiNote
-     * Called once from {@link #initialize()} so the wire-level
+     * <p>It is called once from {@link #initialize()} so the wire-level
      * sequence carries across sessions and the server does not see a
-     * counter reset (which would be indistinguishable from a fresh
-     * stream and would invalidate any deduplication/ordering the
-     * server tracks).
+     * counter reset (which would be indistinguishable from a fresh stream
+     * and would invalidate any deduplication or ordering the server
+     * tracks).
      */
     private void primeSequenceNumbers() {
         var store = client.store();
@@ -1917,15 +1829,14 @@ public abstract class WamService {
      * the store-managed buffer directory and returns the save key
      * that identifies the file.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebWamStorage.add} which writes the
-     * unsaved-portion buffer to the IndexedDB {@code wamBuffers}
-     * object store. The file format is a stream of WAM event entries,
-     * each preceded by a {@code commitTime} global with field id
+     * <p>This mirrors WA Web's {@code WAWebWamStorage.add} which writes the
+     * unsaved-portion buffer to the IndexedDB {@code wamBuffers} object
+     * store. The file format is a stream of WAM event entries, each
+     * preceded by a {@code commitTime} global with field id
      * {@link #COMMIT_TIME_FIELD_ID} written via
-     * {@link WamGlobalEncoder#writeCommitTime(long, WamEventEncoder)};
-     * the next session's {@link #restorePendingBuffers()} decodes the
-     * stream back into pending entries.
+     * {@link WamGlobalEncoder#writeCommitTime(long, WamEventEncoder)}; the
+     * next session's {@link #restorePendingBuffers()} decodes the stream
+     * back into pending entries.
      *
      * @implNote
      * This implementation logs and returns {@code null} on I/O
@@ -1964,13 +1875,11 @@ public abstract class WamService {
     /**
      * Removes a previously-persisted buffer file by save key.
      *
-     * @apiNote
-     * Called by {@link #buildAndSend} after the transport returns; on
-     * a successful upload this drops the durable copy so the next
-     * session does not re-attempt the upload, and on a permanent
-     * drop the durable copy is still removed because the in-memory
-     * pipeline has already accounted for it via a
-     * {@code WamClientErrors} event.
+     * <p>{@link #buildAndSend} calls this after the transport returns; on a
+     * successful upload it drops the durable copy so the next session does
+     * not re-attempt the upload, and on a permanent drop the durable copy
+     * is still removed because the in-memory pipeline has already accounted
+     * for it via a {@code WamClientErrors} event.
      *
      * @param saveKey the save key from
      *                {@link #persistBuffer(List, int[], int, int)},
@@ -1992,13 +1901,12 @@ public abstract class WamService {
      * events back into {@link WamPendingEvent}s, and re-injects them
      * into the pending list for their channel.
      *
-     * @apiNote
-     * Called once from {@link #initialize()} before the schedulers
+     * <p>It is called once from {@link #initialize()} before the schedulers
      * arm. Each file is deleted as soon as its contents have been
-     * re-injected so the next flush cycle re-persists whatever still
-     * needs to ship; a corrupted leading entry (where the first field
-     * is not {@link #COMMIT_TIME_FIELD_ID}) aborts the decode loop
-     * for that file and skips the rest of its content.
+     * re-injected so the next flush cycle re-persists whatever still needs
+     * to ship; a corrupted leading entry (where the first field is not
+     * {@link #COMMIT_TIME_FIELD_ID}) aborts the decode loop for that file
+     * and skips the rest of its content.
      *
      * @implNote
      * This implementation logs and continues on any decode failure for
@@ -2047,13 +1955,11 @@ public abstract class WamService {
     /**
      * Generates a fresh save key for a persisted buffer.
      *
-     * @apiNote
-     * Produces a filesystem-safe key whose shape is
-     * {@code <random36>_<unixmillis>}, combining a base-36-encoded
-     * random {@code long} prefix with a millisecond timestamp suffix;
-     * the random prefix avoids collisions when many buffers are
-     * flushed within the same millisecond and the timestamp suffix
-     * makes the key sortable for ad-hoc inspection.
+     * <p>The key has the shape {@code <random36>_<unixmillis>}, combining a
+     * base-36-encoded random {@code long} prefix with a millisecond
+     * timestamp suffix; the random prefix avoids collisions when many
+     * buffers are flushed within the same millisecond and the timestamp
+     * suffix makes the key sortable for ad-hoc inspection.
      *
      * @return a filesystem-safe save key
      */
@@ -2068,15 +1974,13 @@ public abstract class WamService {
      * {@link #CONNECTIVITY_WAIT_TIMEOUT_MS} elapses, whichever comes
      * first.
      *
-     * @apiNote
-     * Called by {@link #sendWithRetry(byte[])} and
-     * {@link #sendPrivateWithRetry(byte[])} before each upload
-     * attempt; mirrors WA Web's
-     * {@code WAWebUploadStatsBackend.waitIfOffline} which avoids
-     * burning retry budget on attempts made while the socket is
-     * known-disconnected. After the deadline elapses the upload still
-     * proceeds; the retry loop then handles the actual transport
-     * failure.
+     * <p>{@link #sendWithRetry(byte[])} and
+     * {@link #sendPrivateWithRetry(byte[])} call this before each upload
+     * attempt; it mirrors WA Web's
+     * {@code WAWebUploadStatsBackend.waitIfOffline} which avoids burning
+     * retry budget on attempts made while the socket is known-disconnected.
+     * After the deadline elapses the upload still proceeds; the retry loop
+     * then handles the actual transport failure.
      *
      * @implNote
      * This implementation polls
@@ -2106,15 +2010,13 @@ public abstract class WamService {
      * and retries with exponential backoff on transient server
      * errors.
      *
-     * @apiNote
-     * The dispatch protocol matches WA Web's
+     * <p>The dispatch protocol matches WA Web's
      * {@code WASmaxStatsSendBufferRPC.sendSendBufferRPC}: a
      * {@code type="result"} response terminates successfully, a
-     * {@code type="error"} response with a {@code 5xx}-class status
-     * is retried up to {@link #MAX_RETRIES} times, and any other
-     * error is permanent and the buffer is dropped with a
-     * {@code WamClientErrors} drop-counter event re-committed in its
-     * place.
+     * {@code type="error"} response with a {@code 5xx}-class status is
+     * retried up to {@link #MAX_RETRIES} times, and any other error is
+     * permanent and the buffer is dropped with a {@code WamClientErrors}
+     * drop-counter event re-committed in its place.
      *
      * @implNote
      * This implementation runs {@link #waitIfDisconnected()} once
@@ -2178,20 +2080,18 @@ public abstract class WamService {
      * {@link WamPrivateStatsUploader} and retries with exponential
      * backoff on transient server errors.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebUploadPrivateStatsBackend}. Each
+     * <p>This mirrors WA Web's {@code WAWebUploadPrivateStatsBackend}. Each
      * attempt acquires a fresh single-use authentication token via
-     * {@link WamPrivateStatsTokenIssuer} (the {@code <sign_credential>}
-     * IQ round-trip with the Ed25519 blinded-token VOPRF) and then
-     * POSTs a multipart {@code message} body to
+     * {@link WamPrivateStatsTokenIssuer} (the {@code <sign_credential>} IQ
+     * round-trip with the Ed25519 blinded-token VOPRF) and then POSTs a
+     * multipart {@code message} body to
      * {@code https://dit.whatsapp.net/deidentified_telemetry} with the
      * buffer authenticated by {@code HMAC-SHA256(sharedSecret, buffer)}.
-     * Retry policy: {@code 200} returns immediately;
+     * The retry policy is: {@code 200} returns immediately;
      * {@code ERROR_SERVER_OTHER}, {@code ERROR_OTHER}, and
-     * {@code ERROR_CREDENTIAL} retry up to {@link #MAX_RETRIES} times
-     * with exponential backoff; permanent classifications drop the
-     * buffer and re-commit a {@code WamClientErrors} drop-counter
-     * event.
+     * {@code ERROR_CREDENTIAL} retry up to {@link #MAX_RETRIES} times with
+     * exponential backoff; permanent classifications drop the buffer and
+     * re-commit a {@code WamClientErrors} drop-counter event.
      *
      * @implNote
      * This implementation runs {@link #waitIfDisconnected()} once
@@ -2250,8 +2150,7 @@ public abstract class WamService {
      * Sends a single WAM buffer via an {@code <iq xmlns="w:stats">}
      * stanza and returns the server response.
      *
-     * @apiNote
-     * The wire shape is
+     * <p>The wire shape is
      * {@snippet lang=xml :
      *     <iq xmlns="w:stats" to="s.whatsapp.net" type="set">
      *         <add t="<unix-seconds>">
@@ -2282,12 +2181,11 @@ public abstract class WamService {
      * Parses the HTTP-style error code from a {@code type="error"}
      * IQ response.
      *
-     * @apiNote
-     * The error code lives in the {@code code} attribute of the first
-     * {@code <error>} child of the IQ; classifications above
-     * {@code 500} drive retry, everything else drives a permanent
-     * drop. Returns {@code 0} when no {@code <error>} child is
-     * present, which the caller treats as permanent.
+     * <p>The error code lives in the {@code code} attribute of the first
+     * {@code <error>} child of the IQ; classifications above {@code 500}
+     * drive retry, everything else drives a permanent drop. The method
+     * returns {@code 0} when no {@code <error>} child is present, which the
+     * caller treats as permanent.
      *
      * @param response the server response node
      * @return the error code, or {@code 0} when no error child exists
@@ -2305,11 +2203,9 @@ public abstract class WamService {
      * Computes the exponential-backoff delay in milliseconds for the
      * given zero-based retry attempt.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WABackoffUtils.expBackoff(attempt,
-     * 120000, 1000, 0.1)} call inside
-     * {@code WAWebUploadStatsBackend}: returns
-     * {@code 2^attempt} clamped into
+     * <p>This mirrors WA Web's {@code WABackoffUtils.expBackoff(attempt,
+     * 120000, 1000, 0.1)} call inside {@code WAWebUploadStatsBackend}: it
+     * returns {@code 2^attempt} clamped into
      * {@code [RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS]} plus up to ten
      * percent uniform jitter on top, capped from above at
      * {@code RETRY_MAX_DELAY_MS * 1.1}.
@@ -2340,13 +2236,11 @@ public abstract class WamService {
      * Returns the {@code webcWebArch} push-phase string for the
      * current build, or {@code null} when no phase tag applies.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWam.getPushPhase}, which maps the
-     * {@code WAWebBuildConstants.PUSH_PHASE} build constant through
-     * the alias table {@code sandcastle -> dev},
-     * {@code trunkstable -> C1} (other values pass through), and forces
-     * {@code "jest-e2e"} when the {@code 26256} gatekeeper is set.
+     * <p>This mirrors WA Web's {@code WAWebWam.getPushPhase}, which maps the
+     * {@code WAWebBuildConstants.PUSH_PHASE} build constant through the
+     * alias table {@code sandcastle -> dev}, {@code trunkstable -> C1}
+     * (other values pass through), and forces {@code "jest-e2e"} when the
+     * {@code 26256} gatekeeper is set.
      *
      * @implNote
      * This implementation always returns {@code null} because Cobalt
@@ -2366,10 +2260,9 @@ public abstract class WamService {
      * Tears down the recurring schedulers, performs a final flush,
      * and clears the {@code initialized} flag.
      *
-     * @apiNote
-     * After this returns, every {@link #commit(WamEventSpec)} again
-     * defers to the init queue and {@link #flush()} /
-     * {@link #checkMidCycleUpload()} no-op; a subsequent
+     * <p>After this returns, every {@link #commit(WamEventSpec)} again
+     * defers to the init queue and {@link #flush()} and
+     * {@link #checkMidCycleUpload()} become no-ops; a subsequent
      * {@link #initialize()} call is required to resume the pipeline.
      */
     public void close() {
@@ -2386,11 +2279,10 @@ public abstract class WamService {
      * Returns the WAM {@link MediaType} classification for the
      * payload carried by the given {@link ChatMessageInfo}.
      *
-     * @apiNote
-     * Resolves the wrapped {@link MessageContainer} and forwards to
-     * {@link #getWamMediaType(MessageContainer)}; used by the WAM
-     * send/receive metric loggers to tag every event with the payload
-     * shape so the WA backend can bucket telemetry per media kind.
+     * <p>This resolves the wrapped {@link MessageContainer} and forwards to
+     * {@link #getWamMediaType(MessageContainer)}; the WAM send and receive
+     * metric loggers use it to tag every event with the payload shape so
+     * the WA backend can bucket telemetry per media kind.
      * {@link MediaType#NONE} is returned for {@code null} and for
      * unclassified types.
      *
@@ -2409,10 +2301,9 @@ public abstract class WamService {
      * Returns the WAM {@link MediaType} classification for the
      * resolved content of the given {@link MessageContainer}.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code getWamMediaType} switch on
-     * {@code e.type}: every branch of the upstream string switch maps
-     * to an {@code instanceof} arm here, with the GIF / PTT
+     * <p>This mirrors WA Web's {@code getWamMediaType} switch on
+     * {@code e.type}: every branch of the upstream string switch maps to
+     * an {@code instanceof} arm here, with the GIF and PTT
      * sub-classifications driven off the per-message
      * {@link VideoMessage#gifPlayback()} and {@link AudioMessage#ptt()}
      * booleans rather than secondary type strings.
@@ -2476,14 +2367,12 @@ public abstract class WamService {
      * from the chat JID carried by the given
      * {@link ChatMessageInfo}.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamMsgUtils.getWamMessageType}: resolves the parent
-     * JID from {@code info.key()} and delegates to
+     * <p>This mirrors WA Web's {@code WAWebWamMsgUtils.getWamMessageType}:
+     * it resolves the parent JID from {@code info.key()} and delegates to
      * {@link #getWamMessageType(Jid)}. {@link MessageType#STATUS} is
-     * disambiguated before {@link MessageType#BROADCAST} because
-     * status messages live on the broadcast server but must not be
-     * reported as generic broadcasts.
+     * disambiguated before {@link MessageType#BROADCAST} because status
+     * messages live on the broadcast server but must not be reported as
+     * generic broadcasts.
      *
      * @param info the chat message info whose destination is being
      *             classified; {@code null} yields
@@ -2508,15 +2397,13 @@ public abstract class WamService {
      * Returns the WAM {@link MessageType} classification derived
      * from the server component of the given chat JID.
      *
-     * @apiNote
-     * The JID-level fan-out of
+     * <p>This is the JID-level fan-out of
      * {@link #getWamMessageType(ChatMessageInfo)}, exposed separately
-     * because Cobalt's send pipeline reaches the classification
-     * before the {@link ChatMessageInfo} wrapper has been
-     * constructed. Mirrors WA Web's {@code getWamMessageType} server
-     * cascade: {@code isStatusBroadcast} first, then
-     * {@code isGroup}, then {@code isBroadcast}, then
-     * {@code isNewsletter}, falling through to
+     * because Cobalt's send pipeline reaches the classification before the
+     * {@link ChatMessageInfo} wrapper has been constructed. It mirrors WA
+     * Web's {@code getWamMessageType} server cascade:
+     * {@code isStatusBroadcast} first, then {@code isGroup}, then
+     * {@code isBroadcast}, then {@code isNewsletter}, falling through to
      * {@link MessageType#INDIVIDUAL} for user, LID, hosted, and bot
      * servers.
      *
@@ -2552,15 +2439,13 @@ public abstract class WamService {
      * {@link com.github.auties00.cobalt.message.receive.stanza.MessageType}
      * produced during parsing.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamMsgUtils.getMessageTypeFromMsgInfoType}: the
-     * upstream switch is on the {@code msgInfo.type} string
-     * ({@code chat}, {@code group}, {@code peer_broadcast},
-     * {@code other_broadcast}, {@code direct_peer_status},
-     * {@code other_status}). Cobalt classifies the incoming stanza
-     * once during parsing into the enum form, so this helper
-     * performs the equivalent collapse onto the WAM message-type
+     * <p>This mirrors WA Web's
+     * {@code WAWebWamMsgUtils.getMessageTypeFromMsgInfoType}: the upstream
+     * switch is on the {@code msgInfo.type} string ({@code chat},
+     * {@code group}, {@code peer_broadcast}, {@code other_broadcast},
+     * {@code direct_peer_status}, {@code other_status}). Cobalt classifies
+     * the incoming stanza once during parsing into the enum form, so this
+     * helper performs the equivalent collapse onto the WAM message-type
      * enum directly without re-stringifying.
      *
      * @param stanzaType the parser-level message type;
@@ -2588,18 +2473,15 @@ public abstract class WamService {
      * Returns the WAM {@link E2eDeviceType} classification of the
      * sender JID relative to the bound account.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamMsgUtils.getWamE2eSenderType}: a two-axis
-     * classification (self-vs-other on the user component of the
-     * JID, primary-vs-companion on the device component, hosted-vs-not
-     * on the server component). The {@code instanceof Wid} guard at
-     * the top of the WA Web function maps here to a server-family
-     * check ({@link Jid#hasUserServer()},
-     * {@link Jid#hasLidServer()},
-     * {@link Jid#hasHostedServer()},
-     * {@link Jid#hasHostedLidServer()}); foreign-server JIDs return
-     * {@code null} so callers omit the property from the WAM event.
+     * <p>This mirrors WA Web's {@code WAWebWamMsgUtils.getWamE2eSenderType}:
+     * a two-axis classification (self-vs-other on the user component of
+     * the JID, primary-vs-companion on the device component, hosted-vs-not
+     * on the server component). The {@code instanceof Wid} guard at the top
+     * of the WA Web function maps here to a server-family check
+     * ({@link Jid#hasUserServer()}, {@link Jid#hasLidServer()},
+     * {@link Jid#hasHostedServer()}, {@link Jid#hasHostedLidServer()});
+     * foreign-server JIDs return {@code null} so callers omit the property
+     * from the WAM event.
      *
      * @param senderJid the sender's full device JID;
      *                  {@code null} yields {@code null}
@@ -2638,13 +2520,12 @@ public abstract class WamService {
      * Returns the WAM {@link MediaType} classification for an
      * interactive message based on its body variant.
      *
-     * @apiNote
-     * Mirrors WA Web's
+     * <p>This mirrors WA Web's
      * {@code WAWebWamMsgUtils.getInteractiveWamType} switch on the
      * {@code interactiveType} discriminator: shop storefront maps to
      * {@link MediaType#SHOP_STOREFRONT}, carousels map to
-     * {@link MediaType#INTERACTIVE_CAROUSEL}, native flows delegate
-     * to {@link #getInteractiveNativeFlowWamType(InteractiveMessage.NativeFlowMessage)}
+     * {@link MediaType#INTERACTIVE_CAROUSEL}, native flows delegate to
+     * {@link #getInteractiveNativeFlowWamType(InteractiveMessage.NativeFlowMessage)}
      * which further separates {@code CTA_FLOW} ({@link MediaType#NONE})
      * from any other native flow ({@link MediaType#INTERACTIVE_NFM}).
      *
@@ -2683,13 +2564,11 @@ public abstract class WamService {
      * Disambiguates the WAM {@link MediaType} for a native-flow
      * interactive message based on the resolved native-flow name.
      *
-     * @apiNote
-     * Mirrors WA Web's inner native-flow disambiguator: the
-     * {@code CTA_FLOW} (galaxy) variant is filtered out of interactive
-     * WAM reporting and maps to {@link MediaType#NONE}; any other
-     * native-flow name maps to {@link MediaType#INTERACTIVE_NFM}. The
-     * WA Web string constant for {@code CTA_FLOW} is
-     * {@code "galaxy_message"}.
+     * <p>This mirrors WA Web's inner native-flow disambiguator: the
+     * {@code CTA_FLOW} (galaxy) variant is filtered out of interactive WAM
+     * reporting and maps to {@link MediaType#NONE}; any other native-flow
+     * name maps to {@link MediaType#INTERACTIVE_NFM}. The WA Web string
+     * constant for {@code CTA_FLOW} is {@code "galaxy_message"}.
      *
      * @param nativeFlow the native-flow message whose name drives the
      *                   classification; must not be {@code null}
@@ -2713,16 +2592,14 @@ public abstract class WamService {
      * Returns the WAM {@link AgentEngagementEnumType} classification
      * for a message exchanged with a bot.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamMsgUtils.getWamAgentEngagementType}: a chat JID
-     * that is itself a bot maps to
-     * {@link AgentEngagementEnumType#DIRECT_CHAT}; a bot-invoked
-     * message in a non-bot chat maps to
+     * <p>This mirrors WA Web's
+     * {@code WAWebWamMsgUtils.getWamAgentEngagementType}: a chat JID that
+     * is itself a bot maps to {@link AgentEngagementEnumType#DIRECT_CHAT};
+     * a bot-invoked message in a non-bot chat maps to
      * {@link AgentEngagementEnumType#INVOKED}; everything else returns
-     * {@code null} so callers omit the property from the emitted WAM
-     * event entirely (a present-but-null property would shift the
-     * server-side bucketing).
+     * {@code null} so callers omit the property from the emitted WAM event
+     * entirely (a present-but-null property would shift the server-side
+     * bucketing).
      *
      * @param chatJid      the chat JID that hosts the message;
      *                     {@code null} yields {@code null}
@@ -2754,14 +2631,13 @@ public abstract class WamService {
      * Returns the WAM {@link BotType} classification of a bot
      * interaction.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebWamMsgUtils.getWamBotType}: a
-     * Meta-bot JID maps to {@link BotType#METABOT}; a first-party
-     * business bot (via {@code BizBotType.BIZ_1P} or
+     * <p>This mirrors WA Web's {@code WAWebWamMsgUtils.getWamBotType}: a
+     * Meta-bot JID maps to {@link BotType#METABOT}; a first-party business
+     * bot (via {@code BizBotType.BIZ_1P} or
      * {@code BizBotAutomatedType.PARTIAL_1P}) maps to
      * {@link BotType#BOT_1P_BIZ}; a third-party business bot (via
-     * {@code BizBotType.BIZ_3P} or {@code BizBotAutomatedType.FULL_3P})
-     * maps to {@link BotType#BOT_3P_BIZ}; the catch-all is
+     * {@code BizBotType.BIZ_3P} or {@code BizBotAutomatedType.FULL_3P}) maps
+     * to {@link BotType#BOT_3P_BIZ}; the catch-all is
      * {@link BotType#UNKNOWN}.
      *
      * @implNote
@@ -2803,14 +2679,12 @@ public abstract class WamService {
      * classification for the supplied stanza-level message-category
      * attribute.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebWamMsgUtils.getWamInvisibleMessageCatgoryType} (the
-     * typo in the upstream export name is preserved on the annotation
-     * to track the actual export). The only recognised category is
-     * {@code "peer"} ({@code MSG_CATEGORY.peer}); any other value or
-     * {@code null} returns {@code null} so callers omit the property
-     * from the emitted WAM event.
+     * <p>This mirrors WA Web's
+     * {@code WAWebWamMsgUtils.getWamInvisibleMessageCatgoryType} (the typo
+     * in the upstream export name is preserved on the annotation to track
+     * the actual export). The only recognised category is {@code "peer"}
+     * ({@code MSG_CATEGORY.peer}); any other value or {@code null} returns
+     * {@code null} so callers omit the property from the emitted WAM event.
      *
      * @param category the {@code category} attribute carried on the
      *                 incoming stanza; may be {@code null}
@@ -2833,8 +2707,7 @@ public abstract class WamService {
      * Returns whether any of the JIDs participating in the message
      * exchange are LID-addressed.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebWamMsgUtils.msgIsLid} chat-type
+     * <p>This mirrors WA Web's {@code WAWebWamMsgUtils.msgIsLid} chat-type
      * cascade:
      * <ul>
      *   <li>group chats: the supplied {@code participantIsLid} flag;</li>
@@ -2843,10 +2716,9 @@ public abstract class WamService {
      *   <li>everything else: whether the {@code from} or {@code to}
      *       JID is LID-addressed.</li>
      * </ul>
-     * Used by the message-receive and message-send WAM emitters to
-     * tag every event with whether the exchange touched the
-     * LID-addressing namespace, which the backend uses to bucket
-     * LID-migration metrics.
+     * The message-receive and message-send WAM emitters use it to tag every
+     * event with whether the exchange touched the LID-addressing namespace,
+     * which the backend uses to bucket LID-migration metrics.
      *
      * @param fromJid           the sender JID; may be {@code null}
      * @param toJid             the recipient JID; may be {@code null}
@@ -2884,18 +2756,15 @@ public abstract class WamService {
     }
 
     /**
-     * The fixed mapping from lower-case file extensions (without the
-     * leading dot) to the corresponding WAM {@link DocumentType}
-     * bucket consumed by
-     * {@link #logSendDocumentEvent(String, long)}.
+     * Holds the fixed mapping from lower-case file extensions (without the
+     * leading dot) to the corresponding WAM {@link DocumentType} bucket
+     * consumed by {@link #logSendDocumentEvent(String, long)}.
      *
-     * @apiNote
-     * Populated verbatim from WA Web's
-     * {@code WAWebProcessRawMediaLogging} extension-to-type table so
-     * the emitted {@code documentType} / {@code documentExt} fields
-     * match the upstream wire shape exactly. Extensions not in the
-     * table fall back to {@link DocumentType#OTHER} with an empty
-     * {@code documentExt}.
+     * <p>It is populated verbatim from WA Web's
+     * {@code WAWebProcessRawMediaLogging} extension-to-type table so the
+     * emitted {@code documentType} and {@code documentExt} fields match the
+     * upstream wire shape exactly. Extensions not in the table fall back to
+     * {@link DocumentType#OTHER} with an empty {@code documentExt}.
      *
      * @implNote
      * The WA Web table classifies {@code wmv} as
@@ -2981,14 +2850,13 @@ public abstract class WamService {
      * Commits the {@code SendDocumentEvent} for an outgoing document
      * send.
      *
-     * @apiNote
-     * Called by the document-send pipeline before the upload begins;
+     * <p>The document-send pipeline calls this before the upload begins; it
      * mirrors WA Web's
      * {@code WAWebProcessRawMediaLogging.logSendDocumentEvent}. The
-     * filename is split on {@code .} and the last segment, lowercased,
-     * is looked up in {@link #DOCUMENT_EXT_TO_TYPE} to resolve the
-     * {@link DocumentType}; an absent or unknown extension yields an
-     * empty {@code documentExt} property and falls back to
+     * filename is split on {@code .} and the last segment, lowercased, is
+     * looked up in {@link #DOCUMENT_EXT_TO_TYPE} to resolve the
+     * {@link DocumentType}; an absent or unknown extension yields an empty
+     * {@code documentExt} property and falls back to
      * {@link DocumentType#OTHER}.
      *
      * @implNote

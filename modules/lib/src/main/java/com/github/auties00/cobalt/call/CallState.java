@@ -1,48 +1,61 @@
 package com.github.auties00.cobalt.call;
 
 /**
- * The four points of a call's life as visible to a Cobalt user.
- * Internal protocol-level events (ICE checks, DTLS handshake, SCTP
- * association, etc.) are folded into {@link #CONNECTING}; users only
- * need to observe {@link #ACTIVE} for "media is flowing" and
- * {@link #ENDED} for "you can clean up".
+ * Enumerates the user-visible phases of a call's lifecycle.
+ *
+ * <p>Internal protocol-level events (ICE connectivity checks, the DTLS
+ * handshake, SCTP association setup) are folded into {@link #CONNECTING}.
+ * A caller only needs to observe {@link #ACTIVE} to know media is
+ * flowing and {@link #ENDED} to know the call may be cleaned up. The
+ * constants are ordered chronologically, so {@link Enum#ordinal()}
+ * comparison drives the monotonic waits in
+ * {@link ActiveCall#awaitState(CallState)}.
  */
 public enum CallState {
     /**
-     * The call has been offered and is awaiting acceptance —
-     * either remotely (we're the caller, peer is being notified) or
-     * locally (we're the callee, the user must accept or reject).
+     * Indicates the call has been offered and is awaiting acceptance.
+     *
+     * <p>For an outbound call the local user is the caller and the peer
+     * is being notified; for an inbound call the local user is the
+     * callee and must accept or reject the offer.
      */
     RINGING,
 
     /**
-     * The peer has accepted; ICE / DTLS / SRTP setup is in
-     * progress. No application-layer media is flowing yet.
+     * Indicates the peer has accepted and transport setup is underway.
+     *
+     * <p>The ICE, DTLS, and SRTP layers are negotiating; no
+     * application-layer media is flowing yet.
      */
     CONNECTING,
 
     /**
-     * Media is flowing. The four media ports on
+     * Indicates media is flowing and the four media ports on
      * {@link ActiveCall} are live.
      */
     ACTIVE,
 
     /**
-     * The transport layer detected a network change (Wi-Fi ↔
-     * cellular IP swap, relay outage, prolonged RTT spike) and is
-     * re-establishing the DTLS + SRTP path against a fresh
-     * relay/candidate pair. Mic frames written during this window
-     * are buffered or dropped at the call's discretion; the call
-     * transitions back to {@link #ACTIVE} once the new handshake
-     * completes, or to {@link #ENDED} if the recovery fails.
+     * Indicates the transport layer detected a network change and is
+     * re-establishing the media path.
+     *
+     * <p>A Wi-Fi to cellular IP swap, a relay outage, or a prolonged
+     * round-trip-time spike drives the call here while a fresh DTLS and
+     * SRTP path is negotiated against a new relay or candidate pair.
+     * Microphone frames written during this window are buffered or
+     * dropped at the call's discretion. The call returns to
+     * {@link #ACTIVE} once the new handshake completes, or moves to
+     * {@link #ENDED} if recovery fails.
      */
     RECONNECTING,
 
     /**
-     * The call is over for any reason (hangup, reject, timeout,
-     * network failure). The call's
-     * {@link ActiveCall#endReason()} is populated. No further
-     * frames will be exchanged.
+     * Indicates the call is over for any reason: hangup, reject,
+     * timeout, or network failure.
+     *
+     * <p>Once a call reaches this state its
+     * {@link ActiveCall#endReason()} is populated and no further frames
+     * are exchanged.
      */
     ENDED
 }

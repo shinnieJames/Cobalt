@@ -9,49 +9,45 @@ import com.github.auties00.cobalt.registration.push.apns.plist.value.PlistString
 import java.io.IOException;
 
 /**
- * The decoded bag response published at
- * {@code http://init-p01st.push.apple.com/bag}.
+ * Holds the two courier-routing values decoded from the APNS bag response.
  *
- * @apiNote
- * Consumed by the courier connection bootstrap to pick which courier
- * replica to dial. The hostname is the DNS suffix
- * (e.g. {@code "courier.push.apple.com"}) and the replica count is the
- * number of live front-ends Apple is currently rotating between; the
- * caller dials {@code <index>-<hostname>:443} for some random
- * {@code index} in {@code [1, hostCount)}.
- *
- * @implNote
- * This implementation models the bag as a plain {@link Record} with
- * only the two fields the courier handshake actually needs; the
- * remaining metadata in the bag plist (carrier-specific overrides,
- * retry hints, region info) is parsed but discarded.
+ * <p>The bag is the document Apple publishes at
+ * {@code http://init-p01st.push.apple.com/bag} and that the courier connection
+ * bootstrap fetches to pick which courier replica to dial. The {@link #hostname()}
+ * is the DNS suffix shared by every replica (for example
+ * {@code "courier.push.apple.com"}) and {@link #hostCount()} is the number of live
+ * front-ends Apple is currently rotating between, so a caller dials
+ * {@code <index>-<hostname>:443} for some random {@code index} in
+ * {@code [1, hostCount)}.
  *
  * @param hostCount the number of courier replicas advertised by Apple
  * @param hostname  the DNS suffix shared by every replica
+ * @implNote This implementation models the bag as a plain {@link Record} carrying
+ * only the two fields the courier handshake actually needs; the remaining metadata
+ * in the bag plist (carrier-specific overrides, retry hints, region info) is parsed
+ * but discarded.
  */
 public record ApnsBag(int hostCount, String hostname) {
     /**
-     * Decodes the bag response into an {@link ApnsBag}.
+     * Decodes the raw bag plist bytes into an {@link ApnsBag}.
      *
-     * @apiNote
-     * Called once per courier connection by
-     * {@link com.github.auties00.cobalt.registration.push.apns.ApnsCourierConnection}
-     * after fetching {@code /bag}. The response is a plist-in-plist:
-     * the outer {@link PlistDictionaryValue} has a {@code "bag"} key
-     * whose {@link PlistDataValue} payload is itself a plist carrying
-     * {@code APNSCourierHostcount} and {@code APNSCourierHostname}.
-     *
-     * @implNote
-     * This implementation funnels every parsing failure (including
-     * {@link NullPointerException} from missing keys and
-     * {@link ClassCastException} from unexpected types) through a
-     * single {@link IOException} so callers can handle bag-parse
-     * failures as ordinary transport failures.
+     * <p>The response is a plist nested inside a plist: the outer
+     * {@link PlistDictionaryValue} has a {@code "bag"} key whose
+     * {@link PlistDataValue} payload is itself a plist carrying the
+     * {@code APNSCourierHostcount} and {@code APNSCourierHostname} entries that map
+     * to {@link #hostCount()} and {@link #hostname()}. The integer host count is
+     * read as a {@code long} via {@link PlistIntegerValue#value()} and narrowed to
+     * an {@code int}. This is called once per courier connection after fetching
+     * {@code /bag}.
      *
      * @param plist the raw plist bytes returned by the bag endpoint
      * @return the decoded bag
-     * @throws IOException if the plist is malformed or missing either
-     *                     of the two required keys
+     * @throws IOException if the plist is malformed or missing either of the two
+     *                     required keys
+     * @implNote This implementation funnels every parsing failure (including a
+     * {@link NullPointerException} from a missing key and a {@link ClassCastException}
+     * from an unexpected value type) through a single {@link IOException} so callers
+     * can treat bag-parse failures as ordinary transport failures.
      */
     public static ApnsBag ofPlist(byte[] plist) throws IOException {
         try {

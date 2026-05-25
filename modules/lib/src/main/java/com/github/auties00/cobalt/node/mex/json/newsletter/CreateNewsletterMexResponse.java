@@ -23,43 +23,36 @@ import java.util.OptionalLong;
  * Parses the MEX response of the create-newsletter mutation built by
  * {@link CreateNewsletterMexRequest}.
  *
- * @apiNote
- * Exposes the fully-hydrated newsletter metadata returned under
- * {@code xwa2_newsletter_create}: the freshly-assigned id, the initial
- * state object, the thread metadata (name, description, picture, preview,
- * invite handle, verification, subscriber count, creation time) and the
- * viewer metadata that records the local user's role (owner) and per-channel
- * settings.
+ * <p>Exposes the fully-hydrated newsletter metadata returned under {@code xwa2_newsletter_create}:
+ * the freshly-assigned id, the initial state object, the thread metadata (name, description,
+ * picture, preview, invite handle, verification, subscriber count, creation time) and the viewer
+ * metadata that records the local user's role (owner) and per-channel settings.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateNewsletterJob")
 public final class CreateNewsletterMexResponse implements MexOperation.Response.Json {
     /**
-     * The newly assigned newsletter Jid string.
+     * Holds the newly assigned newsletter Jid string.
      */
     private final String id;
 
     /**
-     * The initial newsletter state object.
+     * Holds the initial newsletter state object.
      */
     private final State state;
 
     /**
-     * The hydrated thread metadata (name, description, picture, preview,
-     * invite handle, verification, subscriber count and creation time).
+     * Holds the hydrated thread metadata (name, description, picture, preview, invite handle,
+     * verification, subscriber count and creation time).
      */
     private final ThreadMetadata threadMetadata;
 
     /**
-     * The viewer-side metadata (per-channel settings and viewer role).
+     * Holds the viewer-side metadata (per-channel settings and viewer role).
      */
     private final ViewerMetadata viewerMetadata;
 
     /**
      * Constructs a response wrapping the parsed top-level fields.
-     *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
      *
      * @param id             the newly assigned newsletter Jid string
      * @param state          the initial newsletter state object
@@ -76,15 +69,13 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_create} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_create} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<CreateNewsletterMexResponse> of(Node node) {
         return node.getChild("result")
@@ -104,8 +95,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Returns the initial newsletter state object.
      *
-     * @return the parsed {@link State}, or empty when the relay omitted the
-     *         field
+     * @return the parsed {@link State}, or empty when the relay omitted the field
      */
     public Optional<State> state() {
         return Optional.ofNullable(state);
@@ -114,8 +104,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Returns the hydrated thread metadata.
      *
-     * @return the parsed {@link ThreadMetadata}, or empty when the relay
-     *         omitted the field
+     * @return the parsed {@link ThreadMetadata}, or empty when the relay omitted the field
      */
     public Optional<ThreadMetadata> threadMetadata() {
         return Optional.ofNullable(threadMetadata);
@@ -124,32 +113,26 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Returns the viewer-side metadata.
      *
-     * @return the parsed {@link ViewerMetadata}, or empty when the relay
-     *         omitted the field
+     * @return the parsed {@link ViewerMetadata}, or empty when the relay omitted the field
      */
     public Optional<ViewerMetadata> viewerMetadata() {
         return Optional.ofNullable(viewerMetadata);
     }
 
     /**
-     * Wraps the {@code state} object embedded in the create-newsletter
-     * response.
+     * Wraps the {@code state} object embedded in the create-newsletter response.
      *
-     * @apiNote
-     * Exposes only the {@code type} scalar; immediately after creation WA
-     * Web reports a non-deleted state.
+     * <p>Exposes only the {@code type} scalar; immediately after creation the relay reports a
+     * non-deleted state.
      */
     public static final class State {
         /**
-         * The textual state identifier.
+         * Holds the textual state identifier.
          */
         private final String type;
 
         /**
          * Constructs a state wrapping the textual type.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param type the raw state identifier returned by the relay
          */
@@ -169,13 +152,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses a {@link State} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link CreateNewsletterMexResponse#of(byte[])} to hydrate
-         * the top-level {@code state} entry.
+         * <p>Drives hydration of the top-level {@code state} entry from
+         * {@link CreateNewsletterMexResponse#of(byte[])}.
          *
          * @param obj the JSON object to parse
-         * @return the parsed {@link State}, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed {@link State}, or empty when {@code obj} is {@code null}
          */
         static Optional<State> of(JSONObject obj) {
             if (obj == null) {
@@ -189,10 +170,8 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses a list of {@link State} entries from the given JSON array.
          *
-         * @apiNote
-         * Provided for symmetry with the other nested array parsers; the
-         * create-newsletter envelope does not carry a {@code state} array
-         * at the top level.
+         * <p>Provided for symmetry with the other nested array parsers; the create-newsletter
+         * envelope does not carry a {@code state} array at the top level.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -211,66 +190,60 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Wraps the {@code thread_metadata} sub-object embedded in the
-     * create-newsletter response.
+     * Wraps the {@code thread_metadata} sub-object embedded in the create-newsletter response.
      *
-     * @apiNote
-     * Carries the hydrated newsletter profile: display name, description,
-     * picture and preview hashes, invite handle, verification tier,
-     * subscriber count and creation time. Each nested object follows the
-     * standard MEX shape (string identifier, payload, update timestamp).
+     * <p>Carries the hydrated newsletter profile: display name, description, picture and preview
+     * hashes, invite handle, verification tier, subscriber count and creation time. Each nested
+     * object follows the standard MEX shape (string identifier, payload, update timestamp).
      */
     public static final class ThreadMetadata {
         /**
-         * The display-name sub-object.
+         * Holds the display-name sub-object.
          */
         private final Name name;
 
         /**
-         * The description sub-object.
+         * Holds the description sub-object.
          */
         private final Description description;
 
         /**
-         * The full-resolution picture sub-object.
+         * Holds the full-resolution picture sub-object.
          */
         private final Picture picture;
 
         /**
-         * The preview-resolution picture sub-object.
+         * Holds the preview-resolution picture sub-object.
          */
         private final Preview preview;
 
         /**
-         * The shareable invite identifier.
+         * Holds the shareable invite identifier.
          */
         private final String invite;
 
         /**
-         * The reserved handle (vanity URL slug) of the newsletter.
+         * Holds the reserved handle (vanity URL slug) of the newsletter.
          */
         private final String handle;
 
         /**
-         * The verification tier label.
+         * Holds the verification tier label.
          */
         private final String verification;
 
         /**
-         * The follower count at the moment of creation.
+         * Holds the follower count at the moment of creation.
          */
         private final Long subscribersCount;
 
         /**
-         * The unix-second creation timestamp.
+         * Holds the unix-second creation timestamp.
          */
         private final Long creationTime;
 
         /**
          * Constructs a thread-metadata wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param name             the display-name sub-object
          * @param description      the description sub-object
@@ -297,8 +270,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the display-name sub-object.
          *
-         * @return the parsed {@link Name}, or empty when the relay omitted
-         *         the field
+         * @return the parsed {@link Name}, or empty when the relay omitted the field
          */
         public Optional<Name> name() {
             return Optional.ofNullable(name);
@@ -307,8 +279,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the description sub-object.
          *
-         * @return the parsed {@link Description}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link Description}, or empty when the relay omitted the field
          */
         public Optional<Description> description() {
             return Optional.ofNullable(description);
@@ -317,8 +288,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the full-resolution picture sub-object.
          *
-         * @return the parsed {@link Picture}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link Picture}, or empty when the relay omitted the field
          */
         public Optional<Picture> picture() {
             return Optional.ofNullable(picture);
@@ -327,8 +297,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the preview-resolution picture sub-object.
          *
-         * @return the parsed {@link Preview}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link Preview}, or empty when the relay omitted the field
          */
         public Optional<Preview> preview() {
             return Optional.ofNullable(preview);
@@ -337,8 +306,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the shareable invite identifier.
          *
-         * @return the invite token, or empty when the relay omitted the
-         *         field
+         * @return the invite token, or empty when the relay omitted the field
          */
         public Optional<String> invite() {
             return Optional.ofNullable(invite);
@@ -356,8 +324,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the verification tier label.
          *
-         * @return the verification label, or empty when the relay omitted
-         *         the field
+         * @return the verification label, or empty when the relay omitted the field
          */
         public Optional<String> verification() {
             return Optional.ofNullable(verification);
@@ -366,8 +333,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the follower count at the moment of creation.
          *
-         * @return the follower count, or empty when the relay omitted the
-         *         field
+         * @return the follower count, or empty when the relay omitted the field
          */
         public OptionalLong subscribersCount() {
             return subscribersCount != null ? OptionalLong.of(subscribersCount) : OptionalLong.empty();
@@ -376,46 +342,38 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the creation timestamp.
          *
-         * @apiNote
-         * Carried by the relay as a unix-second integer.
+         * <p>Carried by the relay as a unix-second integer and surfaced as an {@link Instant}.
          *
-         * @return the parsed {@link Instant}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link Instant}, or empty when the relay omitted the field
          */
         public Optional<Instant> creationTime() {
             return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Wraps the {@code name} sub-object embedded in
-         * {@code thread_metadata}.
+         * Wraps the {@code name} sub-object embedded in {@code thread_metadata}.
          *
-         * @apiNote
-         * The MEX schema models a renameable scalar as a tuple of
-         * (server-side id, text, update timestamp) so consumers can detect
-         * stale local copies during sync reconciliation.
+         * <p>The MEX schema models a renameable scalar as a tuple of (server-side id, text, update
+         * timestamp) so consumers can detect stale local copies during sync reconciliation.
          */
         public static final class Name {
             /**
-             * The server-side identifier of this name revision.
+             * Holds the server-side identifier of this name revision.
              */
             private final String id;
 
             /**
-             * The textual display name.
+             * Holds the textual display name.
              */
             private final String text;
 
             /**
-             * The unix-second timestamp of the last name update.
+             * Holds the unix-second timestamp of the last name update.
              */
             private final Long updateTime;
 
             /**
              * Constructs a name wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param id         the server-side revision identifier
              * @param text       the textual display name
@@ -430,8 +388,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the server-side identifier of this name revision.
              *
-             * @return the revision id, or empty when the relay omitted the
-             *         field
+             * @return the revision id, or empty when the relay omitted the field
              */
             public Optional<String> id() {
                 return Optional.ofNullable(id);
@@ -440,8 +397,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the textual display name.
              *
-             * @return the display name, or empty when the relay omitted
-             *         the field
+             * @return the display name, or empty when the relay omitted the field
              */
             public Optional<String> text() {
                 return Optional.ofNullable(text);
@@ -450,8 +406,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the timestamp of the last name update.
              *
-             * @return the parsed {@link Instant}, or empty when the relay
-             *         omitted the field
+             * @return the parsed {@link Instant}, or empty when the relay omitted the field
              */
             public Optional<Instant> updateTime() {
                 return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
@@ -460,13 +415,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses a {@link Name} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate the
-             * nested {@code name} entry.
+             * <p>Drives hydration of the nested {@code name} entry from
+             * {@link ThreadMetadata#of(JSONObject)}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link Name}, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed {@link Name}, or empty when {@code obj} is {@code null}
              */
             static Optional<Name> of(JSONObject obj) {
                 if (obj == null) {
@@ -480,16 +433,13 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a list of {@link Name} entries from the given JSON
-             * array.
+             * Parses a list of {@link Name} entries from the given JSON array.
              *
-             * @apiNote
-             * Provided for symmetry; the create-newsletter envelope does
-             * not carry a {@code name} array.
+             * <p>Provided for symmetry; the create-newsletter envelope does not carry a
+             * {@code name} array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Name> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -505,35 +455,29 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Wraps the {@code description} sub-object embedded in
-         * {@code thread_metadata}.
+         * Wraps the {@code description} sub-object embedded in {@code thread_metadata}.
          *
-         * @apiNote
-         * Models the same (id, text, update_time) tuple as
-         * {@link Name}, so consumers can detect stale local copies during
-         * sync reconciliation.
+         * <p>Models the same (id, text, update_time) tuple as {@link Name}, so consumers can detect
+         * stale local copies during sync reconciliation.
          */
         public static final class Description {
             /**
-             * The server-side identifier of this description revision.
+             * Holds the server-side identifier of this description revision.
              */
             private final String id;
 
             /**
-             * The textual description.
+             * Holds the textual description.
              */
             private final String text;
 
             /**
-             * The unix-second timestamp of the last description update.
+             * Holds the unix-second timestamp of the last description update.
              */
             private final Long updateTime;
 
             /**
              * Constructs a description wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param id         the server-side revision identifier
              * @param text       the textual description
@@ -546,11 +490,9 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Returns the server-side identifier of this description
-             * revision.
+             * Returns the server-side identifier of this description revision.
              *
-             * @return the revision id, or empty when the relay omitted the
-             *         field
+             * @return the revision id, or empty when the relay omitted the field
              */
             public Optional<String> id() {
                 return Optional.ofNullable(id);
@@ -559,8 +501,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the textual description.
              *
-             * @return the description, or empty when the relay omitted the
-             *         field
+             * @return the description, or empty when the relay omitted the field
              */
             public Optional<String> text() {
                 return Optional.ofNullable(text);
@@ -569,8 +510,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the timestamp of the last description update.
              *
-             * @return the parsed {@link Instant}, or empty when the relay
-             *         omitted the field
+             * @return the parsed {@link Instant}, or empty when the relay omitted the field
              */
             public Optional<Instant> updateTime() {
                 return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
@@ -579,13 +519,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses a {@link Description} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate the
-             * nested {@code description} entry.
+             * <p>Drives hydration of the nested {@code description} entry from
+             * {@link ThreadMetadata#of(JSONObject)}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link Description}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link Description}, or empty when {@code obj} is {@code null}
              */
             static Optional<Description> of(JSONObject obj) {
                 if (obj == null) {
@@ -599,15 +537,13 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a list of {@link Description} entries from the given
-             * JSON array.
+             * Parses a list of {@link Description} entries from the given JSON array.
              *
-             * @apiNote
-             * Provided for symmetry.
+             * <p>Provided for symmetry; the create-newsletter envelope does not carry a
+             * {@code description} array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Description> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -623,35 +559,29 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Wraps the {@code picture} sub-object embedded in
-         * {@code thread_metadata}.
+         * Wraps the {@code picture} sub-object embedded in {@code thread_metadata}.
          *
-         * @apiNote
-         * Carries the (id, type, direct_path) triple that lets the client
-         * download the full-resolution newsletter avatar from the media
-         * CDN.
+         * <p>Carries the (id, type, direct_path) triple that lets the client download the
+         * full-resolution newsletter avatar from the media CDN.
          */
         public static final class Picture {
             /**
-             * The opaque server-side identifier of the picture revision.
+             * Holds the opaque server-side identifier of the picture revision.
              */
             private final String id;
 
             /**
-             * The picture MIME-style type discriminator.
+             * Holds the picture MIME-style type discriminator.
              */
             private final String type;
 
             /**
-             * The CDN direct-path used to fetch the picture bytes.
+             * Holds the CDN direct-path used to fetch the picture bytes.
              */
             private final String directPath;
 
             /**
              * Constructs a picture wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param id         the server-side revision identifier
              * @param type       the picture type discriminator
@@ -666,8 +596,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the server-side identifier of this picture revision.
              *
-             * @return the revision id, or empty when the relay omitted the
-             *         field
+             * @return the revision id, or empty when the relay omitted the field
              */
             public Optional<String> id() {
                 return Optional.ofNullable(id);
@@ -676,8 +605,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the picture type discriminator.
              *
-             * @return the picture type, or empty when the relay omitted
-             *         the field
+             * @return the picture type, or empty when the relay omitted the field
              */
             public Optional<String> type() {
                 return Optional.ofNullable(type);
@@ -686,8 +614,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the CDN direct-path used to fetch the picture bytes.
              *
-             * @return the direct-path, or empty when the relay omitted the
-             *         field
+             * @return the direct-path, or empty when the relay omitted the field
              */
             public Optional<String> directPath() {
                 return Optional.ofNullable(directPath);
@@ -696,13 +623,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses a {@link Picture} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate the
-             * nested {@code picture} entry.
+             * <p>Drives hydration of the nested {@code picture} entry from
+             * {@link ThreadMetadata#of(JSONObject)}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link Picture}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link Picture}, or empty when {@code obj} is {@code null}
              */
             static Optional<Picture> of(JSONObject obj) {
                 if (obj == null) {
@@ -716,15 +641,13 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a list of {@link Picture} entries from the given JSON
-             * array.
+             * Parses a list of {@link Picture} entries from the given JSON array.
              *
-             * @apiNote
-             * Provided for symmetry.
+             * <p>Provided for symmetry; the create-newsletter envelope does not carry a
+             * {@code picture} array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Picture> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -740,34 +663,29 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Wraps the {@code preview} sub-object embedded in
-         * {@code thread_metadata}.
+         * Wraps the {@code preview} sub-object embedded in {@code thread_metadata}.
          *
-         * @apiNote
-         * Mirrors {@link Picture} but points at the preview-resolution
-         * avatar used in chat-list rendering paths.
+         * <p>Mirrors {@link Picture} but points at the preview-resolution avatar used in chat-list
+         * rendering paths.
          */
         public static final class Preview {
             /**
-             * The opaque server-side identifier of the preview revision.
+             * Holds the opaque server-side identifier of the preview revision.
              */
             private final String id;
 
             /**
-             * The preview MIME-style type discriminator.
+             * Holds the preview MIME-style type discriminator.
              */
             private final String type;
 
             /**
-             * The CDN direct-path used to fetch the preview bytes.
+             * Holds the CDN direct-path used to fetch the preview bytes.
              */
             private final String directPath;
 
             /**
              * Constructs a preview wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param id         the server-side revision identifier
              * @param type       the preview type discriminator
@@ -782,8 +700,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the server-side identifier of this preview revision.
              *
-             * @return the revision id, or empty when the relay omitted the
-             *         field
+             * @return the revision id, or empty when the relay omitted the field
              */
             public Optional<String> id() {
                 return Optional.ofNullable(id);
@@ -792,8 +709,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the preview type discriminator.
              *
-             * @return the preview type, or empty when the relay omitted
-             *         the field
+             * @return the preview type, or empty when the relay omitted the field
              */
             public Optional<String> type() {
                 return Optional.ofNullable(type);
@@ -802,8 +718,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the CDN direct-path used to fetch the preview bytes.
              *
-             * @return the direct-path, or empty when the relay omitted the
-             *         field
+             * @return the direct-path, or empty when the relay omitted the field
              */
             public Optional<String> directPath() {
                 return Optional.ofNullable(directPath);
@@ -812,13 +727,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses a {@link Preview} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link ThreadMetadata#of(JSONObject)} to hydrate the
-             * nested {@code preview} entry.
+             * <p>Drives hydration of the nested {@code preview} entry from
+             * {@link ThreadMetadata#of(JSONObject)}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link Preview}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link Preview}, or empty when {@code obj} is {@code null}
              */
             static Optional<Preview> of(JSONObject obj) {
                 if (obj == null) {
@@ -832,15 +745,13 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a list of {@link Preview} entries from the given JSON
-             * array.
+             * Parses a list of {@link Preview} entries from the given JSON array.
              *
-             * @apiNote
-             * Provided for symmetry.
+             * <p>Provided for symmetry; the create-newsletter envelope does not carry a
+             * {@code preview} array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Preview> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -858,13 +769,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses a {@link ThreadMetadata} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link CreateNewsletterMexResponse#of(byte[])} to hydrate
-         * the {@code thread_metadata} entry.
+         * <p>Drives hydration of the {@code thread_metadata} entry from
+         * {@link CreateNewsletterMexResponse#of(byte[])}.
          *
          * @param obj the JSON object to parse
-         * @return the parsed {@link ThreadMetadata}, or empty when
-         *         {@code obj} is {@code null}
+         * @return the parsed {@link ThreadMetadata}, or empty when {@code obj} is {@code null}
          */
         static Optional<ThreadMetadata> of(JSONObject obj) {
             if (obj == null) {
@@ -884,12 +793,10 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses a list of {@link ThreadMetadata} entries from the given
-         * JSON array.
+         * Parses a list of {@link ThreadMetadata} entries from the given JSON array.
          *
-         * @apiNote
-         * Provided for symmetry; the create-newsletter envelope does not
-         * carry a {@code thread_metadata} array.
+         * <p>Provided for symmetry; the create-newsletter envelope does not carry a
+         * {@code thread_metadata} array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -908,30 +815,24 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Wraps the {@code viewer_metadata} sub-object embedded in the
-     * create-newsletter response.
+     * Wraps the {@code viewer_metadata} sub-object embedded in the create-newsletter response.
      *
-     * @apiNote
-     * Records per-viewer state that the local user holds against the
-     * newly-created newsletter; immediately after creation the role is
-     * always owner.
+     * <p>Records per-viewer state that the local user holds against the newly-created newsletter;
+     * immediately after creation the role is always owner.
      */
     public static final class ViewerMetadata {
         /**
-         * The per-channel viewer-side settings (type/value pairs).
+         * Holds the per-channel viewer-side settings (type/value pairs).
          */
         private final List<Settings> settings;
 
         /**
-         * The viewer's role on the newsletter (e.g. owner).
+         * Holds the viewer's role on the newsletter (for example owner).
          */
         private final String role;
 
         /**
          * Constructs a viewer-metadata wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param settings the viewer-side settings list
          * @param role     the viewer's role on the newsletter
@@ -944,8 +845,7 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the per-channel viewer-side settings.
          *
-         * @return the settings list, empty when the relay omitted the
-         *         field
+         * @return the settings list, empty when the relay omitted the field
          */
         public List<Settings> settings() {
             return settings;
@@ -963,27 +863,22 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Wraps an entry of the viewer-side {@code settings} list.
          *
-         * @apiNote
-         * Each entry is a (type, value) pair; the type discriminates which
-         * UI preference the value applies to.
+         * <p>Each entry is a (type, value) pair; the type discriminates which UI preference the
+         * value applies to.
          */
         public static final class Settings {
             /**
-             * The discriminator identifying which viewer preference this
-             * entry represents.
+             * Holds the discriminator identifying which viewer preference this entry represents.
              */
             private final String type;
 
             /**
-             * The textual value associated with {@link #type}.
+             * Holds the textual value associated with {@link #type}.
              */
             private final String value;
 
             /**
              * Constructs a settings entry from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param type  the discriminator
              * @param value the textual value
@@ -994,11 +889,9 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Returns the discriminator identifying which viewer
-             * preference this entry represents.
+             * Returns the discriminator identifying which viewer preference this entry represents.
              *
-             * @return the discriminator, or empty when the relay omitted
-             *         the field
+             * @return the discriminator, or empty when the relay omitted the field
              */
             public Optional<String> type() {
                 return Optional.ofNullable(type);
@@ -1016,13 +909,10 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses a {@link Settings} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link Settings#ofArray(JSONArray)} when hydrating
-             * the {@code settings} array under {@code viewer_metadata}.
+             * <p>Drives per-entry hydration from {@link Settings#ofArray(JSONArray)}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed {@link Settings}, or empty when
-             *         {@code obj} is {@code null}
+             * @return the parsed {@link Settings}, or empty when {@code obj} is {@code null}
              */
             static Optional<Settings> of(JSONObject obj) {
                 if (obj == null) {
@@ -1035,16 +925,12 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a list of {@link Settings} entries from the given
-             * JSON array.
+             * Parses a list of {@link Settings} entries from the given JSON array.
              *
-             * @apiNote
-             * Drives hydration of the {@code settings} array under
-             * {@code viewer_metadata}.
+             * <p>Drives hydration of the {@code settings} array under {@code viewer_metadata}.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<Settings> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -1062,13 +948,11 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses a {@link ViewerMetadata} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link CreateNewsletterMexResponse#of(byte[])} to
-         * hydrate the {@code viewer_metadata} entry.
+         * <p>Drives hydration of the {@code viewer_metadata} entry from
+         * {@link CreateNewsletterMexResponse#of(byte[])}.
          *
          * @param obj the JSON object to parse
-         * @return the parsed {@link ViewerMetadata}, or empty when
-         *         {@code obj} is {@code null}
+         * @return the parsed {@link ViewerMetadata}, or empty when {@code obj} is {@code null}
          */
         static Optional<ViewerMetadata> of(JSONObject obj) {
             if (obj == null) {
@@ -1081,12 +965,10 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses a list of {@link ViewerMetadata} entries from the given
-         * JSON array.
+         * Parses a list of {@link ViewerMetadata} entries from the given JSON array.
          *
-         * @apiNote
-         * Provided for symmetry; the create-newsletter envelope does not
-         * carry a {@code viewer_metadata} array.
+         * <p>Provided for symmetry; the create-newsletter envelope does not carry a
+         * {@code viewer_metadata} array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -1105,20 +987,14 @@ public final class CreateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_create} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_create} root
      */
     private static Optional<CreateNewsletterMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

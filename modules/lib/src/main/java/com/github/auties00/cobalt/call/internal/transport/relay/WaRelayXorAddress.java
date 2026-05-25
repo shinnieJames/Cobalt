@@ -11,10 +11,13 @@ import java.nio.ByteOrder;
 import java.util.Objects;
 
 /**
- * RFC 5389 §15.2 XOR-MAPPED-ADDRESS / RFC 5766 §14.5 XOR-RELAYED-ADDRESS
- * codec.
+ * Codes and decodes the STUN {@code XOR-MAPPED-ADDRESS} (RFC 5389 section 15.2) and TURN
+ * {@code XOR-RELAYED-ADDRESS} (RFC 5766 section 14.5) attribute value of a {@link WaRelayPacket}.
  *
- * <p>Wire format:
+ * <p>The attribute value is an address-family-tagged endpoint whose address and port are obfuscated
+ * by XOR with the packet's magic cookie. An instance holds the plaintext {@link #address()} and
+ * {@link #port()}; {@link #decode(byte[], byte[])} reads the obfuscated value into one and
+ * {@link #encode(byte[])} produces the obfuscated value from one.
  *
  * <pre>{@code
  *  0                   1                   2                   3
@@ -26,43 +29,42 @@ import java.util.Objects;
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * }</pre>
  *
- * <p>For IPv4 (Family = 0x01) the address is 4 bytes XOR'd with the
- * top 4 bytes of the magic cookie (0x2112A442). For IPv6 (Family =
- * 0x02) the address is 16 bytes XOR'd with the magic cookie followed
- * by the 12-byte transaction id.
- *
- * <p>The X-Port is the real port XOR'd with the top 16 bits of the
- * magic cookie (0x2112).
+ * @implNote This implementation reproduces the RFC 5389 XOR obfuscation exactly. The first byte is
+ * reserved zero and the second is the family ({@link #FAMILY_IPV4} or {@link #FAMILY_IPV6}). X-Port
+ * is the real port XOR'd with the top 16 bits of {@link WaRelayPacket#MAGIC_COOKIE}
+ * ({@code 0x2112}). For IPv4 the 4 address bytes are XOR'd with the full 32-bit magic cookie; for
+ * IPv6 the first 4 address bytes are XOR'd with the magic cookie and the remaining 12 with the
+ * packet's transaction id.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipSctpConnectionManager")
 public final class WaRelayXorAddress {
     /**
-     * Address family marker for IPv4.
+     * Holds the address-family marker for IPv4.
      */
     public static final int FAMILY_IPV4 = 0x01;
 
     /**
-     * Address family marker for IPv6.
+     * Holds the address-family marker for IPv6.
      */
     public static final int FAMILY_IPV6 = 0x02;
 
     /**
-     * The decoded inet address.
+     * Holds the plaintext inet address.
      */
     private final InetAddress address;
 
     /**
-     * The decoded port (1..65535).
+     * Holds the plaintext port in the range 0 to 65535.
      */
     private final int port;
 
     /**
-     * Constructs a new {@code WaRelayXorAddress}.
+     * Constructs an address from a plaintext inet address and port.
      *
-     * @param address the decoded address; must not be {@code null}
-     * @param port    the decoded port (0..65535)
+     * @param address the inet address; must not be {@code null}
+     * @param port    the port in the range 0 to 65535
      * @throws NullPointerException     if {@code address} is {@code null}
-     * @throws IllegalArgumentException if {@code port} is out of range
+     * @throws IllegalArgumentException if {@code port} is outside the range 0 to 65535
      */
     public WaRelayXorAddress(InetAddress address, int port) {
         Objects.requireNonNull(address, "address cannot be null");
@@ -74,7 +76,7 @@ public final class WaRelayXorAddress {
     }
 
     /**
-     * Returns the decoded {@link InetAddress}.
+     * Returns the plaintext inet address.
      *
      * @return the address
      */
@@ -83,24 +85,30 @@ public final class WaRelayXorAddress {
     }
 
     /**
-     * Returns the decoded port.
+     * Returns the plaintext port.
      *
-     * @return the port (0..65535)
+     * @return the port in the range 0 to 65535
      */
     public int port() {
         return port;
     }
 
     /**
-     * Decodes an XOR-MAPPED/RELAYED-ADDRESS attribute value.
+     * Decodes an XOR-mapped or XOR-relayed address attribute value.
      *
-     * @param attrValue   the 8-byte (IPv4) or 20-byte (IPv6) attribute
-     *                    value, omitting the 4-byte attr header
-     * @param transactionId the packet's 12-byte transaction id; only
-     *                      consulted for IPv6
+     * <p>Verifies the reserved leading byte is zero, reads the address family, de-obfuscates the port
+     * against the top 16 bits of {@link WaRelayPacket#MAGIC_COOKIE}, and de-obfuscates the address
+     * bytes. For an IPv4 family the address is the 4 bytes XOR'd with the magic cookie; for an IPv6
+     * family it is the 16 bytes XOR'd with the magic cookie followed by the {@code transactionId}.
+     *
+     * @param attrValue     the attribute value with the 4-byte attribute header already stripped: 8
+     *                      bytes for IPv4, 20 bytes for IPv6
+     * @param transactionId the packet's 12-byte transaction id, consulted only for the IPv6 family
      * @return the decoded address
-     * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if the value is malformed
+     * @throws NullPointerException     if {@code attrValue} or {@code transactionId} is {@code null}
+     * @throws IllegalArgumentException if the value is shorter than 4 bytes, its reserved byte is
+     *                                  non-zero, the family is unknown, the length does not match the
+     *                                  family, or the address bytes do not form a valid address
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSctpConnectionManager",
             exports = "sendWAWebVoipDataToRelay", adaptation = WhatsAppAdaptation.DIRECT)
@@ -156,11 +164,15 @@ public final class WaRelayXorAddress {
     }
 
     /**
-     * Encodes this address back to its on-wire XOR-MAPPED-ADDRESS form.
+     * Encodes this address to its on-wire XOR-mapped-address attribute value.
      *
-     * @param transactionId the packet's 12-byte transaction id; only
-     *                      consulted for IPv6
-     * @return the encoded attribute value (8 bytes for IPv4, 20 for IPv6)
+     * <p>Tags the family from the address length, obfuscates the address bytes against
+     * {@link WaRelayPacket#MAGIC_COOKIE} (and, for IPv6, against {@code transactionId} for the
+     * trailing 12 bytes), and obfuscates the port against the top 16 bits of the magic cookie.
+     *
+     * @param transactionId the packet's 12-byte transaction id, consulted only for the IPv6 family
+     * @return the encoded attribute value: 8 bytes for IPv4, 20 bytes for IPv6
+     * @throws NullPointerException if {@code transactionId} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipSctpConnectionManager",
             exports = "sendWAWebVoipDataToRelay", adaptation = WhatsAppAdaptation.DIRECT)
@@ -184,7 +196,11 @@ public final class WaRelayXorAddress {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this address with another for address and port equality.
+     *
+     * @param o the object to compare against
+     * @return {@code true} when {@code o} is a {@code WaRelayXorAddress} with the same address and
+     *         port
      */
     @Override
     public boolean equals(Object o) {
@@ -194,7 +210,9 @@ public final class WaRelayXorAddress {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}, combining the address and port.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -202,7 +220,9 @@ public final class WaRelayXorAddress {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a {@code host:port} diagnostic string using the address's textual host form.
+     *
+     * @return a human-readable representation
      */
     @Override
     public String toString() {

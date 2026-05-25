@@ -12,34 +12,18 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link CallLogMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing call-log mutation against the
- * {@code WAWebCallLogSync} JS encoder. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.CallLogHandler} whose
- * inbound-side coverage lives in {@code CallLogHandlerTest}.
- *
- * @implNote
- * This implementation passes a {@code null} {@link com.github.auties00.cobalt.model.call.CallLog}
- * record so the captured oracle pins the minimal action shape; the fixture
- * for a populated call record will land in a follow-up matrix.
+ * Covers {@link CallLogMutationFactory} against the captured WhatsApp Web
+ * encode oracle for {@code handler/call-log/encode}. The test passes a
+ * {@code null} {@code CallLog} record so the oracle pins the minimal action
+ * shape. The check is gated on {@link SyncFixtures#isOracleAvailable(String)}
+ * so it no-ops cleanly until the fixture is present.
  */
 @DisplayName("CallLogMutationFactory")
 class CallLogMutationFactoryTest {
-    /**
-     * Peer JID used as the resolved caller index segment.
-     */
     private static final Jid PEER = Jid.of("1234567890@s.whatsapp.net");
 
-    /**
-     * Call identifier used in the index.
-     */
     private static final String CALL_ID = "CALL_ID_42";
 
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
     void byteEqualityWithOracle() {

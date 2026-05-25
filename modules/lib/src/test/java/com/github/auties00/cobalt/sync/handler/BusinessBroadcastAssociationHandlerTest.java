@@ -29,15 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastAssociationHandler}.
- *
- * <p>This handler is Cobalt-inferred: WA Web defines the
- * {@code SyncActionValue.BusinessBroadcastAssociationAction} protobuf for
- * {@code "broadcast_jid"} mutations, but ships no corresponding sync handler
- * module. The Cobalt implementation associates (SET, {@code deleted=false}) or
- * disassociates (SET, {@code deleted=true}) a recipient JID inside a parent
- * {@code BusinessBroadcastList} stored on {@link WhatsAppStore}. The recipient
- * is keyed by {@code indexParts[2]} and the list id by {@code indexParts[1]}.
+ * Covers {@link BusinessBroadcastAssociationHandler}, which associates (SET, {@code deleted=false})
+ * or disassociates (SET, {@code deleted=true}) a recipient JID inside a parent broadcast list on
+ * {@link WhatsAppStore}, keyed by the list id at {@code indexParts[1]} and the recipient at
+ * {@code indexParts[2]}. WA Web defines the {@code BusinessBroadcastAssociationAction} protobuf but
+ * ships no corresponding sync-handler module, so this handler is Cobalt-inferred.
  */
 @DisplayName("BusinessBroadcastAssociationHandler")
 class BusinessBroadcastAssociationHandlerTest {
@@ -58,18 +54,6 @@ class BusinessBroadcastAssociationHandlerTest {
         handler = new BusinessBroadcastAssociationHandler();
     }
 
-    /**
-     * Builds a trusted mutation whose value carries the given association action.
-     *
-     * @param listId       the broadcast list id placed at {@code indexParts[1]},
-     *                     may be {@code null} to produce a short index
-     * @param recipient    the recipient JID placed at {@code indexParts[2]},
-     *                     may be {@code null} to produce a short index
-     * @param action       the action payload, may be {@code null}
-     * @param operation    the sync operation
-     * @param ts           the mutation timestamp
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted build(String listId, Jid recipient,
                                             BusinessBroadcastAssociationAction action,
                                             SyncdOperation operation, Instant ts) {
@@ -157,14 +141,12 @@ class BusinessBroadcastAssociationHandlerTest {
         @Test
         @DisplayName("SET with deleted=true strips any matching participant and is a SUCCESS")
         void setDeletedRemovesParticipant() {
-            // First, add the participant.
             seedList(LIST_ID);
             handler.applyMutation(client, build(LIST_ID, CONTACT_LID,
                     new BusinessBroadcastAssociationActionBuilder().deleted(false).build(),
                     SyncdOperation.SET, Instant.now()));
             assertFalse(store.findBusinessBroadcastList(LIST_ID).orElseThrow().participants().isEmpty());
 
-            // Now strip it with deleted=true.
             var result = handler.applyMutation(client, build(LIST_ID, CONTACT_LID,
                     new BusinessBroadcastAssociationActionBuilder().deleted(true).build(),
                     SyncdOperation.SET, Instant.now()));

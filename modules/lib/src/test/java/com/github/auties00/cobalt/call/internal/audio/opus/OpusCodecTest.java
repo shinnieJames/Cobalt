@@ -6,43 +6,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Round-trip tests for {@link OpusEncoder} + {@link OpusDecoder} at
- * WhatsApp's voice configuration: 16 kHz mono, 10 ms frames, VOIP
- * application.
- *
- * <p>Pins:
- *
- * <ul>
- *   <li>End-to-end encode + decode produces output close to the
- *       input (Opus is lossy but voice-band content preserves well).</li>
- *   <li>The encoder accepts the configured frame size and emits a
- *       compact packet at typical voice bitrates.</li>
- *   <li>DTX (silent input) produces a much smaller packet than
- *       active speech, confirming the silence-detector path works.</li>
- *   <li>FEC + packet-loss-percent settings round-trip through the
- *       encoder.</li>
- * </ul>
+ * Round-trips audio through {@link OpusEncoder} and {@link OpusDecoder} at WhatsApp's voice
+ * configuration: 16 kHz mono, 10 ms frames, {@link OpusApplication#VOIP}. Covers energy
+ * preservation across encode then decode, DTX packet shrinkage on silence, and round-tripping of
+ * the bitrate, FEC, and packet-loss-percent settings.
  */
 public class OpusCodecTest {
 
-    /**
-     * WhatsApp voice sample rate.
-     */
     private static final int SAMPLE_RATE = 16000;
 
-    /**
-     * 10 ms at 16 kHz = 160 samples per Opus frame.
-     */
+    // 10 ms at 16 kHz = 160 samples per Opus frame
     private static final int FRAME_SIZE = 160;
 
-    /**
-     * Samples one full second of a 1 kHz sine wave at 16 kHz mono
-     * (matches the human voice band) and round-trips it through the
-     * encoder/decoder, asserting that the decoded waveform's RMS
-     * energy is within ~30% of the input — Opus voice quality at
-     * default bitrate is high enough that the energy envelope is
-     * very close.
-     */
     @Test
     public void sineWaveRoundTripsWithComparableEnergy() {
         var input = sineWave(1000, SAMPLE_RATE * 1, SAMPLE_RATE);
@@ -73,10 +48,6 @@ public class OpusCodecTest {
         }
     }
 
-    /**
-     * DTX should produce a much smaller packet for silent input than
-     * for active speech.
-     */
     @Test
     public void dtxShrinksPacketsForSilence() {
         try (var enc = new OpusEncoder(SAMPLE_RATE, 1, OpusApplication.VOIP)) {
@@ -88,24 +59,19 @@ public class OpusCodecTest {
                 System.arraycopy(sine, off, frame, 0, FRAME_SIZE);
                 enc.encode(frame, FRAME_SIZE);
             }
-            // Now encode silent frames — these should shrink dramatically
             var silentFrame = new short[FRAME_SIZE];
             var totalSilentBytes = 0;
             for (var i = 0; i < 20; i++) {
                 var encoded = enc.encode(silentFrame, FRAME_SIZE);
                 totalSilentBytes += encoded.length;
             }
-            // Active frames at default bitrate produce ~30-50 bytes each
-            // (~600+ for 20 frames). Silence should be far less — Opus
-            // DTX emits ~5 bytes per silent frame, so 20 frames ≈ 100 bytes.
+            // Active frames at default bitrate are ~30-50 bytes each (~600+ for 20 frames);
+            // DTX emits ~5 bytes per silent frame, so 20 frames is ~100 bytes
             assertTrue(totalSilentBytes < 200,
                     "DTX should compress 20 silent frames to <200 bytes, got " + totalSilentBytes);
         }
     }
 
-    /**
-     * Bitrate setter round-trips through the getter.
-     */
     @Test
     public void bitrateRoundTrips() {
         try (var enc = new OpusEncoder(SAMPLE_RATE, 1, OpusApplication.VOIP)) {
@@ -114,9 +80,6 @@ public class OpusCodecTest {
         }
     }
 
-    /**
-     * FEC + loss-percent settings round-trip through the encoder.
-     */
     @Test
     public void fecAndLossPercentSettingsAccepted() {
         try (var enc = new OpusEncoder(SAMPLE_RATE, 1, OpusApplication.VOIP)) {
@@ -125,16 +88,7 @@ public class OpusCodecTest {
         }
     }
 
-    /**
-     * Generates a sine wave of {@code freqHz} for {@code n} samples
-     * at {@code sampleRate}, normalised to {@code ±0x4000} (half
-     * full-scale, leaving headroom).
-     *
-     * @param freqHz     the wave frequency in Hz
-     * @param n          the number of samples
-     * @param sampleRate the sample rate in Hz
-     * @return the generated PCM samples
-     */
+    // Amplitude 0x4000 is half full-scale, leaving headroom
     private static short[] sineWave(double freqHz, int n, int sampleRate) {
         var out = new short[n];
         var twoPiOverFs = 2.0 * Math.PI * freqHz / sampleRate;
@@ -144,23 +98,10 @@ public class OpusCodecTest {
         return out;
     }
 
-    /**
-     * Returns the root-mean-square amplitude of a PCM buffer.
-     *
-     * @param pcm the samples
-     * @return the RMS amplitude
-     */
     private static double rms(short[] pcm) {
         return Math.sqrt(rmsSquared(pcm));
     }
 
-    /**
-     * Returns the mean-squared amplitude of a PCM buffer (used as
-     * an intermediate when accumulating across frames).
-     *
-     * @param pcm the samples
-     * @return the mean of squared sample values
-     */
     private static double rmsSquared(short[] pcm) {
         var sum = 0.0;
         for (var s : pcm) sum += (double) s * s;

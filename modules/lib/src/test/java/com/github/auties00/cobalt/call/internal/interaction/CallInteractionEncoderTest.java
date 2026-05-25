@@ -10,16 +10,13 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for {@link CallInteractionEncoder} — verifies the
- * per-interaction (byte0, byte1) tag pairs, header layout,
- * sequence/timestamp counter advancement, and body size
- * relationships observed in live captures.
+ * Covers {@link CallInteractionEncoder}: the per-interaction (byte0, byte1) tag pairs,
+ * RTP header layout, sequence/timestamp counter advancement, and body-size relationships.
+ *
+ * <p>The expected envelope tags, lengths, and counter cadence are taken from live VoIP
+ * captures of the corresponding WhatsApp Web in-call interactions.
  */
 public class CallInteractionEncoderTest {
-    /**
-     * Reaction packets use V2/PT=119 framing and the body length
-     * tracks the UTF-8 emoji length exactly.
-     */
     @Test
     public void reactionEnvelope() {
         var state = new InteractionStreamState();
@@ -36,11 +33,6 @@ public class CallInteractionEncoderTest {
                 Arrays.copyOfRange(thumb, thumb.length - 4, thumb.length));
     }
 
-    /**
-     * The two reaction emojis we captured (thumbsup, heart) differ
-     * in encoded length by exactly 2 bytes, matching their UTF-8
-     * length delta (4 vs 6).
-     */
     @Test
     public void reactionLengthTracksUtf8Delta() {
         var state = new InteractionStreamState();
@@ -52,10 +44,6 @@ public class CallInteractionEncoderTest {
         assertEquals(2, heart.length - thumb.length);
     }
 
-    /**
-     * Hand toggles share an envelope (byte0=0x81, byte1=0xc8) and a
-     * fixed body length (110 bytes -> 122-byte packet).
-     */
     @Test
     public void handToggleEnvelope() {
         var state = new InteractionStreamState();
@@ -72,10 +60,6 @@ public class CallInteractionEncoderTest {
         assertEquals((byte) 0x00, lower[12]);
     }
 
-    /**
-     * Key-frame and peer-mute requests share the byte0=0x90,
-     * byte1=0x78 framing.
-     */
     @Test
     public void requestEnvelope() {
         var state = new InteractionStreamState();
@@ -88,10 +72,6 @@ public class CallInteractionEncoderTest {
         assertEquals((byte) 0x78, peerMute[1]);
     }
 
-    /**
-     * Video-upgrade packets use byte0=0x91, byte1=0xc8 and a fixed
-     * 122-byte total length.
-     */
     @Test
     public void videoUpgradeEnvelope() {
         var state = new InteractionStreamState();
@@ -101,10 +81,6 @@ public class CallInteractionEncoderTest {
         assertEquals((byte) 0xc8, pkt[1]);
     }
 
-    /**
-     * Sequence number increments by 1 per packet within the same
-     * stream; timestamp advances by {@code TIMESTAMP_STEP}.
-     */
     @Test
     public void streamCountersAdvance() {
         var state = new InteractionStreamState();
@@ -122,10 +98,6 @@ public class CallInteractionEncoderTest {
         assertEquals(ts1 + InteractionStreamState.TIMESTAMP_STEP, ts2);
     }
 
-    /**
-     * The same SSRC is reused across all packets within one stream;
-     * different streams have independent SSRCs.
-     */
     @Test
     public void perStreamSsrc() {
         var state = new InteractionStreamState();
@@ -142,9 +114,6 @@ public class CallInteractionEncoderTest {
         assertNotEquals(ssrcReactA, ssrcHand, "reaction and control streams differ");
     }
 
-    /**
-     * Null arguments are rejected.
-     */
     @Test
     public void nullArgsRejected() {
         var state = new InteractionStreamState();
@@ -154,12 +123,7 @@ public class CallInteractionEncoderTest {
                 () -> CallInteractionEncoder.encode(new CallInteraction.RaiseHand(), null));
     }
 
-    /**
-     * Reads the SSRC out of a packet (bytes 8..12, big-endian).
-     *
-     * @param packet the packet
-     * @return the SSRC as an int
-     */
+    // SSRC occupies bytes 8..12 of the RTP header, big-endian.
     private static int readSsrc(byte[] packet) {
         return ((packet[8] & 0xff) << 24)
                 | ((packet[9] & 0xff) << 16)

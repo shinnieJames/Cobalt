@@ -11,39 +11,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <call><waiting_room_toggle/></call>} request that flips
- * the waiting-room gate on an existing call link.
+ * Flips the waiting-room gate on an existing call link.
  *
- * @apiNote
- * Drives the call-link admin's "Require approval to join" toggle on the
- * link details surface; only the link's creator can issue this RPC, and the
- * relay rejects non-creator callers with a Nack carrying the offending
- * token.
+ * <p>This is the outbound {@code <call><waiting_room_toggle/></call>} request
+ * behind the call-link admin's "Require approval to join" toggle on the link
+ * details surface. Only the link's creator can issue this RPC; the relay
+ * rejects a non-creator caller with a Nack carrying the offending token.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutVoipWaitingRoomToggleCallLinkRequest")
 public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation.Request {
     /**
-     * The desired waiting-room state on the wire.
+     * The desired waiting-room state carried by the {@code enabled} attribute.
      *
-     * @apiNote
-     * {@code "0"} disables the gate, {@code "1"} enables it.
-     * {@code WAWebVoipWaitingRoomToggleJob.toggleWaitingRoomForCallLink}
-     * derives the value from a boolean; the field is modelled as a raw
-     * string for forward-compat with relay-side enum extensions.
+     * <p>{@code "0"} disables the gate and {@code "1"} enables it. The field is
+     * modelled as a raw {@link String} for forward-compat with relay-side enum
+     * extensions, even though the toggle UI derives it from a boolean.
      */
     private final String waitingRoomToggleEnabled;
 
     /**
-     * The call-link token whose waiting-room state should be toggled.
+     * The call-link token whose waiting-room state should be toggled, carried by
+     * the {@code link-token} attribute.
      */
     private final String waitingRoomToggleLinkToken;
 
     /**
-     * The media type the link is configured for.
+     * The media type the link is configured for, carried by the {@code media}
+     * attribute.
      *
-     * @apiNote
-     * Either {@code "audio"} or {@code "video"} on the wire; supplied so
-     * the relay can confirm the toggle targets the correct link.
+     * <p>Holds {@code "audio"} or {@code "video"} on the wire so the relay can
+     * confirm the toggle targets the correct link.
      */
     private final String waitingRoomToggleMedia;
 
@@ -94,9 +91,9 @@ public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a {@code <call to="call">} envelope around a
-     * {@code <waiting_room_toggle/>} child, mirroring
-     * {@code makeWaitingRoomToggleCallLinkRequest}.
+     * This implementation wraps a {@code <waiting_room_toggle/>} child in a
+     * {@code <call to="call">} envelope, stamping the {@code enabled},
+     * {@code link-token}, and {@code media} attributes.
      *
      * @return a {@link NodeBuilder} carrying the
      *         {@code <call><waiting_room_toggle/></call>} stanza
@@ -117,6 +114,14 @@ public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation
                 .content(toggleNode);
     }
 
+    /**
+     * Compares this request to another object for value equality.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxWaitingRoomToggleCallLinkRequest} with equal fields,
+     *         {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -131,11 +136,21 @@ public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation
                 && Objects.equals(this.waitingRoomToggleMedia, that.waitingRoomToggleMedia);
     }
 
+    /**
+     * Returns a hash code derived from every field of this request.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(waitingRoomToggleEnabled, waitingRoomToggleLinkToken, waitingRoomToggleMedia);
     }
 
+    /**
+     * Returns a debug string listing every field of this request.
+     *
+     * @return the string representation of this request
+     */
     @Override
     public String toString() {
         return "SmaxWaitingRoomToggleCallLinkRequest[waitingRoomToggleEnabled=" + waitingRoomToggleEnabled

@@ -28,30 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link QuickReplyHandler} against the
- * {@code WAWebQuickRepliesSync.applyMutations} per-mutation flow.
- *
- * @apiNote
- * Verifies that the Cobalt handler matches WA Web's per-mutation
- * classification: a {@link SyncdOperation#SET}
- * with {@code deleted=true} drops the entry by id; a {@code SET}
- * with non-empty {@code shortcut} and {@code message} upserts a
- * {@link com.github.auties00.cobalt.model.preference.QuickReply}
- * keyed by {@code indexParts[1]}; a missing quick reply id surfaces
- * as {@link SyncActionState#MALFORMED};
- * a missing
- * {@link QuickReplyAction}
- * payload, empty {@code shortcut}, or empty {@code message} surface
- * as {@link SyncActionState#MALFORMED};
- * non-{@code SET} operations surface as
- * {@link SyncActionState#UNSUPPORTED};
- * the default {@code resolveConflicts} chooses the later timestamp.
- *
- * @implNote
- * This implementation drives both the handler and the
- * {@link QuickReplyMutationFactory}
- * directly so the static outbound-mutation builders can be checked
- * alongside the inbound apply path.
+ * Covers {@link QuickReplyHandler}: a {@link SyncdOperation#SET} with {@code deleted=true}
+ * drops the entry by id; a {@code SET} with non-empty {@code shortcut} and {@code message}
+ * upserts a {@link com.github.auties00.cobalt.model.preference.QuickReply} keyed by
+ * {@code indexParts[1]}; a missing id, a missing {@link QuickReplyAction} payload, an
+ * empty {@code shortcut}, or an empty {@code message} surface as
+ * {@link SyncActionState#MALFORMED}; non-{@code SET} operations surface as
+ * {@link SyncActionState#UNSUPPORTED}; the default conflict resolution chooses the later
+ * timestamp. Both the handler and the {@link QuickReplyMutationFactory} outbound builders
+ * are exercised.
  */
 @DisplayName("QuickReplyHandler")
 class QuickReplyHandlerTest {
@@ -71,33 +56,8 @@ class QuickReplyHandlerTest {
         factory = new QuickReplyMutationFactory();
     }
 
-    /**
-     * Builds a trusted mutation whose value carries the given
-     * quick-reply action under the
-     * {@code ["quick_reply", indexId]} index.
-     *
-     * @apiNote
-     * Internal helper consumed by every test in this class; not used
-     * outside it. Setting {@code indexId} to {@code null} produces
-     * the singleton-index shape {@code ["quick_reply"]} so the
-     * malformed-index branch can be exercised; setting
-     * {@code action} to {@code null} omits the {@code quickReplyAction}
-     * field on the value so the malformed-value branch can be
-     * exercised.
-     *
-     * @implNote
-     * This implementation builds the index via
-     * {@link JSON#toJSONString(Object)} to
-     * match the on-wire JSON encoding the production handler reads
-     * back via {@link JSON#parseArray(String)}.
-     *
-     * @param indexId   the quick reply id placed in {@code indexParts[1]};
-     *                  may be {@code null}
-     * @param action    the quick reply action payload; may be {@code null}
-     * @param operation the sync operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
+    // indexId == null yields the singleton index ["quick_reply"] (malformed-index branch);
+    // action == null omits the quickReplyAction sub-message (malformed-value branch).
     private DecryptedMutation.Trusted buildMutation(String indexId, QuickReplyAction action, SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {

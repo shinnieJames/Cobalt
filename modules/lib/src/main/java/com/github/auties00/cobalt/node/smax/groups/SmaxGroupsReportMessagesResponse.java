@@ -13,10 +13,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsReportMessagesRequest}.
+ * Models the sealed reply family for a {@link SmaxGroupsReportMessagesRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsReportMessagesRPC}.
- * {@link Success} carries no payload because the report is opaque to the client; the relay simply acknowledges
+ * <p>The three permitted variants are {@link Success}, {@link ClientError}, and {@link ServerError}.
+ * {@link Success} carries no payload: the report is opaque to the client and the relay simply acknowledges
  * receipt with a {@code type="result"} envelope.
  */
 public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.Response
@@ -26,11 +26,11 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
      * Dispatches the inbound IQ across each {@link SmaxGroupsReportMessagesResponse} variant in priority order
      * and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsReportMessagesRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the caller so
+     * it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsReportMessagesRequest} stanza, used to validate
@@ -55,10 +55,10 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay accepted the report.
+     * Represents the reply variant emitted when the relay accepted the report.
      *
-     * @apiNote The payload is empty by design: the report is opaque to the client and the relay's acknowledgement
-     * carries no per-report status. Successful construction simply signals that the report was delivered.
+     * <p>The variant carries no fields: the report is opaque to the client and the relay's acknowledgement
+     * carries no per-report status, so successful construction simply signals that the report was delivered.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsReportMessagesResponseSuccess")
     final class Success implements SmaxGroupsReportMessagesResponse {
@@ -71,8 +71,8 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseReportMessagesResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request. No further fields are extracted.
+         * <p>The IQ must be a valid {@code type="result"} echo of {@code request}, validated through
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}; no further fields are extracted.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -124,8 +124,8 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
-     * referencing a non-existent group or message id.
+     * Represents the reply variant emitted when the relay rejected the request envelope as malformed,
+     * unauthorised, or referencing a non-existent group or message id.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsReportMessagesResponseClientError")
     final class ClientError implements SmaxGroupsReportMessagesResponse {
@@ -171,8 +171,9 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -230,7 +231,7 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Represents the reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsReportMessagesResponseServerError")
     final class ServerError implements SmaxGroupsReportMessagesResponse {
@@ -276,8 +277,9 @@ public sealed interface SmaxGroupsReportMessagesResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

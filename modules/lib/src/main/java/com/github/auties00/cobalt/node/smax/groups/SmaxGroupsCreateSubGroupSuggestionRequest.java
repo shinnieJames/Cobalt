@@ -16,36 +16,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2" to="<parent>">} stanza that posts a new sub-group
- * suggestion (a fresh sub-group to spin up, or one or more existing groups to absorb) inside a community.
+ * Posts a new sub-group suggestion inside a community as an {@code <iq type="set" xmlns="w:g2">} stanza.
  *
- * @apiNote
- * Drives the sub-group suggestion pipeline surfaced by {@code WAWebSubgroupSuggestionCreateJob}; pair with
- * {@link SmaxGroupsCreateSubGroupSuggestionResponse} to read the relay's verdict. The body is a single
- * {@code <sub_group_suggestion/>} child whose shape is decided by the {@link #suggestion()} oneof.
+ * <p>The suggestion either proposes a fresh sub-group to spin up or names one or more existing groups to absorb;
+ * the body is a single {@code <sub_group_suggestion/>} child whose shape is decided by the {@link #suggestion()}
+ * oneof. Callers pair this request with {@link SmaxGroupsCreateSubGroupSuggestionResponse} to read the relay's
+ * verdict.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsCreateSubGroupSuggestionRequest implements SmaxOperation.Request {
     /**
-     * The parent community {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
+     * Holds the parent community {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
      */
     private final Jid parentGroupJid;
 
     /**
-     * The suggestion-body oneof choosing between {@link SmaxGroupsCreateSubGroupSuggestionSuggestion.NewGroup}
-     * (spin up a fresh sub-group) and {@link SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups}
-     * (link existing groups in as sub-groups).
+     * Holds the suggestion-body oneof choosing between
+     * {@link SmaxGroupsCreateSubGroupSuggestionSuggestion.NewGroup} and
+     * {@link SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups}.
      */
     private final SmaxGroupsCreateSubGroupSuggestionSuggestion suggestion;
 
     /**
      * Constructs a request targeting the given community with the supplied suggestion body.
      *
-     * @apiNote
-     * Pick the {@link SmaxGroupsCreateSubGroupSuggestionSuggestion} variant that matches the user-facing
-     * action; the request envelope is identical in both cases.
+     * <p>The request envelope is identical for both suggestion variants; the caller selects the
+     * {@link SmaxGroupsCreateSubGroupSuggestionSuggestion} variant that matches the user-facing action.
      *
      * @param parentGroupJid the parent community {@link Jid}; never {@code null}
      * @param suggestion     the suggestion body; never {@code null}
@@ -59,8 +57,7 @@ public final class SmaxGroupsCreateSubGroupSuggestionRequest implements SmaxOper
     /**
      * Returns the parent community {@link Jid} targeted by this request.
      *
-     * @apiNote
-     * Mirrors the value that will appear in the rendered IQ envelope's {@code to} attribute.
+     * <p>The returned value is the one rendered into the IQ envelope's {@code to} attribute.
      *
      * @return the parent group {@link Jid}; never {@code null}
      */
@@ -71,8 +68,7 @@ public final class SmaxGroupsCreateSubGroupSuggestionRequest implements SmaxOper
     /**
      * Returns the suggestion-body oneof.
      *
-     * @apiNote
-     * Inspect via {@code instanceof} to discriminate between the new-group and existing-groups branches.
+     * <p>Callers discriminate between the new-group and existing-groups branches with {@code instanceof}.
      *
      * @return the suggestion; never {@code null}
      */
@@ -84,10 +80,10 @@ public final class SmaxGroupsCreateSubGroupSuggestionRequest implements SmaxOper
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation builds a single {@code <sub_group_suggestion/>} child, lets the
-     * {@link SmaxGroupsCreateSubGroupSuggestionSuggestion#contributeTo(NodeBuilder)} hook stamp the
-     * branch-specific attributes and children, then wraps it in the canonical
-     * {@code <iq xmlns="w:g2" type="set" to="<parentGroupJid>">} envelope.
+     * This implementation builds a single {@code <sub_group_suggestion/>} child, lets
+     * {@link SmaxGroupsCreateSubGroupSuggestionSuggestion#contributeTo(NodeBuilder)} stamp the branch-specific
+     * attributes and children, then wraps it in the {@code <iq xmlns="w:g2" type="set">} envelope addressed to
+     * {@link #parentGroupJid()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionRequest",
@@ -105,6 +101,13 @@ public final class SmaxGroupsCreateSubGroupSuggestionRequest implements SmaxOper
                 .content(suggestionNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsCreateSubGroupSuggestionRequest} with
+     *         identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -118,11 +121,21 @@ public final class SmaxGroupsCreateSubGroupSuggestionRequest implements SmaxOper
                 && Objects.equals(this.suggestion, that.suggestion);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(parentGroupJid, suggestion);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsCreateSubGroupSuggestionRequest[parentGroupJid=" + parentGroupJid

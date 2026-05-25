@@ -11,25 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link DisableLinkPreviewsMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing disable-link-previews mutation against the
- * {@code WAWebDisableLinkPreviewsSync} JS encoder. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.DisableLinkPreviewsHandler}
- * whose inbound-side coverage lives in
- * {@code DisableLinkPreviewsHandlerTest}.
- *
- * @implNote
- * This implementation pins the timestamp to the seed used when capturing
- * the WA Web oracle so byte parity holds; the flag is set to
- * {@code isPreviewsDisabled = true} to match the capture.
+ * Verifies that {@link DisableLinkPreviewsMutationFactory} encodes byte-for-byte against the captured
+ * WhatsApp Web encode oracle under {@code handler/disable-link-previews/encode}. The timestamp is
+ * pinned to the seed ({@code 1_700_000_000L}) used when capturing the oracle and the disabled flag is
+ * set to {@code true} to match the capture. The test skips when the oracle fixture is absent.
  */
 @DisplayName("DisableLinkPreviewsMutationFactory")
 class DisableLinkPreviewsMutationFactoryTest {
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
     void byteEqualityWithOracle() {

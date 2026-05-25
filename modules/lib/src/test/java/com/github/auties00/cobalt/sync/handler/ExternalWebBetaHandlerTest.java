@@ -29,22 +29,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link ExternalWebBetaHandler} adapter for
- * {@code WAWebExternalWebBetaSync}.
+ * Covers the {@link ExternalWebBetaHandler} for the {@code external_web_beta}
+ * app-state sync action: metadata, the {@link ABProp#EXTERNAL_BETA_CAN_JOIN}
+ * gating, the SET happy path, the malformed-value branch and the REMOVE
+ * rejection.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code external_web_beta}
- * app-state sync action across metadata, the
- * {@link ABProp#EXTERNAL_BETA_CAN_JOIN} gating, the SET happy path,
- * the malformed-value branch and the REMOVE rejection.
- *
- * @implNote
- * This implementation builds the handler with a stubbed
- * {@link TestABPropsService} so the gating prop can be flipped per
- * test, and exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the {@link WhatsAppStore#externalWebBeta()} read-back can be
- * asserted directly.
+ * <p>The handler is built with a stubbed {@link TestABPropsService} so the
+ * gating prop can be flipped per test, and runs against a fresh in-memory
+ * {@link DeviceFixtures#temporaryStore} through {@link TestWhatsAppClient} so
+ * the {@link WhatsAppStore#externalWebBeta()} read-back can be asserted directly.
  */
 @DisplayName("ExternalWebBetaHandler")
 class ExternalWebBetaHandlerTest {

@@ -28,25 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link MarketingMessageHandler} adapter for
- * {@code WAWebPremiumMessageSync}.
+ * Covers {@link MarketingMessageHandler}: metadata, the SET upsert keyed by {@code indexParts[1]},
+ * the malformed branch when {@link MarketingMessageAction#type()} is empty, the malformed-input
+ * fallbacks, the REMOVE rejection and the inherited timestamp-based conflict resolution.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code marketingMessage}
- * app-state sync action across metadata, the SET upsert keyed by
- * {@code indexParts[1]}, the malformed branch when
- * {@link MarketingMessageAction#type()} is empty, the
- * malformed-input fallbacks, the REMOVE rejection and the inherited
- * timestamp-based conflict resolution.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link WhatsAppStore#findMarketingMessage(String)} read-back can
- * be asserted directly. The
- * {@link MarketingMessageAction#isDeleted()} flag is preserved on
- * the stored row so subsequent readers can filter live templates.
+ * <p>The handler runs against an in-memory {@link DeviceFixtures#temporaryStore} via
+ * {@link TestWhatsAppClient} so the {@link WhatsAppStore#findMarketingMessage(String)} read-back
+ * can be asserted directly, including the preserved {@link MarketingMessageAction#isDeleted()} flag.
  */
 @DisplayName("MarketingMessageHandler")
 class MarketingMessageHandlerTest {
@@ -64,26 +52,8 @@ class MarketingMessageHandlerTest {
         handler = new MarketingMessageHandler();
     }
 
-    /**
-     * Builds a {@link DecryptedMutation.Trusted} carrying the given
-     * marketing action under the canonical
-     * {@code ["marketingMessage", indexId]} index.
-     *
-     * @apiNote
-     * Used by every test to centralise mutation construction; the
-     * nullable {@code indexId} and {@code action} let the
-     * malformed-index and malformed-value paths be exercised without
-     * re-implementing the envelope.
-     *
-     * @param indexId   the template id placed in
-     *                  {@code indexParts[1]}, may be {@code null}
-     * @param action    the marketing action payload, may be
-     *                  {@code null}
-     * @param operation the {@link SyncdOperation} to wrap
-     * @param ts        the mutation timestamp
-     * @return a {@link DecryptedMutation.Trusted} with the requested
-     *         shape
-     */
+    // A nullable indexId and a nullable action let the malformed-index and malformed-value
+    // paths be exercised without re-implementing the envelope.
     private DecryptedMutation.Trusted buildMutation(String indexId, MarketingMessageAction action, SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {

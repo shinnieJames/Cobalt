@@ -30,23 +30,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link OutContactHandler} against the
- * {@code WAWebOutContactSync.applyMutations} per-mutation flow.
- *
- * @apiNote
- * Verifies the AB-prop gate
- * ({@link ABProp#OUT_CONTACT_INVITES_ENABLED} {@code == 1}), the
- * {@link SyncdOperation#SET}
- * upsert and {@link SyncdOperation#REMOVE}
- * paths, the JID validation (a non-phone-user JID surfaces as
- * {@link SyncActionState#MALFORMED}),
- * and the {@code firstName} fallback derived from the first
+ * Covers {@link OutContactHandler}: the AB-prop gate
+ * ({@link ABProp#OUT_CONTACT_INVITES_ENABLED} {@code == 1}), the {@link SyncdOperation#SET} upsert
+ * and {@link SyncdOperation#REMOVE} paths, the JID validation (a non-phone-user JID surfaces as
+ * {@link SyncActionState#MALFORMED}), and the {@code firstName} fallback derived from the first
  * whitespace-separated token of {@code fullName}.
  *
- * @implNote
- * This implementation builds mutations directly via the local
- * {@code setMutation} / {@code removeMutation} helpers because no
- * public outgoing-mutation factory exists for this action.
+ * <p>No public outgoing-mutation factory exists for this action, so each test builds mutations
+ * directly via the local {@code setMutation} / {@code removeMutation} helpers.
  */
 @DisplayName("OutContactHandler")
 class OutContactHandlerTest {

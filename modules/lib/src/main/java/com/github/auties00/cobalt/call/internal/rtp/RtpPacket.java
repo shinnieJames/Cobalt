@@ -7,12 +7,10 @@ import java.nio.ByteOrder;
 import java.util.Objects;
 
 /**
- * One decoded RTP packet (RFC 3550 §5.1) — the fixed 12-byte header
- * plus its payload bytes. The encoder/decoder live as static helpers
- * on this record; the {@link RtpSender} and {@link RtpReceiver} use
- * them.
+ * One decoded RTP packet (RFC 3550 section 5.1): the fixed 12-byte header plus its payload bytes.
  *
- * <p>Wire format:
+ * <p>The {@link #encode()} and {@link #decode(byte[])} helpers serialise and parse the on-wire
+ * representation; the {@link RtpSender} and {@link RtpReceiver} use them. The wire layout is:
  *
  * <pre>{@code
  *  0                   1                   2                   3
@@ -31,22 +29,19 @@ import java.util.Objects;
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * }</pre>
  *
- * <p>Cobalt does not emit padding ({@code P=0}), header extensions
- * ({@code X=0}), or contributing sources ({@code CC=0}) — the WebRTC
- * defaults. Inbound packets that carry any of these are decoded and
- * the relevant bytes skipped, so peer-supplied extensions don't break
- * us.
+ * <p>Outbound packets never carry padding ({@code P=0}), header extensions ({@code X=0}), or
+ * contributing sources ({@code CC=0}), matching the WebRTC defaults. Inbound packets that do carry
+ * any of these are decoded with the relevant bytes skipped, so peer-supplied extensions are
+ * tolerated.
  *
- * @param marker      the M bit — for audio set on the first packet
- *                    of each talkspurt; for video set on the last
- *                    packet of each frame (RFC 3551 §5)
- * @param payloadType the 7-bit payload type (RFC 3551 — 111 for
- *                    Opus, 96 for VP8 in WebRTC)
- * @param sequenceNumber 16-bit sequence number, wraps modulo 65536
- * @param timestamp   32-bit RTP timestamp; clock rate depends on the
- *                    payload type (48 kHz for Opus, 90 kHz for video)
- * @param ssrc        the 32-bit synchronization source identifier
- * @param payload     the payload bytes (without any RTP header)
+ * @param marker         the M bit; for audio it is set on the first packet of each talkspurt, for
+ *                       video on the last packet of each frame (RFC 3551 section 5)
+ * @param payloadType    the 7-bit payload type (RFC 3551; 111 for Opus, 96 for VP8 in WebRTC)
+ * @param sequenceNumber the 16-bit sequence number, which wraps modulo 65536
+ * @param timestamp      the 32-bit RTP timestamp, whose clock rate depends on the payload type
+ *                       (48 kHz for Opus, 90 kHz for video)
+ * @param ssrc           the 32-bit synchronization source identifier
+ * @param payload        the payload bytes, excluding any RTP header
  */
 public record RtpPacket(
         boolean marker,
@@ -57,17 +52,23 @@ public record RtpPacket(
         byte[] payload
 ) {
     /**
-     * RFC 3550 RTP version field — always 2.
+     * RTP version carried in the two high bits of the first header byte, fixed at {@code 2} by
+     * RFC 3550.
      */
     public static final int VERSION = 2;
 
     /**
-     * Length of the fixed RTP header (no CSRCs, no extension).
+     * Length in bytes of the fixed RTP header, excluding any CSRC list or header extension.
      */
     public static final int FIXED_HEADER_LENGTH = 12;
 
     /**
-     * Compact constructor — null-checks payload and validates ranges.
+     * Validates the components and rejects an out-of-range header field.
+     *
+     * @throws NullPointerException     if {@code payload} is {@code null}
+     * @throws IllegalArgumentException if {@code payloadType} is outside {@code [0, 127]},
+     *                                  {@code sequenceNumber} is outside {@code [0, 65535]}, or
+     *                                  {@code timestamp} is outside {@code [0, 2^32)}
      */
     public RtpPacket {
         Objects.requireNonNull(payload, "payload cannot be null");
@@ -86,14 +87,18 @@ public record RtpPacket(
     }
 
     /**
-     * Encodes this packet to its on-wire bytes.
+     * Encodes this packet into its big-endian on-wire byte sequence.
      *
-     * @return a freshly-allocated byte array
+     * <p>The output is a fresh array of {@link #FIXED_HEADER_LENGTH} plus payload bytes, with
+     * {@code P}, {@code X}, and {@code CC} all zero, the M bit and payload type packed into the
+     * second byte, and the sequence number, timestamp, and SSRC written big-endian.
+     *
+     * @return a freshly allocated byte array holding the encoded packet
      */
     public byte[] encode() {
         var buf = ByteBuffer.allocate(FIXED_HEADER_LENGTH + payload.length).order(ByteOrder.BIG_ENDIAN);
-        buf.put((byte) (VERSION << 6));                                // V=2, P=0, X=0, CC=0
-        buf.put((byte) ((marker ? 0x80 : 0) | (payloadType & 0x7F))); // M | PT
+        buf.put((byte) (VERSION << 6));
+        buf.put((byte) ((marker ? 0x80 : 0) | (payloadType & 0x7F)));
         buf.putShort((short) sequenceNumber);
         buf.putInt((int) timestamp);
         buf.putInt(ssrc);
@@ -102,13 +107,20 @@ public record RtpPacket(
     }
 
     /**
-     * Decodes an inbound RTP packet from its on-wire bytes.
+     * Decodes an inbound RTP packet from its big-endian on-wire byte sequence.
      *
-     * @param bytes the captured / received bytes
+     * <p>The fixed header is parsed and its version field checked. Any CSRC list ({@code CC}
+     * entries of 4 bytes each) and one-shot header extension ({@code X=1}) are skipped. When the
+     * padding bit is set and the payload is non-empty, the trailing pad-count byte is honoured and
+     * the corresponding bytes are removed from the returned payload.
+     *
+     * @param bytes the received bytes
      * @return the parsed packet
-     * @throws WhatsAppCallException.Rtp         if the bytes are too short or the
-     *                              version field is not 2
-     * @throws NullPointerException if {@code bytes} is {@code null}
+     * @throws NullPointerException      if {@code bytes} is {@code null}
+     * @throws WhatsAppCallException.Rtp if {@code bytes} is shorter than {@link #FIXED_HEADER_LENGTH},
+     *                                   the version field is not {@link #VERSION}, the CSRC list or
+     *                                   extension is truncated, or the padding count exceeds the
+     *                                   payload length
      */
     public static RtpPacket decode(byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes cannot be null");
@@ -143,7 +155,7 @@ public record RtpPacket(
             if (buf.remaining() < 4) {
                 throw new WhatsAppCallException.Rtp("truncated extension header");
             }
-            buf.getShort(); // profile-specific id, ignored
+            buf.getShort();
             var extLengthWords = Short.toUnsignedInt(buf.getShort());
             var extLengthBytes = extLengthWords * 4;
             if (buf.remaining() < extLengthBytes) {

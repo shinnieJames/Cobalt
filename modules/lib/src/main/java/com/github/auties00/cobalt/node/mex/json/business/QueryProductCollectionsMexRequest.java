@@ -15,94 +15,133 @@ import java.io.UncheckedIOException;
  * Outbound MEX request that fetches the product collections of a WhatsApp
  * Business catalog.
  *
- * @apiNote Drives the collections browser surface for business catalogs.
- * Collections are named groups of products that business owners define
- * inside a catalog; the response returns each collection's id and name
- * paired with the products nested inside it. Surfaced from
- * {@code WAWebProductCollCollection} via
- * {@code WAWebQueryProductCollections.default}, which dispatches to the
- * owner ({@code queryCollectionsGraphQLByOwner}) or guest
- * ({@code queryCollectionsGraphQLByGuest}) variant on the same compiled
- * document depending on the caller; Cobalt issues the single query and lets
- * the relay disambiguate.
+ * <p>Collections are named groups of products that business owners define
+ * inside a catalog; the response returns each collection's id and name paired
+ * with the products nested inside it. The matching decoder is
+ * {@link QueryProductCollectionsMexResponse}.
  *
- * @implNote This implementation lets the caller pass every optional GraphQL
- * variable (cursor, encrypted direct-connection blob, variant info,
- * thumbnail dimensions) as explicit {@code null} when not needed, matching
- * WA Web's pass-through behaviour rather than baking in WA-Web defaults.
+ * @implNote This implementation issues a single query and lets the relay
+ * disambiguate between the owner and guest browse paths that WA Web routes
+ * with two named functions on the same compiled document. Every optional
+ * GraphQL variable (cursor, encrypted direct-connection blob, variant info,
+ * thumbnail dimensions) is passed through as the caller supplies it, emitted
+ * as explicit {@code null} when absent, rather than baking in WA-Web defaults.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryProductCollections")
 @WhatsAppWebModule(moduleName = "WAWebQueryProductCollectionsQuery.graphql")
 public final class QueryProductCollectionsMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
+     * Holds the compiled GraphQL query identifier for the
      * {@code WAWebQueryProductCollectionsQuery} document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebQueryProductCollectionsQuery.graphql}. The relay maps this
-     * id to its persisted operation; the GraphQL text is never sent on the
-     * wire.
+     * <p>The relay maps this id to its persisted operation; the GraphQL text
+     * is never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryProductCollectionsQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9430970660362540";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     * Holds the GraphQL operation name reported when this query is dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
-     * and error metrics; Cobalt keeps the name on the request for embedders
-     * mirroring WA Web's telemetry surface.
+     * <p>WA Web's MEX perf tracker uses this name to tag the query in latency
+     * and error metrics; Cobalt keeps it on the request for embedders
+     * mirroring that telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryProductCollections", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "queryProductCollections";
 
+    /**
+     * Holds the target business JID owning the catalog.
+     */
     private final String businessJid;
+
+    /**
+     * Holds the maximum number of collections returned per page.
+     */
     private final int collectionLimit;
+
+    /**
+     * Holds the maximum number of products returned inside every collection.
+     */
     private final int itemLimit;
+
+    /**
+     * Holds the pagination cursor returned by a previous page, or {@code null}
+     * for the first page.
+     */
     private final String afterCursor;
+
+    /**
+     * Holds the requested image width in pixels used when the relay rewrites
+     * image URLs.
+     */
     private final int width;
+
+    /**
+     * Holds the requested image height in pixels used when the relay rewrites
+     * image URLs.
+     */
     private final int height;
+
+    /**
+     * Holds the optional direct-connection encrypted payload produced by the
+     * business direct-connection retry loop, or {@code null} when not used.
+     */
     private final String directConnectionEncryptedInfo;
+
+    /**
+     * Holds the optional variant-info field selector, or {@code null} when not
+     * requested.
+     */
     private final String variantInfoFields;
+
+    /**
+     * Holds the optional variant thumbnail height in pixels, or {@code null}
+     * when not requested.
+     */
     private final Integer variantThumbnailHeight;
+
+    /**
+     * Holds the optional variant thumbnail width in pixels, or {@code null}
+     * when not requested.
+     */
     private final Integer variantThumbnailWidth;
 
     /**
      * Creates a new collections query request.
      *
-     * @apiNote {@code collectionLimit} and {@code itemLimit} are independent:
-     * the first bounds the number of collections returned per page, the
-     * second bounds the number of products returned inside each collection.
+     * <p>The {@code collectionLimit} and {@code itemLimit} are independent: the
+     * first bounds the number of collections returned per page, the second
+     * bounds the number of products returned inside each collection. The
      * {@code directConnectionEncryptedInfo} is the optional payload the
      * business direct-connection retry loop produces; pass {@code null} when
      * the call is not routed through that retry path.
      *
-     * @param businessJid                   the target business JID owning
-     *                                      the catalog
-     * @param collectionLimit               the maximum number of
-     *                                      collections per page
+     * @param businessJid                   the target business JID owning the
+     *                                      catalog
+     * @param collectionLimit               the maximum number of collections
+     *                                      per page
      * @param itemLimit                     the maximum number of products
      *                                      returned inside every collection
-     * @param afterCursor                   the pagination cursor returned
-     *                                      by a previous page, or
-     *                                      {@code null} for the first page
-     * @param width                         the requested image width in
-     *                                      pixels used when the relay
-     *                                      rewrites image URLs
+     * @param afterCursor                   the pagination cursor returned by a
+     *                                      previous page, or {@code null} for
+     *                                      the first page
+     * @param width                         the requested image width in pixels
+     *                                      used when the relay rewrites image
+     *                                      URLs
      * @param height                        the requested image height in
      *                                      pixels
      * @param directConnectionEncryptedInfo the optional direct-connection
-     *                                      encrypted payload, or
-     *                                      {@code null} when not used
+     *                                      encrypted payload, or {@code null}
+     *                                      when not used
      * @param variantInfoFields             the optional variant-info field
-     *                                      selector, or {@code null} when
-     *                                      not requested
+     *                                      selector, or {@code null} when not
+     *                                      requested
      * @param variantThumbnailHeight        the optional variant thumbnail
-     *                                      height in pixels, or
-     *                                      {@code null} when not requested
+     *                                      height in pixels, or {@code null}
+     *                                      when not requested
      * @param variantThumbnailWidth         the optional variant thumbnail
      *                                      width in pixels, or {@code null}
      *                                      when not requested
@@ -143,14 +182,13 @@ public final class QueryProductCollectionsMexRequest implements MexOperation.Req
      *
      * @implNote This implementation streams the GraphQL variables through
      * fastjson2's {@link JSONWriter}, mirroring the
-     * {@code {"variables": {"request": {"collections": {...}}}}} shape
-     * expected by {@code xwa_product_catalog_get_collections}. Width,
-     * height, limit and pagination fields are stringified to match the WA
-     * Web wire shape, which sends them as JSON strings even though they are
-     * integers in the GraphQL schema. {@code null} variants of the four
-     * optional fields are emitted as explicit JSON {@code null}, not
-     * omitted, to match the WA Web {@code variant_thumbnail_height: m != null
-     * ? String(m) : null} pattern.
+     * {@code {"variables": {"request": {"collections": {...}}}}} shape expected
+     * by {@code xwa_product_catalog_get_collections}. Width, height, limit and
+     * pagination fields are stringified to match the WA Web wire shape, which
+     * sends them as JSON strings even though they are integers in the GraphQL
+     * schema. The {@code null} variants of the four optional fields are emitted
+     * as explicit JSON {@code null}, not omitted, to match the WA Web
+     * {@code variant_thumbnail_height: m != null ? String(m) : null} pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryProductCollections", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)

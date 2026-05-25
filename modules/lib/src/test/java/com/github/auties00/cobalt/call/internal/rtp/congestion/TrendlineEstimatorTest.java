@@ -6,37 +6,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Synthetic-stream tests for {@link TrendlineEstimator}. Drives the
- * estimator with three traffic shapes — constant capacity, dropping
- * capacity, recovering capacity — and asserts the classification
- * matches the expectation. The values are tuned to be far from the
- * decision boundary so the test isn't sensitive to constant tweaks.
+ * Synthetic-stream tests for {@link TrendlineEstimator} covering the three
+ * {@link BandwidthState} classifications ({@link BandwidthState#NORMAL},
+ * {@link BandwidthState#OVERUSE}, {@link BandwidthState#UNDERUSE}) plus adaptive-threshold
+ * drift. Each scenario feeds a hand-built stream of send/arrival delta pairs whose values sit
+ * well clear of the decision boundary, so the assertions stay stable against tuning of the
+ * estimator's internal constants.
  */
 public class TrendlineEstimatorTest {
 
-    /**
-     * Number of packet groups fed in each scenario — enough to fill
-     * the regression window several times over.
-     */
+    // Group count fills the regression window several times over.
     private static final int GROUP_COUNT = 200;
 
-    /**
-     * Send-side spacing between consecutive packet groups (typical
-     * 5 ms burst grouping).
-     */
+    // Typical 5 ms burst grouping for send-side spacing between groups.
     private static final double SEND_DELTA_MS = 5.0;
 
-    /**
-     * Group payload — informational, the estimator only uses
-     * timing.
-     */
+    // The estimator only uses timing, so the payload size is arbitrary.
     private static final int GROUP_PAYLOAD_BYTES = 1200;
 
-    /**
-     * A constant-capacity link should not trigger overuse: arrival
-     * deltas equal send deltas, so accumulated delay stays at zero
-     * and the trend is flat.
-     */
     @Test
     public void constantCapacityStaysNormal() {
         var est = new TrendlineEstimator();
@@ -49,11 +36,6 @@ public class TrendlineEstimatorTest {
                 "trend should stay flat with matched send/arrival deltas, was " + est.trendSlope());
     }
 
-    /**
-     * Ramping queue delay (each group arrives slightly later than
-     * the previous) must produce at least one OVERUSE classification
-     * within the test horizon.
-     */
     @Test
     public void risingDelayTriggersOveruse() {
         var est = new TrendlineEstimator();
@@ -61,8 +43,7 @@ public class TrendlineEstimatorTest {
         var sawOveruse = false;
         for (var i = 0; i < GROUP_COUNT; i++) {
             now += (long) SEND_DELTA_MS;
-            // Arrival delta steadily above send delta — queue is
-            // accumulating delay.
+            // Arrival delta steadily above send delta: the queue accumulates delay.
             var arrival = SEND_DELTA_MS + 2.0;
             var s = est.update(SEND_DELTA_MS, arrival, GROUP_PAYLOAD_BYTES, now);
             if (s == BandwidthState.OVERUSE) {
@@ -73,11 +54,6 @@ public class TrendlineEstimatorTest {
         assertTrue(sawOveruse, "expected OVERUSE for a steadily-rising delay; final slope " + est.trendSlope());
     }
 
-    /**
-     * Falling queue delay (each group arrives slightly earlier than
-     * the previous) must produce at least one UNDERUSE
-     * classification.
-     */
     @Test
     public void fallingDelayTriggersUnderuse() {
         var est = new TrendlineEstimator();
@@ -100,12 +76,6 @@ public class TrendlineEstimatorTest {
         assertTrue(sawUnderuse, "expected UNDERUSE for a steadily-shrinking delay; final slope " + est.trendSlope());
     }
 
-    /**
-     * The adaptive threshold should track the magnitude of
-     * sustained-noise modified-trends — start at the default
-     * (12.5), then drift down toward the lower bound when the
-     * trend stays small.
-     */
     @Test
     public void thresholdAdaptsDownInQuietConditions() {
         var est = new TrendlineEstimator();

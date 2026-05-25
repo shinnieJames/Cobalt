@@ -5,26 +5,29 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 /**
- * Server reply to {@link FcmMcsLoginRequest} (MCS frame tag {@code 3}).
+ * Models the server reply to {@link FcmMcsLoginRequest} on the MCS stream.
  *
- * @apiNote
- * On success, {@link #error} is {@code null} and
- * {@link #serverTimestamp} carries the server's clock; on failure,
- * {@link #error} carries the code and message pair.
+ * <p>On a successful login {@link #error()} is {@code null} and
+ * {@link #serverTimestamp()} carries the server's clock; on a rejected login
+ * {@link #error()} carries the code and message pair describing the failure.
+ *
+ * @implNote This implementation carries the MCS frame tag {@code 3}; the tag is
+ * read from the frame's length-prefixed type byte by the connection layer, not
+ * from this message.
  */
 @ProtobufMessage(name = "FcmMcsLoginResponse")
 public final class FcmMcsLoginResponse {
     /**
-     * Optional error block.
+     * Holds the optional error block, present only when the login is rejected.
      *
-     * @apiNote
-     * {@code null} iff the login succeeded.
+     * <p>This is {@code null} if and only if the login succeeded.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
     ErrorInfo error;
 
     /**
-     * Server's wall-clock at login time, in milliseconds since epoch.
+     * Holds the server's wall-clock at login time, in milliseconds since the
+     * epoch.
      */
     @ProtobufProperty(index = 8, type = ProtobufType.INT64)
     long serverTimestamp;
@@ -33,7 +36,7 @@ public final class FcmMcsLoginResponse {
      * Constructs a new login response with the given values.
      *
      * @param error           the optional error block
-     * @param serverTimestamp the server timestamp in millis
+     * @param serverTimestamp the server timestamp in milliseconds
      */
     FcmMcsLoginResponse(ErrorInfo error, long serverTimestamp) {
         this.error = error;
@@ -50,7 +53,7 @@ public final class FcmMcsLoginResponse {
     }
 
     /**
-     * Returns the server timestamp in milliseconds since epoch.
+     * Returns the server timestamp in milliseconds since the epoch.
      *
      * @return the server timestamp
      */
@@ -59,30 +62,29 @@ public final class FcmMcsLoginResponse {
     }
 
     /**
-     * Non-zero error code plus human-readable message returned when
+     * Models the non-zero error code plus human-readable message returned when
      * the login is rejected.
      *
-     * @apiNote
-     * Common codes include "Expired security token" (force a fresh
-     * checkin) and "Invalid credentials" (the
-     * {@code androidId}/{@code securityToken} pair is wrong).
+     * <p>Common codes include "Expired security token", which requires forcing a
+     * fresh checkin, and "Invalid credentials", which indicates the
+     * {@code androidId}/{@code securityToken} pair is wrong.
      */
     @ProtobufMessage(name = "FcmMcsLoginResponse.ErrorInfo")
     public static final class ErrorInfo {
         /**
-         * Numeric error code.
+         * Holds the numeric error code.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.INT64)
         long code;
 
         /**
-         * Human-readable error message.
+         * Holds the human-readable error message.
          */
         @ProtobufProperty(index = 2, type = ProtobufType.STRING)
         String message;
 
         /**
-         * Constructs a new error block.
+         * Constructs a new error block with the given code and message.
          *
          * @param code    the numeric error code
          * @param message the human-readable message

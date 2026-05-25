@@ -12,63 +12,52 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <ack class="notification" type="link_code_companion_reg"/>}
- * stanza emitted by a companion after consuming a
- * {@link SmaxMdRefreshCodeNotifyCompanionResponse}.
+ * Models the outbound {@code <ack class="notification" type="link_code_companion_reg"/>}
+ * stanza a companion emits after consuming a {@link SmaxMdRefreshCodeNotifyCompanionResponse}.
  *
- * @apiNote
- * Companions send exactly one ack per inbound refresh-code
- * notification so the relay marks the notification delivered and
- * stops replaying it. WA Web's
- * {@code WAWebAltDeviceLinkingHandleNotification.handleAltDeviceLinkingNotification}
- * builds this stanza via the
- * {@code makeRefreshCodeNotifyCompanionResponseAck} thunk returned by
- * the {@code receiveRefreshCodeNotifyCompanionRPC} entry point.
+ * <p>A companion sends exactly one ack per inbound refresh-code notification so the relay marks
+ * the notification delivered and stops replaying it. The three echoed attributes ({@code id},
+ * {@code to}, {@code type}) are taken from the inbound notification, while {@code class} is fixed
+ * to {@code "notification"}. The usual entry point is
+ * {@link #from(SmaxMdRefreshCodeNotifyCompanionResponse)}, which derives those fields from an
+ * already-parsed projection.
  *
- * @implNote
- * This implementation folds WA Web's
- * {@code WASmaxOutMdNotificationClientAckMixin.mergeNotificationClientAckMixin}
- * into the builder: {@code id}, {@code to} and {@code type} are echoed
- * from the inbound notification, and {@code class} is pinned to the
- * literal {@code "notification"} that the mixin merges in.
+ * @implNote This implementation folds the WA Web notification-ack mixin into the same builder
+ * rather than keeping it as a separate merge pass: {@code class} is pinned to the literal
+ * {@code "notification"} that the upstream mixin would otherwise merge in.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMdRefreshCodeNotifyCompanionResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutMdNotificationClientAckMixin")
 public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements SmaxOperation.Request {
     /**
-     * The {@code id} of the inbound notification being acknowledged.
+     * Holds the {@code id} of the inbound notification being acknowledged.
      *
-     * @apiNote
-     * Echoed into the outbound {@code <ack id="..."/>} attribute.
+     * <p>Echoed into the outbound {@code <ack id="..."/>} attribute.
      */
     private final String notificationId;
 
     /**
-     * The sender JID of the inbound notification, always the
-     * {@code s.whatsapp.net} server domain.
+     * Holds the sender JID of the inbound notification, always the {@code s.whatsapp.net}
+     * server domain.
      *
-     * @apiNote
-     * Echoed into the outbound {@code <ack to="..."/>} attribute.
+     * <p>Echoed into the outbound {@code <ack to="..."/>} attribute.
      */
     private final Jid notificationFrom;
 
     /**
-     * The {@code type} attribute of the inbound notification, fixed by
-     * the link-code pairing flow to {@code "link_code_companion_reg"}.
+     * Holds the {@code type} attribute of the inbound notification, fixed by the link-code
+     * pairing flow to {@code "link_code_companion_reg"}.
      *
-     * @apiNote
-     * Echoed back into {@code <ack type="..."/>}.
+     * <p>Echoed back into the {@code <ack type="..."/>} attribute.
      */
     private final String notificationType;
 
     /**
      * Constructs an ack from already-resolved component fields.
      *
-     * @apiNote
-     * Library code typically calls
-     * {@link #from(SmaxMdRefreshCodeNotifyCompanionResponse)} to derive
-     * the three echoed fields from an already-parsed notification
-     * projection; this constructor is exposed for unit tests.
+     * <p>Most callers use {@link #from(SmaxMdRefreshCodeNotifyCompanionResponse)} to derive the
+     * three echoed fields from a parsed notification projection; this constructor is exposed so
+     * unit tests can build fixtures directly.
      *
      * @param notificationId   the notification id; never {@code null}
      * @param notificationFrom the notification sender JID; never {@code null}
@@ -82,18 +71,15 @@ public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements Sm
     }
 
     /**
-     * Derives the ack from an already-parsed
-     * {@link SmaxMdRefreshCodeNotifyCompanionResponse} projection.
+     * Derives the ack from an already-parsed {@link SmaxMdRefreshCodeNotifyCompanionResponse}
+     * projection.
      *
-     * @apiNote
-     * Mirrors the WA Web pattern of obtaining the ack builder thunk
-     * directly from the {@code receiveRefreshCodeNotifyCompanionRPC}
-     * return value.
+     * <p>Copies the inbound {@link SmaxMdRefreshCodeNotifyCompanionResponse#notificationId()}
+     * and {@link SmaxMdRefreshCodeNotifyCompanionResponse#notificationFrom()} into the new ack
+     * and pins the type to {@code "link_code_companion_reg"}.
      *
-     * @implNote
-     * This implementation hardcodes the type to
-     * {@code "link_code_companion_reg"} rather than reading it back
-     * from the inbound projection, because the inbound parser only
+     * @implNote This implementation hardcodes the type rather than reading it back from the
+     * inbound projection, because {@link SmaxMdRefreshCodeNotifyCompanionResponse#of(Node)} only
      * accepts that exact literal.
      *
      * @param inbound the parsed inbound notification projection
@@ -115,10 +101,7 @@ public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements Sm
     }
 
     /**
-     * Returns the notification sender JID.
-     *
-     * @apiNote
-     * Becomes the ack's {@code to} attribute.
+     * Returns the notification sender JID that becomes the ack's {@code to} attribute.
      *
      * @return the JID; never {@code null}
      */
@@ -138,16 +121,11 @@ public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements Sm
     /**
      * Builds the outbound ack stanza.
      *
-     * @apiNote
-     * Returns the unfinished {@link NodeBuilder} so the dispatch path
-     * can stamp the wire-level identifiers before flushing, matching
-     * {@link SmaxOperation.Request#toNode()}.
+     * <p>Returns the unfinished {@link NodeBuilder} so the dispatch path can stamp the wire-level
+     * identifiers before flushing, matching the contract of {@link SmaxOperation.Request#toNode()}.
      *
-     * @implNote
-     * This implementation pins {@code class} to the literal
-     * {@code "notification"} because WA Web's
-     * {@code mergeNotificationClientAckMixin} hardcodes the same
-     * value into the stanza shape.
+     * @implNote This implementation pins {@code class} to the literal {@code "notification"}
+     * that the WA Web notification-ack mixin merges into the stanza shape.
      *
      * @return a {@link NodeBuilder} carrying the {@code <ack>} envelope
      */
@@ -164,6 +142,15 @@ public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements Sm
                 .attribute("type", notificationType);
     }
 
+    /**
+     * Compares this acknowledgement to another object for value equality.
+     *
+     * <p>Two acknowledgements are equal when their notification id, sender JID, and type all
+     * match.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an equal acknowledgement
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -178,11 +165,21 @@ public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements Sm
                 && Objects.equals(this.notificationType, that.notificationType);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code derived from the notification id, sender JID, and type
+     */
     @Override
     public int hashCode() {
         return Objects.hash(notificationId, notificationFrom, notificationType);
     }
 
+    /**
+     * Returns a debug string listing the notification id, sender JID, and type.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxMdRefreshCodeNotifyCompanionAcknowledgement[notificationId=" + notificationId

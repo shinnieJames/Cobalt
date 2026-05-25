@@ -14,60 +14,40 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Applies the {@code payment_tos} app-state action that records
- * acceptance of the Brazil Pix Terms of Service across linked SMB
- * devices.
+ * Applies the {@code payment_tos} app-state action that records acceptance of
+ * the Brazil Pix Terms of Service across linked SMB devices.
  *
- * @apiNote
- * Drives the WhatsApp SMB Brazil Pix payments surface: when the
- * business owner accepts the Pix payment ToS on one SMB device the
- * acceptance fans out so the other paired SMB devices can render the
- * Pix flow without prompting again. Gated on SMB platform AND
- * {@link ABProp#PAYMENTS_BR_PIX_ON_WEB}; non-SMB or AB-prop-disabled
- * accounts surface every mutation as
- * {@link MutationApplicationResult#unsupported()}. The mutation index
- * is the singleton {@snippet :
+ * <p>When the business owner accepts the Pix payment ToS on one SMB device the
+ * acceptance fans out so the other paired SMB devices can render the Pix flow
+ * without prompting again. The action is gated on SMB platform AND
+ * {@link ABProp#PAYMENTS_BR_PIX_ON_WEB}; non-SMB or AB-prop-disabled accounts
+ * surface every mutation as {@link MutationApplicationResult#unsupported()}.
+ * The mutation index is the singleton {@snippet :
  *     ["payment_tos"]
  * }
  *
+ * <p>Only {@link SyncdOperation#SET} is accepted and the resolved action is
+ * written to the store; a missing {@link PaymentTosAction} payload surfaces as
+ * {@link SyncdIndexUtils#malformedActionValue(String)}.
+ *
  * @implNote
- * This implementation mirrors the WA Web
- * {@code WAWebPaymentTosSync.applyMutations} gating order exactly:
- * SMB platform check first, AB-prop check second, then
- * {@link SyncdOperation#SET}, then a missing
- * {@link PaymentTosAction} surfaces as
- * {@link SyncdIndexUtils#malformedActionValue(String)}. The
- * {@code WAWebUserPrefsPaymentTos.setPaymentTos} call is collapsed
- * into a single {@code WhatsAppStore.setPaymentTos} write; the
- * per-batch {@code WALogger.WARN} counters are dropped.
+ * This implementation collapses WA Web's
+ * {@code WAWebUserPrefsPaymentTos.setPaymentTos} call into a single
+ * {@code WhatsAppStore.setPaymentTos} write; the per-batch {@code WARN}
+ * counters are dropped.
  */
 @WhatsAppWebModule(moduleName = "WAWebPaymentTosSync")
 public final class PaymentTosHandler implements WebAppStateActionHandler {
     /**
-     * The AB-props service consulted before applying any mutation.
-     *
-     * @apiNote
-     * Internal collaborator injected at construction; never accessed
-     * outside {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
+     * Holds the AB-props service consulted before applying any mutation.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Constructs the payment-ToS sync handler bound to the given
-     * AB-props service.
+     * Constructs the payment-ToS sync handler bound to the given AB-props
+     * service.
      *
-     * @apiNote
-     * Used by the sync handler registry; the AB-props service is
-     * consulted on every mutation to honour the
-     * {@link ABProp#PAYMENTS_BR_PIX_ON_WEB} gate.
-     *
-     * @implNote
-     * This implementation mirrors the WA Web {@code WAWebPaymentTosSync}
-     * constructor: it sets {@code collectionName = RegularLow} on the
-     * prototype and inherits from {@code AccountSyncdActionBase}.
-     *
-     * @param abPropsService the AB-props service consulted on every
-     *                       mutation
+     * @param abPropsService the AB-props service consulted on every mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebPaymentTosSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public PaymentTosHandler(ABPropsService abPropsService) {
@@ -106,19 +86,15 @@ public final class PaymentTosHandler implements WebAppStateActionHandler {
      *
      * @implNote
      * This implementation gates each mutation on, in order:
-     * <ol>
-     *   <li>{@link ClientPlatformType#IOS_BUSINESS} or
-     *       {@link ClientPlatformType#ANDROID_BUSINESS} (mirroring WA
-     *       Web's {@code WAWebMobilePlatforms.isSMB});</li>
-     *   <li>{@link ABProp#PAYMENTS_BR_PIX_ON_WEB};</li>
-     *   <li>{@link SyncdOperation#SET};</li>
-     *   <li>a non-{@code null} {@link PaymentTosAction} payload.</li>
-     * </ol>
-     * Failures at the first three layers surface as
-     * {@link MutationApplicationResult#unsupported()}; a missing
-     * payload surfaces as
-     * {@link SyncdIndexUtils#malformedActionValue(String)}. On success
-     * the resolved action is written via
+     * {@link ClientPlatformType#IOS_BUSINESS} or
+     * {@link ClientPlatformType#ANDROID_BUSINESS} (mirroring WA Web's
+     * {@code WAWebMobilePlatforms.isSMB}); then
+     * {@link ABProp#PAYMENTS_BR_PIX_ON_WEB}; then {@link SyncdOperation#SET};
+     * then a non-{@code null} {@link PaymentTosAction} payload. Failures at the
+     * first three layers surface as
+     * {@link MutationApplicationResult#unsupported()}; a missing payload
+     * surfaces as {@link SyncdIndexUtils#malformedActionValue(String)}. On
+     * success the resolved action is written via
      * {@code WhatsAppStore.setPaymentTos}.
      */
     @Override

@@ -28,46 +28,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.github.auties00.cobalt.call.internal.CallService;
 
 /**
- * Live-oracle tests for {@link CallService} exercising the real engine
- * (no {@code RecordingEngine} stub) against {@link TestWhatsAppClient}.
- * Drives the three public entrypoints {@link CallService#placeCall},
- * {@link CallService#accept}, {@link CallService#reject} plus the
- * peer-driven hooks, and asserts:
- * <ul>
- *   <li>the outgoing stanza dispatched via {@link TestWhatsAppClient}'s
- *       {@code onNodeSent} pipeline matches the wire shape captured from
- *       WA Web;</li>
- *   <li>the in-flight {@link ActiveCall} registry adds and removes
- *       correctly through the call lifecycle;</li>
- *   <li>listener callbacks fire with the right typed arguments.</li>
- * </ul>
+ * Live-oracle tests for {@link CallService} exercising the real engine against
+ * a {@link TestWhatsAppClient} and a recording {@link TestWamService}. The
+ * suite drives the public entrypoints {@link CallService#placeCall},
+ * {@link CallService#accept}, and {@link CallService#reject} plus the
+ * peer-driven hooks, and asserts that outgoing stanzas (captured on the
+ * client's {@code onNodeSent} pipeline) match the wire shape captured from WA
+ * Web, that the {@link ActiveCall} registry adds and removes correctly across
+ * the lifecycle, that listener callbacks fire with the right typed arguments,
+ * and that {@link CallService#unregister} commits the expected
+ * {@link CallResultType} per end-reason.
  *
- * <p>TODO: WAM telemetry assertion. {@link CallService#unregister} drains
- * the per-call stats into a {@code CallEvent} (id 462) via
- * {@code WamService.commit}. We pass {@code wamService = null} here so
- * the telemetry path is skipped; once a {@code TestWamService} stub is
- * available, add an assertion that the right {@code CallResultType} is
- * committed per end-reason.
+ * <p>JID constants are pinned to the {@code business}/{@code primary} pair the
+ * capture-call-corpus script uses; cross-reference
+ * {@code reference_call_capture_sessions.md} in the memory directory.
  */
 @DisplayName("CallService live wire oracle")
 class CallServiceLiveOracleTest {
 
-    /**
-     * Peer-roster constants pinned to the {@code business}/{@code primary}
-     * pair the capture-call-corpus script uses. Cross-reference
-     * {@code reference_call_capture_sessions.md} in the memory directory.
-     */
     private static final Jid SELF_PN  = Jid.of("19254863482@s.whatsapp.net");
     private static final Jid SELF_LID = Jid.of("83116928594056@lid");
     private static final Jid PEER_PN  = Jid.of("19153544650@s.whatsapp.net");
     private static final Jid PEER_LID = Jid.of("39110693621863@lid");
 
-    /**
-     * Test harness wiring a real {@link CallService} + a recording
-     * {@link TestWhatsAppClient} + a recording
-     * {@link TestWamService}. The {@code sentNodes} and {@code wam}
-     * collectors are the primary assertion surfaces.
-     */
     private static final class Harness {
         final TestWhatsAppClient client;
         final CallService service;
@@ -87,10 +70,6 @@ class CallServiceLiveOracleTest {
         }
     }
 
-    /**
-     * Recording listener: captures only the call-lifecycle callbacks the
-     * orchestrator fires; other listener methods are inherited as no-ops.
-     */
     private static final class RecordingListener implements WhatsAppClientListener {
         final ConcurrentLinkedQueue<EndedEvent> ended = new ConcurrentLinkedQueue<>();
         @Override public void onCallEnded(WhatsAppClient w, String callId, Jid fromJid, CallEndReason reason) {
@@ -99,8 +78,6 @@ class CallServiceLiveOracleTest {
     }
 
     private record EndedEvent(String callId, Jid fromJid, CallEndReason reason) {}
-
-    // -------- placeCall — outgoing offer ----------------------------------
 
     @Test
     @DisplayName("placeCall: registers ActiveCall, dispatches <call><offer>, parks in CONNECTING")
@@ -112,8 +89,6 @@ class CallServiceLiveOracleTest {
         assertSame(session, h.service.find(session.callId()),
                 "placed call must be findable in the engine's registry");
 
-        // Outgoing — exactly one <call><offer/></call> with the expected
-        // call-id + call-creator.
         var offers = h.sentNodes.stream().filter(n -> "call".equals(n.description()))
                 .filter(n -> n.getChild("offer").isPresent()).toList();
         assertEquals(1, offers.size(), "exactly one offer expected; got " + h.sentNodes);
@@ -140,8 +115,6 @@ class CallServiceLiveOracleTest {
         assertThrows(NullPointerException.class, () -> h.service.placeCall(PEER_LID, null));
     }
 
-    // -------- accept(IncomingCall) ---------------------------------------
-
     @Test
     @DisplayName("accept: dispatches <call><accept>, registers session")
     void acceptDispatches() {
@@ -157,8 +130,6 @@ class CallServiceLiveOracleTest {
                 .findFirst().orElseThrow().getChild("accept").orElseThrow();
         assertEquals("CID-INBOUND", accept.getAttributeAsString("call-id").orElseThrow());
     }
-
-    // -------- reject(IncomingCall) ---------------------------------------
 
     @Test
     @DisplayName("reject: dispatches <call><reject>, fires onCallEnded(REJECT_*)")
@@ -184,8 +155,6 @@ class CallServiceLiveOracleTest {
         assertNull(h.service.find("CID-REJECT"));
     }
 
-    // -------- peer-driven transitions ------------------------------------
-
     @Test
     @DisplayName("onPeerAccept: routes to the right ActiveCall; no listener fires (state-only)")
     void peerAcceptRoutes() {
@@ -194,9 +163,8 @@ class CallServiceLiveOracleTest {
         h.sentNodes.clear(); // drop the outbound offer for clarity
 
         h.service.onPeerAccept(session.callId());
-        // ActiveCall.onPeerAccept is intentionally a no-op state-wise until
-        // the media plane lands — so we assert there's no terminate stanza
-        // and the call is still registered.
+        // onPeerAccept is intentionally a no-op state-wise until the media
+        // plane lands, so the call must still be registered.
         assertSame(session, h.service.find(session.callId()));
     }
 
@@ -231,8 +199,6 @@ class CallServiceLiveOracleTest {
         assertEquals(CallState.ENDED, session.state());
     }
 
-    // -------- concurrent calls do not cross-contaminate ------------------
-
     @Test
     @DisplayName("two concurrent calls: separate registry entries, separate lifecycles")
     void concurrentCallsIsolated() throws InterruptedException {
@@ -250,12 +216,7 @@ class CallServiceLiveOracleTest {
         assertSame(second, h.service.find(second.callId()));
     }
 
-    // -------- end-reason → CallResultType mapping ------------------------
-
-    /**
-     * Returns the {@link CallResultType} of the last
-     * {@link CallEvent} committed by the harness's WAM service.
-     */
+    // Returns the CallResultType of the last CallEvent committed by the WAM service.
     private static CallResultType lastCommittedResult(Harness h) {
         var events = h.wam.committedEvents();
         for (var i = events.size() - 1; i >= 0; i--) {

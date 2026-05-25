@@ -13,25 +13,17 @@ import java.util.Optional;
  * The inbound family of relay notifications echoing the
  * SMB-to-Meta data-sharing consent across linked devices.
  *
- * @apiNote
- * Used by the CTWA biz-business-notification dispatcher in
- * {@code WAWebCTWAParsePrivacy.parseCTWAPrivacy}, which extracts
- * the post-update consent value and forwards it to
- * {@code WAWebHandlePrivacySettingsNotification.handleSmbDataSharingSettingNotification}
- * so other linked devices stay in sync after a
- * {@link SmaxSetPrivacySettingResponse.Success} write. The family
- * carries a single permit because {@code Receive}-shape SMAX RPCs
- * have no outbound counterpart.
+ * <p>The post-update consent value is forwarded to the local biz-privacy preference cache so other
+ * linked devices stay in sync after a {@link SmaxSetPrivacySettingResponse.Success} write. The
+ * family carries a single permit because receive-shape SMAX RPCs have no outbound counterpart.
  */
 public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Response permits SmaxSyncPrivacySettingResponse.Notification {
 
     /**
      * Tries to parse the supplied stanza as a {@link Notification}.
      *
-     * @apiNote
-     * Called by the biz-notification dispatcher after detecting a
-     * {@code <privacy/>} child. Returns {@link Optional#empty()}
-     * when the stanza does not match the documented shape.
+     * <p>Returns {@link Optional#empty()} when the stanza does not match the documented shape so
+     * the dispatcher can fall through to other branches.
      *
      * @param node the inbound notification stanza; never
      *             {@code null}
@@ -50,11 +42,9 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
     /**
      * The single permitted relay-pushed privacy-sync notification.
      *
-     * @apiNote
-     * Carries the post-update consent value plus the standard
-     * envelope echoes; the consumer extracts
-     * {@link #dataSharingConsent()} and writes it to the local
-     * device's biz-privacy preference cache.
+     * <p>Carries the post-update consent value plus the standard envelope echoes; the consumer
+     * extracts {@link #dataSharingConsent()} and writes it to the local device's biz-privacy
+     * preference cache.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSyncPrivacySettingRequest")
     @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsSmbDataSharingSettingMixin")
@@ -78,9 +68,7 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
         /**
          * Constructs a new notification.
          *
-         * @apiNote
-         * Called by {@link #of(Node)} after validating the stanza
-         * envelope.
+         * <p>Called by {@link #of(Node)} after validating the stanza envelope.
          *
          * @param to                 the optional target user JID;
          *                           may be {@code null}
@@ -95,10 +83,8 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
         /**
          * Returns the optional target user JID.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the relay
-         * broadcasts to every linked device without a specific
-         * target.
+         * <p>Returns {@link Optional#empty()} when the relay broadcasts to every linked device
+         * without a specific target.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -109,12 +95,9 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
         /**
          * Returns the optional post-update consent value.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the relay cleared
-         * the preference. Decoded values are restricted to the
-         * documented {@code "true"} / {@code "false"} /
-         * {@code "notset"} tuple via
-         * {@link SmaxBizSettingsFalseNotsetTrueFlag#of(String)}.
+         * <p>Returns {@link Optional#empty()} when the relay cleared the preference. Decoded values
+         * are restricted to the documented {@code "true"} / {@code "false"} / {@code "notset"}
+         * tuple via {@link SmaxBizSettingsFalseNotsetTrueFlag#of(String)}.
          *
          * @return an {@link Optional} carrying the consent value
          */
@@ -125,20 +108,14 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
         /**
          * Tries to parse a notification from the supplied stanza.
          *
-         * @apiNote
-         * Accepts only stanzas tagged
-         * {@code <notification type="business" from="s.whatsapp.net">}
-         * carrying a {@code <privacy/>} child; the inner
-         * {@code <smb_data_sharing_with_meta_consent>} echo is
-         * optional and is decoded under the
-         * {@link SmaxBizSettingsFalseNotsetTrueFlag} dictionary.
+         * <p>Accepts only stanzas tagged
+         * {@code <notification type="business" from="s.whatsapp.net">} carrying a
+         * {@code <privacy/>} child; the inner {@code <smb_data_sharing_with_meta_consent>} echo is
+         * optional and is decoded under the {@link SmaxBizSettingsFalseNotsetTrueFlag} dictionary.
          *
          * @implNote
-         * This implementation drops the inner consent value when
-         * its {@code value} attribute lies outside the documented
-         * dictionary, matching the JS
-         * {@code optionalMerge / attrStringEnum} composition that
-         * folds a failed inner parse into {@code null} without
+         * This implementation drops the inner consent value when its {@code value} attribute lies
+         * outside the documented dictionary, folding a failed inner parse into {@code null} without
          * failing the whole notification.
          *
          * @param node the inbound notification stanza
@@ -188,6 +165,9 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
             return Optional.of(new Notification(to, consent));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -201,11 +181,17 @@ public sealed interface SmaxSyncPrivacySettingResponse extends SmaxOperation.Res
                     && Objects.equals(this.dataSharingConsent, that.dataSharingConsent);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(to, dataSharingConsent);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxSyncPrivacySettingResponse.Notification[to=" + to

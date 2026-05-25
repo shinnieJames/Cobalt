@@ -6,20 +6,19 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
  * Thrown when Cobalt cannot obtain a private-stats authentication token
  * from the WhatsApp servers.
  *
- * @apiNote
- * The private-stats upload backend (used by the WAM telemetry pipeline)
- * gates uploads with a single-use, blinded credential issued by the
- * {@code <sign_credential>} IQ exchange documented in WA Web's
- * {@code WAWebIssuePrivateStatsToken}. Failures fall into three buckets:
- * the IQ comes back with {@code type="error"}, a required child element
- * is missing or malformed, or the returned Ed25519 material does not
- * decode as a valid curve point so the unblinding step cannot run. Most
- * Cobalt embedders do not run the WAM pipeline and will never see this.
+ * <p>The private-stats upload backend that feeds the WAM telemetry
+ * pipeline gates each upload with a single-use, blinded credential the
+ * server issues on request. This exception covers every way that issuance
+ * can fail: the server returns an error instead of a credential, a
+ * required element of the reply is missing or malformed, or the returned
+ * Ed25519 material does not decode as a valid curve point so the
+ * unblinding step cannot run.
  *
- * @implNote
- * This implementation always reports the failure as non-fatal: token
- * issuance is scoped to a single upload, not to the session as a whole,
- * so the upload can be retried independently.
+ * @apiNote
+ * Raised only on the WAM telemetry path, which most embedders do not run.
+ * {@link #isFatal()} reports {@code false}, so a configured
+ * {@code WhatsAppClientErrorHandler} can leave the session running and
+ * the upload can be retried independently.
  */
 @WhatsAppWebModule(moduleName = "WAWebIssuePrivateStatsToken")
 public final class WhatsAppPrivateStatsTokenIssuerException extends WhatsAppException {

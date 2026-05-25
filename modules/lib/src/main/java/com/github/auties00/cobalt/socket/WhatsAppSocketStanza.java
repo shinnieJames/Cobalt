@@ -12,18 +12,16 @@ import java.util.function.Function;
  * completes it, exposing a blocking send-then-await primitive over the
  * otherwise fully asynchronous reader pipeline.
  *
- * @apiNote
- * Used by every request-response stanza Cobalt sends on the WhatsApp
- * socket: the sender thread parks on {@link #waitForResponse()} after
- * dispatching the request, and the inbound dispatcher pumps each
- * arriving {@link Node} through {@link #complete(Node)} until the
- * filter accepts one. The filter is what distinguishes a stanza-pair
- * from a fire-and-forget broadcast: a {@code null} filter accepts the
- * first node offered, an explicit predicate keeps unrelated traffic
- * from waking up the waiter early. The two-arg
- * {@link #waitForResponse(Duration)} overload exists so callers that
- * issue long-running operations (history sync chunk fetches, large
- * media downloads) can extend the default 60-second budget.
+ * <p>Every request-response stanza Cobalt sends on the WhatsApp socket uses
+ * this pairing: the sender thread parks on {@link #waitForResponse()} after
+ * dispatching the request, and the inbound dispatcher pumps each arriving
+ * {@link Node} through {@link #complete(Node)} until the filter accepts one.
+ * The filter is what distinguishes a stanza-pair from a fire-and-forget
+ * broadcast: a {@code null} filter accepts the first node offered, an
+ * explicit predicate keeps unrelated traffic from waking up the waiter
+ * early. The two-arg {@link #waitForResponse(Duration)} overload exists so
+ * callers that issue long-running operations (history sync chunk fetches,
+ * large media downloads) can extend the default 60-second budget.
  *
  * @implNote
  * This implementation maps WA Web's per-stanza callback registry to a
@@ -61,11 +59,10 @@ public final class WhatsAppSocketStanza {
     /**
      * Creates a stanza tracker for the given outbound {@link Node}.
      *
-     * @apiNote
-     * Construct one tracker per outbound request that expects a reply.
-     * The constructor does not send the request; the caller is
-     * responsible for dispatching {@code body} and only then parking
-     * on {@link #waitForResponse()}.
+     * <p>One tracker is constructed per outbound request that expects a
+     * reply. The constructor does not send the request; the caller is
+     * responsible for dispatching {@code body} and only then parking on
+     * {@link #waitForResponse()}.
      *
      * @param body   the outbound node, retained for timeout reporting
      * @param filter predicate that returns {@code true} when an
@@ -81,13 +78,11 @@ public final class WhatsAppSocketStanza {
      * Offers an inbound {@link Node} as the candidate response for
      * this stanza and wakes any waiter if the filter accepts it.
      *
-     * @apiNote
-     * Called by the inbound dispatcher for every node that might
-     * match. A {@code null} response unconditionally completes the
-     * stanza (used by the disconnect path to release waiters). The
-     * return value lets the dispatcher know whether to keep
-     * dispatching the same node to the next candidate stanza or to
-     * stop because it has been consumed.
+     * <p>The inbound dispatcher calls this for every node that might match.
+     * A {@code null} response unconditionally completes the stanza (used by
+     * the disconnect path to release waiters). The return value lets the
+     * dispatcher know whether to keep dispatching the same node to the next
+     * candidate stanza or to stop because it has been consumed.
      *
      * @implNote
      * This implementation evaluates the user-supplied {@code filter}
@@ -116,11 +111,10 @@ public final class WhatsAppSocketStanza {
      * Parks the calling virtual thread until a response arrives or
      * the default timeout elapses.
      *
-     * @apiNote
-     * Equivalent to {@link #waitForResponse(Duration)} with the
-     * 60-second default. Most stanzas (presence ack, simple IQ
-     * round-trips) complete in milliseconds; reach for the overload
-     * only when the request can legitimately take longer.
+     * <p>This is equivalent to {@link #waitForResponse(Duration)} with the
+     * 60-second default. Most stanzas (presence ack, simple IQ round-trips)
+     * complete in milliseconds; the overload is for requests that can
+     * legitimately take longer.
      *
      * @return the accepted response
      * @throws WhatsAppStreamException.NodeTimeout if no acceptable
@@ -134,12 +128,10 @@ public final class WhatsAppSocketStanza {
      * Parks the calling virtual thread until a response arrives or
      * the supplied {@code timeout} elapses.
      *
-     * @apiNote
-     * Use the longer-timeout overload for inherently slow operations
-     * (initial history sync chunk fetches, large media uploads,
-     * server-side pairing flows that block on user action). The
-     * default-timeout {@link #waitForResponse()} covers ordinary
-     * IQ round-trips.
+     * <p>The longer-timeout overload covers inherently slow operations
+     * (initial history sync chunk fetches, large media uploads, server-side
+     * pairing flows that block on user action). The default-timeout
+     * {@link #waitForResponse()} covers ordinary IQ round-trips.
      *
      * @implNote
      * This implementation treats {@link InterruptedException} as a

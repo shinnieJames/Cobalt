@@ -15,37 +15,38 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Reference-counted, in-memory map of in-flight message keys that suppresses
- * duplicate work during the offline-delivery replay window.
+ * Suppresses duplicate work on in-flight inbound messages during the
+ * offline-delivery replay window.
  *
- * @apiNote When the WhatsApp socket reconnects, the server replays every
- * message that was not acknowledged before the disconnect. Without a guard
- * the same message would be processed twice (once from the replay stream,
- * once from any queued stanza that had already arrived during the previous
- * session). Callers ask {@link #isPending(String)} (or the
- * {@link MessageKey}/{@link Instant}/payload-list overload) before spending
- * work on a stanza and register the key via {@link #add(String)} to take
- * ownership; the cache is dropped in bulk by {@link #maybeClear(int)} when
- * the offline-delivery counter reaches zero. Backed by a single map; each
- * entry holds a reference count so multiple cooperating call sites can claim
- * the same key without premature eviction.
+ * <p>When the WhatsApp socket reconnects, the server replays every message
+ * that was not acknowledged before the disconnect. Without a guard the same
+ * message would be processed twice: once from the replay stream and once from
+ * any queued stanza that had already arrived during the previous session. The
+ * inbound dispatch pipeline tests a composite key with {@link #isPending(String)}
+ * (or the {@link MessageKey}, {@link Instant}, payload-list overload) before
+ * spending work on a stanza, registers the key via {@link #add(String)} to
+ * take ownership, and releases it with {@link #remove(String)} once the work
+ * completes or throws. The whole cache is dropped in bulk by
+ * {@link #maybeClear(int)} when the offline-delivery counter reaches zero. The
+ * cache is backed by a single map whose entries each hold a reference count,
+ * so multiple cooperating call sites can claim the same key without premature
+ * eviction. A single instance is owned by
+ * {@link com.github.auties00.cobalt.message.receive.MessageReceivingService}
+ * and shared across the pipeline.
  *
- * @implNote This implementation mirrors {@code WAWebMessageDedupUtils}, which
- * holds the cache in a module-local {@code Map} keyed by the same composite
- * string produced by {@link PendingMessageKey#create(MessageKey, Instant, List)}.
- * Compared with WA Web the Cobalt cache is process-local and is dropped in
- * full on JVM restart; WA Web's cache is likewise in-memory and is dropped on
- * tab reload.
+ * @implNote This implementation holds the cache in a process-local
+ * {@link ConcurrentMap} and drops it in full on JVM restart, where WA Web's
+ * cache is dropped on tab reload.
  */
 @WhatsAppWebModule(moduleName = "WAWebMessageDedupUtils")
 public final class MessageDedup {
     /**
-     * Logger used for the dedup add, pending-hit, and clear events.
+     * Records the dedup add, pending-hit, and clear events.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageDedup.class.getName());
 
     /**
-     * Map from composite dedup key to outstanding reference count.
+     * Maps each composite dedup key to its outstanding reference count.
      */
     @WhatsAppWebExport(moduleName = "WAWebMessageDedupUtils", exports = {"addPendingMessage", "hasPendingMessage", "maybeClearPendingMessages"},
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -53,10 +54,6 @@ public final class MessageDedup {
 
     /**
      * Constructs an empty dedup cache.
-     *
-     * @apiNote A single instance is owned by {@link com.github.auties00.cobalt.message.receive.MessageReceivingService}
-     * and shared across the inbound dispatch pipeline; tests can construct
-     * additional instances to isolate their dedup state.
      */
     public MessageDedup() {
         this.pending = new ConcurrentHashMap<>();
@@ -66,17 +63,15 @@ public final class MessageDedup {
      * Returns whether the pending-message cache is currently enabled by the
      * server-side AB prop.
      *
-     * @apiNote WA Web's {@code WAWebHandleMsg} gates every call to
-     * {@link #add(MessageKey, Instant, List)} on this predicate so the server
-     * can roll the dedup feature back without a client redeploy. Cobalt
-     * callers should follow the same convention and check this before calling
-     * {@link #add(String)} or its composite overload.
+     * <p>The dispatch pipeline gates registration on this predicate so the
+     * server can roll the dedup feature back without a client redeploy; callers
+     * check it before invoking {@link #add(String)} or its composite overload.
      *
      * @implNote This implementation reads the
      * {@link ABProp#WEB_PENDING_MESSAGE_CACHE_ENABLED} flag through
-     * {@link ABPropsService#getBool(ABProp)} rather than wrapping it in
-     * {@code Optional}; the AB-prop layer returns the server's most recent
-     * value, defaulting to {@code false} when the prop has never been seen.
+     * {@link ABPropsService#getBool(ABProp)}, which returns the server's most
+     * recent value and defaults to {@code false} when the prop has never been
+     * seen.
      *
      * @param abPropsService the AB props service consulted for the
      *                       {@code web_pending_message_cache_enabled} flag
@@ -95,12 +90,12 @@ public final class MessageDedup {
      * Registers the given composite key as pending and returns its new
      * reference count.
      *
-     * @apiNote Use when the composite key has already been built (for
-     * example, when caching the same key from two different call sites). For
-     * the canonical message-key/timestamp/encs derivation use the
-     * {@link #add(MessageKey, Instant, List)} overload. The new key starts
-     * with refcount {@code 1}; a re-registration atomically increments the
-     * existing count.
+     * <p>The key starts with reference count {@code 1}; a re-registration
+     * atomically increments the existing count. Use this overload when the
+     * composite key has already been built, for example when caching the same
+     * key from two different call sites; for the canonical
+     * message-key/timestamp/encs derivation use
+     * {@link #add(MessageKey, Instant, List)}.
      *
      * @param key the composite dedup key produced by
      *            {@link PendingMessageKey#create(MessageKey, Instant, List)}
@@ -124,15 +119,12 @@ public final class MessageDedup {
      * Registers an incoming message as pending under its canonical composite
      * key and returns the new reference count.
      *
-     * @apiNote Convenience overload that delegates to
-     * {@link #add(String)} after deriving the composite key via
-     * {@link PendingMessageKey#create(MessageKey, Instant, List)}. Mirrors
-     * WA Web's {@code addPendingMessage(msgKey, ts, encs)} call signature in
-     * {@code WAWebHandleMsg}.
+     * <p>Derives the composite key via
+     * {@link PendingMessageKey#create(MessageKey, Instant, List)} and delegates
+     * to {@link #add(String)}.
      *
      * @param key       the logical message key
-     * @param timestamp the message timestamp, serialised as Unix epoch
-     *                  seconds
+     * @param timestamp the message timestamp, serialised as Unix epoch seconds
      * @param encs      the encrypted payloads carried on the incoming
      *                  {@code <message>} stanza
      * @return the new reference count for the derived composite key
@@ -148,11 +140,9 @@ public final class MessageDedup {
      * Returns whether the given composite key is currently registered as
      * pending.
      *
-     * @apiNote Used by the inbound dispatch loop to decide whether to skip a
-     * stanza whose decryption is already in progress (or has already
-     * completed) on another execution path. A debug log entry is emitted on a
-     * cache hit so diagnostic output can be correlated with WA Web's
-     * {@code [message-dedup] message ... is pending} traces.
+     * <p>The inbound dispatch loop uses this to decide whether to skip a stanza
+     * whose decryption is already in progress (or has already completed) on
+     * another execution path. A debug log entry is emitted on a cache hit.
      *
      * @param key the composite dedup key
      * @return {@code true} if at least one outstanding reference exists for
@@ -178,15 +168,13 @@ public final class MessageDedup {
      * Returns whether the canonical composite key for an incoming message is
      * already registered.
      *
-     * @apiNote Convenience overload over {@link #isPending(String)} that
-     * derives the composite key from the same triple the
-     * {@link #add(MessageKey, Instant, List)} overload uses. The caller does
-     * not need to retain the composite string between the
-     * {@code isPending}/{@code add} pair.
+     * <p>Derives the composite key from the same triple
+     * {@link #add(MessageKey, Instant, List)} uses and delegates to
+     * {@link #isPending(String)}, so the caller need not retain the composite
+     * string between the {@code isPending}/{@code add} pair.
      *
      * @param key       the logical message key
-     * @param timestamp the message timestamp, serialised as Unix epoch
-     *                  seconds
+     * @param timestamp the message timestamp, serialised as Unix epoch seconds
      * @param encs      the encrypted payloads carried on the incoming
      *                  {@code <message>} stanza
      * @return {@code true} if the derived composite key is registered
@@ -199,20 +187,16 @@ public final class MessageDedup {
     }
 
     /**
-     * Drops every entry in the cache when the supplied offline-delivery
-     * counter reaches zero.
+     * Drops every entry in the cache when the supplied offline-delivery counter
+     * reaches zero.
      *
-     * @apiNote Called from the offline-info-bulletin handler with the
-     * remaining-message counter the server reports; mirrors WA Web's
-     * {@code WAWebHandleInfoBulletin} call to
-     * {@code WAWebMessageDedupUtils.maybeClearPendingMessages(n.count)} after
-     * the {@code OFFLINE} bulletin lands. Any message id that was pending
-     * during the replay window is no longer at risk of being duplicated once
-     * the offline-delivery phase ends, so the memory is released in bulk
-     * rather than per entry.
+     * <p>Called from the offline-info-bulletin handler with the
+     * remaining-message counter the server reports. Once the offline-delivery
+     * phase ends no pending message id is at risk of being duplicated, so the
+     * memory is released in bulk rather than per entry. The cache is cleared
+     * only when {@code count} is exactly zero.
      *
-     * @param count the remaining-message counter reported by the server; the
-     *              cache is cleared only when this is exactly zero
+     * @param count the remaining-message counter reported by the server
      */
     @WhatsAppWebExport(moduleName = "WAWebMessageDedupUtils", exports = "maybeClearPendingMessages",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -229,10 +213,9 @@ public final class MessageDedup {
     /**
      * Unconditionally empties the cache.
      *
-     * @apiNote Convenience for callers that have verified the
-     * offline-delivery counter externally and want to drop the cache without
-     * rechecking. Most callers should prefer {@link #maybeClear(int)} so the
-     * guard stays in one place.
+     * <p>Serves callers that have verified the offline-delivery counter
+     * externally and want to drop the cache without rechecking; most callers
+     * prefer {@link #maybeClear(int)} so the guard stays in one place.
      */
     public void clear() {
         maybeClear(0);
@@ -242,10 +225,10 @@ public final class MessageDedup {
      * Decrements the reference count for the given composite key and removes
      * the entry once the count reaches zero.
      *
-     * @apiNote Paired with {@link #add(String)} or
-     * {@link #add(MessageKey, Instant, List)}; calling code releases a key
-     * when the work that took ownership has either completed or has thrown.
-     * A {@code remove} for an unknown key is a no-op.
+     * <p>Pairs with {@link #add(String)} or
+     * {@link #add(MessageKey, Instant, List)}; calling code releases a key when
+     * the work that took ownership has either completed or thrown. A removal
+     * for an unknown key is a no-op.
      *
      * @param key the composite dedup key
      * @throws NullPointerException if {@code key} is {@code null}
@@ -265,10 +248,10 @@ public final class MessageDedup {
     /**
      * Returns the number of distinct composite keys currently in the cache.
      *
-     * @apiNote Surfaces the {@code Map.size()} of the underlying refcount
-     * map; useful for diagnostics and for assertions in dedup tests. The
-     * value is the count of distinct keys, not the sum of their reference
-     * counts.
+     * <p>Surfaces the {@link ConcurrentMap#size()} of the underlying refcount
+     * map, which is the count of distinct keys rather than the sum of their
+     * reference counts; useful for diagnostics and for assertions in dedup
+     * tests.
      *
      * @return the cache size
      */

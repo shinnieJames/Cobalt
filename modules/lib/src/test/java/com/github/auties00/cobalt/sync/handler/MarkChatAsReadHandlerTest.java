@@ -33,27 +33,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link MarkChatAsReadHandler} adapter for
- * {@code WAWebMarkChatAsReadSync}.
- *
- * @apiNote
- * Verifies parity with WA Web for the {@code markChatAsRead}
- * app-state sync action across metadata, the SET happy path that
- * flips the chat between marked-as-read and marked-as-unread, the
- * orphan branch when the chat is unknown locally, the
- * malformed-input fallbacks, the REMOVE rejection, the four-way
- * message-range conflict matrix and the
+ * Covers {@link MarkChatAsReadHandler}: metadata, the SET happy path that flips a chat between
+ * marked-as-read and marked-as-unread, the orphan branch for an unknown chat, the malformed-input
+ * fallbacks, the REMOVE rejection, the four-way message-range conflict matrix and the
  * {@link MarkChatAsReadMutationFactory} builder.
  *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
- * {@link com.github.auties00.cobalt.model.chat.Chat#markedAsUnread()}
- * and
- * {@link com.github.auties00.cobalt.model.chat.Chat#unreadCount()}
- * read-backs can be asserted directly without consulting a chat
- * table.
+ * <p>The handler runs against an in-memory {@link DeviceFixtures#temporaryStore} via
+ * {@link TestWhatsAppClient} so {@link com.github.auties00.cobalt.model.chat.Chat#markedAsUnread()}
+ * and {@link com.github.auties00.cobalt.model.chat.Chat#unreadCount()} read-backs can be asserted
+ * directly.
  */
 @DisplayName("MarkChatAsReadHandler")
 class MarkChatAsReadHandlerTest {

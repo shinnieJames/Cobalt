@@ -13,87 +13,68 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="w:g2" type="set" to="g.us"><leave>...</leave></iq>}
- * request that leaves one or more groups or communities in a single
- * batched stanza.
+ * Models the outbound {@code <iq xmlns="w:g2" type="set" to="g.us"><leave>...</leave></iq>} request that leaves one or more groups or communities in a single batched stanza.
  *
- * @apiNote
- * Send this when implementing the "leave group", "leave community",
- * or "leave several communities" admin actions (the menu entries
- * surfaced by WA Web's chat options, by the community detail panel,
- * and by the bulk community-leave flow). Pick {@link Mode#GROUP} for
- * regular groups (each target encodes as {@code <group id="..."/>})
- * and {@link Mode#LINKED_GROUPS} for communities (each target encodes
- * as {@code <linked_groups parent_group_jid="..."/>}, which the relay
- * expands server-side to leave the parent and every linked sub-group
- * atomically).
+ * <p>This request backs the "leave group", "leave community", and "leave several communities" admin
+ * actions. {@link Mode#GROUP} targets regular groups (each encodes as {@code <group id="..."/>})
+ * and {@link Mode#LINKED_GROUPS} targets communities (each encodes as
+ * {@code <linked_groups parent_group_jid="..."/>}, which the relay expands server-side to leave the
+ * parent and every linked sub-group atomically). The two shapes cannot be mixed inside a single
+ * request.
  *
  * @implNote
- * This implementation collapses WA Web's three exports
- * ({@code leaveGroup} for one regular group, {@code leaveCommunity}
- * for one community, and {@code leaveCommunities} for the bulk-leave
- * surface) into a single request class keyed by {@link Mode} and a
- * list of targets; the single-target exports in WA Web are thin
- * wrappers around the bulk path that extract {@code result[0]} from
- * the parser output.
+ * This implementation collapses the three separate single-group, single-community, and bulk-leave
+ * entry points into one request class keyed by {@link Mode} and a list of targets; the
+ * single-target paths share the same wire format as the bulk path and differ only in the size of
+ * the {@code <leave>} payload.
  */
 @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
 public final class IqGroupExitRequest implements IqOperation.Request {
     /**
-     * The grandchild-shape discriminator carried inside the
-     * {@code <leave>} payload.
+     * Discriminates the grandchild shape carried inside the {@code <leave>} payload.
      *
-     * @apiNote
-     * Choose between regular-group leave (one
-     * {@code <group id="..."/>} per target) and community leave (one
-     * {@code <linked_groups parent_group_jid="..."/>} per target);
-     * the two shapes cannot be mixed inside a single request.
+     * <p>Selects between regular-group leave (one {@code <group id="..."/>} per target) and
+     * community leave (one {@code <linked_groups parent_group_jid="..."/>} per target). The two
+     * shapes cannot be mixed inside a single request.
      */
     public enum Mode {
         /**
-         * The regular-group leave shape.
+         * Selects the regular-group leave shape.
          *
-         * @apiNote
-         * Each target encodes as {@code <group id="GROUP_JID"/>} and
-         * causes the relay to leave that group only. Use this for
-         * both regular groups and announcement-only groups.
+         * <p>Each target encodes as {@code <group id="GROUP_JID"/>} and causes the relay to leave
+         * that group only. Applies to both regular groups and announcement-only groups.
          */
         GROUP,
         /**
-         * The community-leave shape.
+         * Selects the community-leave shape.
          *
-         * @apiNote
-         * Each target encodes as
-         * {@code <linked_groups parent_group_jid="COMMUNITY_JID"/>}
-         * and causes the relay to leave the named community plus
-         * every sub-group linked to it in one atomic step.
+         * <p>Each target encodes as {@code <linked_groups parent_group_jid="COMMUNITY_JID"/>} and
+         * causes the relay to leave the named community plus every sub-group linked to it in one
+         * atomic step.
          */
         LINKED_GROUPS
     }
 
     /**
-     * The list of target JIDs to leave.
+     * Holds the list of target JIDs to leave.
      */
     private final List<Jid> targets;
 
     /**
-     * The grandchild-shape discriminator.
+     * Holds the grandchild-shape discriminator.
      */
     private final Mode mode;
 
     /**
-     * Constructs a request that leaves the given list of targets in
-     * the given mode.
+     * Constructs a request that leaves the given list of targets in the given mode.
      *
-     * @apiNote
-     * For a single-target leave, pass a one-element list; the relay's
-     * batched and single-target paths use the same wire format and
-     * differ only in the size of the {@code <leave>} payload.
+     * <p>For a single-target leave, pass a one-element list; the batched and single-target paths
+     * use the same wire format and differ only in the size of the {@code <leave>} payload.
      *
      * @implNote
      * This implementation defensively copies {@code targets} via
-     * {@link List#copyOf(java.util.Collection)} so later mutation of
-     * the caller's list cannot reach the dispatched stanza.
+     * {@link List#copyOf(java.util.Collection)} so later mutation of the caller's list cannot reach
+     * the dispatched stanza.
      *
      * @param targets the list of group or community {@link Jid}s to leave; never {@code null} and never empty
      * @param mode    the grandchild-shape discriminator; never {@code null}
@@ -129,18 +110,16 @@ public final class IqGroupExitRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound IQ stanza as a {@link NodeBuilder} ready
-     * for dispatch.
+     * Builds the outbound IQ stanza as a {@link NodeBuilder} ready for dispatch.
+     *
+     * <p>Each target in {@link #targets()} becomes one {@code <group id="..."/>} child in
+     * {@link Mode#GROUP} or one {@code <linked_groups parent_group_jid="..."/>} child in
+     * {@link Mode#LINKED_GROUPS}.
      *
      * @implNote
-     * This implementation matches WA Web's
-     * {@code wap("iq", {to:G_US, type:"set", xmlns:"w:g2", id}, wap("leave", null, [...children]))}
-     * call verbatim; each target in {@link #targets()} becomes one
-     * {@code <group id="..."/>} child in {@link Mode#GROUP} or one
-     * {@code <linked_groups parent_group_jid="..."/>} child in
-     * {@link Mode#LINKED_GROUPS}, and the IQ {@code to} is always the
-     * {@link JidServer#groupOrCommunity()} group server rather than
-     * any per-target group JID.
+     * This implementation sets the IQ {@code to} attribute to the
+     * {@link JidServer#groupOrCommunity()} group server rather than any per-target group JID, so a
+     * single envelope addresses the whole batch.
      *
      * @return the IQ envelope builder
      */
@@ -178,6 +157,15 @@ public final class IqGroupExitRequest implements IqOperation.Request {
                 .content(leaveNode);
     }
 
+    /**
+     * Compares this request with another object for equality.
+     *
+     * <p>Two requests are equal when they carry the same {@link #targets()} list and the same
+     * {@link #mode()}.
+     *
+     * @param obj the object to compare with; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal request, {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -191,11 +179,21 @@ public final class IqGroupExitRequest implements IqOperation.Request {
                 && this.mode == that.mode;
     }
 
+    /**
+     * Returns a hash code derived from the targets and mode.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(targets, mode);
     }
 
+    /**
+     * Returns a debug string describing the targets and mode.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "IqGroupExitRequest[targets=" + targets

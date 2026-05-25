@@ -16,26 +16,21 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:profile:picture" type="get">}
- * stanza builder for fetching a contact, group, persona, or avatar
- * picture.
+ * Builds the outbound {@code <iq xmlns="w:profile:picture" type="get">} stanza
+ * that fetches a contact, group, persona, or avatar picture.
  *
- * @apiNote
- * Used by callers driving the WA Web
- * {@code WAWebGetProfilePicJob} surface that dispatches through
- * {@code WASmaxProfilePictureGetRPC.sendGetRPC}. Depending on the
- * combination of optional fields the request fetches the full
- * picture URL, the preview URL, a cached blob, an avatar pose set,
- * or a tctoken-authenticated variant; the relay responds with one of
- * the four {@link SmaxProfilePictureGetResponse} success arms or an
- * error envelope.
+ * <p>Depending on the combination of optional fields the request fetches the
+ * full picture URL, the preview URL, a cached blob, an avatar pose set, or a
+ * privacy-token-authenticated variant; the relay answers with one of the four
+ * {@link SmaxProfilePictureGetResponse} success arms or an error envelope. Most
+ * callers supply {@code iqTarget}, {@code pictureType}, and
+ * {@code pictureQuery}; the remaining fields gate the optional mixin paths.
  *
  * @implNote
- * This implementation flattens the WA Web smax mixin chain
- * (getRequest + getIQ + baseGetIQ + baseIQGet + serverDomainIQ) into
- * a single {@link #toNode()} call; the avatar overlay path replaces
- * the {@code <picture type=...>} attribute and inlines the avatar
- * children directly.
+ * This implementation flattens the WA Web smax mixin chain (getRequest, getIQ,
+ * baseGetIQ, baseIQGet, serverDomainIQ) into a single {@link #toNode()} call;
+ * the avatar overlay path replaces the {@code <picture type=...>} attribute and
+ * inlines the avatar children directly.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePictureGetRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePictureGetIQMixin")
@@ -48,33 +43,31 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePicturePrivacyTokenContentsMixin")
 public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request {
     /**
-     * The target entity JID whose picture is being fetched; routed
-     * verbatim into the IQ's {@code target} attribute.
+     * The target entity JID whose picture is being fetched; routed verbatim
+     * into the IQ's {@code target} attribute.
      */
     private final Jid iqTarget;
 
     /**
-     * The optional {@code <picture type>} attribute. One of
-     * {@code "image"} (full picture) or {@code "preview"} (small
-     * preview).
+     * The optional {@code <picture type>} attribute; one of {@code "image"}
+     * (full picture) or {@code "preview"} (small preview).
      *
-     * @apiNote
-     * Ignored when {@link #avatarMixinArgs} is set; the avatar
+     * <p>This value is ignored when {@link #avatarMixinArgs} is set; the avatar
      * overlay path pins {@code type="avatar"} on its own.
      */
     private final String pictureType;
 
     /**
-     * The optional pre-known {@code <picture id>}. Lets the relay
-     * short-circuit with a 304-style hit when the caller already has
-     * the matching cached picture.
+     * The optional pre-known {@code <picture id>}; lets the relay short-circuit
+     * with a 304-style hit when the caller already holds the matching cached
+     * picture.
      */
     private final String pictureId;
 
     /**
-     * The optional {@code <picture query>} selector. Either
-     * {@code "url"} or {@code "data"} depending on whether the
-     * caller wants the URL or an inlined blob.
+     * The optional {@code <picture query>} selector; either {@code "url"} or
+     * {@code "data"} depending on whether the caller wants the URL or an inlined
+     * blob.
      */
     private final String pictureQuery;
 
@@ -84,67 +77,56 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     private final String pictureInvite;
 
     /**
-     * The optional {@code <picture persona_id>} (community / Meta-AI
-     * persona).
+     * The optional {@code <picture persona_id>} for a community or Meta-AI
+     * persona.
      */
     private final String picturePersonaId;
 
     /**
-     * The optional {@code <picture common_gid>} common-group JID
-     * (drives the contact-card picture in shared-group flows).
+     * The optional {@code <picture common_gid>} common-group JID that drives the
+     * contact-card picture in shared-group flows.
      */
     private final Jid pictureCommonGid;
 
     /**
-     * The optional add-request sub-payload for join-link-triggered
-     * fetches.
+     * The optional add-request sub-payload for join-link-triggered fetches.
      */
     private final SmaxProfilePictureGetAddRequestMixin addRequestMixinArgs;
 
     /**
-     * The optional privacy-token sub-payload for token-authenticated
-     * fetches.
+     * The optional privacy-token sub-payload for token-authenticated fetches.
      */
     private final SmaxProfilePictureGetTcTokenMixin tcTokenMixinArgs;
 
     /**
-     * The optional avatar overlay payload. When set, the
-     * {@code <picture>} root is emitted with
-     * {@code type="avatar"} carrying 0..4 {@code <avatar pose_id/>}
-     * children.
+     * The optional avatar overlay payload; when set, the {@code <picture>} root
+     * is emitted with {@code type="avatar"} carrying {@code 0..4}
+     * {@code <avatar pose_id/>} children.
      */
     private final SmaxProfilePictureGetAvatarMixin avatarMixinArgs;
 
     /**
-     * Constructs a profile-picture fetch request.
+     * Constructs a profile-picture fetch request from the given target and
+     * optional selectors.
      *
-     * @apiNote
-     * Use this when assembling a {@link SmaxProfilePictureGetRequest}
-     * for dispatch through the smax send pipeline. Most callers
-     * supply {@code iqTarget}, {@code pictureType}, and
-     * {@code pictureQuery}; the remaining fields gate the optional
-     * mixin paths.
-     *
-     * @param iqTarget             the target entity JID; never
-     *                             {@code null}
+     * @param iqTarget             the target entity JID; never {@code null}
      * @param pictureType          the optional picture type; may be
      *                             {@code null}
-     * @param pictureId            the optional cached picture id;
-     *                             may be {@code null}
-     * @param pictureQuery         the optional query selector; may
-     *                             be {@code null}
+     * @param pictureId            the optional cached picture id; may be
+     *                             {@code null}
+     * @param pictureQuery         the optional query selector; may be
+     *                             {@code null}
      * @param pictureInvite        the optional invite token; may be
      *                             {@code null}
-     * @param picturePersonaId     the optional persona id; may be
+     * @param picturePersonaId     the optional persona id; may be {@code null}
+     * @param pictureCommonGid     the optional common-group JID; may be
      *                             {@code null}
-     * @param pictureCommonGid     the optional common-group JID; may
-     *                             be {@code null}
-     * @param addRequestMixinArgs  the optional add-request payload;
-     *                             may be {@code null}
-     * @param tcTokenMixinArgs     the optional tctoken payload; may
-     *                             be {@code null}
-     * @param avatarMixinArgs      the optional avatar overlay; may
-     *                             be {@code null}
+     * @param addRequestMixinArgs  the optional add-request payload; may be
+     *                             {@code null}
+     * @param tcTokenMixinArgs     the optional privacy-token payload; may be
+     *                             {@code null}
+     * @param avatarMixinArgs      the optional avatar overlay; may be
+     *                             {@code null}
      * @throws NullPointerException if {@code iqTarget} is {@code null}
      */
     public SmaxProfilePictureGetRequest(Jid iqTarget,
@@ -177,11 +159,10 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     /**
      * Returns the optional picture type.
      *
-     * @apiNote
-     * Read by {@link #toNode()} when no avatar overlay is set.
+     * <p>{@link #toNode()} reads this value only when no avatar overlay is set.
      *
-     * @return an {@link Optional} carrying the type, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the type, or {@link Optional#empty()}
+     *         when omitted
      */
     public Optional<String> pictureType() {
         return Optional.ofNullable(pictureType);
@@ -190,8 +171,8 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     /**
      * Returns the optional cached picture id.
      *
-     * @return an {@link Optional} carrying the id, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the id, or {@link Optional#empty()}
+     *         when omitted
      */
     public Optional<String> pictureId() {
         return Optional.ofNullable(pictureId);
@@ -220,8 +201,8 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     /**
      * Returns the optional persona id.
      *
-     * @return an {@link Optional} carrying the id, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the id, or {@link Optional#empty()}
+     *         when omitted
      */
     public Optional<String> picturePersonaId() {
         return Optional.ofNullable(picturePersonaId);
@@ -230,8 +211,8 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     /**
      * Returns the optional common-group JID.
      *
-     * @return an {@link Optional} carrying the JID, or
-     *         {@link Optional#empty()} when omitted
+     * @return an {@link Optional} carrying the JID, or {@link Optional#empty()}
+     *         when omitted
      */
     public Optional<Jid> pictureCommonGid() {
         return Optional.ofNullable(pictureCommonGid);
@@ -248,7 +229,7 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     }
 
     /**
-     * Returns the optional tctoken payload.
+     * Returns the optional privacy-token payload.
      *
      * @return an {@link Optional} carrying the payload, or
      *         {@link Optional#empty()} when omitted
@@ -268,10 +249,9 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @apiNote
-     * The stanza has shape
+     * <p>The returned stanza has shape
      * {@snippet lang=xml :
      * <iq xmlns="w:profile:picture" type="get" to="s.whatsapp.net" target="<iqTarget>">
      *   <picture type="image|preview|avatar"? id? query? invite? persona_id? common_gid?>
@@ -284,15 +264,14 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
      * }
      *
      * @implNote
-     * This implementation pins the picture type to {@code "avatar"}
-     * and folds in {@code <avatar pose_id/>} children when an
-     * {@link #avatarMixinArgs} is present; otherwise it copies the
-     * caller's {@link #pictureType} through. The tctoken and
-     * add-request sub-payloads are emitted as the last children when
-     * present.
+     * This implementation pins the picture type to {@code "avatar"} and folds in
+     * {@code <avatar pose_id/>} children when {@link #avatarMixinArgs} is
+     * present; otherwise it copies the caller's {@link #pictureType} through.
+     * The privacy-token and add-request sub-payloads are emitted as the last
+     * children when present. The {@code to} attribute is pinned to
+     * {@link Jid#userServer()}.
      *
-     * @return a {@link NodeBuilder} carrying the partially-built IQ
-     *         envelope
+     * @return a {@link NodeBuilder} carrying the partially-built IQ envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutProfilePictureGetRequest",
@@ -343,13 +322,11 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     }
 
     /**
-     * Compares this request to another for value equality on every
-     * field.
+     * Compares this request to another for value equality on every field.
      *
      * @param obj the object to compare against
      * @return {@code true} when {@code obj} is a
-     *         {@link SmaxProfilePictureGetRequest} with identical
-     *         fields
+     *         {@link SmaxProfilePictureGetRequest} with identical fields
      */
     @Override
     public boolean equals(Object obj) {
@@ -387,9 +364,7 @@ public final class SmaxProfilePictureGetRequest implements SmaxOperation.Request
     /**
      * Returns a debug-friendly representation of this request.
      *
-     * @apiNote
-     * Intended for logging; the format is not part of the public
-     * contract.
+     * <p>The format is intended for logging and is not part of the contract.
      *
      * @return the string form
      */

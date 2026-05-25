@@ -17,30 +17,24 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that sync an addressbook contact to or from the primary device.
  *
- * @apiNote
- * Drives the contact-editor flow that WA Web exposes through
- * {@code WAWebContactEditSync}: adding, editing, or removing a contact in
- * the Web UI emits a contact-sync mutation that the primary device replays
- * against its native addressbook so the contact stays consistent across
- * linked devices. The factory is the outgoing-mutation counterpart of
+ * <p>Adding, editing, or removing a contact in the Web UI emits a contact-sync
+ * mutation that the primary device replays against its native addressbook so
+ * the contact stays consistent across linked devices. This factory builds the
+ * outgoing mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.ContactActionHandler}.
  *
  * @implNote
- * This implementation uses {@link Jid#toString()} for the index segment.
- * WA Web's {@code WAWebContactSync.getContactSyncMutation} calls
- * {@code e.toString({legacy: true})} to produce a legacy
- * {@code @c.us}-suffixed encoding; Cobalt normalises JIDs to a single
- * canonical form upstream so the legacy form is not reproduced. Receive-side
- * indexing in WA Web also accepts the canonical form, so the wire is
- * compatible.
+ * This implementation uses {@link Jid#toString()} for the index segment. WA
+ * Web produces a legacy {@code @c.us}-suffixed encoding; Cobalt normalises JIDs
+ * to a single canonical form upstream so the legacy form is not reproduced.
+ * Receive-side indexing in WA Web also accepts the canonical form, so the wire
+ * is compatible.
  */
 public final class ContactActionMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public ContactActionMutationFactory() {
 
@@ -49,18 +43,17 @@ public final class ContactActionMutationFactory {
     /**
      * Returns a SET or REMOVE mutation that syncs the given contact, timestamped at the moment of the call.
      *
-     * @apiNote
-     * Production code path. Delegates to
+     * <p>This is the production code path; it delegates to
      * {@link #getContactSyncMutation(Jid, String, String, boolean, Jid, Boolean, String, Instant)}
-     * with {@link Instant#now()}; tests that need byte-equality against a
-     * captured WA Web oracle should call the eight-arg overload directly
-     * with a pinned timestamp.
+     * with {@link Instant#now()}. Tests that need byte-equality against a
+     * captured WA Web oracle should call the eight-arg overload directly with a
+     * pinned timestamp.
      *
      * @implNote
-     * This implementation forwards {@code null} for any optional field
-     * (first name, full name, LID, username); the builder writes them as
-     * absent on the wire so a deletion ({@code isDelete == true}) still
-     * carries a valid empty {@link ContactAction} body.
+     * This implementation forwards {@code null} for any optional field (first
+     * name, full name, LID, username); the builder writes them as absent on the
+     * wire so a deletion ({@code isDelete == true}) still carries a valid empty
+     * {@link ContactAction} body.
      *
      * @param contactJid        the contact's primary {@link Jid} (PN form)
      * @param firstName         the user's first name, or {@code null} when unset
@@ -87,17 +80,15 @@ public final class ContactActionMutationFactory {
     /**
      * Returns a SET or REMOVE mutation that syncs the given contact at a caller-supplied timestamp.
      *
-     * @apiNote
-     * The pinned-timestamp seam exists so byte-parity tests can re-encode
-     * the same {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
-     * that a WA Web capture pinned at a known time; callers that just want
-     * the production path should prefer the seven-arg overload.
+     * <p>The pinned-timestamp seam exists so byte-parity tests can re-encode the
+     * same {@link com.github.auties00.cobalt.model.sync.SyncActionValue} that a
+     * WA Web capture pinned at a known time; callers that just want the
+     * production path should prefer the seven-arg overload.
      *
      * @implNote
-     * This implementation does not log or report when the contact is a LID;
-     * WA Web's {@code WAWebContactSync.getContactSyncMutation} warns and
-     * sends a Falco event in that case, but Cobalt does not run Falco and
-     * leaves the choice up to the caller.
+     * This implementation does not log or report when the contact is a LID; WA
+     * Web warns and sends a Falco event in that case, but Cobalt does not run
+     * Falco and leaves the choice up to the caller.
      *
      * @param contactJid        the contact's primary {@link Jid} (PN form)
      * @param firstName         the user's first name, or {@code null} when unset

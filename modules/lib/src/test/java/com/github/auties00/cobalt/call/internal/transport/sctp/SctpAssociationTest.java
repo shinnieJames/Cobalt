@@ -6,18 +6,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Smoke tests for the usrsctp FFM bindings and {@link SctpAssociation}
- * lifecycle. The tests fail loudly if libusrsctp is not loadable on
- * the running platform — silently skipping would let a broken native
- * bundle ship green.
+ * lifecycle. The tests deliberately do not catch {@link UnsatisfiedLinkError}:
+ * a libusrsctp that fails to load must fail the build rather than skip green.
  */
 public class SctpAssociationTest {
 
-    /**
-     * Constructs and tears down an {@link SctpAssociation} —
-     * verifies the FFM linker resolves all the expected symbols, the
-     * receive-callback upcall stub allocates, and
-     * {@code usrsctp_socket} returns non-NULL.
-     */
     @Test
     public void createAndCloseRoundTrip() {
         var outbound = new AtomicInteger();

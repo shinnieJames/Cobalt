@@ -18,33 +18,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the fetch-newsletter-pending-invites query
- * built by {@link FetchNewsletterPendingInvitesMexRequest}.
+ * Parses the MEX response of the fetch-newsletter-pending-invites query built by
+ * {@link FetchNewsletterPendingInvitesMexRequest}.
  *
- * @apiNote
- * Exposes the {@code pending_admin_invites} list and the newsletter
- * {@code id} echoed under {@code xwa2_newsletter_admin}; each
- * {@link PendingAdminInvites} carries one invited user whose admin invite
- * has not yet been accepted.
+ * <p>Exposes the {@code pending_admin_invites} list and the newsletter {@code id} echoed under
+ * {@code xwa2_newsletter_admin}; each {@link PendingAdminInvites} carries one invited user whose
+ * admin invite has not yet been accepted.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterPendingInvitesJob")
 public final class FetchNewsletterPendingInvitesMexResponse implements MexOperation.Response.Json {
     /**
-     * The list of pending admin invites.
+     * Holds the list of pending admin invites.
      */
     private final List<PendingAdminInvites> pendingAdminInvites;
 
     /**
-     * The newsletter Jid string echoed back by the server.
+     * Holds the newsletter Jid string echoed back by the server.
      */
     private final String id;
 
     /**
-     * Constructs a response wrapping the parsed pending invites and the
-     * echoed newsletter id.
-     *
-     * @apiNote
-     * Reserved for the static parser.
+     * Constructs a response wrapping the parsed pending invites and the echoed newsletter id.
      *
      * @param pendingAdminInvites the pending admin invites
      * @param id                  the newsletter Jid string
@@ -57,15 +51,12 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_admin} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser; the returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_admin} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result payload
      */
     public static Optional<FetchNewsletterPendingInvitesMexResponse> of(Node node) {
         return node.getChild("result")
@@ -94,21 +85,17 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
     /**
      * Wraps one pending admin invite.
      *
-     * @apiNote
-     * Carries only the invited {@link User} sub-object; WA Web maps each
-     * user to a {@code Wid} via the user's phone number or id.
+     * <p>Carries only the invited {@link User} sub-object; WA Web maps each user to a {@code Wid} via
+     * the user's phone number or id.
      */
     public static final class PendingAdminInvites {
         /**
-         * The invited user sub-object.
+         * Holds the invited user sub-object.
          */
         private final User user;
 
         /**
          * Constructs a pending-invite wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param user the invited user sub-object
          */
@@ -119,8 +106,7 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
         /**
          * Returns the invited user sub-object.
          *
-         * @return the parsed {@link User}, or empty when the relay omitted
-         *         the field
+         * @return the parsed {@link User}, or empty when the relay omitted the field
          */
         public Optional<User> user() {
             return Optional.ofNullable(user);
@@ -129,28 +115,23 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
         /**
          * Wraps the invited {@code user} sub-object.
          *
-         * @apiNote
-         * Carries the user's phone number string ({@code pn}) and Jid
-         * string ({@code id}); WA Web prefers {@code pn} when present and
-         * falls back to {@code id} otherwise to construct the destination
-         * Wid.
+         * <p>Carries the user's phone number string ({@code pn}) and Jid string ({@code id}); WA Web
+         * prefers {@code pn} when present and falls back to {@code id} otherwise to construct the
+         * destination Wid.
          */
         public static final class User {
             /**
-             * The user phone number string.
+             * Holds the user phone number string.
              */
             private final String pn;
 
             /**
-             * The user Jid string.
+             * Holds the user Jid string.
              */
             private final String id;
 
             /**
              * Constructs a user wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param pn the user phone number string
              * @param id the user Jid string
@@ -163,8 +144,7 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
             /**
              * Returns the user phone number string.
              *
-             * @return the phone number, or empty when the relay omitted the
-             *         field
+             * @return the phone number, or empty when the relay omitted the field
              */
             public Optional<String> pn() {
                 return Optional.ofNullable(pn);
@@ -173,8 +153,7 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
             /**
              * Returns the user Jid string.
              *
-             * @return the Jid string, or empty when the relay omitted the
-             *         field
+             * @return the Jid string, or empty when the relay omitted the field
              */
             public Optional<String> id() {
                 return Optional.ofNullable(id);
@@ -183,13 +162,8 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
             /**
              * Parses a {@link User} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link PendingAdminInvites#of(JSONObject)} to
-             * hydrate the nested {@code user} entry.
-             *
              * @param obj the JSON object to parse
-             * @return the parsed entry, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed entry, or empty when {@code obj} is {@code null}
              */
             static Optional<User> of(JSONObject obj) {
                 if (obj == null) {
@@ -202,15 +176,10 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
             }
 
             /**
-             * Parses a list of {@link User} entries from the given JSON
-             * array.
-             *
-             * @apiNote
-             * Provided for symmetry.
+             * Parses a list of {@link User} entries from the given JSON array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<User> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -228,14 +197,8 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
         /**
          * Parses a {@link PendingAdminInvites} from the given JSON object.
          *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterPendingInvitesMexResponse#of(byte[])} to
-         * hydrate one entry of the {@code pending_admin_invites} array.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed entry, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed entry, or empty when {@code obj} is {@code null}
          */
         static Optional<PendingAdminInvites> of(JSONObject obj) {
             if (obj == null) {
@@ -247,13 +210,7 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
         }
 
         /**
-         * Parses a list of {@link PendingAdminInvites} entries from the
-         * given JSON array.
-         *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterPendingInvitesMexResponse#of(byte[])} to
-         * hydrate the {@code pending_admin_invites} array.
+         * Parses a list of {@link PendingAdminInvites} entries from the given JSON array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -272,20 +229,14 @@ public final class FetchNewsletterPendingInvitesMexResponse implements MexOperat
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_admin} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_admin} root
      */
     private static Optional<FetchNewsletterPendingInvitesMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

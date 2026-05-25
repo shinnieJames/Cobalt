@@ -15,13 +15,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Updates the local user's avatar-presence state in response to {@code avatar_updated_action} sync mutations.
  *
- * @apiNote
- * Drives the avatar / Avatar Stickers surface where another device has
- * created, updated, or deleted the user's Meta-AI avatar. Cobalt
- * embedders observe the result through
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#hasAvatar()}
- * and (when the avatar is destroyed) through the recent-avatar-sticker
- * cache being cleared.
+ * <p>When another device creates, updates, or deletes the user's Meta-AI
+ * avatar, the resulting state is mirrored into
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#hasAvatar()}, and the
+ * recent-avatar-sticker cache is cleared on every mutation.
  *
  * @implNote
  * This implementation drops the per-batch {@code notSupported},
@@ -34,20 +31,17 @@ public final class AvatarUpdatedHandler implements WebAppStateActionHandler {
     /**
      * The {@link ABPropsService} consulted before applying any mutation.
      *
-     * @apiNote
-     * Used to read the {@link ABProp#ENABLE_AVATARS_ON_WEB_COMPANION}
-     * gate; when the gate is off every mutation in the batch resolves
-     * to {@link MutationApplicationResult#unsupported()} unchanged.
+     * <p>Reads the {@link ABProp#ENABLE_AVATARS_ON_WEB_COMPANION} gate; when
+     * the gate is off, every mutation resolves to
+     * {@link MutationApplicationResult#unsupported()} unchanged.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Constructs the avatar-updated handler with its dependency on the AB-props subsystem.
      *
-     * @apiNote
-     * Instantiated by the sync handler registry with a shared
-     * {@link ABPropsService}. Embedders do not normally construct this
-     * directly.
+     * <p>The sync handler registry instantiates this type with a shared
+     * {@link ABPropsService}.
      *
      * @param abPropsService the {@link ABPropsService} consulted on every mutation
      */
@@ -77,18 +71,17 @@ public final class AvatarUpdatedHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Reads the {@link AvatarUpdatedAction#eventType()} field from the
+     * <p>Reads the {@link AvatarUpdatedAction#eventType()} field from the
      * mutation value and either marks the user as having an avatar
-     * ({@code CREATED} / {@code UPDATED}) or as not having one
-     * ({@code DELETED}), then drops the recent-avatar-sticker cache so
-     * the UI no longer surfaces stale stickers.
+     * ({@code CREATED} / {@code UPDATED}) or as not having one ({@code DELETED}),
+     * then drops the recent-avatar-sticker cache via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#removeAllRecentAvatarStickers()}.
      *
      * @implNote
      * This implementation gates on the
      * {@link ABProp#ENABLE_AVATARS_ON_WEB_COMPANION} prop first;
-     * non-{@code SET} operations and missing event types are reported
-     * directly through {@link MutationApplicationResult#unsupported()}
+     * non-{@link SyncdOperation#SET} operations and missing event types are
+     * reported directly through {@link MutationApplicationResult#unsupported()}
      * and {@link SyncdIndexUtils#malformedActionValue(String)}.
      * Mutations whose timestamp is at or before the local pairing
      * timestamp are reported as

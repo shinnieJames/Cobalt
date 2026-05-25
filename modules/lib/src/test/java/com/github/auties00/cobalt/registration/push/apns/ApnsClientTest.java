@@ -20,25 +20,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Live integration suite for {@link ApnsClient}.
+ * Live integration suite for {@link ApnsClient}, exercising the real Apple Push Notification courier
+ * and the WhatsApp registration flow it feeds. Tests that talk to WhatsApp retry across several fresh
+ * phone numbers to absorb transient server-side rejections, so a green run requires network access and
+ * working APNS connectivity.
  */
 @Timeout(value = 10, unit = TimeUnit.MINUTES)
 class ApnsClientTest {
 
-    /**
-     * Verifies that a fresh push client can drive a complete WhatsApp
-     * registration to completion.
-     *
-     * @apiNote
-     * Retries up to five times with a fresh phone number per attempt
-     * to absorb transient WhatsApp-side rejections; fails the build
-     * only when every attempt is rejected or every attempt times out
-     * waiting for the silent verification push.
-     *
-     * @throws Throwable if the registration fails for a reason other
-     *                   than {@link WhatsAppRegistrationException} or
-     *                   a push-arrival timeout
-     */
     @Test
     public void deliversPushCodeViaRegistration() throws Throwable {
         var maxAttempts = 5;
@@ -106,9 +95,6 @@ class ApnsClientTest {
                 lastFailure);
     }
 
-    /**
-     * Verifies the supported-platforms set lists both iOS variants.
-     */
     @Test
     void supportedPlatformsListsBothIosVariants() {
         try (var client = ApnsClient.newSession()) {
@@ -118,9 +104,6 @@ class ApnsClientTest {
         }
     }
 
-    /**
-     * Verifies that closing an unauthenticated client is idempotent.
-     */
     @Test
     void closeIsIdempotentBeforeAuthenticate() {
         var client = ApnsClient.newSession();
@@ -128,10 +111,6 @@ class ApnsClientTest {
         assertDoesNotThrow(client::close);
     }
 
-    /**
-     * Verifies that read-only accessors reject an unauthenticated
-     * client.
-     */
     @Test
     void accessorsRejectUnauthenticatedClient() {
         try (var client = ApnsClient.newSession()) {
@@ -142,9 +121,6 @@ class ApnsClientTest {
         }
     }
 
-    /**
-     * Verifies that authenticate rejects non-iOS device profiles.
-     */
     @Test
     void rejectsNonIosDevice() {
         try (var client = ApnsClient.newSession()) {
@@ -156,15 +132,6 @@ class ApnsClientTest {
         }
     }
 
-    /**
-     * Verifies that authenticating as an iOS personal device yields
-     * a 64-character hex push token.
-     *
-     * @implNote
-     * APNS device tokens are 32 raw bytes; the
-     * {@link ApnsClient#getPushToken()} contract returns them
-     * hex-encoded, so the expected width is 64 characters.
-     */
     @Test
     void authenticatesPersonalAndProducesPushToken() {
         try (var client = ApnsClient.newSession()) {
@@ -172,14 +139,11 @@ class ApnsClientTest {
             assertTrue(client.isAuthenticated());
             var token = client.getPushToken();
             assertNotNull(token);
+            // APNS device tokens are 32 raw bytes returned hex-encoded, hence 64 characters
             assertEquals(64, token.length(), () -> "expected 64-char hex token, got: " + token);
         }
     }
 
-    /**
-     * Verifies that authenticating as an iOS business device yields
-     * a 64-character hex push token.
-     */
     @Test
     void authenticatesBusinessAndProducesPushToken() {
         try (var client = ApnsClient.newSession()) {
@@ -189,10 +153,6 @@ class ApnsClientTest {
         }
     }
 
-    /**
-     * Verifies that calling authenticate twice on the same client
-     * is rejected.
-     */
     @Test
     void rejectsDoubleAuthenticate() {
         try (var client = ApnsClient.newSession()) {
@@ -202,17 +162,6 @@ class ApnsClientTest {
         }
     }
 
-    /**
-     * Verifies that a session captured from one client restores
-     * into another and produces a valid push token.
-     *
-     * @implNote
-     * Apple rotates the APNS device token across courier sessions,
-     * so the reload produces a 64-char hex token but not
-     * necessarily the same one; only the activation certificate is
-     * durable. The test asserts shape rather than equality on the
-     * reloaded token for that reason.
-     */
     @Test
     void sessionRoundTripsThroughLoadSession() throws Exception {
         ApnsSession saved;
@@ -227,6 +176,8 @@ class ApnsClientTest {
 
         try (var loaded = ApnsClient.loadSession(saved)) {
             assertTrue(loaded.isAuthenticated());
+            // Apple rotates the device token across courier sessions, so assert shape not equality:
+            // only the activation certificate is durable, the reloaded token need not match the saved one
             assertEquals(64, loaded.getPushToken().length());
         }
     }

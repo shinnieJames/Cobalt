@@ -16,32 +16,25 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that create, edit, or delete a Business label.
  *
- * @apiNote
- * Drives the Business label-editor surfaces that
- * {@code WAWebBizLabelEditingAction} dispatches through (add, edit, and
- * delete). The mutation populates {@code WAWebSchemaLabel} and the
- * in-memory {@code WAWebLabelCollection} consistently across linked
- * devices, including the "deleted" path in which only the {@code deleted}
- * flag travels with the label id. The factory is the outgoing-mutation
- * counterpart of
+ * Drives the Business label-editor surfaces (add, edit, and delete). The mutation keeps the label
+ * schema and the in-memory label collection consistent across linked devices, including the
+ * "deleted" path in which only the {@code deleted} flag travels with the label id. This factory is
+ * the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.LabelEditHandler}.
  *
  * @implNote
- * This implementation does not call
- * {@code WAWebWamLabelSyncTrackingReporter.generateLabelEditHash} or emit
- * the matching {@code logLabelSyncEvent}; WA Web records a SUCCESS event on
- * the sender side as part of {@code getLabelMutation}, but Cobalt does not
- * run that telemetry pipeline. The cast of {@code type} to the protobuf
- * enum is done via {@link LabelEditAction.ListType} directly, so the
- * malformed-cast warning that WA Web logs is unreachable here.
+ * This implementation does not call {@code WAWebWamLabelSyncTrackingReporter.generateLabelEditHash}
+ * or emit the matching {@code logLabelSyncEvent}; WA Web records a SUCCESS event on the sender side
+ * as part of {@code getLabelMutation}, but Cobalt does not run that telemetry pipeline. The
+ * {@code type} value is supplied directly as {@link LabelEditAction.ListType}, so the malformed-cast
+ * warning that WA Web logs is unreachable here.
  */
 public final class LabelEditMutationFactory {
     /**
      * Creates an instance with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public LabelEditMutationFactory() {
 
@@ -50,26 +43,21 @@ public final class LabelEditMutationFactory {
     /**
      * Returns a SET mutation that creates, edits, or deletes a Business label.
      *
-     * @apiNote
      * The mutation index follows
      * {@snippet :
      *     ["label_edit", labelId]
      * }
-     * and the {@link LabelEditAction} sub-message carries only the fields
-     * the caller actually populated; {@code null} fields are omitted on the
-     * wire so unchanged attributes (colour, predefined id, active flag,
-     * list type) round-trip correctly. Set {@code deleted == true} to emit
-     * the delete branch, in which case the receive-side handler skips most
-     * other fields.
+     * and the {@link LabelEditAction} sub-message carries only the fields the caller actually
+     * populated; {@code null} fields are omitted on the wire so unchanged attributes (colour,
+     * predefined id, active flag, list type) round-trip correctly. Set {@code deleted == true} to
+     * emit the delete branch, in which case the receive side skips most other fields.
      *
      * @implNote
      * This implementation preserves the WA Web parameter order
-     * ({@code labelId, name, color, deleted, predefinedId, isActive, type,
-     * timestamp}); changing the order would change the test fixtures'
-     * argument list. Lists with type {@code AI_HANDOFF} or
-     * {@code AI_RESPONDING} are still allowed as outgoing edits; the
-     * receive-side handler reconciles duplicates by querying
-     * {@code WAWebModelStorageUtils.getStorage().lock}.
+     * ({@code labelId, name, color, deleted, predefinedId, isActive, type, timestamp}); changing the
+     * order would change the test fixtures' argument list. Lists with type {@code AI_HANDOFF} or
+     * {@code AI_RESPONDING} are still allowed as outgoing edits; the receive side reconciles
+     * duplicates against its own label storage.
      *
      * @param labelId      the label identifier used as the mutation index
      * @param name         the display name, or {@code null} when unchanged

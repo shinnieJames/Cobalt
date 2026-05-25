@@ -18,42 +18,25 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code label_jid} app-state sync action that pins or unpins a
  * chat or contact under a given chat label.
  *
- * @apiNote
- * Drives the SMB/Business "label this chat" affordance: when the primary
- * device tags a conversation with a colour-coded label the resulting
- * association fans out across the {@link SyncPatchType#REGULAR}
- * collection so companion devices show the same label badge. The
- * mutation index encodes the label id and the target JID, formatted as
+ * <p>The association fans out across the {@link SyncPatchType#REGULAR}
+ * collection so companion devices show the same label badge. The mutation
+ * index encodes the label id and the target JID, formatted as
  * {@snippet :
  *     ["label_jid", labelId, chatJid]
  * }
  *
  * @implNote
  * This implementation stores associations directly on the
- * {@link Label#assignments()} set rather than in a separate
- * label-association table the way WA Web's
- * {@code WAWebDBLabelAssociationDatabaseApi.addOrEditLabelAssociations}
- * does, so the
- * {@code applyLabelAssociationChanges} frontend RPC is not modelled.
- * Target-JID resolution mirrors WA Web's chat-table-first, then
- * LID-to-phone fallback order. The
- * {@code biz_automatically_labeled_chat_system_message} notification
- * emitted by WA Web for the {@code DO_NEW_ORDER} and {@code DO_LEAD}
- * predefined labels and the
- * {@code WAWebWamLabelSyncTrackingReporter} telemetry are not modelled.
+ * {@link Label#assignments()} set rather than in a separate label-association
+ * table, and resolves the target JID chat-table-first then through a
+ * LID-to-phone fallback. The auto-label system notification for predefined
+ * labels is not modelled.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelJidSync")
 public final class LabelAssociationHandler implements WebAppStateActionHandler {
 
     /**
-     * The position of the target JID inside the parsed mutation
-     * {@code indexParts} array.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code chatJidIndex = 2} assignment in the
-     * constructor of {@code WAWebLabelJidSync}; preserving the constant
-     * keeps the wire-level layout visible if WA Web ever reshapes the
-     * index.
+     * The position of the target JID inside the parsed mutation index array.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int CHAT_JID_INDEX = 2;
@@ -96,22 +79,25 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()}, a missing label id or
+     * target JID as malformed, and an unparseable target JID as malformed. The
+     * target JID is resolved chat-table-first, then through
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findPhoneByLid(Jid)}
+     * when it carries the LID server. When {@link LabelAssociationAction#labeled()}
+     * is set the resolved JID is added via {@link Label#addAssignment(Jid)};
+     * otherwise it is removed via {@link Label#removeAssignment(Jid)}.
+     *
      * @implNote
      * This implementation classifies a missing index slot as
-     * {@link MutationApplicationResult#malformed()} explicitly so the
-     * outer try/catch does not turn the malformed index into
-     * {@link MutationApplicationResult#failed()} via an
-     * {@code IndexOutOfBoundsException} from {@code JSON.parseArray}.
-     * The {@link LabelAssociationAction#labeled()} accessor coalesces a
-     * {@code null} protobuf field to {@code false} per the project's
-     * "no Optional&lt;Boolean&gt;" rule, so a {@code null}
-     * {@code labeled} is treated as remove rather than as
-     * {@link MutationApplicationResult#malformed()}. When the label is
-     * not yet known locally a stub
-     * {@link Label} with empty name and zero colour is created so the
-     * association can be recorded, mirroring WA Web's behaviour where
-     * {@code addOrEditLabelAssociations} writes the row even if the
-     * label table has not yet seen the corresponding edit.
+     * {@link MutationApplicationResult#malformed()} before parsing so the outer
+     * try/catch does not turn it into {@link MutationApplicationResult#failed()}
+     * via an {@code IndexOutOfBoundsException} from {@code JSON.parseArray}.
+     * Because {@link LabelAssociationAction#labeled()} coalesces a {@code null}
+     * protobuf field to {@code false}, a {@code null} flag is treated as a
+     * removal rather than a malformed value. When the label is not yet known a
+     * stub {@link Label} with empty name and zero colour is created so the
+     * association can be recorded ahead of the corresponding label edit.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

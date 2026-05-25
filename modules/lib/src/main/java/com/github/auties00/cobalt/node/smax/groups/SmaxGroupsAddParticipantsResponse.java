@@ -15,13 +15,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsAddParticipantsRequest}.
+ * Sealed reply family for a {@link SmaxGroupsAddParticipantsRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's
- * {@code Success}/{@code ClientError}/{@code ServerError} cases. {@link Success} always wraps the
- * per-participant outcome list returned by {@code WAWebGroupModifyParticipantsJob}; a successful envelope still
- * carries individual rejections, so callers must walk {@link Success#participants()} to detect partial
- * failures.
+ * The three variants partition every reply the relay can return: {@link Success}, {@link ClientError} and
+ * {@link ServerError}. {@link Success} always wraps the per-participant outcome list; a successful envelope still
+ * carries individual rejections, so callers must walk {@link Success#participants()} to detect partial failures.
  */
 public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.Response
         permits SmaxGroupsAddParticipantsResponse.Success, SmaxGroupsAddParticipantsResponse.ClientError, SmaxGroupsAddParticipantsResponse.ServerError {
@@ -30,10 +28,10 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
      * Dispatches the inbound IQ across each {@link SmaxGroupsAddParticipantsResponse} variant in priority order
      * and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsAddParticipantsRPC}.
+     * {@link Success} is probed first, then {@link ClientError}, then {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * documented variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the
      * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
@@ -59,32 +57,34 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
     }
 
     /**
-     * The reply variant carrying the per-participant outcome list when the relay accepted the request envelope.
+     * Reply variant carrying the per-participant outcome list when the relay accepted the request envelope.
      *
-     * @apiNote The IQ envelope succeeds even when every candidate is rejected at the participant-policy level
-     * (private accounts, blocked contacts, non-WA users); callers must walk {@link #participants()} to detect
-     * partial or total rejection.
+     * The IQ envelope succeeds even when every candidate is rejected at the participant-policy level (private
+     * accounts, blocked contacts, non-WA users); callers must walk {@link #participants()} to detect partial or
+     * total rejection.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsParticipantAddedOrNonRegisteredWaUserParticipantErrorLidResponseMixinGroup")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
     final class Success implements SmaxGroupsAddParticipantsResponse {
         /**
-         * The optional {@code addressing_mode} attribute echoed on the IQ envelope.
+         * Holds the optional {@code addressing_mode} attribute echoed on the IQ envelope.
          */
         private final String addressingMode;
 
         /**
-         * The per-participant outcome rows projected from the {@code <add>} child.
+         * Holds the per-participant outcome rows projected from the {@code <add>} child.
          */
         private final List<AddParticipantResult> participants;
 
         /**
          * Constructs a {@link Success}.
          *
+         * The supplied participant list is defensively copied and a {@code null} value is treated as empty.
+         *
          * @param addressingMode the optional addressing-mode echo ({@code "lid"} or {@code "pn"}); may be
          *                       {@code null}
-         * @param participants   the per-participant outcomes; defensively copied, {@code null} treated as empty
+         * @param participants   the per-participant outcomes; may be {@code null}
          */
         public Success(String addressingMode, List<AddParticipantResult> participants) {
             this.addressingMode = addressingMode;
@@ -94,8 +94,8 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         /**
          * Returns the optional {@code addressing_mode} echo.
          *
-         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
-         * mode; the field is omitted on legacy groups.
+         * The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing mode; the
+         * field is omitted on legacy groups.
          *
          * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
@@ -115,9 +115,8 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseAddParticipantsResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request, must carry an {@code <add>} child, and every
-         * {@code <participant>} grand-child must satisfy {@link AddParticipantResult#of(Node)}.
+         * The IQ must be a valid {@code type="result"} echo of the request, must carry an {@code <add>} child, and
+         * every {@code <participant>} grand-child must satisfy {@link AddParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -187,39 +186,35 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         }
 
         /**
-         * The per-participant outcome row produced by the relay for a single candidate JID.
+         * Per-participant outcome row produced by the relay for a single candidate JID.
          *
-         * @apiNote The WA Web wire-level shape is a two-arm disjunction
-         * ({@code AddParticipantsParticipantAddedResponse} for accepted candidates,
-         * {@code NonRegisteredWaUserParticipantErrorLidResponse} for rejected ones). Cobalt fuses the two arms
-         * into a single class exposing the always-present {@link #jid()} plus an optional
-         * {@link #nonRegisteredUser()} payload that distinguishes the arms.
+         * The always-present {@link #jid()} identifies the candidate; the optional {@link #nonRegisteredUser()}
+         * payload discriminates the accepted arm (empty) from the rejected arm (present).
          *
-         * @implNote The fusion keeps the response shape stable across both arms so callers do not need to
-         * pattern-match on the disjunction at every call site; the {@code nonRegisteredUser} {@link Optional}
-         * is the discriminator.
+         * @implNote This implementation fuses the WA Web wire-level disjunction (accepted-candidate arm vs.
+         * non-registered-WA-user arm) into a single class so callers do not need to pattern-match on the
+         * disjunction at every call site; the {@code nonRegisteredUser} {@link Optional} is the discriminator.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsParticipantAddedResponseMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsNonRegisteredWaUserParticipantErrorLidResponseMixin")
         public static final class AddParticipantResult {
             /**
-             * The participant {@link Jid}, always present on both disjunction arms.
+             * Holds the participant {@link Jid}, always present on both disjunction arms.
              */
             private final Jid jid;
 
             /**
-             * The optional {@code phone_number} attribute echoed by the relay.
+             * Holds the optional {@code phone_number} attribute echoed by the relay.
              */
             private final String phoneNumber;
 
             /**
-             * The optional {@code username} attribute echoed by the relay.
+             * Holds the optional {@code username} attribute echoed by the relay.
              */
             private final String username;
 
             /**
-             * The optional non-registered-user payload populated only on the
-             * {@code NonRegisteredWaUserParticipantErrorLidResponse} arm.
+             * Holds the optional non-registered-user payload, populated only on the rejected arm.
              */
             private final NonRegisteredWaUser nonRegisteredUser;
 
@@ -270,9 +265,8 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             /**
              * Returns the optional non-registered-user payload.
              *
-             * @apiNote An empty value identifies this row as the accepted-candidate arm; a present value
-             * identifies it as the rejected arm and carries the reason code via
-             * {@link NonRegisteredWaUser#errorCode()}.
+             * An empty value identifies this row as the accepted-candidate arm; a present value identifies it as
+             * the rejected arm and carries the reason code via {@link NonRegisteredWaUser#errorCode()}.
              *
              * @return an {@link Optional} carrying the rejection payload
              */
@@ -284,8 +278,7 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
              * Tries to parse an outcome row from a single {@code <participant>} child of the {@code <add>}
              * payload.
              *
-             * @apiNote Matches the WA Web parser {@code parseAddParticipantsResponseSuccessAddParticipant}: the
-             * node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * The node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
              * {@code error} attribute discriminating the rejected arm.
              *
              * @param node the {@code <participant>} child
@@ -355,17 +348,16 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             }
 
             /**
-             * The rejection payload for a candidate whose supplied phone number or LID did not map to a
-             * registered WhatsApp user.
+             * Rejection payload for a candidate whose supplied phone number or LID did not map to a registered
+             * WhatsApp user.
              *
-             * @apiNote The {@link #errorCode()} is lifted from the inner WA Web mixin family
-             * (request-code-can-be-sent vs. cannot-be-created-for-legal-concerns vs. has-invalid-PN); callers
-             * surface it as the displayed error in the contact-picker rejection toast.
+             * The {@link #errorCode()} identifies which rejection arm the relay took (request-code-can-be-sent
+             * vs. cannot-be-created-for-legal-concerns vs. has-invalid-PN).
              */
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsParticipantRequestCodeCanBeSentOrRequestCodeCannotBeCreatedForLegalConcernsOrHasInvalidPNMixinGroup")
             public static final class NonRegisteredWaUser {
                 /**
-                 * The numeric reason code identifying why the candidate was rejected.
+                 * Holds the numeric reason code identifying why the candidate was rejected.
                  */
                 private final int errorCode;
 
@@ -390,8 +382,12 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                 /**
                  * Tries to parse a {@link NonRegisteredWaUser} payload from a {@code <participant>} child.
                  *
-                 * @apiNote The presence of a non-negative {@code error} attribute discriminates the rejected arm
-                 * from the accepted-candidate arm; an empty value signals the accepted arm.
+                 * The presence of a non-negative {@code error} attribute discriminates the rejected arm from the
+                 * accepted-candidate arm; an empty value signals the accepted arm.
+                 *
+                 * @implNote This implementation reads the {@code error} attribute defaulting to {@code -1}; any
+                 * negative value (including the missing-attribute default) signals the accepted arm and yields an
+                 * empty {@link Optional}.
                  *
                  * @param node the {@code <participant>} child
                  * @return an {@link Optional} carrying the parsed payload, or empty when the node is on the
@@ -449,18 +445,18 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
+     * Reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
      * referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsResponseClientError")
     final class ClientError implements SmaxGroupsAddParticipantsResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -496,8 +492,8 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -555,17 +551,17 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsResponseServerError")
     final class ServerError implements SmaxGroupsAddParticipantsResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -601,8 +597,8 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

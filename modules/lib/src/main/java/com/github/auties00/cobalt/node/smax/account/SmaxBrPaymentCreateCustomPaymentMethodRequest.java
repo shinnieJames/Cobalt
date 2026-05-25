@@ -14,24 +14,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:pay">} stanza builder for
- * registering a Brazilian custom payment method (pay-on-delivery or
- * PIX) against the connected device.
+ * Builds the outbound {@code <iq xmlns="w:pay">} stanza for registering a
+ * Brazilian custom payment method against the connected device.
  *
- * @apiNote
- * Used by callers driving the WA Web Brazilian-payments add-method
- * flow that dispatches through
- * {@code WASmaxBrPaymentCreateCustomPaymentMethodRPC.sendCreateCustomPaymentMethodRPC}.
- * The relay either persists the method and replies with a
- * {@link SmaxBrPaymentCreateCustomPaymentMethodResponse.Success}, or
- * rejects with a {@link SmaxBrPaymentCreateCustomPaymentMethodResponse.IqError}.
+ * <p>The method being registered is either pay-on-delivery or PIX. The relay
+ * either persists the method and replies with a
+ * {@link SmaxBrPaymentCreateCustomPaymentMethodResponse.Success}, or rejects
+ * with a {@link SmaxBrPaymentCreateCustomPaymentMethodResponse.IqError}.
  *
  * @implNote
- * This implementation collapses the WA Web smax mixin chain
- * (set-IQ + metadata-info + metadata-mixin) into a single
- * {@link #toNode()} call. The optional {@code <metadata_info>} child
- * is folded in only when the caller passed a non-{@code null} metadata
- * map.
+ * This implementation collapses the WA Web smax mixin chain (set-IQ +
+ * metadata-info + metadata-mixin) into a single {@link #toNode()} call. The
+ * optional {@code <metadata_info>} child is folded in only when the caller
+ * passed a non-{@code null} metadata map.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBrPaymentCreateCustomPaymentMethodRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBrPaymentSetIQMixin")
@@ -39,91 +34,74 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutBrPaymentCustomPaymentMethodMetaDataMixin")
 public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements SmaxOperation.Request {
     /**
-     * The opaque device-id routed into {@code <account device_id=...>}.
+     * Holds the opaque device-id routed into {@code <account device_id=...>}.
      *
-     * @apiNote
-     * Mirrors the WA Web {@code WAWebDeviceId} value passed by the
-     * Brazilian-payments registration flow.
+     * <p>Carries the device value passed by the Brazilian-payments
+     * registration flow.
      */
     private final String accountDeviceId;
 
     /**
-     * The custom-payment-method type literal; one of
+     * Holds the custom-payment-method type literal; one of
      * {@code "pay_on_delivery"} or {@code "pix_key"}.
      *
-     * @apiNote
-     * Validated against
-     * {@code WASmaxInBrPaymentEnums.ENUM_PAYONDELIVERY_PIXKEY} by the
-     * relay; the request side trusts the caller.
+     * <p>The relay validates this against its method-type enum; the request
+     * side trusts the caller.
      */
     private final String customPaymentMethodType;
 
     /**
-     * The optional {@code update} marker on
+     * Holds the optional {@code update} marker on
      * {@code <custom_payment_method/>}.
      *
-     * @apiNote
-     * Set when re-registering an existing method to refresh server-side
+     * <p>Set when re-registering an existing method to refresh server-side
      * metadata; {@code null} for a brand-new registration.
      */
     private final String customPaymentMethodUpdate;
 
     /**
-     * The optional {@code flow} marker on
-     * {@code <custom_payment_method/>}; one of {@code "p2m"} or
-     * {@code "p2p"}.
+     * Holds the optional {@code flow} marker on
+     * {@code <custom_payment_method/>}; one of {@code "p2m"} or {@code "p2p"}.
      *
-     * @apiNote
-     * Validated against
-     * {@code WASmaxInBrPaymentEnums.ENUM_P2M_P2P} by the relay.
+     * <p>The relay validates this against its flow enum.
      */
     private final String customPaymentMethodFlow;
 
     /**
-     * The optional 1..5 metadata key-value pairs, preserved in
-     * insertion order; {@code null} omits the
-     * {@code <metadata_info>} child entirely.
+     * Holds the optional 1..5 metadata key-value pairs, preserved in insertion
+     * order; {@code null} omits the {@code <metadata_info>} child entirely.
      *
-     * @apiNote
-     * A non-{@code null} value flags an opt-in for the
-     * {@code WASmaxOutBrPaymentCustomPaymentMethodMetaDataInfoMixin}
-     * payload; the relay applies the entries as method-specific
-     * fields (e.g. PIX-key contents).
+     * <p>A non-{@code null} value opts in to the metadata-info payload; the
+     * relay applies the entries as method-specific fields (e.g. PIX-key
+     * contents).
      */
     private final Map<String, String> metadata;
 
     /**
-     * Constructs a Brazilian-payments method-registration request.
-     *
-     * @apiNote
-     * Use this when assembling a
-     * {@link SmaxBrPaymentCreateCustomPaymentMethodRequest} for
-     * dispatch through the smax send pipeline.
+     * Constructs a Brazilian-payments method-registration request for dispatch
+     * through the smax send pipeline.
      *
      * @implNote
      * This implementation defensively copies the metadata map into a
-     * {@link LinkedHashMap} wrapped via
-     * {@link Collections#unmodifiableMap(Map)} so insertion
-     * order is preserved on subsequent {@link #toNode()} fanout.
+     * {@link LinkedHashMap} wrapped via {@link Collections#unmodifiableMap(Map)}
+     * so insertion order is preserved on subsequent {@link #toNode()} fanout.
      *
      * @param accountDeviceId           the device-id; never {@code null}
      * @param customPaymentMethodType   the method-type literal; never
      *                                  {@code null}
-     * @param customPaymentMethodUpdate the optional update marker;
-     *                                  may be {@code null}
-     * @param customPaymentMethodFlow   the optional flow marker; may
-     *                                  be {@code null}
-     * @param metadata                  the optional metadata map;
-     *                                  must contain 1..5 entries when
-     *                                  non-{@code null}; {@code null}
-     *                                  omits the
+     * @param customPaymentMethodUpdate the optional update marker; may be
+     *                                  {@code null}
+     * @param customPaymentMethodFlow   the optional flow marker; may be
+     *                                  {@code null}
+     * @param metadata                  the optional metadata map; must contain
+     *                                  1..5 entries when non-{@code null};
+     *                                  {@code null} omits the
      *                                  {@code <metadata_info>} child
      * @throws NullPointerException     if {@code accountDeviceId} or
-     *                                  {@code customPaymentMethodType}
-     *                                  is {@code null}
-     * @throws IllegalArgumentException if {@code metadata} is
-     *                                  non-{@code null} and empty or
-     *                                  exceeds {@code 5} entries
+     *                                  {@code customPaymentMethodType} is
+     *                                  {@code null}
+     * @throws IllegalArgumentException if {@code metadata} is non-{@code null}
+     *                                  and empty or exceeds {@code 5} entries
      */
     public SmaxBrPaymentCreateCustomPaymentMethodRequest(String accountDeviceId,
                    String customPaymentMethodType,
@@ -147,8 +125,7 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Returns the account device-id.
      *
-     * @apiNote
-     * Read by {@link #toNode()} when stamping the
+     * <p>Read by {@link #toNode()} when stamping the
      * {@code <account device_id=...>} attribute.
      *
      * @return the id; never {@code null}
@@ -160,8 +137,7 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Returns the custom-payment-method type literal.
      *
-     * @apiNote
-     * Read by {@link #toNode()} when stamping the
+     * <p>Read by {@link #toNode()} when stamping the
      * {@code <custom_payment_method type=...>} attribute.
      *
      * @return the type; never {@code null}
@@ -173,8 +149,7 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Returns the optional {@code update} marker.
      *
-     * @apiNote
-     * Read by {@link #toNode()} to decide whether to stamp
+     * <p>Read by {@link #toNode()} to decide whether to stamp
      * {@code <custom_payment_method update=...>}.
      *
      * @return an {@link Optional} carrying the marker, or
@@ -187,8 +162,7 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Returns the optional {@code flow} marker.
      *
-     * @apiNote
-     * Read by {@link #toNode()} to decide whether to stamp
+     * <p>Read by {@link #toNode()} to decide whether to stamp
      * {@code <custom_payment_method flow=...>}.
      *
      * @return an {@link Optional} carrying the marker, or
@@ -201,15 +175,13 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Returns the optional metadata map.
      *
-     * @apiNote
-     * A present value tells {@link #toNode()} to emit a
+     * <p>A present value tells {@link #toNode()} to emit a
      * {@code <metadata_info>} child with one
-     * {@code <metadata key=" " value=" "/>} per entry, in insertion
-     * order.
+     * {@code <metadata key=" " value=" "/>} per entry, in insertion order.
      *
      * @return an {@link Optional} carrying the unmodifiable map, or
-     *         {@link Optional#empty()} when the caller omitted the
-     *         metadata child entirely
+     *         {@link Optional#empty()} when the caller omitted the metadata
+     *         child entirely
      */
     public Optional<Map<String, String>> metadata() {
         return Optional.ofNullable(metadata);
@@ -218,8 +190,7 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The stanza has shape
+     * <p>The stanza has shape
      * {@snippet lang=xml :
      * <iq xmlns="w:pay" type="set" to="s.whatsapp.net">
      *   <account action="create-custom-payment-method" device_id="..." country="BR">
@@ -234,14 +205,12 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
      * }
      *
      * @implNote
-     * This implementation folds the WA Web
-     * {@code optionalMerge} of {@code <metadata_info>} into a single
-     * {@code if (metadata != null)} branch; the metadata map's
-     * {@link LinkedHashMap} backing preserves the caller's insertion
-     * order in the emitted children.
+     * This implementation folds the WA Web optional merge of
+     * {@code <metadata_info>} into a single {@code if (metadata != null)}
+     * branch; the metadata map's {@link LinkedHashMap} backing preserves the
+     * caller's insertion order in the emitted children.
      *
-     * @return a {@link NodeBuilder} carrying the partially-built IQ
-     *         envelope
+     * @return a {@link NodeBuilder} carrying the partially-built IQ envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBrPaymentCreateCustomPaymentMethodRequest",
@@ -308,13 +277,13 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     }
 
     /**
-     * Compares this request to another for value equality on every
-     * payload field.
+     * Compares this request to another for value equality on every payload
+     * field.
      *
      * @param obj the object to compare against
      * @return {@code true} when {@code obj} is a
-     *         {@link SmaxBrPaymentCreateCustomPaymentMethodRequest}
-     *         with identical fields
+     *         {@link SmaxBrPaymentCreateCustomPaymentMethodRequest} with
+     *         identical fields
      */
     @Override
     public boolean equals(Object obj) {
@@ -346,9 +315,7 @@ public final class SmaxBrPaymentCreateCustomPaymentMethodRequest implements Smax
     /**
      * Returns a debug-friendly representation of this request.
      *
-     * @apiNote
-     * Intended for logging; the format is not part of the public
-     * contract.
+     * <p>The format is intended for logging and is not part of any contract.
      *
      * @return the string form
      */

@@ -4,19 +4,20 @@ package com.github.auties00.cobalt.exception;
  * Thrown when the message history transfer from the primary phone to a
  * newly linked companion device fails.
  *
+ * WhatsApp ships chat history to a freshly paired companion as a sequence
+ * of encrypted blobs uploaded by the primary phone and downloaded,
+ * decrypted, and applied by the companion. This exception is raised when
+ * any stage fails: downloading the blob, decrypting it, parsing the
+ * embedded payload, or persisting the resulting messages.
+ *
  * @apiNote
- * WhatsApp ships chat history to a freshly paired companion as a
- * sequence of encrypted blobs uploaded by the primary phone and
- * downloaded, decrypted, and applied by the companion (the WA Web flow
- * runs through {@code WAWebHandleHistorySyncChunk} and the upstream
- * {@code history_sync_notification} protobuf). Failures can happen at
- * any stage: downloading the blob, decrypting it, parsing the embedded
- * protobuf, or persisting the resulting messages.
+ * The failure only affects the backfill of past messages on this device;
+ * the session keeps receiving new messages, and a partial or missing
+ * history can be retried later when the primary phone is online again.
  *
  * @implNote
- * This implementation always reports the failure as non-fatal: the
- * session continues to receive new messages and a partial or missing
- * history can be retried later when the primary phone is online again.
+ * This implementation always reports the failure as non-fatal: it never
+ * affects the active session, only the history backfill.
  */
 public final class WhatsAppHistorySyncException extends WhatsAppException {
 

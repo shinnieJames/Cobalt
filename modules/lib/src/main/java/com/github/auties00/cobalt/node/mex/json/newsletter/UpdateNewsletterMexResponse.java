@@ -22,40 +22,33 @@ import java.util.Optional;
  * Parses the MEX response of the update-newsletter mutation built by
  * {@link UpdateNewsletterMexRequest}.
  *
- * @apiNote
- * Surfaces the relay's {@code data.xwa2_newsletter_update} payload as the
- * newsletter Jid, a {@link State} lifecycle marker, and a full
- * {@link ThreadMetadata} block carrying the updated name, description,
- * picture, preview thumbnail, invite URL, vanity handle, verification
- * badge, creation timestamp and reaction-codes setting. WA Web's
- * {@code WAWebNewsletterMetadataQueryJob} feeds the same shape through
- * {@code WAWebMexNewsletterParseUtils.parseMexNewsletterResponse} to
- * refresh the local newsletter cache.
+ * <p>Surfaces the relay's {@code data.xwa2_newsletter_update} payload as the newsletter Jid, a
+ * {@link State} lifecycle marker, and a full {@link ThreadMetadata} block carrying the updated name,
+ * description, picture, preview thumbnail, invite URL, vanity handle, verification badge, creation
+ * timestamp, and reaction-codes setting. Callers feed the {@link ThreadMetadata} into their local
+ * newsletter cache to apply the relay-confirmed edits.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUpdateNewsletterJob")
 public final class UpdateNewsletterMexResponse implements MexOperation.Response.Json {
     /**
-     * The newsletter Jid string echoed under {@code id}.
+     * Holds the newsletter Jid string echoed under {@code id}.
      */
     private final String id;
 
     /**
-     * The lifecycle state marker echoed under {@code state}.
+     * Holds the lifecycle state marker echoed under {@code state}.
      */
     private final State state;
 
     /**
-     * The post-edit display-metadata block echoed under
-     * {@code thread_metadata}.
+     * Holds the post-edit display-metadata block echoed under {@code thread_metadata}.
      */
     private final ThreadMetadata threadMetadata;
 
     /**
      * Constructs a response wrapping the parsed top-level fields.
      *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
+     * <p>Invoked only by the static parser; external callers obtain instances via {@link #of(Node)}.
      *
      * @param id             the newsletter Jid string echoed by the relay
      * @param state          the lifecycle state marker
@@ -70,15 +63,13 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_update} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_update} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<UpdateNewsletterMexResponse> of(Node node) {
         return node.getChild("result")
@@ -89,9 +80,8 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Returns the newsletter Jid string echoed by the relay.
      *
-     * @apiNote
-     * Empty when the GraphQL envelope omits {@code id}; otherwise carries
-     * the same Jid string sent in {@link UpdateNewsletterMexRequest}.
+     * <p>Empty when the GraphQL envelope omits {@code id}; otherwise carries the same Jid string
+     * sent in {@link UpdateNewsletterMexRequest}.
      *
      * @return the echoed newsletter id, or empty when omitted
      */
@@ -100,13 +90,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Returns the lifecycle state marker the relay attached to the
-     * mutation result.
+     * Returns the lifecycle state marker the relay attached to the mutation result.
      *
-     * @apiNote
-     * Empty when the GraphQL envelope omits {@code state}; otherwise
-     * carries the relay-defined state-type string (for example
-     * {@code "ACTIVE"}, {@code "DELETED"}).
+     * <p>Empty when the GraphQL envelope omits {@code state}; otherwise carries the relay-defined
+     * state-type string, for example {@code "ACTIVE"} or {@code "DELETED"}.
      *
      * @return the parsed {@link State}, or empty when omitted
      */
@@ -117,10 +104,8 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     /**
      * Returns the post-edit display-metadata block.
      *
-     * @apiNote
-     * Empty when the GraphQL envelope omits {@code thread_metadata};
-     * callers feed the populated block into their newsletter cache to
-     * apply the relay-confirmed edits.
+     * <p>Empty when the GraphQL envelope omits {@code thread_metadata}; callers feed the populated
+     * block into their newsletter cache to apply the relay-confirmed edits.
      *
      * @return the parsed {@link ThreadMetadata}, or empty when omitted
      */
@@ -129,24 +114,21 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * The lifecycle {@code state} marker on an update-mutation result.
+     * Models the lifecycle {@code state} marker on an update-mutation result.
      *
-     * @apiNote
-     * Carries the relay-defined state-type string the server attached
-     * after applying the edit; callers use it to detect lifecycle
-     * transitions outside the normal edit flow.
+     * <p>Carries the relay-defined state-type string the server attached after applying the edit;
+     * callers use it to detect lifecycle transitions outside the normal edit flow.
      */
     public static final class State {
         /**
-         * The relay-defined state-type string.
+         * Holds the relay-defined state-type string.
          */
         private final String type;
 
         /**
          * Constructs a parsed {@code state} value.
          *
-         * @apiNote
-         * Reserved for {@link #of(JSONObject)}.
+         * <p>Invoked only by {@link #of(JSONObject)}.
          *
          * @param type the state-type string
          */
@@ -157,8 +139,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the state-type string.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code type}.
+         * <p>Empty when the GraphQL envelope omits {@code type}.
          *
          * @return the {@code type} value, or empty when omitted
          */
@@ -169,13 +150,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses a {@code state} fragment from the given JSON object.
          *
-         * @apiNote
-         * Reserved for the parent parser; returns {@link Optional#empty()}
-         * when {@code obj} is {@code null}.
+         * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
          *
          * @param obj the JSON object to parse
-         * @return the parsed value, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed value, or empty when {@code obj} is {@code null}
          */
         static Optional<State> of(JSONObject obj) {
             if (obj == null) {
@@ -189,13 +167,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses every {@code state} fragment in the given JSON array.
          *
-         * @apiNote
-         * Reserved for callers that handle batched state arrays; returns
-         * {@link List#of()} when {@code arr} is {@code null}.
+         * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed values, empty when {@code arr} is
-         *         {@code null}
+         * @return the list of parsed values, empty when {@code arr} is {@code null}
          */
         static List<State> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -211,66 +186,63 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * The {@code thread_metadata} block on the post-edit mutation result.
+     * Models the {@code thread_metadata} block on the post-edit mutation result.
      *
-     * @apiNote
-     * Carries the full display surface for the local cache: localised
-     * {@link Name} and {@link Description} blocks, the avatar
-     * {@link Picture}, the {@link Preview} thumbnail, the canonical invite
-     * URL, the vanity handle, the verification badge, the creation
-     * timestamp, and the per-newsletter {@link Settings} container.
+     * <p>Carries the full display surface for the local cache: localised {@link Name} and
+     * {@link Description} blocks, the avatar {@link Picture}, the {@link Preview} thumbnail, the
+     * canonical invite URL, the vanity handle, the verification badge, the creation timestamp, and
+     * the per-newsletter {@link Settings} container.
      */
     public static final class ThreadMetadata {
         /**
-         * The localised display-name block.
+         * Holds the localised display-name block.
          */
         private final Name name;
 
         /**
-         * The localised description block.
+         * Holds the localised description block.
          */
         private final Description description;
 
         /**
-         * The avatar-image block.
+         * Holds the avatar-image block.
          */
         private final Picture picture;
 
         /**
-         * The preview-thumbnail block.
+         * Holds the preview-thumbnail block.
          */
         private final Preview preview;
 
         /**
-         * The canonical invite URL string.
+         * Holds the canonical invite URL string.
          */
         private final String invite;
 
         /**
-         * The vanity-handle string.
+         * Holds the vanity-handle string.
          */
         private final String handle;
 
         /**
-         * The verification-badge string.
+         * Holds the verification-badge string.
          */
         private final String verification;
 
         /**
-         * The newsletter-creation timestamp in epoch seconds.
+         * Holds the newsletter-creation timestamp in epoch seconds.
          */
         private final Long creationTime;
 
         /**
-         * The per-newsletter settings container.
+         * Holds the per-newsletter settings container.
          */
         private final Settings settings;
 
         /**
          * Constructs a parsed {@code thread_metadata} value.
          *
-         * @apiNote
-         * Reserved for {@link #of(JSONObject)}.
+         * <p>Invoked only by {@link #of(JSONObject)}.
          *
          * @param name         the localised display-name block
          * @param description  the localised description block
@@ -297,8 +269,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the localised display-name block.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code name}.
+         * <p>Empty when the GraphQL envelope omits {@code name}.
          *
          * @return the parsed {@link Name}, or empty when omitted
          */
@@ -309,8 +280,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the localised description block.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code description}.
+         * <p>Empty when the GraphQL envelope omits {@code description}.
          *
          * @return the parsed {@link Description}, or empty when omitted
          */
@@ -321,8 +291,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the avatar-image block.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code picture}.
+         * <p>Empty when the GraphQL envelope omits {@code picture}.
          *
          * @return the parsed {@link Picture}, or empty when omitted
          */
@@ -333,8 +302,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the preview-thumbnail block.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code preview}.
+         * <p>Empty when the GraphQL envelope omits {@code preview}.
          *
          * @return the parsed {@link Preview}, or empty when omitted
          */
@@ -345,8 +313,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the canonical invite URL.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code invite}.
+         * <p>Empty when the GraphQL envelope omits {@code invite}.
          *
          * @return the {@code invite} value, or empty when omitted
          */
@@ -357,8 +324,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the vanity-handle string.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code handle}.
+         * <p>Empty when the GraphQL envelope omits {@code handle}.
          *
          * @return the {@code handle} value, or empty when omitted
          */
@@ -369,10 +335,8 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the verification-badge string.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code verification};
-         * otherwise carries the relay-defined badge string (for example
-         * {@code "VERIFIED"}, {@code "UNVERIFIED"}).
+         * <p>Empty when the GraphQL envelope omits {@code verification}; otherwise carries the
+         * relay-defined badge string, for example {@code "VERIFIED"} or {@code "UNVERIFIED"}.
          *
          * @return the {@code verification} value, or empty when omitted
          */
@@ -383,13 +347,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the moment the newsletter was created.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code creation_time};
-         * the underlying value is the wire-level epoch-second integer
-         * remapped to an {@link Instant}.
+         * <p>Empty when the GraphQL envelope omits {@code creation_time}; the wire-level epoch-second
+         * integer is remapped to an {@link Instant}.
          *
-         * @return the {@code creation_time} as an {@link Instant}, or
-         *         empty when omitted
+         * @return the {@code creation_time} as an {@link Instant}, or empty when omitted
          */
         public Optional<Instant> creationTime() {
             return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
@@ -398,10 +359,8 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the per-newsletter settings container.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code settings}; in
-         * practice the relay only echoes the {@code reaction_codes}
-         * sub-key updated by the mutation.
+         * <p>Empty when the GraphQL envelope omits {@code settings}; in practice the relay only
+         * echoes the {@code reaction_codes} sub-key updated by the mutation.
          *
          * @return the parsed {@link Settings}, or empty when omitted
          */
@@ -410,34 +369,31 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * The localised {@code name} block on the post-edit metadata.
+         * Models the localised {@code name} block on the post-edit metadata.
          *
-         * @apiNote
-         * Carries the localisation identifier, the display text and the
-         * last-update timestamp the relay uses to drive cache
-         * invalidation.
+         * <p>Carries the localisation identifier, the display text, and the last-update timestamp
+         * the relay uses to drive cache invalidation.
          */
         public static final class Name {
             /**
-             * The localisation identifier.
+             * Holds the localisation identifier.
              */
             private final String id;
 
             /**
-             * The display text.
+             * Holds the display text.
              */
             private final String text;
 
             /**
-             * The last-update timestamp in epoch seconds.
+             * Holds the last-update timestamp in epoch seconds.
              */
             private final Long updateTime;
 
             /**
              * Constructs a parsed {@code name} value.
              *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}.
+             * <p>Invoked only by {@link #of(JSONObject)}.
              *
              * @param id         the localisation identifier
              * @param text       the display text
@@ -452,8 +408,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the localisation identifier.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code id}.
+             * <p>Empty when the GraphQL envelope omits {@code id}.
              *
              * @return the {@code id} value, or empty when omitted
              */
@@ -464,8 +419,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the display text.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code text}.
+             * <p>Empty when the GraphQL envelope omits {@code text}.
              *
              * @return the {@code text} value, or empty when omitted
              */
@@ -476,13 +430,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the last-update timestamp.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code update_time};
-             * the underlying value is the wire-level epoch-second integer
-             * remapped to an {@link Instant}.
+             * <p>Empty when the GraphQL envelope omits {@code update_time}; the wire-level
+             * epoch-second integer is remapped to an {@link Instant}.
              *
-             * @return the {@code update_time} as an {@link Instant}, or
-             *         empty when omitted
+             * @return the {@code update_time} as an {@link Instant}, or empty when omitted
              */
             public Optional<Instant> updateTime() {
                 return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
@@ -491,13 +442,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses a {@code name} fragment from the given JSON object.
              *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null}.
+             * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<Name> of(JSONObject obj) {
                 if (obj == null) {
@@ -513,13 +461,10 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Parses every {@code name} fragment in the given JSON array.
              *
-             * @apiNote
-             * Reserved for callers that handle batched name arrays;
-             * returns {@link List#of()} when {@code arr} is {@code null}.
+             * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed values, empty when {@code arr} is
-             *         {@code null}
+             * @return the list of parsed values, empty when {@code arr} is {@code null}
              */
             static List<Name> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -535,34 +480,31 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * The localised {@code description} block on the post-edit
-         * metadata.
+         * Models the localised {@code description} block on the post-edit metadata.
          *
-         * @apiNote
-         * Mirrors {@link Name}'s shape: a localisation identifier, the
-         * display text, and the last-update timestamp.
+         * <p>Mirrors {@link Name}'s shape: a localisation identifier, the display text, and the
+         * last-update timestamp.
          */
         public static final class Description {
             /**
-             * The localisation identifier.
+             * Holds the localisation identifier.
              */
             private final String id;
 
             /**
-             * The display text.
+             * Holds the display text.
              */
             private final String text;
 
             /**
-             * The last-update timestamp in epoch seconds.
+             * Holds the last-update timestamp in epoch seconds.
              */
             private final Long updateTime;
 
             /**
              * Constructs a parsed {@code description} value.
              *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}.
+             * <p>Invoked only by {@link #of(JSONObject)}.
              *
              * @param id         the localisation identifier
              * @param text       the display text
@@ -577,8 +519,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the localisation identifier.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code id}.
+             * <p>Empty when the GraphQL envelope omits {@code id}.
              *
              * @return the {@code id} value, or empty when omitted
              */
@@ -589,8 +530,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the display text.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code text}.
+             * <p>Empty when the GraphQL envelope omits {@code text}.
              *
              * @return the {@code text} value, or empty when omitted
              */
@@ -601,29 +541,22 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the last-update timestamp.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code update_time};
-             * the underlying value is the wire-level epoch-second integer
-             * remapped to an {@link Instant}.
+             * <p>Empty when the GraphQL envelope omits {@code update_time}; the wire-level
+             * epoch-second integer is remapped to an {@link Instant}.
              *
-             * @return the {@code update_time} as an {@link Instant}, or
-             *         empty when omitted
+             * @return the {@code update_time} as an {@link Instant}, or empty when omitted
              */
             public Optional<Instant> updateTime() {
                 return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Parses a {@code description} fragment from the given JSON
-             * object.
+             * Parses a {@code description} fragment from the given JSON object.
              *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null}.
+             * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<Description> of(JSONObject obj) {
                 if (obj == null) {
@@ -637,16 +570,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses every {@code description} fragment in the given JSON
-             * array.
+             * Parses every {@code description} fragment in the given JSON array.
              *
-             * @apiNote
-             * Reserved for callers that handle batched description arrays;
-             * returns {@link List#of()} when {@code arr} is {@code null}.
+             * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed values, empty when {@code arr} is
-             *         {@code null}
+             * @return the list of parsed values, empty when {@code arr} is {@code null}
              */
             static List<Description> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -662,34 +591,31 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * The {@code picture} avatar block on the post-edit metadata.
+         * Models the {@code picture} avatar block on the post-edit metadata.
          *
-         * @apiNote
-         * Carries the relay-issued media handle, the media type, and the
-         * direct download path the client uses to fetch the full avatar
-         * bytes.
+         * <p>Carries the relay-issued media handle, the media type, and the direct download path the
+         * client uses to fetch the full avatar bytes.
          */
         public static final class Picture {
             /**
-             * The media handle.
+             * Holds the media handle.
              */
             private final String id;
 
             /**
-             * The media type marker.
+             * Holds the media type marker.
              */
             private final String type;
 
             /**
-             * The direct download path.
+             * Holds the direct download path.
              */
             private final String directPath;
 
             /**
              * Constructs a parsed {@code picture} value.
              *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}.
+             * <p>Invoked only by {@link #of(JSONObject)}.
              *
              * @param id         the media handle
              * @param type       the media type marker
@@ -704,8 +630,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the media handle.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code id}.
+             * <p>Empty when the GraphQL envelope omits {@code id}.
              *
              * @return the {@code id} value, or empty when omitted
              */
@@ -716,8 +641,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the media-type marker.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code type}.
+             * <p>Empty when the GraphQL envelope omits {@code type}.
              *
              * @return the {@code type} value, or empty when omitted
              */
@@ -728,10 +652,8 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the direct download path.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code direct_path};
-             * otherwise carries the server-relative path the client uses
-             * to fetch the avatar bytes.
+             * <p>Empty when the GraphQL envelope omits {@code direct_path}; otherwise carries the
+             * server-relative path the client uses to fetch the avatar bytes.
              *
              * @return the {@code direct_path} value, or empty when omitted
              */
@@ -740,16 +662,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a {@code picture} fragment from the given JSON
-             * object.
+             * Parses a {@code picture} fragment from the given JSON object.
              *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null}.
+             * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<Picture> of(JSONObject obj) {
                 if (obj == null) {
@@ -763,16 +681,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses every {@code picture} fragment in the given JSON
-             * array.
+             * Parses every {@code picture} fragment in the given JSON array.
              *
-             * @apiNote
-             * Reserved for callers that handle batched picture arrays;
-             * returns {@link List#of()} when {@code arr} is {@code null}.
+             * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed values, empty when {@code arr} is
-             *         {@code null}
+             * @return the list of parsed values, empty when {@code arr} is {@code null}
              */
             static List<Picture> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -788,33 +702,31 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * The {@code preview} thumbnail block on the post-edit metadata.
+         * Models the {@code preview} thumbnail block on the post-edit metadata.
          *
-         * @apiNote
-         * Mirrors {@link Picture}'s shape but carries the smaller preview
-         * variant the UI renders inline.
+         * <p>Mirrors {@link Picture}'s shape but carries the smaller preview variant the UI renders
+         * inline.
          */
         public static final class Preview {
             /**
-             * The media handle.
+             * Holds the media handle.
              */
             private final String id;
 
             /**
-             * The media type marker.
+             * Holds the media type marker.
              */
             private final String type;
 
             /**
-             * The direct download path.
+             * Holds the direct download path.
              */
             private final String directPath;
 
             /**
              * Constructs a parsed {@code preview} value.
              *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}.
+             * <p>Invoked only by {@link #of(JSONObject)}.
              *
              * @param id         the media handle
              * @param type       the media type marker
@@ -829,8 +741,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the media handle.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code id}.
+             * <p>Empty when the GraphQL envelope omits {@code id}.
              *
              * @return the {@code id} value, or empty when omitted
              */
@@ -841,8 +752,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the media-type marker.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code type}.
+             * <p>Empty when the GraphQL envelope omits {@code type}.
              *
              * @return the {@code type} value, or empty when omitted
              */
@@ -853,10 +763,8 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the direct download path.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code direct_path};
-             * otherwise carries the server-relative path the client uses
-             * to fetch the preview-thumbnail bytes.
+             * <p>Empty when the GraphQL envelope omits {@code direct_path}; otherwise carries the
+             * server-relative path the client uses to fetch the preview-thumbnail bytes.
              *
              * @return the {@code direct_path} value, or empty when omitted
              */
@@ -865,16 +773,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a {@code preview} fragment from the given JSON
-             * object.
+             * Parses a {@code preview} fragment from the given JSON object.
              *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null}.
+             * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<Preview> of(JSONObject obj) {
                 if (obj == null) {
@@ -888,16 +792,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses every {@code preview} fragment in the given JSON
-             * array.
+             * Parses every {@code preview} fragment in the given JSON array.
              *
-             * @apiNote
-             * Reserved for callers that handle batched preview arrays;
-             * returns {@link List#of()} when {@code arr} is {@code null}.
+             * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed values, empty when {@code arr} is
-             *         {@code null}
+             * @return the list of parsed values, empty when {@code arr} is {@code null}
              */
             static List<Preview> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -913,24 +813,21 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * The {@code settings} container on the post-edit metadata.
+         * Models the {@code settings} container on the post-edit metadata.
          *
-         * @apiNote
-         * The relay only echoes the {@link ReactionCodes} sub-key, which
-         * carries the comma-separated reaction emoji whitelist
-         * configured for the newsletter.
+         * <p>The relay only echoes the {@link ReactionCodes} sub-key, which carries the
+         * comma-separated reaction emoji whitelist configured for the newsletter.
          */
         public static final class Settings {
             /**
-             * The reaction-codes sub-key carrying the emoji whitelist.
+             * Holds the reaction-codes sub-key carrying the emoji whitelist.
              */
             private final ReactionCodes reactionCodes;
 
             /**
              * Constructs a parsed {@code settings} value.
              *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}.
+             * <p>Invoked only by {@link #of(JSONObject)}.
              *
              * @param reactionCodes the reaction-codes sub-key
              */
@@ -941,38 +838,30 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             /**
              * Returns the reaction-codes sub-key.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code reaction_codes}.
+             * <p>Empty when the GraphQL envelope omits {@code reaction_codes}.
              *
-             * @return the parsed {@link ReactionCodes}, or empty when
-             *         omitted
+             * @return the parsed {@link ReactionCodes}, or empty when omitted
              */
             public Optional<ReactionCodes> reactionCodes() {
                 return Optional.ofNullable(reactionCodes);
             }
 
             /**
-             * The {@code reaction_codes} sub-key on the newsletter
-             * settings.
+             * Models the {@code reaction_codes} sub-key on the newsletter settings.
              *
-             * @apiNote
-             * Carries the relay-echoed value WA Web's
-             * {@code WAWebMexNewsletterUtils.mapReactionCodesSettingToMexInput}
-             * shipped on the request; the format is a comma-separated
-             * emoji whitelist or one of the relay-defined preset
-             * identifiers.
+             * <p>Carries the relay-echoed value the request shipped; the format is a comma-separated
+             * emoji whitelist or one of the relay-defined preset identifiers.
              */
             public static final class ReactionCodes {
                 /**
-                 * The relay-echoed reaction-codes value.
+                 * Holds the relay-echoed reaction-codes value.
                  */
                 private final String value;
 
                 /**
                  * Constructs a parsed {@code reaction_codes} value.
                  *
-                 * @apiNote
-                 * Reserved for {@link #of(JSONObject)}.
+                 * <p>Invoked only by {@link #of(JSONObject)}.
                  *
                  * @param value the relay-echoed reaction-codes value
                  */
@@ -983,8 +872,7 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
                 /**
                  * Returns the relay-echoed reaction-codes value.
                  *
-                 * @apiNote
-                 * Empty when the GraphQL envelope omits {@code value}.
+                 * <p>Empty when the GraphQL envelope omits {@code value}.
                  *
                  * @return the {@code value} value, or empty when omitted
                  */
@@ -993,17 +881,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
                 }
 
                 /**
-                 * Parses a {@code reaction_codes} fragment from the given
-                 * JSON object.
+                 * Parses a {@code reaction_codes} fragment from the given JSON object.
                  *
-                 * @apiNote
-                 * Reserved for the parent parser; returns
-                 * {@link Optional#empty()} when {@code obj} is
-                 * {@code null}.
+                 * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
                  *
                  * @param obj the JSON object to parse
-                 * @return the parsed value, or empty when {@code obj} is
-                 *         {@code null}
+                 * @return the parsed value, or empty when {@code obj} is {@code null}
                  */
                 static Optional<ReactionCodes> of(JSONObject obj) {
                     if (obj == null) {
@@ -1015,17 +898,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
                 }
 
                 /**
-                 * Parses every {@code reaction_codes} fragment in the
-                 * given JSON array.
+                 * Parses every {@code reaction_codes} fragment in the given JSON array.
                  *
-                 * @apiNote
-                 * Reserved for callers that handle batched reaction-codes
-                 * arrays; returns {@link List#of()} when {@code arr} is
-                 * {@code null}.
+                 * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed values, empty when
-                 *         {@code arr} is {@code null}
+                 * @return the list of parsed values, empty when {@code arr} is {@code null}
                  */
                 static List<ReactionCodes> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -1041,16 +919,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a {@code settings} fragment from the given JSON
-             * object.
+             * Parses a {@code settings} fragment from the given JSON object.
              *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null}.
+             * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
              *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<Settings> of(JSONObject obj) {
                 if (obj == null) {
@@ -1062,16 +936,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses every {@code settings} fragment in the given JSON
-             * array.
+             * Parses every {@code settings} fragment in the given JSON array.
              *
-             * @apiNote
-             * Reserved for callers that handle batched settings arrays;
-             * returns {@link List#of()} when {@code arr} is {@code null}.
+             * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed values, empty when {@code arr} is
-             *         {@code null}
+             * @return the list of parsed values, empty when {@code arr} is {@code null}
              */
             static List<Settings> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -1087,16 +957,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses a {@code thread_metadata} fragment from the given JSON
-         * object.
+         * Parses a {@code thread_metadata} fragment from the given JSON object.
          *
-         * @apiNote
-         * Reserved for the parent parser; returns {@link Optional#empty()}
-         * when {@code obj} is {@code null}.
+         * <p>Returns {@link Optional#empty()} when {@code obj} is {@code null}.
          *
          * @param obj the JSON object to parse
-         * @return the parsed value, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed value, or empty when {@code obj} is {@code null}
          */
         static Optional<ThreadMetadata> of(JSONObject obj) {
             if (obj == null) {
@@ -1116,17 +982,12 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses every {@code thread_metadata} fragment in the given JSON
-         * array.
+         * Parses every {@code thread_metadata} fragment in the given JSON array.
          *
-         * @apiNote
-         * Reserved for callers that handle batched thread-metadata
-         * arrays; returns {@link List#of()} when {@code arr} is
-         * {@code null}.
+         * <p>Returns {@link List#of()} when {@code arr} is {@code null}.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed values, empty when {@code arr} is
-         *         {@code null}
+         * @return the list of parsed values, empty when {@code arr} is {@code null}
          */
         static List<ThreadMetadata> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -1142,21 +1003,16 @@ public final class UpdateNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload; callers should not
-     * hold raw JSON bytes.
+     * <p>Invoked only by the public {@link #of(Node)} overload.
      *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception, mirroring the defensive null-checks in WA Web's caller.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_update} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_update} root
      */
     private static Optional<UpdateNewsletterMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

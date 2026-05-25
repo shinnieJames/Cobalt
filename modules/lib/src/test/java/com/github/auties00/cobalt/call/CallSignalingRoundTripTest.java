@@ -26,24 +26,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.auties00.cobalt.call.internal.CallService;
 
 /**
- * End-to-end signaling round-trip tests — exercises the full chain
- * {@link CallReceiver} → {@link CallService} → {@link ActiveCall} against
- * {@link TestWhatsAppClient}, with stanzas modeled on the
- * {@code fixtures/call/} corpus. Each scenario:
- * <ol>
- *   <li>seeds an inbound {@code <call>} stanza through the receiver;</li>
- *   <li>drives a follow-up step (accept / reject / peer-terminate);</li>
- *   <li>asserts every outgoing stanza on the wire AND the
- *       {@link WhatsAppClientListener} fan-out;</li>
- *   <li>asserts the {@link CallService} registry is in the expected
- *       terminal state.</li>
- * </ol>
+ * End-to-end signaling round-trip tests exercising the full
+ * {@link CallReceiver}, {@link CallService}, {@link ActiveCall} chain against
+ * a {@link TestWhatsAppClient}, with stanzas modeled on the
+ * {@code fixtures/call/} corpus. Each scenario seeds an inbound
+ * {@code <call>} stanza through the receiver, drives a follow-up step
+ * (accept, reject, or peer-terminate), and asserts the outgoing stanzas on
+ * the wire, the {@link WhatsAppClientListener} fan-out, and the terminal
+ * state of the {@link CallService} registry.
  *
- * <p>These tests differ from
+ * <p>Unlike
  * {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiverLiveOracleTest}
- * and {@link CallServiceLiveOracleTest} in that they intentionally
- * exercise the full receiver+service+session chain in one shot, rather
- * than each layer in isolation.
+ * and {@link CallServiceLiveOracleTest}, which test each layer in isolation,
+ * these tests intentionally exercise the receiver, service, and session
+ * together in one shot.
  */
 @DisplayName("Call signaling round-trip — receiver + service + ActiveCall")
 class CallSignalingRoundTripTest {
@@ -52,11 +48,6 @@ class CallSignalingRoundTripTest {
     private static final Jid SELF_LID = Jid.of("39110693621863@lid");
     private static final Jid PEER_LID = Jid.of("83116928594056@lid");
 
-    /**
-     * Single test fixture wiring a real receiver + service over a
-     * {@link TestWhatsAppClient}, with a recording listener installed on
-     * the store.
-     */
     private static final class Harness {
         final TestWhatsAppClient client;
         final CallService service;
@@ -87,12 +78,8 @@ class CallSignalingRoundTripTest {
 
     private record EndedEvent(String callId, Jid fromJid, CallEndReason reason) {}
 
-    /**
-     * Inbound {@code <call><offer call-id call-creator …/></call>}
-     * builder modeled on the captured 1:1 audio offer fixture. The shape
-     * is the minimum the receiver needs to dispatch (call-id +
-     * call-creator + an {@code from} attribute on the outer envelope).
-     */
+    // Minimal inbound <call><offer/></call> the receiver needs to dispatch:
+    // call-id, call-creator, and a from attribute on the outer envelope.
     private static Node inboundOffer(String callId, Jid peer) {
         var offer = new NodeBuilder()
                 .description("offer")
@@ -134,7 +121,6 @@ class CallSignalingRoundTripTest {
         assertNotNull(incoming, "onCall must fire on inbound offer");
         assertEquals("CID-RT-1", incoming.callId());
 
-        // Receipt + ringing dispatched.
         var receiptCount = h.sentNodes.stream()
                 .filter(n -> "receipt".equals(n.description()))
                 .filter(n -> n.getChild("offer").isPresent())
@@ -145,7 +131,6 @@ class CallSignalingRoundTripTest {
         // 2. Local user accepts.
         var session = h.service.accept(incoming, CallOptions.audio());
         assertEquals(CallState.CONNECTING, session.state());
-        // <call><accept/></call> must dispatch.
         var accept = h.sentNodes.stream().filter(n -> "call".equals(n.description()))
                 .map(n -> n.getChild("accept")).filter(Optional::isPresent)
                 .map(Optional::orElseThrow).findFirst().orElseThrow();

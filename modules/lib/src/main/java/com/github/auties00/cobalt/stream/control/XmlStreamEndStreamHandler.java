@@ -7,39 +7,26 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 /**
- * Handles the {@code <xmlstreamend>} stanza that the WhatsApp server emits
- * to signal a graceful end of the encrypted stream.
+ * Handles the {@code <xmlstreamend>} stanza that the WhatsApp server emits to signal a graceful end of the encrypted
+ * stream.
  *
- * @apiNote
- * This handler is registered under the {@code "xmlstreamend"} tag inside
- * {@link SocketStream} and runs as the final stanza on every clean
- * server-initiated close. Cobalt embedders do not invoke this class
- * directly; the dispatcher routes the stanza here automatically and the
- * underlying socket teardown is driven by the next read returning
- * end-of-stream.
+ * <p>The handler is registered under the {@code "xmlstreamend"} tag inside {@link SocketStream} and runs as the final
+ * stanza on every clean server-initiated close. It only logs the stanza and sends no acknowledgement back; the reader
+ * loop recognises this stanza as the terminal frame and stops reading once it has been dispatched, so the underlying
+ * socket teardown needs no reply sent here.
  *
- * @implNote
- * This implementation only logs the stanza and intentionally does not
- * send any acknowledgement back, preserving the {@code "NO_ACK"} sentinel
- * that WA Web's {@code WAWebCommsHandleLoggedInStanza} returns from its
- * {@code "xmlstreamend"} switch arm. {@link SocketStream} never auto-acks
- * on its own, so a no-op handler reproduces the same wire behaviour.
+ * @implNote This implementation is a pure log call because {@link SocketStream} never auto-acks on its own, so a no-op
+ * handler reproduces WA Web's {@code "NO_ACK"} wire behaviour for the {@code "xmlstreamend"} branch.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
 public final class XmlStreamEndStreamHandler implements SocketStream.Handler {
     /**
-     * The system logger used to record the diagnostic line that mirrors the
-     * literal template logged by {@code WALogger.LOG} inside WA Web's
-     * {@code "xmlstreamend"} switch arm.
+     * The system logger used to record the diagnostic line emitted when the server signals end-of-stream.
      */
     private static final System.Logger LOGGER = System.getLogger(XmlStreamEndStreamHandler.class.getName());
 
     /**
      * Constructs a new {@code <xmlstreamend>} stanza handler.
-     *
-     * @apiNote
-     * Cobalt embedders never call this constructor directly; the dispatcher
-     * in {@link SocketStream} instantiates the handler once per client.
      */
     public XmlStreamEndStreamHandler() {
     }
@@ -47,16 +34,8 @@ public final class XmlStreamEndStreamHandler implements SocketStream.Handler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Logs that the server has signalled end-of-stream and returns
-     * without dispatching any reply, matching WA Web's {@code "NO_ACK"}
-     * contract for the {@code "xmlstreamend"} branch of
-     * {@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza}.
-     *
-     * @implNote
-     * This implementation is intentionally a pure log call; the socket
-     * teardown that follows is driven by the next read returning
-     * end-of-stream rather than by any reply sent here.
+     * <p>Logs that the server has signalled end-of-stream and returns without dispatching any reply. The reader loop
+     * stops reading once this stanza has been dispatched, so the socket teardown that follows needs no reply sent here.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza", exports = "handleLoggedInStanza", adaptation = WhatsAppAdaptation.ADAPTED)

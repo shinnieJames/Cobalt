@@ -29,33 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link NoteEditHandler} against the
- * {@code WAWebNoteSync.applyMutations} per-mutation flow.
+ * Covers {@link NoteEditHandler}: a {@link SyncdOperation#SET} carrying type, {@code chatJid} and
+ * content installs the note via {@link WhatsAppStore#putNoteState}, {@code deleted=true} on a SET
+ * drops the entry, an unknown chat JID surfaces as {@link SyncActionState#ORPHAN} with
+ * {@code modelType="Chat"}, a wrong-typed value or missing {@link NoteEditAction#type()},
+ * {@link NoteEditAction#chatJid()}, note id slot or note id surface as
+ * {@link SyncActionState#MALFORMED}, {@link SyncdOperation#REMOVE} surfaces as
+ * {@link SyncActionState#UNSUPPORTED}, and the default {@code resolveConflicts} chooses the later
+ * timestamp.
  *
- * @apiNote
- * Verifies that the Cobalt handler matches WA Web's per-mutation
- * classification: a {@link SyncdOperation#SET} carrying type +
- * {@code chatJid} + content installs the note via
- * {@link WhatsAppStore#putNoteState};
- * {@code deleted=true} on a {@code SET} drops the entry; an unknown
- * chat JID surfaces as
- * {@link SyncActionState#ORPHAN}
- * with {@code modelType="Chat"}; a wrong-typed value, missing
- * {@link NoteEditAction#type()}, missing
- * {@link NoteEditAction#chatJid()}, missing note id slot, or empty
- * note id surface as
- * {@link SyncActionState#MALFORMED};
- * {@link SyncdOperation#REMOVE} surfaces as
- * {@link SyncActionState#UNSUPPORTED};
- * the default {@code resolveConflicts} chooses the later timestamp.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link NoteEditHandler#applyMutation} via the
- * {@link #buildMutation(String, NoteEditAction, SyncdOperation, Instant)}
- * helper; the
- * {@link NoteEditMutationFactory}
- * is wired in but only consumed by other test cases.
+ * <p>Inbound mutations are built directly via the
+ * {@link #buildMutation(String, NoteEditAction, SyncdOperation, Instant)} helper.
  */
 @DisplayName("NoteEditHandler")
 class NoteEditHandlerTest {
@@ -76,31 +60,8 @@ class NoteEditHandlerTest {
         factory = new NoteEditMutationFactory();
     }
 
-    /**
-     * Builds a trusted mutation carrying the given note action and
-     * index note id.
-     *
-     * @apiNote
-     * Internal helper consumed by every test in this class; not used
-     * outside it. Setting {@code indexNoteId} to {@code null} produces
-     * the singleton-index shape {@code ["note_edit"]} so the
-     * malformed-index branch can be exercised; setting
-     * {@code action} to {@code null} omits the {@code noteEditAction}
-     * field on the value so the malformed-value branch can be
-     * exercised.
-     *
-     * @implNote
-     * This implementation builds the index via
-     * {@link JSON#toJSONString(Object)} to match
-     * the on-wire JSON encoding the production handler reads back via
-     * {@link JSON#parseArray(String)}.
-     *
-     * @param indexNoteId the note id placed in {@code indexParts[1]}; may be {@code null}
-     * @param action      the note action payload; may be {@code null}
-     * @param operation   the sync operation
-     * @param ts          the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null indexNoteId produces the singleton-index shape ["note_edit"] for the malformed-index
+    // branch; a null action omits the noteEditAction field for the malformed-value branch.
     private DecryptedMutation.Trusted buildMutation(String indexNoteId, NoteEditAction action,
                                                     SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);

@@ -13,12 +13,11 @@ import java.util.Objects;
  * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads a freshly generated signed
  * pre-key to the relay, replacing the current one.
  *
- * @apiNote
- * Used by the rolling rotation of the local long-lived signed pre-key. WA Web schedules this as a
- * persisted job registered under {@code WAWebPersistedJobInitializers#rotateKey}, periodically
- * driven by the rotation policy; on a {@code 409} response or an unknown error the same job falls
- * back to {@link IqDigestKeyRequest} to revalidate the relay's view of the key bundle. The request
- * body is a single {@code <rotate/>} child wrapping the canonical {@code <skey/>} subtree.
+ * <p>This request backs the rolling rotation of the local long-lived signed pre-key. WA Web
+ * schedules it as a persisted job periodically driven by the rotation policy; on a {@code 409}
+ * response or an unknown error the same job falls back to {@link IqDigestKeyRequest} to revalidate
+ * the relay's view of the key bundle. The request body is a single {@code <rotate/>} child wrapping
+ * the canonical {@code <skey/>} subtree.
  */
 @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
 public final class IqRotateKeyRequest implements IqOperation.Request {
@@ -31,8 +30,7 @@ public final class IqRotateKeyRequest implements IqOperation.Request {
     /**
      * Constructs a rotate-key request for the supplied signed pre-key.
      *
-     * @apiNote
-     * The caller is expected to have already persisted the new signed pre-key against the local
+     * <p>The caller is expected to have already persisted the new signed pre-key against the local
      * Signal store before issuing this request; on success the upload is the final step of the
      * rotation, on failure the local store still records the new key for retry.
      *
@@ -55,10 +53,9 @@ public final class IqRotateKeyRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
-     * {@code xmlns="encrypt"} and {@code type="set"}, wrapping the
-     * {@link IqUploadPreKeysSignedPreKey#toNode()} render under a single {@code <rotate/>} parent.
+     * <p>Produces an {@code <iq>} addressed to {@link JidServer#user()} with {@code xmlns="encrypt"}
+     * and {@code type="set"}, wrapping the {@link IqUploadPreKeysSignedPreKey#toNode()} render under
+     * a single {@code <rotate/>} parent.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebRotateKeyJob",

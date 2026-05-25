@@ -9,47 +9,44 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="md" type="set">} stanza requesting that the relay forget the
- * pairing record for a companion device.
+ * Requests that the relay forget the pairing record for a companion device.
  *
- * @apiNote
- * Used by the logout pipeline ({@code WAWebSocketModel.sendCurrentLogout}) to tear down the
- * server-side multi-device record before the local socket is closed, and by any caller that
- * wants to unpair a specific secondary device while remaining connected. The relay echoes
- * back the {@code <remove-companion-device>} payload with a {@code <iq type="result">}
- * envelope on success.
+ * <p>This is the outbound {@code <iq xmlns="md" type="set">} stanza that tears down the
+ * server-side multi-device record for a single companion. It is sent during logout, before the
+ * local socket is closed, and may also be sent to unpair an arbitrary secondary device while the
+ * client remains connected. On success the relay echoes the {@code <remove-companion-device>}
+ * payload back inside an {@code <iq type="result">} envelope.
  */
 @WhatsAppWebModule(moduleName = "WAWebUnpairDeviceJob")
 public final class IqUnpairDeviceRequest implements IqOperation.Request {
     /**
-     * Companion-device JID being unpaired.
+     * Holds the companion-device {@link Jid} being unpaired.
      *
-     * @apiNote
-     * Routed verbatim into the {@code <remove-companion-device jid=...>} attribute. WA Web
-     * fills this with {@code WAWebCommsWapMd.DEVICE_JID(getMeDevicePnOrThrow_DO_NOT_USE())}
-     * for the self-logout path; Cobalt accepts any JID so a primary client may unpair an
-     * arbitrary companion.
+     * <p>The value is written verbatim into the {@code <remove-companion-device jid=...>}
+     * attribute of {@link #toNode()}.
+     *
+     * @implNote
+     * This implementation accepts any {@link Jid} so that a primary client may unpair an
+     * arbitrary companion; WA Web only ever fills this with the self device for the logout path.
      */
     private final Jid deviceJid;
 
     /**
-     * Free-form caller-supplied reason string.
+     * Holds the free-form, caller-supplied reason string.
      *
-     * @apiNote
-     * Routed verbatim into the {@code <remove-companion-device reason=...>} attribute and
-     * surfaced server-side as telemetry; the relay does not validate the contents.
+     * <p>The value is written verbatim into the {@code <remove-companion-device reason=...>}
+     * attribute and surfaced server-side as telemetry; the relay does not validate its contents.
      */
     private final String reason;
 
     /**
-     * Constructs a new unpair-device request.
+     * Constructs an unpair-device request from the given device handle and reason.
      *
-     * @apiNote
-     * Both arguments are routed verbatim into the outbound stanza; no client-side validation
-     * other than the {@code null} check is performed.
+     * <p>Both arguments are stored as-is and later routed verbatim into the outbound stanza by
+     * {@link #toNode()}; no validation beyond the {@code null} checks is performed.
      *
-     * @param deviceJid the companion-device JID to unpair
-     * @param reason the caller-supplied free-form reason string
+     * @param deviceJid the companion-device {@link Jid} to unpair
+     * @param reason    the caller-supplied free-form reason string
      * @throws NullPointerException if either argument is {@code null}
      */
     public IqUnpairDeviceRequest(Jid deviceJid, String reason) {
@@ -58,9 +55,9 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the companion-device JID being unpaired.
+     * Returns the companion-device {@link Jid} being unpaired.
      *
-     * @return the device JID, never {@code null}
+     * @return the device {@link Jid}, never {@code null}
      */
     public Jid deviceJid() {
         return deviceJid;
@@ -78,10 +75,9 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Produces a {@code <iq xmlns="md" type="set">} envelope addressed to
-     * {@link Jid#userServer()} and wrapping a single {@code <remove-companion-device>} child
-     * carrying {@code jid} and {@code reason} attributes.
+     * <p>Produces an {@code <iq xmlns="md" type="set">} envelope addressed to
+     * {@link Jid#userServer()} and wrapping a single {@code <remove-companion-device>} child that
+     * carries the {@code jid} and {@code reason} attributes.
      *
      * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
      *         {@code <remove-companion-device>} payload
@@ -104,7 +100,13 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to another object for value equality.
+     *
+     * <p>Two requests are equal when they target the same {@link #deviceJid()} and carry the same
+     * {@link #reason()}.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an equal {@link IqUnpairDeviceRequest}
      */
     @Override
     public boolean equals(Object obj) {
@@ -120,7 +122,9 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code derived from {@link #deviceJid()} and {@link #reason()}
      */
     @Override
     public int hashCode() {
@@ -128,7 +132,9 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug representation of this request.
+     *
+     * @return a string containing the {@link #deviceJid()} and {@link #reason()}
      */
     @Override
     public String toString() {

@@ -27,21 +27,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link WamoUserIdentifierHandler}'s forward-looking adapter
- * for the {@code generated_wui} action.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * persists the resolved identifier on
- * {@link WhatsAppStore#setNewsletterSubscriptionUserIdentifier(String)},
- * the malformed branches (missing action, empty string, blank string),
- * the {@link SyncdOperation#REMOVE} unsupported branch, and the
- * default conflict-resolution tiebreaker. WA Web ships no concrete
- * handler so the test surface enforces the Cobalt-inferred shape.
- *
- * @implNote
- * The fixture instantiates a handler per test against a temporary
- * store so the newsletter-subscription identifier starts unset.
+ * Covers {@link WamoUserIdentifierHandler}, the forward-looking adapter for the
+ * {@code generated_wui} action: the wire-constant trio, the happy {@code SET} branch that persists
+ * the resolved identifier on {@link WhatsAppStore#setNewsletterSubscriptionUserIdentifier(String)},
+ * the malformed branches (missing action, empty string, blank string), the
+ * {@link SyncdOperation#REMOVE} unsupported branch, and the default conflict-resolution tiebreaker.
+ * WA Web ships no concrete handler, so the test surface enforces the Cobalt-inferred shape. A
+ * handler is instantiated per test against a fresh temporary store, so the newsletter-subscription
+ * identifier starts unset.
  */
 @DisplayName("WamoUserIdentifierHandler")
 class WamoUserIdentifierHandlerTest {
@@ -52,14 +45,6 @@ class WamoUserIdentifierHandlerTest {
     private WhatsAppClient client;
     private WamoUserIdentifierHandler handler;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} so the
-     * newsletter-subscription user identifier starts unset.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -67,19 +52,6 @@ class WamoUserIdentifierHandlerTest {
         handler = new WamoUserIdentifierHandler();
     }
 
-    /**
-     * Wraps the given action and operation into a trusted mutation
-     * under the canonical {@code [actionName]} index.
-     *
-     * @apiNote
-     * Pass {@code null} for {@code action} to exercise the
-     * missing-action malformed branch.
-     *
-     * @param action the {@code generated_wui} action, or {@code null} to omit
-     * @param op     the mutation operation
-     * @param ts     the mutation timestamp
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted build(WamoUserIdentifierAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {

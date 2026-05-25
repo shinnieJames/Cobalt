@@ -37,25 +37,25 @@ import java.util.Optional;
  *
  * <p>Newsletter messages bypass the Signal envelope: the serialised protobuf
  * payload travels inside a {@code <plaintext>} child of the outer
- * {@code <message to="...@newsletter">} stanza. The wire stanza
- * {@code type} attribute classifies the payload as {@code text},
- * {@code media}, {@code poll}, or {@code reaction}; each method on this
- * sender builds the SMAX shape for one specific content kind.
+ * {@code <message to="...@newsletter">} stanza. The wire stanza {@code type}
+ * attribute classifies the payload as {@code text}, {@code media},
+ * {@code poll}, or {@code reaction}; each method on this sender builds the SMAX
+ * shape for one specific content kind.
  */
 @WhatsAppWebModule(moduleName = "WAWebNewsletterSendMessageQueryJob")
 @WhatsAppWebModule(moduleName = "WASmaxMessagePublishNewsletterRPC")
 @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterClientIdContent")
 final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo> {
     /**
-     * The {@link System.Logger} used for newsletter-send diagnostics.
+     * Surfaces newsletter-send diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(NewsletterMessageSender.class.getName());
 
     /**
-     * The {@code edit} attribute value stamped onto a newsletter
-     * text-or-media edit ({@code "3"}), distinct from the regular
-     * message-edit ({@code "1"}) and pin-in-chat ({@code "2"}) values used
-     * by {@link MessageSender#resolveEditAttribute(MessageContainer)}.
+     * Defines the {@code edit} attribute value stamped onto a newsletter
+     * text-or-media edit ({@code "3"}), distinct from the regular message-edit
+     * ({@code "1"}) and pin-in-chat ({@code "2"}) values used by
+     * {@link MessageSender#resolveEditAttribute(MessageContainer)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAck", exports = "EDIT_ATTR",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -65,16 +65,13 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * Constructs a {@link NewsletterMessageSender} bound to the supplied
      * dependencies.
      *
-     * @apiNote
-     * Constructed once by {@link MessageSendingService}; embedders should
-     * not instantiate directly.
+     * <p>Constructed once by {@link MessageSendingService}; embedders should not
+     * instantiate directly.
      *
-     * @param client         the {@link WhatsAppClient} used to dispatch
-     *                       stanzas
+     * @param client         the {@link WhatsAppClient} used to dispatch stanzas
      * @param abPropsService the {@link ABPropsService} consulted by the base
      *                       sender
-     * @param wamService     the {@link WamService} shared with the base
-     *                       sender
+     * @param wamService     the {@link WamService} shared with the base sender
      */
     @WhatsAppWebExport(moduleName = "WAWebNewsletterSendMessageQueryJob", exports = "querySendNewsletterMessage",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -85,15 +82,14 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Routes by the payload's content kind to the matching SMAX stanza
-     * builder; question and question-reply containers take a dedicated
-     * branch because the meta child uses a different per-shape builder on
+     * <p>Routes by the payload's content kind to the matching SMAX stanza
+     * builder; question and question-reply containers take a dedicated branch
+     * because the meta child uses a different per-shape builder on
      * {@link MetaStanza}.
      *
-     * @throws WhatsAppMessageException.Send.Unknown when the payload's
-     *                                               content kind is
-     *                                               unsupported on newsletters
+     * @throws WhatsAppMessageException.Send.Unknown when the payload's content
+     *                                               kind is unsupported on
+     *                                               newsletters
      */
     @WhatsAppWebExport(moduleName = "WAWebNewsletterSendMessageQueryJob", exports = "querySendNewsletterMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -164,10 +160,9 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Builds the SMAX stanza for a plain-text newsletter post.
      *
-     * @apiNote
-     * Used for the text branch of the publish switch. The outer
-     * {@code type="text"} attribute classifies the payload; the body lives
-     * in the single {@code <plaintext>} child.
+     * <p>Drives the text branch of the publish switch. The outer
+     * {@code type="text"} attribute classifies the payload; the body lives in
+     * the single {@code <plaintext>} child.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -189,10 +184,9 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Builds the SMAX stanza for a newsletter question-response message.
      *
-     * @apiNote
-     * The {@code server_id} attribute carries the parent question's server
-     * id so the server can join the response to its question; the meta
-     * child carries the question-response marker.
+     * <p>The {@code server_id} attribute carries the parent question's server id
+     * so the server can join the response to its question; the meta child
+     * carries the question-response marker.
      *
      * @param messageInfo   the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -217,12 +211,11 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Builds the SMAX stanza for a media (or URL) newsletter post.
      *
-     * @apiNote
-     * The outer {@code type} is always {@code "media"}; the specific media
-     * classification (image, video, gif, audio, ptt, document, sticker,
-     * vcard, url, ...) is stamped on the inner {@code <plaintext>}'s
-     * {@code mediatype} attribute, and the optional media handle is written
-     * to the outer {@code media_id} attribute.
+     * <p>The outer {@code type} is always {@code "media"}; the specific media
+     * classification (image, video, gif, audio, ptt, document, sticker, vcard,
+     * url, and so on) is stamped on the inner {@code <plaintext>}'s
+     * {@code mediatype} attribute, and the optional media handle is written to
+     * the outer {@code media_id} attribute.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -249,11 +242,9 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * Builds the SMAX stanza for a poll-creation or poll-result-snapshot
      * newsletter post.
      *
-     * @apiNote
-     * Shared between {@link PollCreationMessage} and
-     * {@link PollResultSnapshotMessage} branches; the {@code polltype}
-     * attribute on the {@code <meta>} child distinguishes the two
-     * sub-shapes.
+     * <p>Shared between the {@link PollCreationMessage} and
+     * {@link PollResultSnapshotMessage} branches; the {@code polltype} attribute
+     * on the {@code <meta>} child distinguishes the two sub-shapes.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -285,10 +276,9 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Builds the SMAX stanza for an admin-revoke newsletter post.
      *
-     * @apiNote
-     * The {@code edit="8"} marker is hard-coded by WA Web's
-     * {@code applyMixin} regardless of the resolved edit attribute; the
-     * stanza carries a single empty {@code <plaintext/>} child.
+     * <p>The {@code edit="8"} marker is hard-coded by WA Web's
+     * {@code applyMixin} regardless of the resolved edit attribute; the stanza
+     * carries a single empty {@code <plaintext/>} child.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -312,11 +302,10 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Builds the SMAX stanza for a newsletter text or media edit.
      *
-     * @apiNote
-     * The edit marker is the hard-coded {@link #NEWSLETTER_MSG_EDIT}
-     * ({@code "3"}); media edits also stamp the inner
-     * {@code mediatype} attribute on {@code <plaintext>} and the
-     * {@code media_id} attribute on the outer {@code <message>}.
+     * <p>The edit marker is the hard-coded {@link #NEWSLETTER_MSG_EDIT}
+     * ({@code "3"}); media edits also stamp the inner {@code mediatype}
+     * attribute on {@code <plaintext>} and the {@code media_id} attribute on the
+     * outer {@code <message>}.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -351,14 +340,13 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     }
 
     /**
-     * Builds the SMAX stanza for a reaction (or reaction-revoke) on an
-     * existing newsletter message.
+     * Builds the SMAX stanza for a reaction (or reaction-revoke) on an existing
+     * newsletter message.
      *
-     * @apiNote
-     * The {@code server_id} attribute carries the parent message's server
-     * id; an empty or {@code null} reaction code triggers the revoke shape
-     * with {@code edit="7"} and an empty {@code <reaction/>} child, mirroring
-     * WA Web's reaction-revoke mixin.
+     * <p>The {@code server_id} attribute carries the parent message's server id;
+     * an empty or {@code null} reaction code triggers the revoke shape with
+     * {@code edit="7"} and an empty {@code <reaction/>} child, matching WA Web's
+     * reaction-revoke mixin.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -397,8 +385,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * Builds the {@code <reaction code="..."/>} child carrying the supplied
      * emoji code.
      *
-     * @apiNote
-     * Used by the non-revoke branch of {@link #buildReaction}; the code is
+     * <p>Used by the non-revoke branch of {@link #buildReaction}; the code is
      * the canonical reaction string (typically a single emoji).
      *
      * @param s the reaction emoji code
@@ -417,8 +404,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * Builds the empty {@code <reaction/>} child that accompanies the
      * {@code edit="7"} reaction-revoke marker.
      *
-     * @apiNote
-     * Used by the revoke branch of {@link #buildReaction}; the child
+     * <p>Used by the revoke branch of {@link #buildReaction}; the child
      * intentionally carries no attributes.
      *
      * @return the empty {@code <reaction>} {@link Node}
@@ -432,16 +418,14 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     }
 
     /**
-     * Returns the {@code server_id} of the parent newsletter message
-     * referenced by the supplied {@link MessageKey}.
+     * Returns the {@code server_id} of the parent newsletter message referenced
+     * by the supplied {@link MessageKey}.
      *
-     * @apiNote
-     * Newsletters carry a per-message {@code server_id}; reactions, poll
-     * votes, and question responses pin the parent's id into their stanza
-     * so the server can link the child to its parent.
+     * <p>Newsletters carry a per-message {@code server_id}; reactions, poll
+     * votes, and question responses pin the parent's id into their stanza so the
+     * server can link the child to its parent.
      *
-     * @param targetKey the target message {@link MessageKey}, or
-     *                  {@code null}
+     * @param targetKey the target message {@link MessageKey}, or {@code null}
      * @return the parent server id, or {@code 0} when the parent cannot be
      *         resolved
      */
@@ -460,11 +444,10 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Builds the SMAX stanza for a poll-vote on an existing newsletter poll.
      *
-     * @apiNote
-     * The {@code server_id} attribute carries the parent poll-creation
-     * message's server id, and a {@code <votes>} child wraps one
-     * {@code <vote>} per selected option. Returns {@code null} when the
-     * parent poll cannot be resolved.
+     * <p>The {@code server_id} attribute carries the parent poll-creation
+     * message's server id, and a {@code <votes>} child wraps one {@code <vote>}
+     * per selected option. Returns {@code null} when the parent poll cannot be
+     * resolved.
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
@@ -519,12 +502,11 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * Returns the SMAX {@code mediatype} attribute value for the supplied
      * message.
      *
-     * @apiNote
-     * Distinct from {@link MessageSender#resolveStanzaType(MessageContainer)}
-     * (which returns the outer-stanza classification): this returns the
-     * specific media-subtype string written to the inner {@code <plaintext>}
-     * child. Defaults to {@code "text"} for anything that is not a
-     * recognised media payload.
+     * <p>Distinct from
+     * {@link MessageSender#resolveStanzaType(MessageContainer)} (which returns
+     * the outer-stanza classification): this returns the specific media-subtype
+     * string written to the inner {@code <plaintext>} child. Defaults to
+     * {@code "text"} for anything that is not a recognised media payload.
      *
      * @param message the newsletter {@link Message} payload
      * @return the SMAX media subtype, or {@code "text"}

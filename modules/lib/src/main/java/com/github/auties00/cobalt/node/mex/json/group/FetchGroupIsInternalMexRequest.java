@@ -14,60 +14,48 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Outbound MEX query that probes whether a group is flagged as "internal"
- * by the WhatsApp relay.
+ * Outbound MEX query that probes whether a group is flagged as internal by the WhatsApp relay.
  *
- * @apiNote Issued from WA Web's
- * {@code WAWebGroupQueryJob.queryGroupAndUpdate} when the
- * {@code internal_group_indicator} AB-prop is enabled and the user is
- * entering the group-info panel; the boolean drives the staff-only
- * indicator badge rendered on Meta-internal testing groups. Most embedders
+ * <p>The resulting boolean drives the staff-only indicator badge rendered on Meta-internal testing
+ * groups, and is only relevant when the internal-group-indicator gating is enabled; most embedders
  * do not need this query.
  *
- * @implNote This implementation issues a single GraphQL variable
- * ({@code id}) and reads the four-way inline-fragment
- * {@code XWA2*Properties.internal} scalar from the response; the four
- * group variants ({@code XWA2GroupRegularGroup},
- * {@code XWA2CommunityGroup}, {@code XWA2CommunityDefaultSubGroup},
- * {@code XWA2CommunitySubGroup}) all surface the flag under the same
- * {@code properties.internal} path so the parser collapses them.
+ * @implNote This implementation issues a single GraphQL variable ({@code id}) and reads the
+ * {@code properties.internal} scalar from the response. The relay's four group inline-fragment
+ * variants (regular group, community, default subgroup, subgroup) all surface the flag under the
+ * same {@code properties.internal} path, so the parser collapses them.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchGroupIsInternalJob")
 public final class FetchGroupIsInternalMexRequest implements MexOperation.Request.Json {
     /**
-     * Compiled GraphQL query identifier for the
-     * {@code WAWebMexFetchGroupIsInternalJobQuery} document.
+     * Compiled GraphQL query identifier for the {@code WAWebMexFetchGroupIsInternalJobQuery}
+     * document.
      *
-     * @apiNote Mirrors the {@code params.id} value baked into
-     * {@code WAWebMexFetchGroupIsInternalJobQuery.graphql}. The relay maps
-     * this id to its persisted operation; the GraphQL text is never sent on
-     * the wire.
+     * <p>The relay maps this id to its persisted operation; the GraphQL text is never sent on the
+     * wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupIsInternalJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "34119218944390847";
 
     /**
-     * GraphQL operation name reported to
-     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     * GraphQL operation name reported alongside this query when it is dispatched.
      *
-     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
-     * latency and error metrics; Cobalt keeps the name on the request for
-     * embedders mirroring WA Web's telemetry surface.
+     * <p>Tags the query in latency and error metrics; kept on the request for embedders mirroring
+     * WhatsApp's telemetry surface.
      */
     public static final String OPERATION_NAME = "mexFetchGroupIsInternal";
 
     /**
-     * The target group identifier bound to the {@code id} GraphQL variable.
+     * Target group identifier bound to the {@code id} GraphQL variable.
      */
     private final String groupId;
 
     /**
      * Constructs a new request with the single {@code id} GraphQL variable.
      *
-     * @apiNote Forwarded verbatim to the relay; pass {@code null} to omit
-     * the variable from the wire payload (matching the WA Web
-     * undefined-variable convention).
+     * <p>The argument is forwarded verbatim to the relay; pass {@code null} to omit the variable
+     * from the wire payload, matching the WA Web undefined-variable convention.
      *
      * @param groupId the target group identifier, may be {@code null} to omit
      */
@@ -94,10 +82,9 @@ public final class FetchGroupIsInternalMexRequest implements MexOperation.Reques
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation streams the single {@code id} GraphQL
-     * variable through fastjson2's {@link JSONWriter} and wraps the
-     * resulting variables object in the standard MEX IQ envelope built
-     * through {@link MexOperation.Request.Json#createMexNode(String, String)}.
+     * @implNote This implementation streams the single {@code id} GraphQL variable through
+     * fastjson2's {@link JSONWriter} and wraps the resulting variables object in the standard MEX IQ
+     * envelope built through {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupIsInternalJob", exports = "mexFetchGroupIsInternal",
             adaptation = WhatsAppAdaptation.ADAPTED)

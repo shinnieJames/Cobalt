@@ -13,49 +13,27 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link ChatAssignmentOpenedStatusMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing chat-assignment-opened-status mutation
- * against the {@code WAWebChatAssignmentOpenedStatusSync} JS encoder. Pairs
- * with
- * {@link com.github.auties00.cobalt.sync.handler.ChatAssignmentOpenedStatusHandler}
- * whose inbound-side coverage lives in
- * {@code ChatAssignmentOpenedStatusHandlerTest}.
- *
- * @implNote
- * This implementation pins the chat JID, agent id, open flag, and
- * timestamp to the values captured by the WA Web oracle so byte parity
- * holds.
+ * Covers {@link ChatAssignmentOpenedStatusMutationFactory} against the captured
+ * WhatsApp Web encode oracle for
+ * {@code handler/chat-assignment-opened-status/encode}. The chat JID, agent id,
+ * open flag, and timestamp are pinned to the values the oracle was captured
+ * under so byte parity holds. The check is gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so it no-ops cleanly until
+ * the fixture is present.
  */
 @DisplayName("ChatAssignmentOpenedStatusMutationFactory")
 class ChatAssignmentOpenedStatusMutationFactoryTest {
-    /**
-     * Chat JID used as the second index segment.
-     */
     private static final Jid CHAT_JID = Jid.of("12345@s.whatsapp.net");
 
-    /**
-     * Agent identifier used as the third index segment.
-     */
     private static final String AGENT_ID = "agent-1";
 
-    /**
-     * The factory under test; rebuilt before each scenario.
-     */
     private ChatAssignmentOpenedStatusMutationFactory factory;
 
-    /**
-     * Builds a fresh {@link ChatAssignmentOpenedStatusMutationFactory} before each test.
-     */
     @BeforeEach
     void setUp() {
         factory = new ChatAssignmentOpenedStatusMutationFactory();
     }
 
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
     void byteEqualityWithOracle() {

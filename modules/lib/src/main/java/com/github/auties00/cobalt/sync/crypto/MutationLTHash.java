@@ -26,12 +26,11 @@ import java.util.logging.Logger;
  * group-invertible, which is what lets the relay incrementally apply a patch
  * to a snapshot without re-reading every record.
  *
- * @apiNote
- * Driven by both the incoming-patch verifier ({@link MutationIntegrityVerifier})
- * and the outgoing-patch builder, which both compute a new LT-Hash from the
- * mutations they are about to commit. The {@link #checkLtHash} and
- * {@link #reportCollectionInconsistency} helpers are used by periodic
- * consistency tasks rather than by the main sync path.
+ * <p>Driven by both the incoming-patch verifier
+ * ({@link MutationIntegrityVerifier}) and the outgoing-patch builder, which
+ * both compute a new LT-Hash from the mutations they are about to commit. The
+ * {@link #checkLtHash} and {@link #reportCollectionInconsistency} helpers are
+ * used by periodic consistency tasks rather than by the main sync path.
  */
 @WhatsAppWebModule(moduleName = "WACryptoLtHash")
 @WhatsAppWebModule(moduleName = "WAWebSyncdAntiTamperingLtHash")
@@ -44,10 +43,10 @@ public final class MutationLTHash {
     /**
      * The fixed byte length of every LT-Hash buffer.
      *
-     * @apiNote
-     * WA Web exposes this as the {@code KEY_LENGTH_BYTES} constant; the
-     * Cobalt rename to {@code HASH_LENGTH} reflects the actual role (it is
-     * the hash output length, not a key length).
+     * @implNote
+     * This implementation renames the WA Web {@code KEY_LENGTH_BYTES} constant
+     * to {@code HASH_LENGTH} to reflect its actual role: it is the hash output
+     * length, not a key length.
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "KEY_LENGTH_BYTES", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int HASH_LENGTH = 128;
@@ -67,10 +66,9 @@ public final class MutationLTHash {
     /**
      * The all-zero hash state.
      *
-     * @apiNote
-     * The starting accumulator for a collection that has never seen a
-     * mutation. Every {@code add} call moves the hash off zero; every
-     * matching {@code subtract} call moves it back.
+     * <p>The starting accumulator for a collection that has never seen a
+     * mutation. Every {@link #add(byte[], List)} call moves the hash off zero;
+     * every matching {@link #subtract(byte[], List)} call moves it back.
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "EMPTY_LT_HASH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final byte[] EMPTY_HASH = new byte[HASH_LENGTH];
@@ -85,9 +83,8 @@ public final class MutationLTHash {
     /**
      * Expands a value MAC to {@value #HASH_LENGTH} bytes via HKDF-SHA256.
      *
-     * @apiNote
-     * The per-element expansion step that turns each 32-byte value MAC into a
-     * 128-byte vector ready for pointwise addition. The HKDF salt is null
+     * <p>The per-element expansion step that turns each 32-byte value MAC into
+     * a 128-byte vector ready for pointwise addition. The HKDF salt is null
      * (RFC 5869 default of 32 zero bytes); the info parameter is
      * {@link #HKDF_INFO}.
      *
@@ -154,8 +151,7 @@ public final class MutationLTHash {
     /**
      * Folds a sequence of value MACs into the running hash by repeated addition.
      *
-     * @apiNote
-     * Drives the simple-add path used when building a fresh snapshot's
+     * <p>Drives the simple-add path used when building a fresh snapshot's
      * LT-Hash from its decrypted mutations. Ordering of the input does not
      * change the result; the operation is commutative and associative.
      *
@@ -175,8 +171,7 @@ public final class MutationLTHash {
     /**
      * Folds a sequence of value MACs out of the running hash by repeated subtraction.
      *
-     * @apiNote
-     * Inverse of {@link #add(byte[], List)}: subtracting every element of a
+     * <p>Inverse of {@link #add(byte[], List)}: subtracting every element of a
      * previously added sequence restores the original hash. Used by the
      * outgoing-patch builder when a mutation is replaced or removed.
      *
@@ -196,11 +191,9 @@ public final class MutationLTHash {
     /**
      * The paired output of {@link #subtractThenAdd}.
      *
-     * @apiNote
-     * The intermediate result is preserved because WA Web's
-     * {@code WAWebSyncdAntiTampering.computeLtHash} consumes it as
-     * {@code subtractResult} for the verbose diagnostic logging block that
-     * fires on a snapshot MAC mismatch.
+     * <p>The intermediate {@code subtractResult} is preserved so that the
+     * verbose diagnostic logging block that fires on a snapshot MAC mismatch
+     * can report both phases without re-running the subtract.
      *
      * @param ltHash         the final hash after both phases
      * @param subtractResult the intermediate hash after the subtract phase
@@ -215,8 +208,7 @@ public final class MutationLTHash {
     /**
      * Subtracts a removal set out of the running hash and then adds an addition set.
      *
-     * @apiNote
-     * The combined operation that the patch-application path uses to move
+     * <p>The combined operation that the patch-application path uses to move
      * from a collection's old LT-Hash to its new one in a single sweep.
      * Returning the intermediate {@code subtractResult} lets the caller log
      * both phases without re-running the subtract.
@@ -240,8 +232,7 @@ public final class MutationLTHash {
     /**
      * Returns a defensive clone of a hash buffer, or {@code null} for a {@code null} input.
      *
-     * @apiNote
-     * Used wherever a hash buffer escapes from a {@link MutationLTHash}
+     * <p>Used wherever a hash buffer escapes from a {@link MutationLTHash}
      * routine into mutable storage; the {@code null} tolerance matches the
      * nullable accessors on the collection-version store.
      *
@@ -257,8 +248,7 @@ public final class MutationLTHash {
     /**
      * The outcome of an LT-Hash consistency check across one or more collections.
      *
-     * @apiNote
-     * All three fields are {@code null} when the mutation-count threshold
+     * <p>All three fields are {@code null} when the mutation-count threshold
      * triggered a skip; otherwise {@code isLtHashConsistent} carries the
      * boolean verdict and the two hash fields carry the first collection's
      * recomputed and stored hashes (used in the diagnostic log line).
@@ -278,14 +268,11 @@ public final class MutationLTHash {
 
     /**
      * Recomputes the LT-Hash of one or every collection from the
-     * {@code SyncActionEntry} table and compares it against the stored hash.
+     * {@link SyncActionEntry} table and compares it against the stored hash.
      *
-     * @apiNote
-     * The Cobalt counterpart of {@code WAWebSyncdAntiTamperingLtHash.checkLtHash},
-     * driven by a periodic task that runs on the {@code lthash_check_hours}
-     * cadence in WA Web. Skipped (returns the unknown sentinel) when the
-     * total mutation count across the checked collections exceeds
-     * {@code maxMutations}; passing {@code null} disables the threshold.
+     * <p>Driven by a periodic consistency task. Skipped (returns the unknown
+     * sentinel) when the total mutation count across the checked collections
+     * exceeds {@code maxMutations}; passing {@code null} disables the threshold.
      *
      * @implNote
      * This implementation always uses the caller-supplied threshold value as
@@ -355,13 +342,10 @@ public final class MutationLTHash {
      * Runs {@link #checkLtHash} on a single collection and emits a diagnostic
      * log line describing the result.
      *
-     * @apiNote
-     * The Cobalt counterpart of
-     * {@code WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency},
-     * driven by the collection handler at patch-pre-processing time and on
+     * <p>Driven by the collection handler at patch-pre-processing time and on
      * any path that wants a side-effecting consistency probe. Defaults the
      * mutation-count threshold to {@code 400} when {@code maxMutations} is
-     * {@code null}, matching the WA Web default.
+     * {@code null}.
      *
      * @implNote
      * This implementation does not call into the WA Web telemetry helpers
@@ -369,7 +353,7 @@ public final class MutationLTHash {
      * the truncated hex suffixes of both the recomputed and stored hashes,
      * which is the same surface that the matching WA Web log lines expose.
      *
-     * @param store             the store providing the {@code SyncActionEntry} table and the cached hashes
+     * @param store             the store providing the {@link SyncActionEntry} table and the cached hashes
      * @param collection        the collection to check
      * @param diagnosticContext a free-form context describing the call site
      * @param checkContext      the context string passed through to {@link #checkLtHash}
@@ -419,11 +403,9 @@ public final class MutationLTHash {
     /**
      * Recomputes the LT-Hash for a collection from its persisted entries.
      *
-     * @apiNote
-     * Helper for {@link #checkLtHash}. Entries are deduplicated by hex
+     * <p>Helper for {@link #checkLtHash}. Entries are deduplicated by hex
      * {@code indexMac} with last-write-wins semantics before they are folded
-     * into the hash; this matches the {@code new Map(...)} idiom in
-     * WA Web's {@code WAWebSyncdAntiTamperingLtHash} private helper.
+     * into the hash.
      *
      * @param entries the persisted sync action entries for the collection
      * @return the recomputed LT-Hash

@@ -23,54 +23,41 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Builds the optional {@code <ctwa_attribution>} child of an outgoing
- * {@code <message>} stanza for Click-to-WhatsApp ad-attributed sends, and
- * owns the in-memory {@link ExternalEntryPoint} cache that drives it.
+ * Builds the optional {@code <ctwa_attribution>} child of an outgoing {@code <message>} stanza for Click-to-WhatsApp
+ * ad-attributed sends, and owns the in-memory {@link ExternalEntryPoint} cache that drives it.
+ * <p>
+ * When a user opens a chat through a CTWA ad link, the deep-link parameters are saved to a per-chat
+ * {@link ExternalEntryPoint}. The first messages sent in that chat carry a {@code <ctwa_attribution>} child encoding the
+ * JSON {@code {"lt": "WEB_<type>", "s": 0?, "p": "<partner>"?}} so the server attributes the conversation back to the
+ * advertising campaign.
  *
- * @apiNote
- * When a user opens a chat through a CTWA ad link, the deep-link
- * parameters are saved to a per-chat {@link ExternalEntryPoint}. The first
- * messages sent in that chat carry a {@code <ctwa_attribution>} child
- * encoding the JSON {@code {"lt": "WEB_<type>", "s": 0?, "p": "<partner>"?}}
- * so the server attributes the conversation back to the advertising
- * campaign. The save/get/delete methods mirror WA Web's
- * {@code WAWebExternalEntryPointPrefs} module; the AB-prop gating helpers
- * mirror {@code WAWebExternalCtxConfig}.
- *
- * @implNote
- * This implementation backs the entry-point store with a
- * {@link ConcurrentHashMap} keyed by chat JID string, matching how WA Web
- * stores the same map under {@code WAWebUserPrefsKeys.KEYS.EXTERNAL_ENTRY_POINT}.
- * Persistence across restarts is not implemented and the WA-Web JSON
- * serialisation order is reproduced exactly via {@link LinkedHashMap} so
- * the {@code <ctwa_attribution>} byte content matches the live wire.
+ * @implNote This implementation backs the entry-point store with a {@link ConcurrentHashMap} keyed by chat JID string.
+ * Persistence across restarts is not implemented. The JSON serialisation order is reproduced exactly via
+ * {@link LinkedHashMap} so the {@code <ctwa_attribution>} byte content matches the live wire.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCtwaAttributionNode")
 @WhatsAppWebModule(moduleName = "WAWebExternalEntryPointPrefs")
 @WhatsAppWebModule(moduleName = "WAWebExternalCtxConfig")
 public final class CtwaAttributionStanza {
     /**
-     * The in-memory map of recorded entry points keyed by chat JID string.
+     * Holds the recorded entry points keyed by chat JID string.
      */
     private final ConcurrentHashMap<String, ExternalEntryPoint> entryPoints;
 
     /**
-     * The {@link WhatsAppStore} used to look up the chat and count its
-     * messages for the first-message logging policy.
+     * Holds the store used to look up the chat and count its messages for the first-message logging policy.
      */
     private final WhatsAppStore store;
 
     /**
-     * The {@link ABPropsService} consulted for the CTWA-related props.
+     * Holds the AB-props service consulted for the CTWA-related props.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Constructs a stanza builder bound to the given services.
-     *
-     * @apiNote
-     * Constructed once per client; the entry-point cache lives on this
-     * instance.
+     * <p>
+     * The entry-point cache lives on this instance.
      *
      * @param store          the {@link WhatsAppStore}
      * @param abPropsService the {@link ABPropsService}
@@ -85,13 +72,10 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Records an external entry point for the given chat, stamping the
-     * current instant as the added time.
-     *
-     * @apiNote
-     * Convenience overload that builds the {@link ExternalEntryPoint}
-     * internally. Callers that already hold a record (e.g. when replaying
-     * historical attribution) should use the two-argument form.
+     * Records an external entry point for the given chat, stamping the current instant as the added time.
+     * <p>
+     * Builds the {@link ExternalEntryPoint} internally. Callers that already hold a record should use the two-argument
+     * form.
      *
      * @param chatJid      the chat {@link Jid}
      * @param deepLinkType the deep-link type token
@@ -107,13 +91,10 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Records an already-built external entry point for the given chat,
-     * pruning expired siblings.
-     *
-     * @apiNote
-     * Replaces any previous entry for the same chat. Pruning of expired
-     * entries from the in-memory map happens on every save, mirroring WA
-     * Web's {@code c(t)} persist helper.
+     * Records an already-built external entry point for the given chat, pruning expired siblings.
+     * <p>
+     * Replaces any previous entry for the same chat. Pruning of expired entries from the in-memory map happens on every
+     * save.
      *
      * @param chatJid    the chat {@link Jid}
      * @param entryPoint the {@link ExternalEntryPoint} to save
@@ -127,12 +108,8 @@ public final class CtwaAttributionStanza {
 
     /**
      * Removes the external entry point recorded for the given chat.
-     *
-     * @apiNote
-     * Idempotent: removing an absent entry is a no-op. WA Web also persists
-     * the resulting map back to {@code WAWebUserPrefsStore}; the
-     * in-memory-only Cobalt port skips that write because the map is the
-     * source of truth.
+     * <p>
+     * Removing an absent entry is a no-op.
      *
      * @param chatJid the chat {@link Jid}
      */
@@ -143,12 +120,9 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Returns the external entry point recorded for the given chat, if any
-     * non-expired entry exists.
-     *
-     * @apiNote
-     * Expired entries are not pruned here; this method merely declines to
-     * return them. Pruning is performed by
+     * Returns the external entry point recorded for the given chat, if any non-expired entry exists.
+     * <p>
+     * Expired entries are not pruned here; this method merely declines to return them. Pruning is performed by
      * {@link #saveEntryPoint(Jid, ExternalEntryPoint)} on the next save.
      *
      * @param chatJid the chat {@link Jid}
@@ -165,23 +139,17 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Builds the {@code <ctwa_attribution>} child for the given chat, or
-     * {@code null} when CTWA attribution does not apply.
+     * Builds the {@code <ctwa_attribution>} child for the given chat, or {@code null} when CTWA attribution does not
+     * apply.
+     * <p>
+     * Four gates suppress the node: {@code chatJid} is {@code null}, CTWA logging is disabled (see
+     * {@link #isCtxLoggingEnabled()}), no entry point is recorded for the chat, or the
+     * {@link #getFirstMessageLoggingOption() first-message logging policy} excludes this chat (typically because it
+     * already has multiple non-system messages). When emitted, the child carries the UTF-8 JSON payload as its byte
+     * content with no attributes.
      *
-     * @apiNote
-     * Four gates suppress the node: {@code chatJid} is {@code null}, CTWA
-     * logging is disabled via the {@code external_ctx_authorise_wa_chat}
-     * AB prop, no entry point is recorded for the chat, or the
-     * {@link #getFirstMessageLoggingOption() first-message logging policy}
-     * excludes this chat (typically because it already has multiple
-     * non-system messages). When emitted, the child carries the UTF-8 JSON
-     * payload as its byte content with no attributes.
-     *
-     * @implNote
-     * This implementation uses {@link LinkedHashMap} so the
-     * {@code {lt, s?, p?}} key order matches WA Web's
-     * {@code JSON.stringify} output byte-for-byte, which the server treats
-     * as a content tag.
+     * @implNote This implementation uses {@link LinkedHashMap} so the {@code {lt, s?, p?}} key order matches the live
+     * wire byte-for-byte, which the server treats as a content tag.
      *
      * @param chatJid the recipient chat {@link Jid}
      * @return the {@code <ctwa_attribution>} {@link Node}, or {@code null}
@@ -225,13 +193,10 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Returns whether CTWA context logging is currently enabled for this
-     * client.
-     *
-     * @apiNote
-     * Gates {@link #build(Jid)} emission and the deletion of pending entry
-     * points on send. Backed by the {@link ABProp#EXTERNAL_CTX_AUTHORISE_WA_CHAT}
-     * AB prop.
+     * Returns whether CTWA context logging is currently enabled for this client.
+     * <p>
+     * Gates {@link #build(Jid)} emission and the deletion of pending entry points on send. Backed by the
+     * {@link ABProp#EXTERNAL_CTX_AUTHORISE_WA_CHAT} prop.
      *
      * @return {@code true} when CTWA context logging is enabled
      */
@@ -243,21 +208,15 @@ public final class CtwaAttributionStanza {
 
     /**
      * Returns the active first-message logging policy for CTWA attribution.
+     * <p>
+     * The {@link ABProp#EXTERNAL_CTX_AUTHORISE_EXISTING_CHATS} prop maps an integer to one of three policy labels. An
+     * unknown value narrows to the safest default ({@link FirstMessageLoggingOption#NEW_CHATS_ONLY}) so a fresh AB-prop
+     * value never produces a hard failure.
      *
-     * @apiNote
-     * The {@link ABProp#EXTERNAL_CTX_AUTHORISE_EXISTING_CHATS} prop maps an
-     * integer to one of three policy labels. WA Web throws on an unknown
-     * value; Cobalt narrows to the safest default ({@link FirstMessageLoggingOption#NEW_CHATS_ONLY})
-     * so a fresh AB-prop value will never produce a hard failure.
+     * @implNote This implementation models the three labels as an {@link Enum} so the downstream switch in
+     * {@link #shouldLogFirstMessage(Chat, String)} is exhaustive at compile time.
      *
-     * @implNote
-     * This implementation models the three labels as a {@link Enum} so the
-     * downstream switch in {@link #shouldLogFirstMessage(Chat, String)} is
-     * exhaustive at compile time; WA Web's string-labels approach is
-     * checked at runtime.
-     *
-     * @return the resolved {@link FirstMessageLoggingOption}, never
-     *         {@code null}
+     * @return the resolved {@link FirstMessageLoggingOption}, never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalCtxConfig", exports = "getFirstMessageLoggingOption",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -271,16 +230,11 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Returns the list of URL query-parameter names that may carry a CTWA
-     * deep-link token.
-     *
-     * @apiNote
-     * The base list comes from the comma-separated
-     * {@link ABProp#EXTERNAL_CTX_URL_PARAM_NAMES} prop and defaults to
-     * {@code ["partnertoken"]}. When
-     * {@link ABProp#EXTERNAL_CTX_FOA_LOGGING} equals {@code 1}, a trailing
-     * {@code "token"} entry is appended for the First-Open-Attribution
-     * surface.
+     * Returns the list of URL query-parameter names that may carry a CTWA deep-link token.
+     * <p>
+     * The base list comes from the comma-separated {@link ABProp#EXTERNAL_CTX_URL_PARAM_NAMES} prop and defaults to
+     * {@code ["partnertoken"]}. When {@link ABProp#EXTERNAL_CTX_FOA_LOGGING} equals {@code 1}, a trailing {@code "token"}
+     * entry is appended for the First-Open-Attribution surface.
      * {@snippet :
      *     // example AB-prop value
      *     // "partnertoken,token,utm_token"
@@ -317,40 +271,29 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * The default URL query parameter name carrying the CTWA partner
-     * deep-link token.
-     *
-     * @apiNote
-     * Used as the sole fallback when
-     * {@link ABProp#EXTERNAL_CTX_URL_PARAM_NAMES} is missing or contains
-     * only blanks. Mirrors WA Web's local {@code e} in
-     * {@code WAWebExternalCtxConfig}.
+     * Holds the default URL query parameter name carrying the CTWA partner deep-link token.
+     * <p>
+     * Used as the sole fallback when {@link ABProp#EXTERNAL_CTX_URL_PARAM_NAMES} is missing or contains only blanks.
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalCtxConfig", exports = "e",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final String PARTNER_TOKEN_PARAM = "partnertoken";
 
     /**
-     * The additional URL query parameter name appended to the deep-link
-     * list when the First-Open-Attribution feature is enabled.
-     *
-     * @apiNote
-     * Mirrors WA Web's local {@code s} in {@code WAWebExternalCtxConfig};
-     * appended only when {@link #isFoaLoggingEnabled()} returns
-     * {@code true}.
+     * Holds the additional URL query parameter name appended to the deep-link list when the First-Open-Attribution
+     * feature is enabled.
+     * <p>
+     * Appended only when {@link #isFoaLoggingEnabled()} returns {@code true}.
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalCtxConfig", exports = "s",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final String TOKEN_PARAM = "token";
 
     /**
-     * Returns whether the First-Open-Attribution logging feature is
-     * enabled.
-     *
-     * @apiNote
-     * Backed by {@link ABProp#EXTERNAL_CTX_FOA_LOGGING}, which is compared
-     * to the literal {@code 1} (any other value, including {@code 0} and
-     * unknown values, counts as disabled).
+     * Returns whether the First-Open-Attribution logging feature is enabled.
+     * <p>
+     * Backed by {@link ABProp#EXTERNAL_CTX_FOA_LOGGING}, which is compared to the literal {@code 1}; any other value,
+     * including {@code 0} and unknown values, counts as disabled.
      *
      * @return {@code true} when FOA logging is enabled
      */
@@ -361,21 +304,15 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Returns whether the active first-message logging policy permits
-     * emitting CTWA attribution for the given chat.
-     *
-     * @apiNote
-     * The policy is a tri-state:
-     * {@link FirstMessageLoggingOption#NEW_CHATS_OR_EXISTING_CHATS_WITH_PARTNER_LINKS}
-     * permits when the entry point has a partner name OR the chat is new,
-     * {@link FirstMessageLoggingOption#ALL_CHATS} permits unconditionally,
-     * and {@link FirstMessageLoggingOption#NEW_CHATS_ONLY} permits only
-     * for new chats. A chat is "new" when it contains at most one
-     * non-system, non-send-failure message.
+     * Returns whether the active first-message logging policy permits emitting CTWA attribution for the given chat.
+     * <p>
+     * The policy is a tri-state: {@link FirstMessageLoggingOption#NEW_CHATS_OR_EXISTING_CHATS_WITH_PARTNER_LINKS} permits
+     * when the entry point has a partner name or the chat is new; {@link FirstMessageLoggingOption#ALL_CHATS} permits
+     * unconditionally; and {@link FirstMessageLoggingOption#NEW_CHATS_ONLY} permits only for new chats. A chat is new
+     * when it contains at most one non-system, non-send-failure message.
      *
      * @param chat        the {@link Chat}, or {@code null} when not found
-     * @param partnerName the partner name from the
-     *                    {@link ExternalEntryPoint}, or {@code null}
+     * @param partnerName the partner name from the {@link ExternalEntryPoint}, or {@code null}
      * @return {@code true} when attribution should be emitted
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCtwaAttributionNode", exports = "getCtwaAttributionNode",
@@ -391,21 +328,15 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * The three policies the
-     * {@link ABProp#EXTERNAL_CTX_AUTHORISE_EXISTING_CHATS} prop selects
-     * between when deciding whether the next outgoing message in a chat
-     * receives a CTWA attribution tag.
-     *
-     * @apiNote
-     * Mirrors the three string labels returned by
-     * {@code WAWebExternalCtxConfig.getFirstMessageLoggingOption}.
+     * Enumerates the three policies the {@link ABProp#EXTERNAL_CTX_AUTHORISE_EXISTING_CHATS} prop selects between when
+     * deciding whether the next outgoing message in a chat receives a CTWA attribution tag.
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalCtxConfig", exports = "getFirstMessageLoggingOption",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public enum FirstMessageLoggingOption {
         /**
-         * Attributes every chat with at most one non-system message, plus
-         * existing chats that already carry a partner link.
+         * Attributes every chat with at most one non-system message, plus existing chats that already carry a partner
+         * link.
          */
         NEW_CHATS_OR_EXISTING_CHATS_WITH_PARTNER_LINKS,
 
@@ -415,26 +346,21 @@ public final class CtwaAttributionStanza {
         ALL_CHATS,
 
         /**
-         * Attributes only chats with at most one non-system message (the
-         * default policy).
+         * Attributes only chats with at most one non-system message; this is the default policy.
          */
         NEW_CHATS_ONLY
     }
 
     /**
      * Returns whether the chat contains more than one non-system message.
+     * <p>
+     * A chat with zero or one non-system, non-send-failure message is considered new for CTWA attribution; only the
+     * first such message carries the attribution tag.
      *
-     * @apiNote
-     * A chat with zero or one non-system, non-send-failure message is
-     * considered "new" for CTWA attribution; only the first such message
-     * carries the attribution tag.
-     *
-     * @implNote
-     * This implementation streams the chat's messages, filters out system
-     * types via {@link #isSystemMessage(ChatMessageInfo)}, skips one entry,
-     * and tests whether a second qualifying message exists. The stream is
-     * closed via try-with-resources because the underlying {@link Chat}
-     * messages stream may hold a snapshot iterator.
+     * @implNote This implementation streams the chat's messages, filters out system types via
+     * {@link #isSystemMessage(ChatMessageInfo)}, skips one entry, and tests whether a second qualifying message exists.
+     * The stream is closed via try-with-resources because the underlying {@link Chat} messages stream may hold a
+     * snapshot iterator.
      *
      * @param chat the {@link Chat}, or {@code null}
      * @return {@code true} when more than one qualifying message exists
@@ -455,23 +381,16 @@ public final class CtwaAttributionStanza {
     }
 
     /**
-     * Returns whether the given message belongs to WA Web's
-     * {@code SYSTEM_MESSAGE_TYPES} classification.
-     *
-     * @apiNote
-     * System messages (broadcast notifications, call logs, debug messages,
-     * E2E notifications, group notifications, newsletter notifications,
-     * generic notifications, notification templates, protocol messages,
-     * pinned messages, decrypted poll-add-option entries) are excluded
-     * from the "new chat" count so notification-only conversations still
+     * Returns whether the given message is a system message for the purposes of the new-chat count.
+     * <p>
+     * System messages (broadcast notifications, call logs, debug messages, E2E notifications, group notifications,
+     * newsletter notifications, generic notifications, notification templates, protocol messages, pinned messages,
+     * decrypted poll-add-option entries) are excluded from the new-chat count so notification-only conversations still
      * receive CTWA attribution.
      *
-     * @implNote
-     * This implementation reduces the WA-Web type list to a simpler
-     * predicate: a message with a {@code messageStubType}, a {@code null}
-     * container, or a {@link ProtocolMessage} payload counts as system.
-     * That set covers every notification type emitted by WA Web's send
-     * pipeline.
+     * @implNote This implementation reduces the type list to a simpler predicate: a message with a
+     * {@code messageStubType}, a {@code null} container, or a {@link ProtocolMessage} payload counts as system. That set
+     * covers every notification type emitted by the send pipeline.
      *
      * @param msg the {@link ChatMessageInfo} to classify
      * @return {@code true} when the message is a system type
@@ -493,12 +412,8 @@ public final class CtwaAttributionStanza {
 
     /**
      * Removes expired entry points from the in-memory map.
-     *
-     * @apiNote
-     * Invoked on every save; matches the pruning step inside WA Web's
-     * {@code c(t)} persist helper. WA Web also writes the pruned map back
-     * to {@code WAWebUserPrefsStore}; Cobalt skips that step because the
-     * map is the source of truth.
+     * <p>
+     * Invoked on every save.
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalEntryPointPrefs", exports = "saveExternalEntryPoint",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -508,22 +423,14 @@ public final class CtwaAttributionStanza {
 
     /**
      * Serialises a string-keyed map to a minimal JSON object string.
+     * <p>
+     * Handles {@link String}, {@link Number}, and {@link Boolean} values only; other types are coerced via
+     * {@link Object#toString()}. The output matches the live wire byte-for-byte so the encoded
+     * {@code <ctwa_attribution>} content is treated as a content tag by the server.
      *
-     * @apiNote
-     * Internal helper for {@link #build(Jid)} so the encoded
-     * {@code <ctwa_attribution>} content matches WA Web's
-     * {@code JSON.stringify} output byte-for-byte. Handles
-     * {@link String}, {@link Number}, and {@link Boolean} values only;
-     * other types are coerced via {@link Object#toString()}.
-     *
-     * @implNote
-     * This implementation escapes string values exactly like
-     * {@code JSON.stringify}: backslash, double quote, the five
-     * two-character control shortcuts ({@code \b}, {@code \f}, {@code \n},
-     * {@code \r}, {@code \t}), and any other character below
-     * {@code U+0020} as {@code \\u00XX}. Higher Unicode code points are
-     * emitted verbatim, matching the {@code TextEncoder().encode(JSON.stringify(...))}
-     * pipeline used on the WA Web side.
+     * @implNote This implementation escapes string values strictly: backslash, double quote, the five two-character
+     * control shortcuts ({@code \b}, {@code \f}, {@code \n}, {@code \r}, {@code \t}), and any other character below
+     * {@code U+0020} as {@code \\u00XX}. Higher Unicode code points are emitted verbatim.
      *
      * @param map the entries to serialise
      * @return the JSON object string
@@ -551,11 +458,9 @@ public final class CtwaAttributionStanza {
 
     /**
      * Appends a JSON-quoted, properly escaped string to the buffer.
-     *
-     * @apiNote
-     * Internal helper consumed exclusively by {@link #serializeJson}; the
-     * escaping table is JSON-spec strict so the encoded bytes match
-     * {@code JSON.stringify}.
+     * <p>
+     * Consumed exclusively by {@link #serializeJson(LinkedHashMap)}; the escaping table is JSON-spec strict so the
+     * encoded bytes match the live wire.
      *
      * @param sb    the {@link StringBuilder} to append to
      * @param value the source string to encode

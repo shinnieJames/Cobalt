@@ -15,14 +15,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that unlinks one or more sub-groups from a community
- * parent group.
+ * Models the outbound {@code <iq type="set" xmlns="w:g2">} stanza that unlinks one or more sub-groups from a
+ * community parent group.
  *
- * @apiNote Drives the community-admin "Remove from community" affordance applied to sub-groups. The relay
- * accepts up to 1000 entries per request and returns a per-sub-group result row in the matching
+ * <p>This request backs removing sub-groups from a community. The relay accepts up to 1000 entries per request
+ * and returns a per-sub-group result row in the matching
  * {@link SmaxGroupsUnlinkGroupsResponse.Success#unlinkedGroups()}. When the optional
- * {@link RequestedGroup#removeOrphanedMembers()} flag is set on an entry, the relay also evicts community
- * members who, after the unlink, are no longer affiliated with any remaining sub-group.
+ * {@link RequestedGroup#removeOrphanedMembers()} flag is set on an entry, the relay also evicts community members
+ * who, after the unlink, are no longer affiliated with any remaining sub-group.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsUnlinkGroupsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
@@ -41,9 +41,9 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     /**
      * Constructs an unlink-groups request.
      *
-     * @apiNote The relay enforces a 1..1000 cardinality on the {@code <group>} children; callers should
-     * pre-batch larger lists. The {@code groups} list is defensively copied so post-construction mutation of the
-     * caller's list has no effect on the request.
+     * <p>The relay enforces a 1..1000 cardinality on the {@code <group>} children, so callers should pre-batch
+     * larger lists. The {@code groups} list is copied so post-construction mutation of the caller's list has no
+     * effect on the request.
      *
      * @param parentGroupJid the parent community {@link Jid}
      * @param groups         the sub-groups to unlink
@@ -63,7 +63,7 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     /**
      * Returns the parent (community) group {@link Jid}.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * <p>The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the parent group {@link Jid}; never {@code null}
      */
@@ -83,7 +83,7 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * <p>The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
      *         <unlink unlink_type="sub_group">
@@ -93,7 +93,7 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
      *         </unlink>
      *     </iq>
      * }
-     * the {@code remove_orphaned_members} attribute is emitted only on entries where the flag is set.
+     * The {@code remove_orphaned_members} attribute is emitted only on entries where the flag is set.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <unlink>} payload
      */
@@ -165,11 +165,11 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Single sub-group entry inside the outbound {@code <unlink/>} payload.
+     * Represents a single sub-group entry inside the outbound {@code <unlink/>} payload.
      *
-     * @apiNote Pairs a sub-group {@link Jid} with the optional
-     * {@link #removeOrphanedMembers() remove_orphaned_members} flag controlling whether the relay should also
-     * evict community members no longer affiliated with any remaining sub-group.
+     * <p>Pairs a sub-group {@link Jid} with the optional {@link #removeOrphanedMembers() remove_orphaned_members}
+     * flag controlling whether the relay should also evict community members no longer affiliated with any
+     * remaining sub-group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsUnlinkGroupsRequest")
     public static final class RequestedGroup {

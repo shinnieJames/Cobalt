@@ -13,33 +13,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set"><blocking action="..."/></iq>} request
- * that mutes or unmutes the PSA broadcast channel for the current account.
+ * Models the outbound {@code <iq type="set"><blocking action="..."/></iq>}
+ * request that mutes or unmutes the PSA broadcast channel for the current
+ * account.
  *
- * @apiNote
- * Surfaces {@code WAWebBlockUserJob.blockUnblockPSAUser}, called from the
- * "Mute PSA messages" toggle on the chat settings surface. The
- * {@link #blockingAction()} string matches one of the
- * {@link SmaxPsaChatBlockGetBlockingStatus} wire literals
- * ({@code "blocked"} or {@code "unblocked"}) although the wire layer
- * accepts any non-empty string and lets the relay reject unknown literals
- * server-side.
+ * <p>The {@link #blockingAction()} string is the action to apply; typed
+ * callers pass one of the {@link SmaxPsaChatBlockGetBlockingStatus} wire
+ * literals ({@code "blocked"} or {@code "unblocked"}). The wire layer accepts
+ * any non-empty string and lets the relay reject unknown literals server-side.
+ * The reply is a {@link SmaxPsaChatBlockSetResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaChatBlockSetRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaBaseIQSetRequestMixin")
 public final class SmaxPsaChatBlockSetRequest implements SmaxOperation.Request {
     /**
-     * The free-form action string carried by the {@code action} attribute.
-     *
-     * @apiNote
-     * The WA Web layer wraps this in {@code WAWap.CUSTOM_STRING}; typed
-     * callers pass {@code "blocked"} or {@code "unblocked"} to flip the
-     * PSA-mute flag.
+     * Holds the free-form action string carried by the {@code action}
+     * attribute; typed callers pass {@code "blocked"} or {@code "unblocked"}
+     * to flip the PSA-mute flag.
      */
     private final String blockingAction;
 
     /**
-     * Constructs a request.
+     * Constructs a request around the given action string.
      *
      * @param blockingAction the action string; never {@code null}
      * @throws NullPointerException if {@code blockingAction} is {@code null}
@@ -49,7 +44,7 @@ public final class SmaxPsaChatBlockSetRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the action string.
+     * Returns the action string carried by the {@code action} attribute.
      *
      * @return the action string; never {@code null}
      */
@@ -60,11 +55,10 @@ public final class SmaxPsaChatBlockSetRequest implements SmaxOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation emits the canonical
-     * {@code <iq xmlns="w:comms:chat" type="set" to="s.whatsapp.net">}
-     * envelope around a {@code <blocking action="..."/>} child, mirroring
-     * {@code makeChatBlockSetRequest} + {@code mergeBaseIQSetRequestMixin}.
+     * <p>Builds the {@code <iq xmlns="w:comms:chat" type="set">} envelope,
+     * addressed to the {@linkplain JidServer#user() user server}, wrapping a
+     * {@code <blocking action="..."/>} child whose {@code action} attribute
+     * carries {@link #blockingAction()}.
      *
      * @return a {@link NodeBuilder} carrying the
      *         {@code <iq><blocking action="..."/></iq>} stanza

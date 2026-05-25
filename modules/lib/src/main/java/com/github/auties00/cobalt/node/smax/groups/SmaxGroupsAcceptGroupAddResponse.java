@@ -13,15 +13,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsAcceptGroupAddRequest}.
+ * Sealed reply family for a {@link SmaxGroupsAcceptGroupAddRequest}.
  *
- * @apiNote The four variants mirror the WA Web RPC dispatcher's
- * {@code GroupJoinRequestSuccess}/{@code Success}/{@code ClientError}/{@code ServerError} cases:
+ * The four variants partition every reply the relay can return to an accept-group-add request.
  * {@link GroupJoinRequestSuccess} means the relay accepted the {@code accept} but the group's membership-approval
- * mode rerouted the caller into the pending-approval queue, {@link Success} means the caller has joined the group
- * directly, and the two error variants surface the relay's reason codes. Call {@link #of(Node, Node)} on the
- * inbound IQ to land on the right variant; the {@code joinGroupViaInviteV4} caller in
- * {@code WAWebGroupInviteV4Job} uses the same dispatch shape.
+ * mode rerouted the caller into the pending-approval queue; {@link Success} means the caller has joined the group
+ * directly; {@link ClientError} and {@link ServerError} surface the relay's reason codes. Callers obtain the right
+ * variant by passing the inbound IQ to {@link #of(Node, Node)}.
  */
 public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.Response
         permits SmaxGroupsAcceptGroupAddResponse.GroupJoinRequestSuccess, SmaxGroupsAcceptGroupAddResponse.Success,
@@ -31,13 +29,12 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
      * Dispatches the inbound IQ across each {@link SmaxGroupsAcceptGroupAddResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsAcceptGroupAddRPC}:
-     * {@link GroupJoinRequestSuccess} is tried first because its {@code <membership_approval_request/>} child
-     * discriminates it from the bare {@link Success}.
+     * {@link GroupJoinRequestSuccess} is probed first because its {@code <membership_approval_request/>} child
+     * discriminates it from the bare {@link Success}; the two error variants are probed last.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the four documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * four documented variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision
+     * to the caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsAcceptGroupAddRequest} stanza, used to validate
@@ -66,19 +63,18 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay accepted the {@code accept} but the group's membership-approval
-     * mode rerouted the caller into the pending-approval queue.
+     * Reply variant emitted when the relay accepted the {@code accept} but rerouted the caller into the
+     * pending-approval queue.
      *
-     * @apiNote Surfaces as the {@code AcceptGroupAddResponseGroupJoinRequestSuccess} case in
-     * {@code WAWebGroupInviteV4Job}: the caller is not yet a participant but the relay records the request,
-     * and a group admin must approve it.
+     * The caller is not yet a participant; the relay records the request and a group admin must approve it before
+     * the caller joins.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcceptGroupAddResponseGroupJoinRequestSuccess")
     final class GroupJoinRequestSuccess implements SmaxGroupsAcceptGroupAddResponse {
         /**
          * Constructs a marker {@link GroupJoinRequestSuccess}.
          *
-         * @apiNote The instance carries no payload; the discriminator is solely the presence of the
+         * The instance carries no payload; the discriminator is solely the presence of the
          * {@code <membership_approval_request/>} child on the IQ.
          */
         public GroupJoinRequestSuccess() {
@@ -87,8 +83,7 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link GroupJoinRequestSuccess} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseAcceptGroupAddResponseGroupJoinRequestSuccess}: the IQ
-         * must be a valid {@code type="result"} echo of the request and must carry a
+         * The IQ must be a valid {@code type="result"} echo of the request and must carry a
          * {@code <membership_approval_request/>} child.
          *
          * @param node    the inbound IQ stanza
@@ -144,17 +139,16 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay admitted the caller into the group as a regular participant.
+     * Reply variant emitted when the relay admitted the caller into the group as a regular participant.
      *
-     * @apiNote Surfaces as the {@code AcceptGroupAddResponseSuccess} case in {@code WAWebGroupInviteV4Job};
-     * the caller's UI receives a confirmation toast and the local chat row materialises immediately.
+     * The caller has joined directly; no admin approval is pending.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcceptGroupAddResponseSuccess")
     final class Success implements SmaxGroupsAcceptGroupAddResponse {
         /**
          * Constructs a marker {@link Success}.
          *
-         * @apiNote The instance carries no payload; the discriminator is the absence of the
+         * The instance carries no payload; the discriminator is the absence of the
          * {@code <membership_approval_request/>} child.
          */
         public Success() {
@@ -163,9 +157,8 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseAcceptGroupAddResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request and must NOT carry a {@code <membership_approval_request/>}
-         * child, otherwise the {@link GroupJoinRequestSuccess} branch wins.
+         * The IQ must be a valid {@code type="result"} echo of the request and must not carry a
+         * {@code <membership_approval_request/>} child, otherwise the {@link GroupJoinRequestSuccess} branch wins.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -220,21 +213,20 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay rejected the {@code accept} as malformed, expired, or referencing
-     * a non-existent pending request.
+     * Reply variant emitted when the relay rejected the {@code accept} as malformed, expired, or referencing a
+     * non-existent pending request.
      *
-     * @apiNote Surfaces as the {@code AcceptGroupAddResponseClientError} case in {@code WAWebGroupInviteV4Job},
-     * which logs the {@link #errorCode()} as the HTTP-style status passed back to the join-via-invite UI.
+     * The {@link #errorCode()} carries the HTTP-style status the relay reports back to the join-via-invite flow.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcceptGroupAddResponseClientError")
     final class ClientError implements SmaxGroupsAcceptGroupAddResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -270,8 +262,8 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -329,21 +321,20 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Reply variant emitted on transient relay-side failure.
      *
-     * @apiNote Surfaces as the {@code AcceptGroupAddResponseServerError} case in {@code WAWebGroupInviteV4Job},
-     * where it is logged at the same severity as {@link ClientError} but typically signals retry-eligible
-     * relay outages rather than caller error.
+     * Unlike {@link ClientError}, this variant typically signals a retry-eligible relay outage rather than caller
+     * error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcceptGroupAddResponseServerError")
     final class ServerError implements SmaxGroupsAcceptGroupAddResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -379,8 +370,8 @@ public sealed interface SmaxGroupsAcceptGroupAddResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

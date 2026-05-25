@@ -12,47 +12,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound
- * {@code <iq type="error"><error text="not-authorized" code="401"/></iq>}
- * reply emitted when a companion refuses to complete the pair-device
- * handshake.
+ * Models the outbound {@code <iq type="error"><error text="not-authorized" code="401"/></iq>}
+ * reply a companion emits when it refuses to complete the pair-device handshake.
  *
- * @apiNote
- * Sent when the device-identity HMAC check fails, when the account
- * signature verification fails, or when any other validation step in
- * the pair-success handler rejects the inbound stanza; the not-
- * authorized 401 is the only error variant defined for this RPC. WA
- * Web's {@code handlePairSuccess} invokes
- * {@code makeSetRegResponseError} for both branches and then triggers
- * a session logout via
- * {@code logoutAfterValidationFail}.
+ * <p>Sent when the device-identity HMAC check fails, when the account-signature verification
+ * fails, or when any other validation step in the pair-success handler rejects the inbound
+ * stanza; the not-authorized 401 is the only error variant defined for this RPC, after which the
+ * companion logs out. Successful pairings reply with {@link SmaxMdSetRegResponseClient} or
+ * {@link SmaxMdSetRegResponseHostedClient} instead.
  *
- * @implNote
- * This implementation folds WA Web's
- * {@code WASmaxOutMdIQErrorNotAuthorizedMixin} into the builder by
- * inlining the {@code <error text="not-authorized" code="401"/>}
- * shape; the outer envelope is pinned to
- * {@code <iq to="s.whatsapp.net" type="error">} with the original
- * {@code id} echoed back so the relay can pair the error with its
- * pending request.
+ * @implNote This implementation folds the WA Web not-authorized error mixin into the builder by
+ * inlining the {@code <error text="not-authorized" code="401"/>} shape; the outer envelope is
+ * pinned to {@code <iq to="s.whatsapp.net" type="error">} with the original {@code id} echoed back
+ * so the relay can pair the error with its pending request.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMdSetRegResponseError")
 @WhatsAppWebModule(moduleName = "WASmaxOutMdIQErrorNotAuthorizedMixin")
 public final class SmaxMdSetRegResponseError implements SmaxOperation.Request {
     /**
-     * The {@code id} of the inbound IQ being replied to.
+     * Holds the {@code id} of the inbound IQ being replied to.
      *
-     * @apiNote
-     * Echoed into the outbound {@code <iq id="..."/>} attribute.
+     * <p>Echoed into the outbound {@code <iq id="..."/>} attribute.
      */
     private final String iqId;
 
     /**
      * Constructs an error reply.
      *
-     * @apiNote
-     * Library code typically derives {@code iqId} from the rejected
-     * {@link SmaxMdSetRegResponse}.
+     * <p>Callers typically derive {@code iqId} from the rejected {@link SmaxMdSetRegResponse}.
      *
      * @param iqId the inbound IQ id; never {@code null}
      * @throws NullPointerException if {@code iqId} is {@code null}
@@ -73,16 +60,12 @@ public final class SmaxMdSetRegResponseError implements SmaxOperation.Request {
     /**
      * Builds the outbound error stanza.
      *
-     * @apiNote
-     * Returns the unfinished {@link NodeBuilder} so the dispatch path
-     * can stamp the wire-level identifiers before flushing, matching
-     * {@link SmaxOperation.Request#toNode()}.
+     * <p>Returns the unfinished {@link NodeBuilder} so the dispatch path can stamp the wire-level
+     * identifiers before flushing, matching the contract of {@link SmaxOperation.Request#toNode()}.
      *
-     * @implNote
-     * This implementation hardcodes the inner {@code <error>} child
-     * to {@code text="not-authorized"} and {@code code=401} because
-     * WA Web's {@code mergeIQErrorNotAuthorizedMixin} pins the same
-     * two values; no other error variant is defined for this RPC.
+     * @implNote This implementation hardcodes the inner {@code <error>} child to
+     * {@code text="not-authorized"} and {@code code=401} because the WA Web not-authorized error
+     * mixin pins the same two values; no other error variant is defined for this RPC.
      *
      * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
      */
@@ -104,6 +87,14 @@ public final class SmaxMdSetRegResponseError implements SmaxOperation.Request {
                 .content(errorNode);
     }
 
+    /**
+     * Compares this error reply to another object for value equality.
+     *
+     * <p>Two error replies are equal when their IQ id matches.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an equal error reply
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -116,11 +107,21 @@ public final class SmaxMdSetRegResponseError implements SmaxOperation.Request {
         return Objects.equals(this.iqId, that.iqId);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code derived from the IQ id
+     */
     @Override
     public int hashCode() {
         return Objects.hash(iqId);
     }
 
+    /**
+     * Returns a debug string listing the IQ id.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxMdSetRegResponseError[iqId=" + iqId + ']';

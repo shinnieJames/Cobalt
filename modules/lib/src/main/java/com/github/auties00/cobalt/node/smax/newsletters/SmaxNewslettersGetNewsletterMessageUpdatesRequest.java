@@ -15,31 +15,21 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza that polls the relay for a delta of newsletter
- * message updates.
+ * Polls the relay for a delta of newsletter message updates.
  *
- * @apiNote
- * Drives WA Web's background message-update sync
- * ({@code WAWebNewsletterGetMessageUpdatesQuery.getNewsletterMessageUpdatesQuery}),
- * which is run with exponential back-off through
- * {@code WAWebNewsletterRpcUtils.runWithBackoff} after a newsletter
- * subscription changes or a live-updates notification lands. Build via
- * {@code SmaxNewslettersGetNewsletterMessageUpdatesRequestBuilder} and
- * dispatch through the Smax pipeline; the relay echoes the matching
- * {@link SmaxNewslettersGetNewsletterMessageUpdatesResponse}. The
- * resulting IQ has shape:
+ * <p>The relay echoes the matching {@link SmaxNewslettersGetNewsletterMessageUpdatesResponse}.
+ * The resulting IQ has shape:
  * {@snippet :
  *     <iq xmlns="newsletter" type="get" to="<newsletterJid>">
  *         <message_updates count="50" since="1700000000" after="42"/>
  *     </iq>
- * }
+ * }</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterMessageUpdatesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterIQGetRequestMixin")
 public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements SmaxOperation.Request {
     /**
-     * The newsletter {@link Jid} being polled; routed verbatim into
-     * the IQ's {@code to} attribute.
+     * The newsletter {@link Jid} being polled; routed verbatim into the IQ's {@code to} attribute.
      */
     private final Jid newsletterJid;
 
@@ -49,15 +39,14 @@ public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements 
     private final int count;
 
     /**
-     * The optional unix-second floor; when present the relay only
-     * returns updates applied at or after this timestamp.
+     * The optional unix-second floor; when present the relay only returns updates applied at or
+     * after this timestamp.
      */
     private final Long since;
 
     /**
-     * The required pagination cursor selecting either
-     * {@link SmaxNewslettersGetNewsletterMessageUpdatesDirection.Before}
-     * or
+     * The required pagination cursor, either
+     * {@link SmaxNewslettersGetNewsletterMessageUpdatesDirection.Before} or
      * {@link SmaxNewslettersGetNewsletterMessageUpdatesDirection.After}.
      */
     private final SmaxNewslettersGetNewsletterMessageUpdatesDirection direction;
@@ -65,21 +54,15 @@ public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements 
     /**
      * Constructs a new request.
      *
-     * @apiNote
-     * Pass {@code null} for {@code since} to request the full delta
-     * regardless of timestamp; the cursor argument is mandatory because
-     * the relay rejects {@code <message_updates>} elements that lack
-     * both {@code before} and {@code after}.
+     * <p>A {@code null} {@code since} requests the full delta regardless of timestamp. The cursor
+     * is mandatory because the relay rejects {@code <message_updates>} elements that lack both
+     * {@code before} and {@code after}.</p>
      *
-     * @param newsletterJid the newsletter {@link Jid} being polled;
-     *                      never {@code null}
-     * @param count         the per-call cap on returned entries; must
-     *                      be non-negative
-     * @param since         the optional unix-second floor; may be
-     *                      {@code null}
+     * @param newsletterJid the newsletter {@link Jid} being polled; never {@code null}
+     * @param count         the per-call cap on returned entries; must be non-negative
+     * @param since         the optional unix-second floor; may be {@code null}
      * @param direction     the pagination cursor; never {@code null}
-     * @throws NullPointerException if {@code newsletterJid} or
-     *                              {@code direction} is {@code null}
+     * @throws NullPointerException if {@code newsletterJid} or {@code direction} is {@code null}
      */
     public SmaxNewslettersGetNewsletterMessageUpdatesRequest(Jid newsletterJid, int count, Long since, SmaxNewslettersGetNewsletterMessageUpdatesDirection direction) {
         this.newsletterJid = Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
@@ -109,8 +92,7 @@ public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements 
     /**
      * Returns the optional unix-second floor.
      *
-     * @return an {@link Optional} carrying the floor, or empty when
-     *         the request asks for the full delta
+     * @return an {@link Optional} carrying the floor, or empty when the request asks for the full delta
      */
     public Optional<Long> since() {
         return Optional.ofNullable(since);
@@ -126,16 +108,12 @@ public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements 
     }
 
     /**
-     * Builds the outbound {@code <iq>} stanza carrying the
-     * {@code <message_updates>} payload.
+     * Builds the outbound {@code <iq>} stanza carrying the {@code <message_updates>} payload.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} is not yet built; the Smax
-     * pipeline finalises it just before transmission so the stanza id
-     * can be assigned by the central node-id allocator.
+     * <p>The returned {@link NodeBuilder} is not yet built; the Smax pipeline finalises it just
+     * before transmission so the stanza id can be assigned by the central node-id allocator.</p>
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <message_updates>} payload
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <message_updates>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutNewslettersGetNewsletterMessageUpdatesRequest",
@@ -164,9 +142,8 @@ public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements 
      * Compares two requests for value equality on all fields.
      *
      * @param obj the reference object to compare against
-     * @return {@code true} when {@code obj} is a request carrying
-     *         equal {@link #newsletterJid()}, {@link #count()},
-     *         {@link #since()}, and {@link #direction()}
+     * @return {@code true} when {@code obj} is a request carrying equal {@link #newsletterJid()},
+     *         {@link #count()}, {@link #since()}, and {@link #direction()}
      */
     @Override
     public boolean equals(Object obj) {
@@ -186,9 +163,8 @@ public final class SmaxNewslettersGetNewsletterMessageUpdatesRequest implements 
     /**
      * Returns the hash code derived from all fields.
      *
-     * @return the combined hash of {@link #newsletterJid()},
-     *         {@link #count()}, {@link #since()}, and
-     *         {@link #direction()}
+     * @return the combined hash of {@link #newsletterJid()}, {@link #count()}, {@link #since()},
+     *         and {@link #direction()}
      */
     @Override
     public int hashCode() {

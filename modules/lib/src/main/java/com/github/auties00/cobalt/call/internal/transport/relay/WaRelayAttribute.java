@@ -6,30 +6,33 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * A single TLV attribute inside a {@link WaRelayPacket}.
+ * Holds one type-length-value attribute inside a {@link WaRelayPacket}.
  *
- * <p>The wire encoding is {@code [type:u16, length:u16, value,
- * padding-to-4]}. This class holds the type code and the raw value
- * bytes only; higher-level parsing (e.g. of an {@code XOR-RELAYED-ADDRESS}
- * IPv4/IPv6 endpoint, or a {@link WaRelayAttributeType#WA_CALL_INFO}
- * protobuf payload) is the caller's responsibility.
+ * <p>The attribute is encoded on the wire as a 16-bit type, a 16-bit value length, the value bytes,
+ * and zero padding up to a 4-byte boundary. This class retains only the type code and the unpadded
+ * value bytes; interpreting the value, such as parsing an {@link WaRelayAttributeType#XOR_RELAYED_ADDRESS}
+ * endpoint or a {@link WaRelayAttributeType#WA_CALL_INFO} protobuf payload, is left to the caller.
+ * The value bytes are defensively copied on construction and on {@link #value()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipSctpConnectionManager")
 public final class WaRelayAttribute {
     /**
-     * The 16-bit attribute type code.
+     * Holds the 16-bit attribute-type code.
      */
     private final int type;
 
     /**
-     * The attribute value bytes (without padding).
+     * Holds the unpadded attribute value bytes.
      */
     private final byte[] value;
 
     /**
-     * Constructs a new attribute.
+     * Constructs an attribute from a type code and its value bytes.
      *
-     * @param type  the 16-bit attribute type code
+     * <p>The {@code value} array is defensively copied, so later mutation of the caller's array does
+     * not affect this attribute.
+     *
+     * @param type  the 16-bit attribute-type code
      * @param value the value bytes; must not be {@code null}
      * @throws NullPointerException if {@code value} is {@code null}
      */
@@ -40,7 +43,7 @@ public final class WaRelayAttribute {
     }
 
     /**
-     * Returns the 16-bit attribute type code.
+     * Returns the 16-bit attribute-type code.
      *
      * @return the wire-level attribute type
      */
@@ -49,17 +52,19 @@ public final class WaRelayAttribute {
     }
 
     /**
-     * Returns the resolved {@link WaRelayAttributeType} when known, or
-     * {@code null} for unrecognised codes.
+     * Resolves this attribute's type code to a {@link WaRelayAttributeType} constant.
      *
-     * @return the resolved attribute type, or {@code null}
+     * <p>Returns {@code null} for codes not enumerated by {@link WaRelayAttributeType}, which the
+     * caller should treat as comprehension-optional.
+     *
+     * @return the resolved attribute type, or {@code null} when the code is unrecognised
      */
     public WaRelayAttributeType resolvedType() {
         return WaRelayAttributeType.ofWire(type);
     }
 
     /**
-     * Returns a defensive copy of the raw value bytes.
+     * Returns a defensive copy of the unpadded value bytes.
      *
      * @return a fresh copy of the value
      */
@@ -68,7 +73,11 @@ public final class WaRelayAttribute {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this attribute with another for type-code and value-byte equality.
+     *
+     * @param o the object to compare against
+     * @return {@code true} when {@code o} is a {@code WaRelayAttribute} with the same type code and
+     *         the same value bytes
      */
     @Override
     public boolean equals(Object o) {
@@ -78,7 +87,10 @@ public final class WaRelayAttribute {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code consistent with {@link #equals(Object)}, combining the type code and the
+     * value bytes.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -86,7 +98,10 @@ public final class WaRelayAttribute {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string carrying the hex type code, its resolved name when known, and the
+     * value length.
+     *
+     * @return a human-readable representation
      */
     @Override
     public String toString() {

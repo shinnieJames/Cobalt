@@ -32,26 +32,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration cycle for sync-key rotation.
- *
- * <p>Per WA Web {@code WAWebSyncdKeyManagement}, rotation fires before an
- * outgoing mutation upload when the active key is expired (older than
- * {@code SYNCD_KEY_MAX_USE_DAYS}) or when the linked-device fingerprint
- * changed since the key was generated. The rotation flow:
- * <ol>
- *   <li>Generate a new key (next epoch, fresh random key data).</li>
- *   <li>Either persist-then-share, or share-then-persist, depending on
- *       {@code WA_WEB_ENABLE_SYNCD_KEY_PERSISTENCE_ONLY_AFTER_SERVER_ACK}.</li>
- *   <li>Broadcast a {@code Message.AppStateSyncKeyShare} peer message to every
- *       companion device.</li>
- *   <li>Subsequent encryption uses the new key; old-key entries are gradually
- *       rotated as part of the next patch upload.</li>
- * </ol>
- *
- * <p>The captured cycle ({@code integration/key-rotation-cycle/}) replays a
- * forced rotation and asserts the new key lands in the store, the broadcast
- * peer message matches WA Web's payload, and the next mutation upload uses the
- * new key id.
+ * Exercises the sync-key rotation cycle that fires before an outgoing mutation
+ * upload when the active key is expired or the linked-device fingerprint changed:
+ * a new key is generated, persisted, shared to every companion via an app-state
+ * key-share peer message, and used for subsequent encryption while old-key
+ * entries are migrated in later patches. The {@link SyncKeyRotationService} is
+ * obtained from a {@link WebAppStateService} graph wired in-process via
+ * {@link TestWhatsAppClient}. The synthetic group asserts key-share install,
+ * idempotent re-share, and active-key absence behaviour directly; the captured
+ * group is gated on {@link SyncFixtures#isAvailable(String)} so it skips cleanly
+ * until the recorded rotation corpus is committed.
  */
 @DisplayName("KeyRotationCycle integration")
 class KeyRotationCycleIntegrationTest {
@@ -132,11 +122,10 @@ class KeyRotationCycleIntegrationTest {
             if (!SyncFixtures.isAvailable("integration/key-rotation-cycle/forced")) return;
             assertNotNull(SyncFixtures.loadOracle(
                     "integration/key-rotation-cycle/forced"));
-            // The fixture pairs (a) the captured peer message bytes, (b) the
-            // pre- and post-rotation store snapshots. Cobalt's rotation must
-            // produce a key with the same epoch+deviceId, broadcast a peer
-            // message protobuf-equal to the capture, and leave the same store
-            // state behind.
+            // Fixture pairs the captured key-share peer message bytes with the pre-
+            // and post-rotation store snapshots; rotation must produce a key with
+            // the same epoch and deviceId, broadcast a protobuf-equal peer message,
+            // and leave the same store state.
         }
 
         @Test
@@ -151,9 +140,8 @@ class KeyRotationCycleIntegrationTest {
         @DisplayName("old-key entries are re-encrypted in the next outgoing patch")
         void oldKeyMigration() {
             if (!SyncFixtures.isAvailable("integration/key-rotation-cycle/old-key-migration")) return;
-            // WAWebSyncdRequestBuilderBuild._generateMutationsToUpload adds rotation
-            // SET/REMOVE mutations to migrate old-key entries; the captured fixture
-            // exposes the count of rotated entries per outgoing patch.
+            // Each outgoing patch adds rotation SET/REMOVE mutations to migrate
+            // old-key entries; the fixture exposes the rotated-entry count per patch.
         }
     }
 }

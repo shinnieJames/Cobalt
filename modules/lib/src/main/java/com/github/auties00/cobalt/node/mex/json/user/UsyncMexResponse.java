@@ -21,10 +21,9 @@ import java.util.Optional;
 /**
  * Decoded reply to the usync MEX query.
  *
- * @apiNote Consume after dispatching {@link UsyncMexRequest}. Each
- * {@link Item} corresponds to a {@code xwa2_fetch_wa_users} entry; which
- * sub-objects are populated depends on which {@code include_*} flags the
- * request enabled.
+ * <p>Consumed after dispatching {@link UsyncMexRequest}. Each {@link Item} corresponds to a
+ * {@code xwa2_fetch_wa_users} entry; which sub-objects are populated depends on which
+ * {@code include_*} flags the request enabled.
  *
  * @see UsyncMexRequest
  */
@@ -47,12 +46,12 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
     /**
      * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @apiNote Pass the IQ node received in reply to a stanza dispatched
-     * with {@link UsyncMexRequest#toNode()}.
+     * <p>The argument is the IQ node received in reply to a stanza dispatched with
+     * {@link UsyncMexRequest#toNode()}.
      *
      * @param node the IQ reply stanza
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload is missing or malformed
+     * @return the decoded reply, or {@link Optional#empty()} when the payload is missing or
+     *         malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsync", exports = "mexUsyncQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -65,9 +64,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
     /**
      * Returns the decoded {@code xwa2_fetch_wa_users} entries.
      *
-     * @apiNote The list reflects the order the relay returned, which
-     * mirrors the order of the queried users. WA Web's facades key the
-     * reply back to the request batch by {@link Item#jid()}.
+     * <p>The list reflects the order the relay returned, which mirrors the order of the queried
+     * users; callers key the reply back to the request batch by {@link Item#jid()}.
      *
      * @return the per-user records; may be empty, never {@code null}
      */
@@ -78,14 +76,13 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
     /**
      * A decoded {@code xwa2_fetch_wa_users} entry for one user.
      *
-     * @apiNote The {@link #countryCode()}, {@link #usernameInfo()}, and
-     * {@link #aboutStatusInfo()} sub-objects are only populated when the
-     * corresponding {@code include_*} flag was set on the
+     * <p>The {@link #countryCode()}, {@link #usernameInfo()}, and {@link #aboutStatusInfo()}
+     * sub-objects are only populated when the corresponding {@code include_*} flag was set on the
      * {@link UsyncMexRequest}.
      */
     public static final class Item {
         /**
-         * The {@code jid} field carrying the user identifier.
+         * The {@code jid} field carrying the user identifier, possibly {@code null}.
          */
         private final String jid;
 
@@ -105,7 +102,7 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         private final AboutStatusInfo aboutStatusInfo;
 
         /**
-         * The {@code id} field carrying the relay's row identifier.
+         * The {@code id} field carrying the relay's row identifier, possibly {@code null}.
          */
         private final String id;
 
@@ -115,8 +112,7 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
          * @param jid the {@code jid} field
          * @param countryCode the {@code country_code} field
          * @param usernameInfo the decoded {@code username_info} sub-object
-         * @param aboutStatusInfo the decoded {@code about_status_info}
-         *                        sub-object
+         * @param aboutStatusInfo the decoded {@code about_status_info} sub-object
          * @param id the {@code id} row identifier
          */
         private Item(String jid, String countryCode, UsernameInfo usernameInfo, AboutStatusInfo aboutStatusInfo, String id) {
@@ -130,9 +126,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Returns the user identifier.
          *
-         * @return the JID wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when the relay omitted the
-         *         field
+         * @return the JID wrapped in an {@link Optional}, or {@link Optional#empty()} when the relay
+         *         omitted the field
          */
         public Optional<String> jid() {
             return Optional.ofNullable(jid);
@@ -141,11 +136,11 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Returns the phone country code, when requested.
          *
-         * @apiNote Populated only when {@link UsyncMexRequest} was
-         * dispatched with {@code includeCountryCode=true}.
+         * <p>Populated only when {@link UsyncMexRequest} was dispatched with
+         * {@code includeCountryCode=true}.
          *
-         * @return the country code wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when absent
+         * @return the country code wrapped in an {@link Optional}, or {@link Optional#empty()} when
+         *         absent
          */
         public Optional<String> countryCode() {
             return Optional.ofNullable(countryCode);
@@ -154,11 +149,10 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Returns the decoded username record, when requested.
          *
-         * @apiNote Populated only when {@link UsyncMexRequest} was
-         * dispatched with {@code includeUsername=true}.
+         * <p>Populated only when {@link UsyncMexRequest} was dispatched with
+         * {@code includeUsername=true}.
          *
-         * @return the record wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when absent
+         * @return the record wrapped in an {@link Optional}, or {@link Optional#empty()} when absent
          */
         public Optional<UsernameInfo> usernameInfo() {
             return Optional.ofNullable(usernameInfo);
@@ -167,11 +161,10 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Returns the decoded about-status record, when requested.
          *
-         * @apiNote Populated only when {@link UsyncMexRequest} was
-         * dispatched with {@code includeAboutStatus=true}.
+         * <p>Populated only when {@link UsyncMexRequest} was dispatched with
+         * {@code includeAboutStatus=true}.
          *
-         * @return the record wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when absent
+         * @return the record wrapped in an {@link Optional}, or {@link Optional#empty()} when absent
          */
         public Optional<AboutStatusInfo> aboutStatusInfo() {
             return Optional.ofNullable(aboutStatusInfo);
@@ -180,9 +173,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Returns the relay-assigned row identifier.
          *
-         * @return the identifier wrapped in an {@link Optional}, or
-         *         {@link Optional#empty()} when the relay omitted the
-         *         field
+         * @return the identifier wrapped in an {@link Optional}, or {@link Optional#empty()} when
+         *         the relay omitted the field
          */
         public Optional<String> id() {
             return Optional.ofNullable(id);
@@ -191,34 +183,32 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Decoded {@code username_info} sub-object of a usync entry.
          *
-         * @apiNote Carries the per-user view of the username state and a
-         * {@link #status()} field reporting whether the per-user fetch
-         * succeeded ({@code "FOUND"}/{@code "MISSING"} tokens depending on
-         * the relay's response).
+         * <p>Carries the per-user view of the username state along with a {@link #status()} field
+         * reporting whether the per-user fetch succeeded.
          */
         public static final class UsernameInfo {
             /**
-             * The {@code username} field carrying the assigned identifier.
+             * The {@code username} field carrying the assigned identifier, possibly {@code null}.
              */
             private final String username;
 
             /**
-             * The {@code state} field carrying the registration state token.
+             * The {@code state} field carrying the registration state token, possibly {@code null}.
              */
             private final String state;
 
             /**
-             * The {@code timestamp} field, in epoch seconds.
+             * The {@code timestamp} field, in epoch seconds, possibly {@code null}.
              */
             private final Long timestamp;
 
             /**
-             * The {@code pin} field carrying the recovery PIN hash.
+             * The {@code pin} field carrying the recovery PIN hash, possibly {@code null}.
              */
             private final String pin;
 
             /**
-             * The {@code status} field carrying the per-user fetch outcome.
+             * The {@code status} field carrying the per-user fetch outcome, possibly {@code null}.
              */
             private final String status;
 
@@ -227,8 +217,7 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
              *
              * @param username the {@code username} field
              * @param state the {@code state} field
-             * @param timestamp the {@code timestamp} field, in epoch
-             *                  seconds
+             * @param timestamp the {@code timestamp} field, in epoch seconds
              * @param pin the {@code pin} field
              * @param status the {@code status} field
              */
@@ -243,9 +232,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the assigned username.
              *
-             * @return the username wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the username wrapped in an {@link Optional}, or {@link Optional#empty()} when
+             *         the relay omitted the field
              */
             public Optional<String> username() {
                 return Optional.ofNullable(username);
@@ -254,9 +242,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the registration state token.
              *
-             * @return the state wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the state wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+             *         relay omitted the field
              */
             public Optional<String> state() {
                 return Optional.ofNullable(state);
@@ -265,9 +252,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the timestamp the username was registered at.
              *
-             * @return the instant wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the instant wrapped in an {@link Optional}, or {@link Optional#empty()} when
+             *         the relay omitted the field
              */
             public Optional<Instant> timestamp() {
                 return Optional.ofNullable(timestamp).map(Instant::ofEpochSecond);
@@ -276,9 +262,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the recovery PIN hash bound to the username.
              *
-             * @return the hash wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the hash wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+             *         relay omitted the field
              */
             public Optional<String> pin() {
                 return Optional.ofNullable(pin);
@@ -287,9 +272,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the per-user fetch outcome.
              *
-             * @return the status wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the status wrapped in an {@link Optional}, or {@link Optional#empty()} when
+             *         the relay omitted the field
              */
             public Optional<String> status() {
                 return Optional.ofNullable(status);
@@ -298,13 +282,12 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Decodes a single username sub-object from a {@link JSONObject}.
              *
-             * @apiNote Used by {@link Item#of(JSONObject)} while projecting
-             * the {@code username_info} sub-object; not part of the public
-             * API.
+             * <p>Used by {@link Item#of(JSONObject)} while projecting the {@code username_info}
+             * sub-object.
              *
              * @param obj the JSON object to decode, possibly {@code null}
-             * @return the decoded record, or {@link Optional#empty()} when
-             *         {@code obj} is {@code null}
+             * @return the decoded record, or {@link Optional#empty()} when {@code obj} is
+             *         {@code null}
              */
             static Optional<UsernameInfo> of(JSONObject obj) {
                 if (obj == null) {
@@ -322,14 +305,12 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Decodes a list of username sub-objects from a {@link JSONArray}.
              *
-             * @apiNote Provided for parity with other {@code ofArray}
-             * helpers; not invoked by the response decoder because the
-             * wire schema carries {@code username_info} as a single
+             * <p>Kept for parity with the other {@code ofArray} helpers; the response decoder does
+             * not invoke it because the wire schema carries {@code username_info} as a single
              * sub-object, not an array.
              *
              * @param arr the JSON array to decode, possibly {@code null}
-             * @return the decoded records in source order; empty when
-             *         {@code arr} is {@code null}
+             * @return the decoded records in source order; empty when {@code arr} is {@code null}
              */
             static List<UsernameInfo> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -347,24 +328,22 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Decoded {@code about_status_info} sub-object of a usync entry.
          *
-         * @apiNote Carries the about-status text together with its
-         * last-update timestamp and the per-user fetch outcome (the
-         * {@link #status()} field; WA Web treats {@code "FOUND"} as
-         * "value is current", anything else as "value is stale").
+         * <p>Carries the about-status text together with its last-update timestamp and the per-user
+         * fetch outcome reported by {@link #status()}.
          */
         public static final class AboutStatusInfo {
             /**
-             * The {@code text} field carrying the about-status body.
+             * The {@code text} field carrying the about-status body, possibly {@code null}.
              */
             private final String text;
 
             /**
-             * The {@code timestamp} field, in epoch seconds.
+             * The {@code timestamp} field, in epoch seconds, possibly {@code null}.
              */
             private final Long timestamp;
 
             /**
-             * The {@code status} field carrying the per-user fetch outcome.
+             * The {@code status} field carrying the per-user fetch outcome, possibly {@code null}.
              */
             private final String status;
 
@@ -372,8 +351,7 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
              * Wraps the decoded fields of one about-status record.
              *
              * @param text the {@code text} field
-             * @param timestamp the {@code timestamp} field, in epoch
-             *                  seconds
+             * @param timestamp the {@code timestamp} field, in epoch seconds
              * @param status the {@code status} field
              */
             private AboutStatusInfo(String text, Long timestamp, String status) {
@@ -385,9 +363,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the about-status body.
              *
-             * @return the text wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the text wrapped in an {@link Optional}, or {@link Optional#empty()} when the
+             *         relay omitted the field
              */
             public Optional<String> text() {
                 return Optional.ofNullable(text);
@@ -396,9 +373,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the timestamp the about-status was last updated at.
              *
-             * @return the instant wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the instant wrapped in an {@link Optional}, or {@link Optional#empty()} when
+             *         the relay omitted the field
              */
             public Optional<Instant> timestamp() {
                 return Optional.ofNullable(timestamp).map(Instant::ofEpochSecond);
@@ -407,9 +383,8 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Returns the per-user fetch outcome for the about-status.
              *
-             * @return the status wrapped in an {@link Optional}, or
-             *         {@link Optional#empty()} when the relay omitted the
-             *         field
+             * @return the status wrapped in an {@link Optional}, or {@link Optional#empty()} when
+             *         the relay omitted the field
              */
             public Optional<String> status() {
                 return Optional.ofNullable(status);
@@ -418,13 +393,12 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Decodes a single about-status sub-object from a {@link JSONObject}.
              *
-             * @apiNote Used by {@link Item#of(JSONObject)} while
-             * projecting the {@code about_status_info} sub-object; not
-             * part of the public API.
+             * <p>Used by {@link Item#of(JSONObject)} while projecting the {@code about_status_info}
+             * sub-object.
              *
              * @param obj the JSON object to decode, possibly {@code null}
-             * @return the decoded record, or {@link Optional#empty()} when
-             *         {@code obj} is {@code null}
+             * @return the decoded record, or {@link Optional#empty()} when {@code obj} is
+             *         {@code null}
              */
             static Optional<AboutStatusInfo> of(JSONObject obj) {
                 if (obj == null) {
@@ -440,14 +414,12 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
             /**
              * Decodes a list of about-status sub-objects from a {@link JSONArray}.
              *
-             * @apiNote Provided for parity with other {@code ofArray}
-             * helpers; not invoked by the response decoder because the
-             * wire schema carries {@code about_status_info} as a single
+             * <p>Kept for parity with the other {@code ofArray} helpers; the response decoder does
+             * not invoke it because the wire schema carries {@code about_status_info} as a single
              * sub-object, not an array.
              *
              * @param arr the JSON array to decode, possibly {@code null}
-             * @return the decoded records in source order; empty when
-             *         {@code arr} is {@code null}
+             * @return the decoded records in source order; empty when {@code arr} is {@code null}
              */
             static List<AboutStatusInfo> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -465,12 +437,10 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Decodes a single user record from a {@link JSONObject}.
          *
-         * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
-         * {@code xwa2_fetch_wa_users} array; not part of the public API.
+         * <p>Used by {@link #ofArray(JSONArray)} while walking the {@code xwa2_fetch_wa_users} array.
          *
          * @param obj the JSON object to decode, possibly {@code null}
-         * @return the decoded record, or {@link Optional#empty()} when
-         *         {@code obj} is {@code null}
+         * @return the decoded record, or {@link Optional#empty()} when {@code obj} is {@code null}
          */
         static Optional<Item> of(JSONObject obj) {
             if (obj == null) {
@@ -488,13 +458,11 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
         /**
          * Decodes the {@code xwa2_fetch_wa_users} array of the MEX payload.
          *
-         * @apiNote Used by the package-level decoder to project the array
-         * nested under {@code data} of the {@code <result>} payload; not
-         * part of the public API.
+         * <p>Used by the package-level decoder to project the array nested under {@code data} of the
+         * {@code <result>} payload.
          *
          * @param arr the JSON array to decode, possibly {@code null}
-         * @return the decoded records in source order; empty when
-         *         {@code arr} is {@code null}
+         * @return the decoded records in source order; empty when {@code arr} is {@code null}
          */
         static List<Item> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -512,14 +480,13 @@ public final class UsyncMexResponse implements MexOperation.Response.Json {
     /**
      * Decodes the {@code <result>} payload bytes into a {@link UsyncMexResponse}.
      *
-     * @implNote This implementation projects
-     * {@code data.xwa2_fetch_wa_users}; a missing {@code data} envelope
-     * yields {@link Optional#empty()}, while a missing or empty array
-     * yields a response with an empty {@link #items()} list.
+     * @implNote This implementation projects {@code data.xwa2_fetch_wa_users}; a missing
+     * {@code data} envelope yields {@link Optional#empty()}, while a missing or empty array yields a
+     * response with an empty {@link #items()} list.
      *
      * @param json the raw {@code <result>} payload bytes
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload does not parse or lacks the {@code data} envelope
+     * @return the decoded reply, or {@link Optional#empty()} when the payload does not parse or
+     *         lacks the {@code data} envelope
      */
     private static Optional<UsyncMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

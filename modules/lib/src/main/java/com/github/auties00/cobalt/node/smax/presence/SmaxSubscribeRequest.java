@@ -10,67 +10,48 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <presence type="subscribe" to= name? context?/>}
- * subscription stanza.
+ * Models the outbound {@code <presence type="subscribe" to= name? context?/>} subscription stanza.
  *
- * @apiNote
- * Drives WA Web's
- * {@code WASmaxPresenceSubscribeRPC.sendSubscribeRPC}, invoked by
- * {@code WAWebSendPresenceSubscriptionJob.sendUserPresenceSubscription}
- * when the user opens a chat or
- * {@code sendGroupPresenceSubscription} when they enter a group; the
- * relay starts pushing {@link SmaxServerUpdateResponse} updates for
- * the targeted peer until the next subscription expires.
+ * <p>A client dispatches one of these per peer it wants presence updates from, for example when the
+ * user opens a one-to-one chat or enters a group. The relay then starts pushing
+ * {@link SmaxServerUpdateResponse} updates for the targeted peer until the subscription expires;
+ * because the relay expires subscriptions, callers must re-issue them periodically to keep updates
+ * flowing. The stanza is built by {@link #toNode()} and serialised through the
+ * {@link SmaxOperation.Request} dispatch contract.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPresenceSubscribeRequest")
 public final class SmaxSubscribeRequest implements SmaxOperation.Request {
     /**
-     * The peer being subscribed to.
+     * Holds the peer being subscribed to, rendered into the {@code to} attribute.
      *
-     * @apiNote
-     * Routed verbatim into the {@code to} attribute; either a user
-     * JID (LID after 1x1 migration, PN before) or a group JID.
+     * <p>Either a user {@link Jid} (LID after one-to-one migration, PN before) or a group
+     * {@link Jid}.
      */
     private final Jid presenceTo;
 
     /**
-     * The optional display-name hint to advertise to the peer.
+     * Holds the optional display-name hint rendered into the {@code name} attribute.
      *
-     * @apiNote
-     * Routed verbatim into the {@code name} attribute as an
-     * {@code OPTIONAL(CUSTOM_STRING, presenceName)}; used by the relay
-     * to surface the subscriber's push name in the peer's typing /
-     * online UI when applicable.
+     * <p>Used by the relay to surface the subscriber's push name in the peer's typing or online UI
+     * when applicable; dropped at render time when {@code null}.
      */
     private final String presenceName;
 
     /**
-     * The optional parent group JID for participant subscriptions.
+     * Holds the optional parent group {@link Jid} rendered into the {@code context} attribute.
      *
-     * @apiNote
-     * Routed verbatim into the {@code context} attribute as an
-     * {@code OPTIONAL(GROUP_JID, presenceContext)}; supplied when the
-     * subscription targets a participant of an open group chat so the
-     * relay scopes the push to that group's frame only.
+     * <p>Supplied when the subscription targets a participant of an open group chat so the relay
+     * scopes the push to that group's frame only; dropped at render time when {@code null}.
      */
     private final Jid presenceContext;
 
     /**
      * Constructs a new subscription request.
      *
-     * @apiNote
-     * Embedders build one per peer they want presence updates from;
-     * subscriptions expire on the relay, so callers must re-issue
-     * them periodically to keep updates flowing.
-     *
-     * @param presenceTo      the peer to subscribe to; never
-     *                        {@code null}
-     * @param presenceName    the optional display-name hint; may be
-     *                        {@code null}
-     * @param presenceContext the optional parent group JID; may be
-     *                        {@code null}
-     * @throws NullPointerException if {@code presenceTo} is
-     *                              {@code null}
+     * @param presenceTo      the peer to subscribe to; never {@code null}
+     * @param presenceName    the optional display-name hint; may be {@code null}
+     * @param presenceContext the optional parent group {@link Jid}; may be {@code null}
+     * @throws NullPointerException if {@code presenceTo} is {@code null}
      */
     public SmaxSubscribeRequest(Jid presenceTo, String presenceName, Jid presenceContext) {
         this.presenceTo = Objects.requireNonNull(presenceTo, "presenceTo cannot be null");
@@ -79,11 +60,7 @@ public final class SmaxSubscribeRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the peer JID being subscribed to.
-     *
-     * @apiNote
-     * Consumed by {@link #toNode()} to populate the {@code to}
-     * attribute.
+     * Returns the peer {@link Jid} being subscribed to.
      *
      * @return the peer JID; never {@code null}
      */
@@ -94,8 +71,7 @@ public final class SmaxSubscribeRequest implements SmaxOperation.Request {
     /**
      * Returns the optional display-name hint.
      *
-     * @apiNote
-     * Empty when no hint should be advertised.
+     * <p>Empty when no hint should be advertised.
      *
      * @return an {@link Optional} carrying the hint
      */
@@ -104,10 +80,9 @@ public final class SmaxSubscribeRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional parent group JID.
+     * Returns the optional parent group {@link Jid}.
      *
-     * @apiNote
-     * Empty when the subscription is not group-scoped.
+     * <p>Empty when the subscription is not group-scoped.
      *
      * @return an {@link Optional} carrying the group JID
      */
@@ -116,17 +91,14 @@ public final class SmaxSubscribeRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Builds the outbound presence stanza ready for dispatch.
+     * Builds the outbound {@code <presence type="subscribe" to= name? context?/>} stanza ready for
+     * dispatch.
      *
-     * @apiNote
-     * Returned unbuilt so the dispatch path can stamp a fresh stanza
-     * id before flushing; null-valued attributes are dropped at
-     * render time, matching the WA Web {@code OPTIONAL} attribute
-     * semantics.
+     * <p>The {@link NodeBuilder} is returned unbuilt so the dispatch path can stamp a fresh stanza
+     * id before flushing. Null-valued attributes are dropped at render time.
      *
      * @return a {@link NodeBuilder} carrying the
-     *         {@code <presence type="subscribe" to= name? context?/>}
-     *         envelope
+     *         {@code <presence type="subscribe" to= name? context?/>} envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPresenceSubscribeRequest",
@@ -140,6 +112,15 @@ public final class SmaxSubscribeRequest implements SmaxOperation.Request {
                 .attribute("context", presenceContext);
     }
 
+    /**
+     * Compares this request with another for value equality.
+     *
+     * <p>Two instances are equal when the peer, display-name hint, and parent group context are all
+     * equal.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} if {@code obj} is an equal {@link SmaxSubscribeRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -154,11 +135,21 @@ public final class SmaxSubscribeRequest implements SmaxOperation.Request {
                 && Objects.equals(this.presenceContext, that.presenceContext);
     }
 
+    /**
+     * Returns a hash code derived from the peer, display-name hint, and parent group context.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(presenceTo, presenceName, presenceContext);
     }
 
+    /**
+     * Returns a debug string exposing the peer, display-name hint, and parent group context.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxSubscribeRequest[presenceTo=" + presenceTo

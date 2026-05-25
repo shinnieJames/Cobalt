@@ -13,21 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LidMigrationService#getAlternateMsgKey}.
- *
- * @apiNote
- * Pins the alternate-key helper that swaps the participant (for
- * groups, broadcasts, and status) or the remote (for 1:1) into
- * the opposite addressing mode so that two stored copies of the
- * same message (one keyed by PN, one keyed by LID) can be
- * reconciled. Mirrors WA Web's
- * {@code WAWebLidMigrationUtils.getAlternateMsgKey}.
- *
- * @implNote
- * This implementation builds an isolated harness via
- * {@link MigrationFixtures#temporaryStore(Jid, Jid)} and seeds
- * the store with the mappings each branch needs before driving
- * the helper.
+ * Covers {@link LidMigrationService#getAlternateMsgKey}: the helper that swaps the participant
+ * (for groups, broadcasts, and status) or the remote (for 1:1) into the opposite addressing mode
+ * so the two stored copies of a message, one keyed by PN and one by LID, can be reconciled. Each
+ * case seeds an isolated store with the mappings its branch needs before driving the helper.
  */
 @DisplayName("LidMigrationService.getAlternateMsgKey")
 class LidMigrationServiceMessageKeyAlternatesTest {
@@ -43,20 +32,8 @@ class LidMigrationServiceMessageKeyAlternatesTest {
     private static final Jid STATUS_BROADCAST = Jid.of("status@broadcast");
     private static final Jid PEER_PN_DEVICE_2 = Jid.of("393495089819:2@s.whatsapp.net");
 
-    /**
-     * Bundles the test client and the service under test.
-     *
-     * @param client  the test client harness
-     * @param service the service under test
-     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
-    /**
-     * Builds a fresh harness with a default
-     * {@link TestABPropsService}.
-     *
-     * @return a fresh {@link Harness}
-     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -66,18 +43,12 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         return new Harness(client, service);
     }
 
-    /**
-     * Verifies that returns null for a null message key.
-     */
     @Test
     @DisplayName("returns null for a null message key")
     void nullKey() {
         assertNull(build().service.getAlternateMsgKey(null));
     }
 
-    /**
-     * Verifies that returns null when no parent JID is set.
-     */
     @Test
     @DisplayName("returns null when no parent JID is set")
     void noParent() {
@@ -85,9 +56,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertNull(build().service.getAlternateMsgKey(key));
     }
 
-    /**
-     * Verifies that returns null for a remote that is neither user-wid nor group/broadcast (e.g. newsletter).
-     */
     @Test
     @DisplayName("returns null for a remote that is neither user-wid nor group/broadcast (e.g. newsletter)")
     void unsupportedRemote() {
@@ -96,9 +64,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertNull(build().service.getAlternateMsgKey(key));
     }
 
-    /**
-     * Verifies that 1:1 PN remote -> swaps to LID when mapping is known.
-     */
     @Test
     @DisplayName("1:1 PN remote -> swaps to LID when mapping is known")
     void oneOnOnePnToLid() {
@@ -115,9 +80,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertTrue(alt.fromMe());
     }
 
-    /**
-     * Verifies that 1:1 LID remote -> swaps to PN when mapping is known.
-     */
     @Test
     @DisplayName("1:1 LID remote -> swaps to PN when mapping is known")
     void oneOnOneLidToPn() {
@@ -132,9 +94,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertEquals(PEER_PN, alt.parentJid().orElseThrow());
     }
 
-    /**
-     * Verifies that 1:1 PN remote -> returns null when no mapping exists.
-     */
     @Test
     @DisplayName("1:1 PN remote -> returns null when no mapping exists")
     void oneOnOnePnUnmapped() {
@@ -146,9 +105,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertNull(h.service.getAlternateMsgKey(key));
     }
 
-    /**
-     * Verifies that group -> swaps participant when mapping is known.
-     */
     @Test
     @DisplayName("group -> swaps participant when mapping is known")
     void groupSwapsParticipant() {
@@ -164,9 +120,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertEquals(PEER_LID, alt.senderJid().orElseThrow(), "participant swapped to LID");
     }
 
-    /**
-     * Verifies that group -> strips device suffix from participant before lookup.
-     */
     @Test
     @DisplayName("group -> strips device suffix from participant before lookup")
     void groupStripsDeviceFromParticipant() {
@@ -182,9 +135,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
                 "device-suffixed PN participant is normalised to user-level LID");
     }
 
-    /**
-     * Verifies that group -> returns null when participant has no alternate.
-     */
     @Test
     @DisplayName("group -> returns null when participant has no alternate")
     void groupNoParticipantAlternate() {
@@ -198,9 +148,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertNull(h.service.getAlternateMsgKey(key));
     }
 
-    /**
-     * Verifies that group -> returns null when no participant is recorded.
-     */
     @Test
     @DisplayName("group -> returns null when no participant is recorded")
     void groupNoParticipant() {
@@ -214,9 +161,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertNull(h.service.getAlternateMsgKey(key));
     }
 
-    /**
-     * Verifies that broadcast -> swaps participant when mapping is known.
-     */
     @Test
     @DisplayName("broadcast -> swaps participant when mapping is known")
     void broadcastSwapsParticipant() {
@@ -232,9 +176,6 @@ class LidMigrationServiceMessageKeyAlternatesTest {
         assertEquals(PEER_LID, alt.senderJid().orElseThrow());
     }
 
-    /**
-     * Verifies that status broadcast -> swaps participant when mapping is known.
-     */
     @Test
     @DisplayName("status broadcast -> swaps participant when mapping is known")
     void statusBroadcastSwapsParticipant() {

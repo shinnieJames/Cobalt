@@ -17,15 +17,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to a
- * {@link SmaxGroupsCreateRequest}.
+ * Sealed reply family for a {@link SmaxGroupsCreateRequest}.
  *
- * @apiNote
- * Pattern-match the result returned by {@link #of(Node, Node)} to drive group-create surfaces equivalent to
- * WA Web's {@code WAWebGroupCreateJob} / {@code WAWebGroupCommunityJob} switch: {@link Success} carries the
- * provisioned group's metadata and seed participants, {@link GroupAlreadyExists} surfaces the dedup-driven
- * "this creator+token tuple already mapped to a group" path that WA Web rejects with
- * {@code GroupAlreadyExistsError}, and the two error variants surface caller-side and relay-side failures.
+ * The four variants partition every reply the relay can return: {@link Success} carries the provisioned group's
+ * metadata and seed participants; {@link GroupAlreadyExists} surfaces the dedup-driven path where the
+ * creator-plus-token tuple already maps to an existing group; {@link ClientError} and {@link ServerError} surface
+ * caller-side and relay-side failures. Callers obtain the right variant by passing the inbound IQ to
+ * {@link #of(Node, Node)}.
  */
 public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         permits SmaxGroupsCreateResponse.Success, SmaxGroupsCreateResponse.GroupAlreadyExists,
@@ -34,20 +32,17 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
     /**
      * Parses the inbound IQ stanza into the first matching {@link SmaxGroupsCreateResponse} variant.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WASmaxGroupsCreateRPC.sendCreateRPC} fall-through cascade: {@link Success},
-     * {@link GroupAlreadyExists}, {@link ClientError}, {@link ServerError}. An empty {@link Optional}
-     * signals a stanza shape outside the documented union.
+     * The variant probes run in priority order: {@link Success}, {@link GroupAlreadyExists}, {@link ClientError},
+     * {@link ServerError}. An empty {@link Optional} signals a stanza shape outside the documented union.
      *
-     * @implNote
-     * This implementation runs the variant probes in the same priority order as WA Web; it does not throw a
-     * parsing-failure exception, leaving the recovery decision to the caller.
+     * @implNote This implementation does not throw a parsing-failure exception, leaving the recovery decision to
+     * the caller.
      *
-     * @param node    the inbound IQ stanza received from the relay; never {@code null}
-     * @param request the original outbound {@link SmaxGroupsCreateRequest} stanza; used to validate the
-     *                echoed {@code id} attribute; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
-     *         documented variant matched
+     * @param node    the inbound IQ stanza received from the relay
+     * @param request the original outbound {@link SmaxGroupsCreateRequest} stanza, used to validate the echoed
+     *                {@code id} attribute
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented
+     *         variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsCreateRPC",
@@ -71,157 +66,153 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The success variant returned when the relay materialised the new group and echoed its provisioned
-     * metadata.
+     * Reply variant returned when the relay materialised the new group and echoed its provisioned metadata.
      *
-     * @apiNote
-     * Carries the typed identity triple ({@link #groupId()}, {@link #groupCreator()},
-     * {@link #groupCreation()}), the optional sync-token and sync-owner pair, every echoed
-     * {@code <group/>} policy marker, and the non-empty list of seed-participant rows. WA Web's
-     * {@code WAWebGroupCreateJob} forwards the equivalent payload as a {@code {wid, subject, creator, ts,
-     * participants, invitedOutContacts}} object after running the {@code GroupCreateCWamEvent} hook.
+     * Carries the identity triple ({@link #groupId()}, {@link #groupCreator()}, {@link #groupCreation()}), the
+     * optional sync-token and sync-owner pair, every echoed policy marker, and the non-empty list of
+     * seed-participant rows.
      *
-     * @implNote
-     * This implementation surfaces the raw {@code <group/>} sub-node via {@link #group()} so callers can
-     * read mixin metadata (addressing mode, subject-owner identity, member-add / link / share-history
-     * mixins, dedup attribute echo) that Cobalt does not project as typed accessors.
+     * @implNote This implementation surfaces the raw {@code <group/>} sub-node via {@link #group()} so callers can
+     * read mixin metadata (addressing mode, subject-owner identity, member-add, member-link and
+     * member-share-history mixins, dedup attribute echo) that Cobalt does not project as typed accessors.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateResponseSuccess")
     final class Success implements SmaxGroupsCreateResponse {
         /**
-         * The new group's user-component id (the portion of the JID preceding {@code @g.us}).
+         * Holds the new group's user-component id (the portion of the JID preceding {@code @g.us}).
          */
         private final String groupId;
 
         /**
-         * The fully-qualified group {@link Jid}, derived from {@code <groupId>@g.us}.
+         * Holds the fully-qualified group {@link Jid}, derived from {@code <groupId>@g.us}.
          */
         private final Jid groupJid;
 
         /**
-         * The creator {@link Jid} that initiated the group.
+         * Holds the creator {@link Jid} that initiated the group.
          */
         private final Jid groupCreator;
 
         /**
-         * The creation timestamp in seconds since epoch.
+         * Holds the creation timestamp in seconds since epoch.
          */
         private final long groupCreation;
 
         /**
-         * The optional {@code s_t} sync-time mixin echoed by the relay; {@code null} when omitted.
+         * Holds the optional {@code s_t} sync-time mixin echoed by the relay; {@code null} when omitted.
          */
         private final Long groupSyncTime;
 
         /**
-         * The optional {@code s_o} sync-owner {@link Jid} echoed by the relay; {@code null} when omitted.
+         * Holds the optional {@code s_o} sync-owner {@link Jid} echoed by the relay; {@code null} when omitted.
          */
         private final Jid groupSyncOwner;
 
         /**
-         * The group's subject (display name) echoed by the relay.
+         * Holds the group's subject (display name) echoed by the relay.
          */
         private final String subject;
 
         /**
-         * The optional description id echoed inside the {@code <description id="...">} attribute;
+         * Holds the optional description id echoed inside the {@code <description id="...">} attribute;
          * {@code null} when the relay did not commit a description.
          */
         private final String descriptionId;
 
         /**
-         * The optional description-error string echoed inside the {@code <description error="...">}
-         * attribute (e.g. {@code "406"} or {@code "500"}); {@code null} when the description committed
-         * cleanly.
+         * Holds the optional description-error string echoed inside the {@code <description error="...">}
+         * attribute (e.g. {@code "406"} or {@code "500"}); {@code null} when the description committed cleanly.
          */
         private final String descriptionError;
 
         /**
-         * Whether the relay echoed a {@code <locked/>} child marking chat-info edits admin-only.
+         * Indicates whether the relay echoed a {@code <locked/>} child marking chat-info edits admin-only.
          */
         private final boolean locked;
 
         /**
-         * Whether the relay echoed an {@code <announcement/>} child restricting posting to admins.
+         * Indicates whether the relay echoed an {@code <announcement/>} child restricting posting to admins.
          */
         private final boolean announcement;
 
         /**
-         * Whether the relay echoed a {@code <parent/>} child marking the new group as a community parent.
+         * Indicates whether the relay echoed a {@code <parent/>} child marking the new group as a community
+         * parent.
          */
         private final boolean parent;
 
         /**
-         * Whether the relay echoed a {@code <no_frequently_forwarded/>} child.
+         * Indicates whether the relay echoed a {@code <no_frequently_forwarded/>} child.
          */
         private final boolean noFrequentlyForwarded;
 
         /**
-         * The optional {@code <ephemeral expiration="...">} attribute echoed by the relay; {@code null} when
+         * Holds the optional {@code <ephemeral expiration="...">} attribute echoed by the relay; {@code null} when
          * no ephemeral expiration was committed.
          */
         private final Integer ephemeralExpiration;
 
         /**
-         * The optional {@code <ephemeral trigger="...">} attribute echoed by the relay; {@code null} when
+         * Holds the optional {@code <ephemeral trigger="...">} attribute echoed by the relay; {@code null} when
          * omitted.
          */
         private final Integer ephemeralTrigger;
 
         /**
-         * Whether the relay echoed a {@code <membership_approval_mode/>} child.
+         * Indicates whether the relay echoed a {@code <membership_approval_mode/>} child.
          */
         private final boolean membershipApprovalMode;
 
         /**
-         * Whether the relay echoed a {@code <breakout/>} child marking the group as a breakout sub-group.
+         * Indicates whether the relay echoed a {@code <breakout/>} child marking the group as a breakout
+         * sub-group.
          */
         private final boolean breakout;
 
         /**
-         * The optional linked parent community {@link Jid} echoed inside a
-         * {@code <linked_parent jid="...">} child; {@code null} when the new group has no parent.
+         * Holds the optional linked parent community {@link Jid} echoed inside a {@code <linked_parent jid="...">}
+         * child; {@code null} when the new group has no parent.
          */
         private final Jid linkedParentJid;
 
         /**
-         * Whether the relay echoed a {@code <hidden_group/>} child hiding the group from the community
+         * Indicates whether the relay echoed a {@code <hidden_group/>} child hiding the group from the community
          * directory.
          */
         private final boolean hiddenGroup;
 
         /**
-         * Whether the relay echoed an {@code <allow_non_admin_sub_group_creation/>} child.
+         * Indicates whether the relay echoed an {@code <allow_non_admin_sub_group_creation/>} child.
          */
         private final boolean allowNonAdminSubGroupCreation;
 
         /**
-         * Whether the relay echoed a {@code <group_history/>} child.
+         * Indicates whether the relay echoed a {@code <group_history/>} child.
          */
         private final boolean groupHistory;
 
         /**
-         * Whether the relay echoed a {@code <capi/>} child.
+         * Indicates whether the relay echoed a {@code <capi/>} child.
          */
         private final boolean capi;
 
         /**
-         * The non-empty list of seed-participant echo rows, one per requested participant.
+         * Holds the non-empty list of seed-participant echo rows, one per requested participant.
          */
         private final List<ResponseParticipant> participants;
 
         /**
-         * The verbatim {@code <group/>} child exposed for callers that need to read mixin metadata
-         * (addressing mode, subject-owner identity, member-add / link / share-history mixins, dedup attribute
-         * echo) that Cobalt does not project as typed accessors.
+         * Holds the verbatim {@code <group/>} child exposed for callers that need to read mixin metadata
+         * (addressing mode, subject-owner identity, member-add, member-link and member-share-history mixins, dedup
+         * attribute echo) that Cobalt does not project as typed accessors.
          */
         private final Node group;
 
         /**
          * Constructs a success variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * The supplied participant list is defensively copied. Direct construction is primarily used to seed test
+         * fixtures; most callers obtain instances via {@link #of(Node, Node)}.
          *
          * @param groupId                       the user-component id; never {@code null}
          * @param groupJid                      the full group {@link Jid}; never {@code null}
@@ -242,15 +233,13 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
          * @param breakout                      whether {@code <breakout/>} was echoed
          * @param linkedParentJid               the optional linked parent community JID; may be {@code null}
          * @param hiddenGroup                   whether {@code <hidden_group/>} was echoed
-         * @param allowNonAdminSubGroupCreation whether {@code <allow_non_admin_sub_group_creation/>} was
-         *                                      echoed
+         * @param allowNonAdminSubGroupCreation whether {@code <allow_non_admin_sub_group_creation/>} was echoed
          * @param groupHistory                  whether {@code <group_history/>} was echoed
          * @param capi                          whether {@code <capi/>} was echoed
-         * @param participants                  the seed-participant rows; never {@code null} and must be
-         *                                      non-empty
+         * @param participants                  the seed-participant rows; never {@code null} and must be non-empty
          * @param group                         the raw {@code <group/>} sub-node; never {@code null}
          * @throws NullPointerException     if any non-nullable argument is {@code null}
-         * @throws IllegalArgumentException when {@code participants} is empty
+         * @throws IllegalArgumentException if {@code participants} is empty
          */
         public Success(String groupId,
                        Jid groupJid,
@@ -309,7 +298,6 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Returns the new group's user-component id.
          *
-         * @apiNote
          * Concatenate with {@code @g.us} to recover the fully-qualified group JID; the same value is exposed
          * pre-built via {@link #groupJid()}.
          *
@@ -385,13 +373,11 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Returns the optional description-error string.
          *
-         * @apiNote
          * Non-empty when the group was created but the description body was rejected (e.g. {@code "406"} or
-         * {@code "500"}); callers should surface a partial-acceptance UI rather than treating the whole
+         * {@code "500"}); callers should surface a partial-acceptance result rather than treating the whole
          * operation as failed.
          *
-         * @return an {@link Optional} carrying the error string, or empty when the description committed
-         *         cleanly
+         * @return an {@link Optional} carrying the error string, or empty when the description committed cleanly
          */
         public Optional<String> descriptionError() {
             return Optional.ofNullable(descriptionError);
@@ -436,8 +422,8 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Returns the optional {@code <ephemeral expiration="...">} value.
          *
-         * @return an {@link Optional} carrying the value in seconds, or empty when no ephemeral expiration
-         *         was committed
+         * @return an {@link Optional} carrying the value in seconds, or empty when no ephemeral expiration was
+         *         committed
          */
         public Optional<Integer> ephemeralExpiration() {
             return Optional.ofNullable(ephemeralExpiration);
@@ -518,10 +504,8 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Returns the seed-participant echo rows.
          *
-         * @apiNote
-         * One entry per participant the relay processed; an entry's
-         * {@link ResponseParticipant#notRegisteredOnWa()} discriminates between "successfully added" and
-         * "non-registered WA user".
+         * One entry per participant the relay processed; an entry's {@link ResponseParticipant#notRegisteredOnWa()}
+         * discriminates between successfully-added and non-registered WA user.
          *
          * @return an unmodifiable list of participant rows; never empty
          */
@@ -530,13 +514,11 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the verbatim {@code <group/>} sub-node carrying the remaining {@code GroupInfoMixin}
-         * metadata.
+         * Returns the verbatim {@code <group/>} sub-node carrying the remaining group-info mixin metadata.
          *
-         * @apiNote
          * Exposed for callers that need to read mixin metadata (addressing mode, subject-owner identity,
-         * member-add / link / share-history mixins, dedup attribute echo) that Cobalt does not project as
-         * typed accessors.
+         * member-add, member-link and member-share-history mixins, dedup attribute echo) that Cobalt does not
+         * project as typed accessors.
          *
          * @return the raw {@code <group/>} {@link Node}; never {@code null}
          */
@@ -547,23 +529,20 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Parses the inbound stanza into a {@link Success} variant.
          *
-         * @apiNote
-         * Invoked as the first probe in the variant cascade by
-         * {@link SmaxGroupsCreateResponse#of(Node, Node)}.
+         * Runs as the first probe in the variant cascade driven by {@link SmaxGroupsCreateResponse#of(Node, Node)}.
          *
-         * @implNote
-         * This implementation validates that the IQ envelope is an {@code <iq type="result">} addressed
-         * {@code from} a {@code g.us} JID with the echoed {@code id} attribute, then extracts the
-         * {@code <group/>} child and reads the mandatory identity attributes ({@code id}, {@code creator},
-         * {@code creation}, {@code subject}), the optional mixin attributes ({@code s_t}, {@code s_o}), the
-         * boolean-gated marker children, the optional ephemeral / description / linked-parent sub-nodes,
-         * and the participant rows. Any missing mandatory attribute or unparseable participant short-circuits
-         * the parse and returns {@link Optional#empty()}.
+         * @implNote This implementation validates that the IQ envelope is an {@code <iq type="result">} addressed
+         * {@code from} a {@code g.us} JID with the echoed {@code id} attribute, then extracts the {@code <group/>}
+         * child and reads the mandatory identity attributes ({@code id}, {@code creator}, {@code creation},
+         * {@code subject}), the optional mixin attributes ({@code s_t}, {@code s_o}), the boolean-gated marker
+         * children, the optional ephemeral, description and linked-parent sub-nodes, and the participant rows. Any
+         * missing mandatory attribute or unparseable participant short-circuits the parse and returns
+         * {@link Optional#empty()}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
-         *         stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the stanza
+         *         does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateResponseSuccess",
                 exports = "parseCreateResponseSuccess",
@@ -661,6 +640,12 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
                     group));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -696,6 +681,15 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
                     && Objects.equals(this.group, that.group);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @implNote This implementation splits the hash into two {@code Objects.hash} batches because the field
+         * list exceeds the practical width of a single varargs call; the {@code primary * 31 + secondary} mix
+         * preserves permutation-sensitive distribution across the batches.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             var primary = Objects.hash(groupId, groupJid, groupCreator, groupCreation, groupSyncTime,
@@ -706,6 +700,11 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return primary * 31 + secondary;
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateResponse.Success[groupId=" + groupId
@@ -736,51 +735,46 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Single seed-participant echo row inside a {@link Success}.
          *
-         * @apiNote
          * Each requested participant surfaces either as a successfully-added participant
-         * ({@link #notRegisteredOnWa()} returns {@code false}, with {@link #username()} populated when the
-         * relay echoed the username mixin) or as a not-registered marker
-         * ({@link #notRegisteredOnWa()} returns {@code true}). WA Web discriminates the two via the
-         * {@code WASmaxInGroupsCreateParticipantAddedResponseMixin} vs
-         * {@code WASmaxInGroupsNonRegisteredWaUserParticipantErrorLidResponseMixin} parsers.
+         * ({@link #notRegisteredOnWa()} returns {@code false}, with {@link #username()} populated when the relay
+         * echoed the username mixin) or as a not-registered marker ({@link #notRegisteredOnWa()} returns
+         * {@code true}).
          *
-         * @implNote
-         * This implementation collapses the WA Web alternation into a single class with the
-         * {@link #notRegisteredOnWa()} flag because the two sub-shapes share the same attribute schema and
-         * downstream callers branch on a single boolean.
+         * @implNote This implementation collapses the WA Web alternation (added-participant arm vs.
+         * non-registered-WA-user arm) into a single class with the {@link #notRegisteredOnWa()} flag because the
+         * two sub-shapes share the same attribute schema and downstream callers branch on a single boolean.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateParticipantAddedResponseMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsNonRegisteredWaUserParticipantErrorLidResponseMixin")
         public static final class ResponseParticipant {
             /**
-             * The participant {@link Jid} echoed by the relay when the participant was successfully added;
+             * Holds the participant {@link Jid} echoed by the relay when the participant was successfully added;
              * {@code null} for not-registered entries.
              */
             private final Jid jid;
 
             /**
-             * The optional phone-number mixin echoed by the relay (always present on not-registered entries;
+             * Holds the optional phone-number mixin echoed by the relay (always present on not-registered entries;
              * optional on added entries).
              */
             private final Jid phoneNumber;
 
             /**
-             * The optional username echoed by the relay for LID-addressed participants.
+             * Holds the optional username echoed by the relay for LID-addressed participants.
              */
             private final String username;
 
             /**
-             * Whether the relay surfaced the not-registered marker (parsed via
-             * {@code NonRegisteredWaUserParticipantErrorLidResponseMixin} rather than
-             * {@code CreateParticipantAddedResponseMixin}).
+             * Indicates whether the relay surfaced the not-registered marker (parsed via the non-registered-WA-user
+             * mixin rather than the added-participant mixin).
              */
             private final boolean notRegisteredOnWa;
 
             /**
              * Constructs a participant echo row.
              *
-             * @apiNote
-             * Typically produced by {@link #of(Node)}; direct construction is used to seed test fixtures.
+             * Direct construction is primarily used to seed test fixtures; most callers obtain instances via
+             * {@link #of(Node)}.
              *
              * @param jid               the participant JID; may be {@code null} for not-registered rows
              * @param phoneNumber       the optional phone JID
@@ -806,9 +800,8 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             /**
              * Returns the optional phone-number {@link Jid}.
              *
-             * @apiNote
-             * Always present on not-registered rows; optional on added rows depending on whether the relay
-             * echoed the phone-number mixin.
+             * Always present on not-registered rows; optional on added rows depending on whether the relay echoed
+             * the phone-number mixin.
              *
              * @return an {@link Optional} carrying the phone JID, or empty when omitted
              */
@@ -828,10 +821,6 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             /**
              * Returns whether this row represents a non-registered WhatsApp user.
              *
-             * @apiNote
-             * WA Web routes these rows into the {@code invitedOutContacts} array (for V4-invite-link
-             * surfacing) rather than the {@code participants} array.
-             *
              * @return {@code true} when the relay surfaced the not-registered marker
              */
             public boolean notRegisteredOnWa() {
@@ -841,18 +830,17 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             /**
              * Parses a single {@code <participant/>} child into a {@link ResponseParticipant} row.
              *
-             * @apiNote
-             * Invoked by {@link Success#of(Node, Node)} for every {@code <participant/>} child inside the
-             * echoed {@code <group/>} subtree.
+             * Invoked by {@link Success#of(Node, Node)} for every {@code <participant/>} child inside the echoed
+             * {@code <group/>} subtree.
              *
-             * @implNote
-             * This implementation reads {@code jid}, {@code phone_number}, and {@code username} attributes
-             * and infers the not-registered flag from "no {@code jid} attribute but a {@code phone_number}
-             * attribute". A row with no {@code jid} and no {@code phone_number} is rejected.
+             * @implNote This implementation reads the {@code jid}, {@code phone_number} and {@code username}
+             * attributes and infers the not-registered flag from the absence of a {@code jid} attribute combined
+             * with the presence of a {@code phone_number} attribute. A row with neither {@code jid} nor
+             * {@code phone_number} is rejected.
              *
              * @param participantNode the {@code <participant/>} child
-             * @return an {@link Optional} carrying the parsed row, or {@link Optional#empty()} when the
-             *         child satisfies neither sub-shape
+             * @return an {@link Optional} carrying the parsed row, or {@link Optional#empty()} when the child
+             *         satisfies neither sub-shape
              */
             static Optional<ResponseParticipant> of(Node participantNode) {
                 var jid = participantNode.getAttributeAsJid("jid").orElse(null);
@@ -865,6 +853,12 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
                 return Optional.of(new ResponseParticipant(jid, phoneNumber, username, notRegistered));
             }
 
+            /**
+             * Compares this row to {@code obj} for value equality across every field.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is a {@link ResponseParticipant} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -880,11 +874,21 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
                         && Objects.equals(this.username, that.username);
             }
 
+            /**
+             * Returns a hash composed of every field.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, phoneNumber, username, notRegisteredOnWa);
             }
 
+            /**
+             * Returns a debug string carrying every field.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsCreateResponse.Success.ResponseParticipant[jid=" + jid
@@ -896,26 +900,24 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The variant returned when the relay detected an existing group whose creator and dedup-token tuple
-     * matches the new request, and returned the existing group's JID rather than creating a new one.
+     * Reply variant returned when the relay detected an existing group whose creator-plus-dedup-token tuple matches
+     * the new request and returned the existing group's JID rather than creating a new one.
      *
-     * @apiNote
-     * WA Web's {@code WAWebGroupCreateJob} rejects this variant with its custom {@code GroupAlreadyExistsError};
-     * embedders that want to surface the existing-group UI should branch on this variant explicitly and
+     * Callers that want to surface the existing-group experience should branch on this variant explicitly and
      * extract {@link #groupJid()} to navigate to the existing chat.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateResponseGroupAlreadyExists")
     final class GroupAlreadyExists implements SmaxGroupsCreateResponse {
         /**
-         * The existing group {@link Jid} surfaced by the relay.
+         * Holds the existing group {@link Jid} surfaced by the relay.
          */
         private final Jid groupJid;
 
         /**
          * Constructs a group-already-exists variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * Direct construction is primarily used to seed test fixtures; most callers obtain instances via
+         * {@link #of(Node, Node)}.
          *
          * @param groupJid the existing group {@link Jid}; never {@code null}
          * @throws NullPointerException if {@code groupJid} is {@code null}
@@ -936,21 +938,18 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Parses the inbound stanza into a {@link GroupAlreadyExists} variant.
          *
-         * @apiNote
-         * Invoked as the second probe in the variant cascade by
+         * Runs as the second probe in the variant cascade driven by
          * {@link SmaxGroupsCreateResponse#of(Node, Node)}.
          *
-         * @implNote
-         * This implementation validates the {@code <iq type="result">} envelope addressed {@code from} a
-         * {@code g.us} JID with the echoed {@code id} attribute, extracts the {@code <group/>} child, and
-         * reads the {@code jid} attribute. The {@code <group/>} child on this branch carries only the
-         * existing group's JID, distinct from the rich {@code <group/>} subtree on the {@link Success}
-         * branch.
+         * @implNote This implementation validates the {@code <iq type="result">} envelope addressed {@code from} a
+         * {@code g.us} JID with the echoed {@code id} attribute, extracts the {@code <group/>} child, and reads the
+         * {@code jid} attribute. The {@code <group/>} child on this branch carries only the existing group's JID,
+         * distinct from the rich {@code <group/>} subtree on the {@link Success} branch.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
-         *         stanza does not match the already-exists schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the stanza
+         *         does not match the already-exists schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateResponseGroupAlreadyExists",
                 exports = "parseCreateResponseGroupAlreadyExists",
@@ -984,6 +983,12 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return Optional.of(new GroupAlreadyExists(groupJid));
         }
 
+        /**
+         * Compares this variant to {@code obj} for value equality on {@link #groupJid()}.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link GroupAlreadyExists} with the same group JID
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -996,11 +1001,21 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return Objects.equals(this.groupJid, that.groupJid);
         }
 
+        /**
+         * Returns a hash derived from {@link #groupJid()}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(groupJid);
         }
 
+        /**
+         * Returns a debug string carrying {@link #groupJid()}.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateResponse.GroupAlreadyExists[groupJid=" + groupJid + ']';
@@ -1008,26 +1023,22 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The client-error variant returned when the relay rejected the request as malformed, unauthorised, or
-     * bumping a per-creator rate-limit cap.
+     * Reply variant returned when the relay rejected the request as malformed, unauthorised, or bumping a
+     * per-creator rate-limit cap.
      *
-     * @apiNote
-     * WA Web's {@code WAWebGroupCreateJob} forwards this variant as a {@code ServerStatusCodeError}; the
-     * job additionally extracts the {@code rateLimitAddParticipantTimeOrCountRateLimitMixinGroup} mixin to
-     * surface {@code GroupAddParticipantTimeRateLimitServerError} / {@code GroupAddParticipantCountRateLimitServerError}
-     * for the participant-add rate-limit path. Cobalt exposes the raw error envelope and leaves the
-     * rate-limit projection to the caller.
+     * @implNote This implementation exposes the raw error envelope and leaves any rate-limit projection (such as
+     * distinguishing time-based from count-based participant-add caps) to the caller.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateResponseClientError")
     final class ClientError implements SmaxGroupsCreateResponse {
         /**
-         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * Holds the numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
          * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * Holds the human-readable error text echoed by the relay; {@code null} when the relay omitted the
          * {@code <error text="...">} attribute.
          */
         private final String errorText;
@@ -1035,8 +1046,8 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Constructs a client-error variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * Direct construction is primarily used to seed test fixtures; most callers obtain instances via
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -1067,19 +1078,16 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Parses the inbound stanza into a {@link ClientError} envelope.
          *
-         * @apiNote
-         * Invoked as the third probe in the variant cascade by
-         * {@link SmaxGroupsCreateResponse#of(Node, Node)}.
+         * Runs as the third probe in the variant cascade driven by {@link SmaxGroupsCreateResponse#of(Node, Node)}.
          *
-         * @implNote
-         * This implementation delegates the error-envelope extraction to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} so every SMAX response in the family
-         * shares the same client-error parsing.
+         * @implNote This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} so every SMAX response in the family shares
+         * the same client-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
-         *         envelope does not match the client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the envelope
+         *         does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateResponseClientError",
                 exports = "parseCreateResponseClientError",
@@ -1092,6 +1100,12 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -1104,11 +1118,21 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateResponse.ClientError[errorCode=" + errorCode
@@ -1117,22 +1141,20 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The server-error variant returned when the relay encountered a transient internal failure.
+     * Reply variant returned when the relay encountered a transient internal failure.
      *
-     * @apiNote
-     * WA Web's {@code WAWebGroupCreateJob} forwards this variant as a {@code ServerStatusCodeError}; callers
-     * can decide whether to retry based on the surfaced {@link #errorCode()}.
+     * Callers can decide whether to retry based on the surfaced {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateResponseServerError")
     final class ServerError implements SmaxGroupsCreateResponse {
         /**
-         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * Holds the numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
          * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * Holds the human-readable error text echoed by the relay; {@code null} when the relay omitted the
          * {@code <error text="...">} attribute.
          */
         private final String errorText;
@@ -1140,8 +1162,8 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Constructs a server-error variant.
          *
-         * @apiNote
-         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         * Direct construction is primarily used to seed test fixtures; most callers obtain instances via
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -1172,19 +1194,17 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
         /**
          * Parses the inbound stanza into a {@link ServerError} envelope.
          *
-         * @apiNote
-         * Invoked as the terminal probe in the variant cascade by
+         * Runs as the terminal probe in the variant cascade driven by
          * {@link SmaxGroupsCreateResponse#of(Node, Node)}.
          *
-         * @implNote
-         * This implementation delegates the error-envelope extraction to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} so every SMAX response in the family
-         * shares the same server-error parsing.
+         * @implNote This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} so every SMAX response in the family shares
+         * the same server-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
-         *         envelope does not match the server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the envelope
+         *         does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateResponseServerError",
                 exports = "parseCreateResponseServerError",
@@ -1197,6 +1217,12 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -1209,11 +1235,21 @@ public sealed interface SmaxGroupsCreateResponse extends SmaxOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateResponse.ServerError[errorCode=" + errorCode

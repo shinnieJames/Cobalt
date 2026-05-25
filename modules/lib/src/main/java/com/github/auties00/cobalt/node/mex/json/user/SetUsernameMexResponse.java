@@ -17,18 +17,17 @@ import java.util.Optional;
 /**
  * Decoded reply to the set-username mutation.
  *
- * @apiNote Consume after dispatching {@link SetUsernameMexRequest}. Wraps
- * the {@code xwa2_username_set.result} status token; WA Web's
- * {@code WAWebMexSetUsernameJob.mexSetUsernameQueryJob} returns only the
- * boolean derived from {@code result === "SUCCESS"}, which Cobalt
- * surfaces via {@link #isSuccess()}.
+ * <p>Consumed after dispatching {@link SetUsernameMexRequest}. The reply wraps the
+ * {@code xwa2_username_set.result} status token; the success signal is the boolean derived from
+ * {@code result == "SUCCESS"}, exposed through {@link #isSuccess()}, while the raw token is kept on
+ * {@link #result()} so callers may distinguish among the relay's error tokens.
  *
  * @see SetUsernameMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexSetUsernameJob")
 public final class SetUsernameMexResponse implements MexOperation.Response.Json {
     /**
-     * The {@code result} field carrying the relay's status token.
+     * The {@code result} field carrying the relay's status token, possibly {@code null}.
      */
     private final String result;
 
@@ -44,12 +43,12 @@ public final class SetUsernameMexResponse implements MexOperation.Response.Json 
     /**
      * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @apiNote Pass the IQ node received in reply to a stanza dispatched
-     * with {@link SetUsernameMexRequest#toNode()}.
+     * <p>The argument is the IQ node received in reply to a stanza dispatched with
+     * {@link SetUsernameMexRequest#toNode()}.
      *
      * @param node the IQ reply stanza
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload is missing or malformed
+     * @return the decoded reply, or {@link Optional#empty()} when the payload is missing or
+     *         malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -62,13 +61,12 @@ public final class SetUsernameMexResponse implements MexOperation.Response.Json 
     /**
      * Returns the raw status token.
      *
-     * @apiNote Use {@link #isSuccess()} for the boolean WA Web exposes;
-     * the raw token is preserved so callers may distinguish among the
-     * relay's error tokens (such as the various "username taken" or
-     * "username invalid" failures).
+     * <p>The token is preserved so callers may distinguish among the relay's error tokens, such as
+     * the various "username taken" or "username invalid" failures; {@link #isSuccess()} exposes the
+     * success/failure boolean.
      *
-     * @return the token wrapped in an {@link Optional}, or
-     *         {@link Optional#empty()} when the relay omitted the field
+     * @return the token wrapped in an {@link Optional}, or {@link Optional#empty()} when the relay
+     *         omitted the field
      */
     public Optional<String> result() {
         return Optional.ofNullable(result);
@@ -77,12 +75,10 @@ public final class SetUsernameMexResponse implements MexOperation.Response.Json 
     /**
      * Returns whether the mutation succeeded.
      *
-     * @apiNote Mirrors WA Web's
-     * {@code result?.xwa2_username_set?.result === "SUCCESS"} check,
-     * which is the only signal the JS implementation surfaces to callers.
+     * <p>The result is {@code true} only when the relay's {@code xwa2_username_set.result} token
+     * equals {@code "SUCCESS"}, which is the only signal surfaced for this mutation.
      *
-     * @return {@code true} when {@link #result()} equals
-     *         {@code "SUCCESS"}, {@code false} otherwise
+     * @return {@code true} when {@link #result()} equals {@code "SUCCESS"}, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -93,13 +89,12 @@ public final class SetUsernameMexResponse implements MexOperation.Response.Json 
     /**
      * Decodes the {@code <result>} payload bytes into a {@link SetUsernameMexResponse}.
      *
-     * @implNote This implementation projects
-     * {@code data.xwa2_username_set.result}; missing intermediate
-     * envelopes yield {@link Optional#empty()}.
+     * @implNote This implementation projects {@code data.xwa2_username_set.result}; missing
+     * intermediate envelopes yield {@link Optional#empty()}.
      *
      * @param json the raw {@code <result>} payload bytes
-     * @return the decoded reply, or {@link Optional#empty()} when the
-     *         payload does not parse or lacks the required envelope
+     * @return the decoded reply, or {@link Optional#empty()} when the payload does not parse or
+     *         lacks the required envelope
      */
     private static Optional<SetUsernameMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

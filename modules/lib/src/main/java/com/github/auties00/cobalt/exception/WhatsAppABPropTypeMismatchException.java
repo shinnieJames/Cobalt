@@ -6,23 +6,26 @@ import java.util.Objects;
  * Thrown when an A/B configuration property cannot be decoded as the type
  * the caller asked for.
  *
- * @apiNote
  * WhatsApp ships A/B test ("AB prop") values from the server to drive
  * feature flags, rate limits, and rollout percentages. Each property is
  * keyed by a numeric configuration code and read from the client by
  * specifying the expected Java type ({@link Boolean}, {@link Integer},
- * {@link Long}, {@link Double}, {@link String}). When the raw string the
- * server delivered cannot be parsed as the expected type, this exception
- * is raised so the caller can fall back to a default. Equivalent to a
- * type-coercion failure inside WA Web's {@code getABPropConfigValue}
- * pipeline; WA Web handles the conversion inline and silently returns the
- * default, whereas Cobalt surfaces the mismatch so the embedder can
- * choose between logging it or falling back.
+ * {@link Long}, {@link Double}, or {@link String}). This exception is
+ * raised when the raw string the server delivered cannot be parsed as that
+ * expected type. It carries the {@link #configCode()}, the
+ * {@link #expectedType()}, and the {@link #actualValue()} that failed to
+ * convert.
+ *
+ * @apiNote
+ * The failure is local to one configuration lookup, so a caller that
+ * catches it can fall back to a default value and continue. WA Web
+ * performs the same coercion inline and silently returns the default;
+ * Cobalt surfaces the mismatch instead so the embedder can choose between
+ * logging it and falling back.
  *
  * @implNote
- * This implementation is non-fatal: {@link #isFatal()} always returns
- * {@code false} because an AB prop lookup miss never invalidates the
- * Noise session.
+ * This implementation is non-fatal: an AB prop lookup miss never
+ * invalidates the Noise session.
  */
 public final class WhatsAppABPropTypeMismatchException extends WhatsAppException {
 

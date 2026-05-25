@@ -14,15 +14,16 @@ import java.util.Arrays;
 import java.util.Collection;
 
 /**
- * Pure-static helper for the byte-level conversions and gating-AB-prop accessors used
- * across the syncd subsystem.
+ * Provides the byte-level conversions and gating-{@link ABProp} accessors shared across the
+ * syncd subsystem.
  *
- * <p>Two responsibilities sit here. Buffer-level helpers (combine, split, hex round-trip,
- * 64-bit network-order encoding, key-id structure parsing) translate the
- * {@code WAWebSyncdCryptoUtils} and {@code WASyncdKeyManagementUtils} primitives into Java.
- * AB-prop accessors expose the syncd gating values
- * ({@code syncd_key_max_use_days}, {@code syncd_inline_mutations_max_count}, etc.) used by
- * the rotation, request-builder, and timeout flows.
+ * <p>The class holds no state: every method is a pure function of its arguments. Two
+ * families of helpers live here. Buffer-level helpers (concatenate, split, hex round-trip,
+ * 64-bit network-order encoding, key-id structure parsing) and constant-time comparison
+ * cover the cryptographic plumbing the syncd MAC and key-id flows need. AB-prop accessors
+ * read the syncd gating values ({@link ABProp#SYNCD_KEY_MAX_USE_DAYS},
+ * {@link ABProp#SYNCD_INLINE_MUTATIONS_MAX_COUNT}, and the rest) consumed by the rotation,
+ * request-builder, and timeout flows.
  *
  * <p>A sync key id is a 6-byte big-endian buffer:
  * <ul>
@@ -30,9 +31,8 @@ import java.util.Collection;
  * <li>Bytes 2-5 ({@code uint32}): key epoch (monotonically increasing)
  * </ul>
  *
- * @apiNote
- * No state is held; every method is a pure function of its arguments. The class is
- * deliberately {@code final} with a private constructor to make that property explicit.
+ * <p>The class is {@code final} with a private constructor so the stateless-helper contract
+ * is enforced by construction.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdCryptoUtils")
 @WhatsAppWebModule(moduleName = "WASyncdKeyManagementUtils")
@@ -41,12 +41,13 @@ import java.util.Collection;
 @WhatsAppWebModule(moduleName = "WAWebSyncdKeyManagement")
 public final class SyncKeyUtils {
     /**
-     * The byte length of a sync key id ({@code uint16} device id + {@code uint32} epoch).
+     * Holds the byte length of a sync key id, the sum of the {@code uint16} device id and the
+     * {@code uint32} epoch.
      */
     private static final int KEY_ID_LENGTH = 6;
 
     /**
-     * Prevents instantiation of the static helper.
+     * Prevents instantiation of this stateless helper.
      */
     private SyncKeyUtils() {
     }
@@ -54,16 +55,13 @@ public final class SyncKeyUtils {
     /**
      * Concatenates the supplied byte arrays into a single fresh array.
      *
-     * @apiNote
-     * Translation of WA Web's {@code WAWebSyncdCryptoUtils.combine}, used to build the HMAC
-     * input for the {@code valueMac}/{@code patchMac}/{@code snapshotMac} computations and
-     * the IV-prefixed ciphertext layouts. Throws on an empty argument list (mirroring the
-     * WA Web {@code throw err("buffers length is zero")} branch).
+     * <p>The inputs are copied in argument order into one newly allocated array. An empty
+     * argument list is rejected with an {@link IllegalArgumentException}. When exactly one
+     * array is supplied that array is returned verbatim without allocating a copy.
      *
-     * @implNote
-     * This implementation returns the sole input verbatim when {@code buffers.length == 1}
-     * (no allocation), matching WA Web's identity short-circuit. For multi-input calls a
-     * single pass computes the total length and a second copies in.
+     * @implNote This implementation returns the sole input verbatim when {@code buffers.length}
+     * is {@code 1}; for multi-input calls one pass computes the total length and a second
+     * copies the segments in.
      *
      * @param buffers the byte arrays to concatenate
      * @return a single byte array containing the inputs in order
@@ -94,17 +92,15 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Slices a byte array three ways at the given offsets.
+     * Slices a byte array into three independent segments at the given offsets.
      *
-     * @apiNote
-     * Translation of WA Web's {@code WAWebSyncdCryptoUtils.split}, used to peel apart the
-     * IV-then-ciphertext-then-MAC layout in the syncd record decrypt path. The returned
-     * array is always length 3 in {@code [prefix, middle, suffix]} order.
+     * <p>The result is always a three-element array in {@code [prefix, middle, suffix]} order:
+     * the prefix spans {@code [0, offset)}, the middle spans {@code [offset, offset + length)},
+     * and the suffix spans {@code [offset + length, buffer.length)}. A negative {@code offset}
+     * or {@code length} is rejected. Each segment is a fresh copy detached from {@code buffer}.
      *
-     * @implNote
-     * This implementation uses {@link Arrays#copyOfRange(byte[], int, int)} so each slice is
-     * an independent copy; WA Web's slice variant returns aliasing
-     * {@code ArrayBuffer.slice} views that are also detached from the original.
+     * @implNote This implementation uses {@link Arrays#copyOfRange(byte[], int, int)} so each
+     * slice is an independent copy rather than a view aliasing {@code buffer}.
      *
      * @param buffer the byte array to split
      * @param offset the start offset of the middle segment
@@ -126,18 +122,16 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Parses a space-separated hex string back into a byte array.
+     * Parses a space-separated unpadded hex string back into a byte array.
      *
-     * @apiNote
-     * The reverse direction of {@link #syncKeyIdToHex(byte[])}; both are kept in sync so a
-     * round-trip {@code hexToUint8Array(syncKeyIdToHex(x))} preserves the bytes exactly.
+     * <p>Each whitespace-delimited token is parsed as a radix-16 value and stored in the
+     * corresponding output byte. This is the exact inverse of {@link #syncKeyIdToHex(byte[])},
+     * so {@code hexToUint8Array(syncKeyIdToHex(x))} reproduces the original bytes.
      *
-     * @implNote
-     * This implementation parses each token with radix 16 via
-     * {@link Integer#parseInt(String, int)}; WA Web uses the equivalent
-     * {@code parseInt(e, 16)}.
+     * @implNote This implementation parses each token with {@link Integer#parseInt(String, int)}
+     * at radix 16.
      *
-     * @param hex the space-separated hex string (e.g. {@code "a 1f 0"})
+     * @param hex the space-separated hex string (for example {@code "a 1f 0"})
      * @return the decoded byte array
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "hexToUint8Array", adaptation = WhatsAppAdaptation.DIRECT)
@@ -153,16 +147,14 @@ public final class SyncKeyUtils {
     /**
      * Renders a sync key id as a space-separated unpadded hex string for diagnostics.
      *
-     * @apiNote
-     * Used by every {@code syncd: ...} log line that mentions a key id. Returns the
-     * sentinel {@code "unknown"} for {@code null} input so the diagnostic call sites can
-     * stay short and the hex render never NPEs.
+     * <p>Each byte is rendered as its unpadded lowercase hex value with single-space
+     * separators between bytes. A {@code null} input yields the sentinel {@code "unknown"}
+     * so diagnostic call sites can render a key id without a null guard; an empty array
+     * yields the empty string.
      *
-     * @implNote
-     * This implementation does not zero-pad each byte: the canonical WA Web format is the
-     * unpadded form (e.g. {@code "a 1f 0"}, not {@code "0a 1f 00"}); for the padded form
-     * use {@link #arrayBufferToHexPadded(byte[])} instead. Empty input renders as the empty
-     * string.
+     * @implNote This implementation does not zero-pad each byte: the unpadded form is the
+     * canonical syncd log shape (for example {@code "a 1f 0"} rather than {@code "0a 1f 00"}).
+     * For the padded, separator-free form use {@link #arrayBufferToHexPadded(byte[])}.
      *
      * @param keyId the raw key id bytes
      * @return the space-separated unpadded hex string, or {@code "unknown"} for {@code null}
@@ -187,10 +179,8 @@ public final class SyncKeyUtils {
      * Renders the key id of an {@link AppStateSyncKey} as a space-separated unpadded hex
      * string.
      *
-     * @apiNote
-     * Convenience overload used by call sites that already hold the
-     * {@link AppStateSyncKey} wrapper rather than the raw bytes; unwraps the
-     * {@link Optional} chain and delegates to {@link #syncKeyIdToHex(byte[])}.
+     * <p>Unwraps the optional key-id chain of {@code key} and delegates to
+     * {@link #syncKeyIdToHex(byte[])}; an absent key id yields {@code "unknown"}.
      *
      * @param key the sync key
      * @return the hex string, or {@code "unknown"} when the key id is absent
@@ -207,18 +197,16 @@ public final class SyncKeyUtils {
      * Renders a byte array as a zero-padded two-character-per-byte hex string with no
      * separator.
      *
-     * @apiNote
-     * The padded form used by HMAC diagnostic logs (the
-     * {@code WAWebSyncdAntiTamperingLtHash} hex dumps) where adjacent bytes must remain
-     * unambiguous; for the space-separated diagnostic form use
+     * <p>Each byte is rendered as exactly two lowercase hex characters with no delimiter, so
+     * adjacent bytes stay unambiguous in HMAC diagnostic dumps. A {@code null} or empty input
+     * yields the empty string. For the space-separated diagnostic form use
      * {@link #syncKeyIdToHex(byte[])}.
      *
-     * @implNote
-     * This implementation pre-sizes the {@link StringBuilder} to {@code data.length * 2} to
-     * avoid a re-allocation; null and empty inputs render as the empty string.
+     * @implNote This implementation pre-sizes the {@link StringBuilder} to
+     * {@code data.length * 2} to avoid a re-allocation.
      *
      * @param data the byte array to render
-     * @return the zero-padded hex string (e.g. {@code "0a1f00"})
+     * @return the zero-padded hex string (for example {@code "0a1f00"})
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "arrayBufferToHexPadded", adaptation = WhatsAppAdaptation.DIRECT)
     public static String arrayBufferToHexPadded(byte[] data) {
@@ -238,20 +226,17 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Encodes a 32-bit unsigned value as an 8-byte big-endian buffer with the upper 4 bytes
+     * Encodes a 32-bit unsigned value as an 8-byte big-endian buffer with the upper four bytes
      * left zero.
      *
-     * @apiNote
-     * Used to build the {@code valueMac} HMAC input for syncd patches: the
-     * {@code WAWebSyncdAntiTamperingValueMac} algorithm requires the version field to occupy
-     * the lower 4 bytes of an 8-byte big-endian slot.
+     * <p>The value occupies the lower four bytes of the returned buffer in big-endian order;
+     * the upper four bytes remain zero. This is the layout the syncd {@code valueMac} HMAC
+     * input requires for the version field.
      *
-     * @implNote
-     * This implementation writes only the low four bytes; the high four are left at the
-     * zero-initialised default rather than re-zeroed, which is also what WA Web's
-     * {@code DataView.setUint32(4, e, false)} achieves on a fresh {@code ArrayBuffer(8)}.
+     * @implNote This implementation writes only the low four bytes and leaves the high four at
+     * their zero-initialised default rather than re-zeroing them.
      *
-     * @param value the value to encode (treated as unsigned 32-bit)
+     * @param value the value to encode, treated as an unsigned 32-bit quantity
      * @return the 8-byte big-endian buffer
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "to64BitNetworkOrder", adaptation = WhatsAppAdaptation.DIRECT)
@@ -267,16 +252,13 @@ public final class SyncKeyUtils {
     /**
      * Compares two sync key ids in constant time.
      *
-     * @apiNote
-     * Used wherever the rotation flow gates an action on whether two key references match
-     * (e.g. "should this entry be rotated to the latest key?"). Two {@code null} inputs
-     * compare equal, mirroring the WA Web {@code Optional.equals} short-circuit at the
-     * caller site.
+     * <p>Two {@code null} inputs compare equal; exactly one {@code null} input compares
+     * unequal. Two non-null arrays compare equal when they are byte-for-byte identical, with
+     * the comparison performed in time independent of the position of the first differing
+     * byte.
      *
-     * @implNote
-     * This implementation delegates to {@link MessageDigest#isEqual(byte[], byte[])} for
-     * the constant-time guarantee; WA Web routes through
-     * {@code WACryptoPrimitives.verify} which provides the same property in the browser.
+     * @implNote This implementation delegates to
+     * {@link MessageDigest#isEqual(byte[], byte[])} for the constant-time guarantee.
      *
      * @param keyId1 the first key id bytes
      * @param keyId2 the second key id bytes
@@ -298,12 +280,10 @@ public final class SyncKeyUtils {
     /**
      * Returns the device id encoded in bytes 0-1 of a sync key id.
      *
-     * @apiNote
-     * Reads the {@code uint16} that identifies which device originally minted the key;
-     * used by the rotation flow's "ties broken by lowest device id" rule in
-     * {@link #findNewestKey(Collection)}.
+     * <p>Reads the leading {@code uint16} that identifies which device minted the key. A
+     * {@code null} key id or one shorter than {@link #KEY_ID_LENGTH} bytes yields {@code -1}.
      *
-     * @param keyId the raw key id bytes (must be at least 6 bytes)
+     * @param keyId the raw key id bytes, expected to be at least {@link #KEY_ID_LENGTH} bytes
      * @return the device id, or {@code -1} when {@code keyId} is {@code null} or too short
      */
     @WhatsAppWebExport(moduleName = "WASyncdKeyManagementUtils", exports = "getKeyDeviceId", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -317,13 +297,11 @@ public final class SyncKeyUtils {
     /**
      * Returns the key epoch encoded in bytes 2-5 of a sync key id.
      *
-     * @apiNote
-     * The epoch is the rotation counter; the newest key is the one with the highest epoch.
-     * Cobalt's rotation logic compares epochs to pick the active key and to gate the
-     * "rotate this entry to the latest key" decision in
-     * {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder}.
+     * <p>The epoch is the monotonically increasing rotation counter; the newest key is the one
+     * with the highest epoch. A {@code null} key id or one shorter than {@link #KEY_ID_LENGTH}
+     * bytes yields {@code -1}.
      *
-     * @param keyId the raw key id bytes (must be at least 6 bytes)
+     * @param keyId the raw key id bytes, expected to be at least {@link #KEY_ID_LENGTH} bytes
      * @return the key epoch, or {@code -1} when {@code keyId} is {@code null} or too short
      */
     public static int getKeyEpoch(byte[] keyId) {
@@ -334,12 +312,10 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Returns the epoch of an {@link AppStateSyncKey}, unwrapping the
-     * {@link Optional} chain.
+     * Returns the epoch of an {@link AppStateSyncKey}.
      *
-     * @apiNote
-     * Convenience overload for call sites that already hold the {@link AppStateSyncKey}
-     * wrapper.
+     * <p>Unwraps the optional key-id chain of {@code key} and delegates to
+     * {@link #getKeyEpoch(byte[])}; an absent or too-short key id yields {@code -1}.
      *
      * @param key the sync key
      * @return the epoch, or {@code -1} when the key id is absent or too short
@@ -354,10 +330,9 @@ public final class SyncKeyUtils {
     /**
      * Returns the next epoch value for a key derived from the supplied predecessor.
      *
-     * @apiNote
-     * Called by {@link SyncKeyRotationService} to seed the new key's epoch slot during
-     * rotation; the epoch is the only field the new key id changes monotonically so the
-     * server can order rotations.
+     * <p>The new epoch is one greater than the epoch encoded in {@code keyId}. The epoch is
+     * the only key-id field that advances monotonically across a rotation, so the server can
+     * order rotations by it.
      *
      * @param keyId the current key id bytes
      * @return the next epoch value
@@ -369,14 +344,12 @@ public final class SyncKeyUtils {
     /**
      * Builds a 6-byte sync key id from a device id and key epoch.
      *
-     * @apiNote
-     * The inverse of {@link #getKeyDeviceId(byte[])} plus {@link #getKeyEpoch(byte[])}; used
-     * by {@link SyncKeyRotationService} to mint the key id for a freshly rotated key.
+     * <p>Writes the device id as the leading {@code uint16} and the epoch as the trailing
+     * {@code uint32}, the inverse of {@link #getKeyDeviceId(byte[])} together with
+     * {@link #getKeyEpoch(byte[])}.
      *
-     * @implNote
-     * This implementation uses {@link ByteBuffer} (default big-endian) so the wire layout
-     * matches WA Web's {@code DataView.setUint16(0, deviceId)} followed by
-     * {@code DataView.setUint32(2, epoch)}.
+     * @implNote This implementation uses a default big-endian {@link ByteBuffer} so the wire
+     * layout matches the device-id-then-epoch ordering of the syncd key id.
      *
      * @param deviceId the device id of the creator
      * @param keyEpoch the key epoch
@@ -390,23 +363,20 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Returns the newest key from the supplied collection: highest epoch first, then lowest
-     * device id when epochs tie.
+     * Returns the newest key from the supplied collection, preferring the highest epoch and
+     * breaking ties by the lowest device id.
      *
-     * @apiNote
-     * Drives both {@link SyncKeyRotationService#getNewestKeyPair()} and
-     * {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder}'s active-key
-     * lookup. The lowest-device-id tiebreaker matches WA Web's
-     * {@code Math.min(...getKeyDeviceId)} so independently-rotating clients converge on the
-     * same winner deterministically.
+     * <p>The winner is the key with the greatest {@link #getKeyEpoch(AppStateSyncKey) epoch};
+     * when several keys share that epoch the one with the lowest
+     * {@link #getKeyDeviceId(byte[]) device id} wins. Entries without a key id are skipped
+     * rather than treated as candidates. A {@code null} or empty input yields {@code null}.
+     * The lowest-device-id tiebreaker is deterministic, so independently rotating clients
+     * converge on the same winner.
      *
-     * @implNote
-     * This implementation skips entries without a key id rather than throwing, mirroring
-     * WA Web's behaviour (the {@code .map(getKeyEpoch)} chain returns {@code NaN} for
-     * malformed entries which is then excluded by the {@code Math.max} comparison).
+     * @implNote This implementation skips entries without a key id rather than throwing.
      *
      * @param keys the available sync keys
-     * @return the newest key, or {@code null} when the input is null/empty
+     * @return the newest key, or {@code null} when the input is {@code null} or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdKeyManagement",
             exports = "getNewestKeyPair",
@@ -449,12 +419,10 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Returns the configured maximum number of days a sync key may be used before
-     * {@link SyncKeyRotationService} rotates it.
+     * Returns the configured maximum number of days a sync key may be used before rotation.
      *
-     * @apiNote
-     * The raw AB-prop value is returned without clamping; the rotation flow clamps it to
-     * the {@code [1, 90]} window inline. The default value when the AB prop is unset is
+     * <p>The raw {@link ABProp#SYNCD_KEY_MAX_USE_DAYS} value is returned without clamping; the
+     * rotation flow clamps it inline. The default value when the AB prop is unset is
      * {@code 30}.
      *
      * @param abPropsService the AB prop source
@@ -467,9 +435,9 @@ public final class SyncKeyUtils {
     /**
      * Returns the configured sentinel-mutation flush timeout in seconds.
      *
-     * @apiNote
-     * Used by the syncd logout path to bound how long the sentinel mutation flush waits
-     * before giving up. The default value when the AB prop is unset is {@code 3}.
+     * <p>Bounds how long the syncd logout path waits for the sentinel mutation flush before
+     * giving up. The default value when {@link ABProp#SYNCD_SENTINEL_TIMEOUT_SECONDS} is unset
+     * is {@code 3}.
      *
      * @param abPropsService the AB prop source
      * @return the configured {@code syncd_sentinel_timeout_seconds} value
@@ -482,10 +450,9 @@ public final class SyncKeyUtils {
      * Returns the configured maximum number of mutations that may be sent inline in a single
      * patch before the request builder switches to an MMS upload.
      *
-     * @apiNote
-     * Read by {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder} and
-     * clamped inline to {@code [100, 2000]}. The default value when the AB prop is unset
-     * is {@code 100}.
+     * <p>Read by {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder}, which
+     * clamps the value inline. The default value when
+     * {@link ABProp#SYNCD_INLINE_MUTATIONS_MAX_COUNT} is unset is {@code 100}.
      *
      * @param abPropsService the AB prop source
      * @return the configured {@code syncd_inline_mutations_max_count} value
@@ -498,10 +465,9 @@ public final class SyncKeyUtils {
      * Returns the configured maximum patch protobuf size in kilobytes before the request
      * builder switches to an MMS upload.
      *
-     * @apiNote
-     * Read by {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder} and
-     * clamped inline to {@code [10, 100]} kilobytes (then multiplied by 1000 for bytes).
-     * The default value when the AB prop is unset is {@code 10}.
+     * <p>Read by {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder}, which
+     * clamps the value inline. The default value when
+     * {@link ABProp#SYNCD_PATCH_PROTOBUF_MAX_SIZE} is unset is {@code 10}.
      *
      * @param abPropsService the AB prop source
      * @return the configured {@code syncd_patch_protobuf_max_size} value
@@ -511,13 +477,11 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Returns the configured number of days
-     * {@link MissingSyncKeyTimeoutScheduler} waits for a missing key before raising a fatal
-     * sync exception.
+     * Returns the configured number of days the timeout scheduler waits for a missing key
+     * before raising a fatal sync exception.
      *
-     * @apiNote
-     * Read by {@link MissingSyncKeyTimeoutScheduler} for the wait-for-key timeout. The
-     * default value when the AB prop is unset is {@code 7}.
+     * <p>Read by {@link MissingSyncKeyTimeoutScheduler} for the wait-for-key timeout. The
+     * default value when {@link ABProp#SYNCD_WAIT_FOR_KEY_TIMEOUT_DAYS} is unset is {@code 7}.
      *
      * @param abPropsService the AB prop source
      * @return the configured {@code syncd_wait_for_key_timeout_days} value
@@ -527,17 +491,17 @@ public final class SyncKeyUtils {
     }
 
     /**
-     * Returns whether {@link SyncKeyRotationService} should wait for a server acknowledgment
-     * before persisting a freshly rotated key.
+     * Returns whether a freshly rotated key must wait for a server acknowledgment before being
+     * persisted locally.
      *
-     * @apiNote
-     * Gates the order of the rotation steps: when {@code true} the rotation broadcast is
-     * sent first and the local store update only happens after the share returns. The
-     * default value when the AB prop is unset is {@code false}; the server default is
-     * {@code true}.
+     * <p>Gates the order of the rotation steps: when {@code true} the rotation broadcast is
+     * sent before the local store update, so persistence only happens after the share returns.
+     * The default value when
+     * {@link ABProp#WA_WEB_ENABLE_SYNCD_KEY_PERSISTENCE_ONLY_AFTER_SERVER_ACK} is unset is
+     * {@code false}.
      *
      * @param abPropsService the AB prop source
-     * @return {@code true} when key persistence should wait for server ACK
+     * @return {@code true} when key persistence should wait for a server acknowledgment
      */
     public static boolean getEnableSyncdKeyPersistenceOnlyAfterServerAck(ABPropsService abPropsService) {
         return abPropsService.getBool(ABProp.WA_WEB_ENABLE_SYNCD_KEY_PERSISTENCE_ONLY_AFTER_SERVER_ACK);

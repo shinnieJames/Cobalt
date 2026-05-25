@@ -14,40 +14,33 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Builds the MEX IQ stanza that retrieves a linked-identity (LID) change
- * notification.
+ * Builds the MEX IQ stanza that retrieves a linked-identity (LID) change notification.
  *
- * @apiNote Powers the LID migration flow. WA Web's
- * {@code WAWebMexLidChangeNotificationHandler.mexHandleLidChangeNotification}
- * dispatches this stanza (gated on
- * {@code WAWebUsernameGatingUtils.usernameDisplayedEnabled}) when the
- * server emits a {@code lid_change} notification, then inserts a chat-side
- * "change_lid" notification template so the user sees the new identifier.
- * Pair the dispatched stanza with {@link LidChangeNotificationMexResponse}
- * to consume the reply.
+ * <p>The request powers the LID migration flow: WhatsApp Web dispatches it when the server emits a
+ * {@code lid_change} notification, then inserts a chat-side change notification so the user sees the
+ * new identifier. The dispatched stanza is paired with {@link LidChangeNotificationMexResponse} to
+ * consume the reply.
  *
  * @see LidChangeNotificationMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexLidChangeNotification")
 public final class LidChangeNotificationMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled-document id the relay maps to the persisted query.
+     * Holds the compiled-document identifier the relay maps to the persisted query.
      *
-     * @apiNote Used as the {@code query_id} attribute of the outbound
-     * {@code <query>} node. Matches the {@code params.id} field of
-     * {@code WAWebMexLidChangeNotificationQuery.graphql} for the snapshot
-     * this file was generated against.
+     * <p>Emitted as the {@code query_id} attribute of the outbound {@code <query>} node.
+     *
+     * @implNote The value matches the compiled query for the WhatsApp Web snapshot this file was
+     * generated against, and must be rotated together with that bundle.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9892367127524985";
 
     /**
-     * The GraphQL operation name reported alongside this request.
+     * Holds the GraphQL operation name reported alongside this request.
      *
-     * @apiNote Mirrors {@code params.name} on
-     * {@code WAWebMexLidChangeNotificationQuery.graphql}; WA Web tags the
-     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
+     * <p>WhatsApp Web tags this name onto its per-operation latency metrics.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -56,8 +49,8 @@ public final class LidChangeNotificationMexRequest implements MexOperation.Reque
     /**
      * Constructs a LID-change notification fetch request.
      *
-     * @apiNote The compiled GraphQL document declares no variables; the
-     * dispatched stanza carries an empty {@code variables} object.
+     * <p>The compiled GraphQL document declares no variables; the dispatched stanza carries an empty
+     * {@code variables} object.
      */
     public LidChangeNotificationMexRequest() {
     }
@@ -81,9 +74,8 @@ public final class LidChangeNotificationMexRequest implements MexOperation.Reque
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation emits {@code {"variables": {}}} and
-     * defers envelope construction to
-     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
+     * @implNote This implementation emits {@code {"variables": {}}} and defers envelope construction
+     * to {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotification", exports = "parseLidChangeNotification",
             adaptation = WhatsAppAdaptation.ADAPTED)

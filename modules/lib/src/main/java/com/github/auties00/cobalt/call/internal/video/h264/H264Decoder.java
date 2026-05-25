@@ -17,16 +17,29 @@ import java.lang.invoke.MethodHandle;
 import java.util.Objects;
 
 /**
- * H.264 decoder backed by openh264's {@code ISVCDecoder} vtable. The
- * {@code WelsCreateDecoder} / {@code WelsDestroyDecoder} entry points
- * are plain functions; everything else (Initialize, DecodeFrame2,
- * Uninitialize) is dispatched through function-pointer fields of
- * {@link ISVCDecoderVtbl}.
+ * Decodes H.264 video into raw I420 frames through the openh264 codec library.
  *
- * <p>I/O contract: input is one or more H.264 NAL units in byte-stream
- * format (annexed or length-prefixed — openh264 accepts both); output
- * is a raw I420 planar buffer with width/height observed from the
- * decoded SPS.
+ * <p>Consumes one or more H.264 NAL units per call and yields a planar I420
+ * picture once the codec has assembled a complete frame. Input accepts both
+ * Annex-B byte-stream framing (NAL units delimited by {@code 00 00 00 01} start
+ * codes) and length-prefixed framing; openh264 parses either. The decoded
+ * picture geometry (width, height) is taken from the sequence parameter set
+ * carried in the bitstream, so callers do not configure it ahead of time.
+ *
+ * <p>The instance owns native resources for its whole lifetime and is not
+ * thread-safe: a single decoder must be driven from one thread, or externally
+ * serialised. Callers release the codec and its native memory through
+ * {@link #close()}.
+ *
+ * @implNote This implementation drives the {@code ISVCDecoder} C++ object
+ * directly rather than through a thin C shim. {@code WelsCreateDecoder} and
+ * {@code WelsDestroyDecoder} are plain exported functions, but every method on
+ * the codec instance ({@code Initialize}, {@code DecodeFrame2},
+ * {@code Uninitialize}) lives in the virtual table whose address sits in the
+ * first pointer-sized slot of the instance. Each such method is bound to a
+ * {@link MethodHandle} once at construction by reading the function pointer out
+ * of {@link ISVCDecoderVtbl} and the instance pointer is passed back as the
+ * implicit {@code this} (here named {@code self}) on every call.
  */
 public final class H264Decoder implements AutoCloseable {
     static {
@@ -34,51 +47,69 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Per-instance arena for the decoder pointer, the vtable slice,
-     * and the reusable scratch buffers.
+     * Backs the decoder instance pointer, the virtual-table slice, and the
+     * reusable scratch structures for this decoder's whole lifetime.
+     *
+     * <p>Allocated as a shared arena so the native memory may be touched from
+     * any thread, and closed by {@link #close()} once teardown completes.
      */
     private final Arena arena;
 
     /**
-     * The {@code ISVCDecoder} pointer returned by
-     * {@code WelsCreateDecoder} — passed as {@code self} to every
-     * vtable method, and to {@code WelsDestroyDecoder} at teardown.
+     * Holds the {@code ISVCDecoder} instance pointer returned by
+     * {@code WelsCreateDecoder}.
+     *
+     * <p>Passed as the implicit {@code this} argument to every virtual-table
+     * method and to {@code WelsDestroyDecoder} at teardown. Reset to
+     * {@link MemorySegment#NULL} once the codec is destroyed, which marks the
+     * decoder closed for {@link #requireOpen()}.
      */
     private MemorySegment self;
 
     /**
-     * Reusable {@code unsigned char *[3]} array for the decoded
-     * plane pointers populated by every {@code DecodeFrame2} call.
+     * Holds the reusable {@code unsigned char *[3]} array that
+     * {@code DecodeFrame2} fills with the three decoded plane pointers (Y, U,
+     * V) on every call.
      */
     private final MemorySegment planesArray;
 
     /**
-     * Reusable {@link TagBufferInfo} populated by
-     * {@code DecodeFrame2}.
+     * Holds the reusable {@code SBufferInfo} structure that
+     * {@code DecodeFrame2} fills with the decode status and the system-memory
+     * picture description (width, height, per-plane stride).
      */
     private final MemorySegment bufInfo;
 
     /**
-     * Cached downcall handle for {@code ISVCDecoderVtbl.DecodeFrame2}.
+     * Holds the cached downcall handle for the {@code DecodeFrame2} virtual
+     * table method.
      */
     private final MethodHandle decodeFrame2Handle;
 
     /**
-     * Cached downcall handle for {@code ISVCDecoderVtbl.Uninitialize}.
+     * Holds the cached downcall handle for the {@code Uninitialize} virtual
+     * table method.
      */
     private final MethodHandle uninitHandle;
 
     /**
-     * One decoded raw frame in I420 planar layout.
+     * Represents one decoded raw picture in I420 (YUV 4:2:0 planar) layout.
      *
-     * @param yuvI420 the decoded frame bytes
-     *                ({@code w*h + 2*(w/2)*(h/2)} bytes)
-     * @param width   frame width in pixels
-     * @param height  frame height in pixels
+     * <p>The byte array holds the full-resolution Y plane followed by the
+     * half-resolution U and V planes, packed contiguously with no inter-plane
+     * stride padding. Its length is therefore
+     * {@snippet : width*height + 2 * (width/2)*(height/2) }
+     *
+     * @param yuvI420 the decoded picture bytes in I420 plane order (Y, then U,
+     *                then V); never {@code null}
+     * @param width   the picture width in pixels, as carried in the bitstream
+     * @param height  the picture height in pixels, as carried in the bitstream
      */
     public record Frame(byte[] yuvI420, int width, int height) {
         /**
-         * Compact constructor — null-checks the payload.
+         * Validates that the picture payload is present.
+         *
+         * @throws NullPointerException if {@code yuvI420} is {@code null}
          */
         public Frame {
             Objects.requireNonNull(yuvI420, "yuvI420 cannot be null");
@@ -86,12 +117,20 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Constructs a new H.264 decoder with openh264's defaults — no
-     * postprocessing, error concealment off, output color format
-     * I420.
+     * Creates a decoder and initialises the underlying openh264 instance.
      *
-     * @throws WhatsAppCallException.H264        if openh264 initialisation fails
-     * @throws UnsatisfiedLinkError if libopenh264 cannot be loaded
+     * <p>Allocates the instance through {@code WelsCreateDecoder}, binds the
+     * required virtual-table methods, and calls {@code Initialize} with
+     * settings appropriate for realtime decode: I420 output color format, error
+     * concealment disabled, and no parse-only mode. On any failure the
+     * partially created native state and the arena are released before the
+     * triggering exception propagates, so a failed construction leaks nothing.
+     *
+     * @throws WhatsAppCallException.H264 if the codec cannot be created,
+     *                                    the virtual table is absent, or
+     *                                    {@code Initialize} fails
+     * @throws UnsatisfiedLinkError       if the openh264 native library cannot
+     *                                    be loaded
      */
     public H264Decoder() {
         this.arena = Arena.ofShared();
@@ -135,22 +174,23 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Decodes one H.264 access unit and returns the resulting raw
-     * I420 frame, or {@code null} if the decoder has not yet
-     * produced a complete picture.
+     * Decodes one access unit and returns the resulting I420 frame, or
+     * {@code null} when none is ready yet.
      *
-     * <p>Internally drives {@code DecodeFrame2} twice: once with the
-     * input bitstream, then once with {@code (NULL, 0)} to flush any
-     * pending decoded frame held by openh264's internal reorder
-     * buffer. WebRTC realtime streams emit one decoded frame per
-     * input access unit, so the flush call yields the picture
-     * synchronously — this matches openh264's documented sample
-     * pattern.
+     * <p>Copies the encoded bytes into native scratch memory, feeds them to the
+     * codec, and then issues a flush call so any picture the codec is holding
+     * in its reorder buffer is released in the same invocation. An empty input
+     * returns {@code null} without touching the codec. Because realtime WebRTC
+     * streams emit exactly one decoded picture per access unit, the flush makes
+     * the picture available synchronously rather than on the next call.
      *
-     * @param h264 the encoded H.264 bytes
-     * @return the decoded frame, or {@code null} if none was produced
-     * @throws IllegalStateException if the decoder is closed
-     * @throws WhatsAppCallException.H264         if openh264 returns non-zero
+     * @param h264 the encoded H.264 NAL units for one access unit; never
+     *             {@code null}, may be empty
+     * @return the decoded frame, or {@code null} if the codec produced no
+     *         complete picture
+     * @throws NullPointerException       if {@code h264} is {@code null}
+     * @throws IllegalStateException      if the decoder has been closed
+     * @throws WhatsAppCallException.H264 if the codec reports a decode error
      */
     public Frame decode(byte[] h264) {
         Objects.requireNonNull(h264, "h264 cannot be null");
@@ -170,16 +210,21 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Single {@code DecodeFrame2} call that reads back the plane
-     * pointers and {@link TagBufferInfo} and turns them into a
-     * {@link Frame} if the decoder produced one. Used both for the
-     * input-feed call and the flush call inside {@link #decode}.
+     * Performs a single {@code DecodeFrame2} call and materialises the result.
      *
-     * @param src    pointer to bitstream bytes (or {@code NULL} for
-     *               flush)
-     * @param srcLen byte length (or {@code 0} for flush)
-     * @return the decoded frame, or {@code null} if the call did not
-     *         produce one
+     * <p>Clears the three plane pointers, invokes the codec with the given
+     * source bytes (or a null/zero pair to flush), and returns a {@link Frame}
+     * only when the codec marks the buffer status as holding a complete
+     * picture. Used both for the input-feed call and the flush call inside
+     * {@link #decode(byte[])}.
+     *
+     * @param src    the pointer to the bitstream bytes, or
+     *               {@link MemorySegment#NULL} to flush
+     * @param srcLen the byte length of {@code src}, or {@code 0} to flush
+     * @return the decoded frame, or {@code null} if the call produced no
+     *         complete picture
+     * @throws WhatsAppCallException.H264 if the codec call fails or returns a
+     *                                    non-zero status
      */
     private Frame invokeDecode(MemorySegment src, int srcLen) {
         for (var i = 0; i < 3; i++) {
@@ -201,11 +246,18 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Reads the SPS-derived width/height/stride out of
-     * {@link #bufInfo} and copies the three planes from the
-     * pointers in {@link #planesArray} into a fresh I420 byte array.
+     * Copies the decoded picture out of the codec's internal buffers into a
+     * packed I420 byte array.
+     *
+     * <p>Reads the picture width, height, and per-plane stride from the
+     * system-memory buffer description in {@link #bufInfo}, then copies the
+     * full-resolution Y plane and the two half-resolution chroma planes from
+     * the pointers in {@link #planesArray} into a freshly allocated array. The
+     * chroma plane dimensions are derived as {@code width/2} by
+     * {@code height/2}, matching the 4:2:0 subsampling of I420.
      *
      * @return the decoded frame
+     * @throws WhatsAppCallException.H264 if any decoded plane pointer is null
      */
     private Frame readFrame() {
         var sysBuf = TagBufferInfo.UsrData.sSystemBuffer(TagBufferInfo.UsrData(bufInfo));
@@ -223,15 +275,22 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Copies one decoded plane out of openh264's internal buffer
-     * accounting for the (possibly padded) line stride.
+     * Copies one decoded plane into the destination array row by row.
      *
-     * @param planeIndex  0=Y, 1=U, 2=V
-     * @param planeWidth  pixel width of the plane
-     * @param planeHeight pixel height of the plane
-     * @param stride      byte stride of the plane
-     * @param dst         destination byte array
-     * @param dstOffset   destination start offset
+     * <p>The codec's plane buffers are laid out with a line stride that may
+     * exceed the plane's pixel width (the buffer is padded for alignment), so
+     * each row is copied for exactly {@code planeWidth} bytes from a source
+     * offset advanced by {@code stride}, packing the destination tightly.
+     *
+     * @param planeIndex  the plane to copy: {@code 0} for Y, {@code 1} for U,
+     *                    {@code 2} for V
+     * @param planeWidth  the plane width in pixels
+     * @param planeHeight the plane height in pixels
+     * @param stride      the plane byte stride between successive rows in the
+     *                    source buffer
+     * @param dst         the destination array
+     * @param dstOffset   the offset into {@code dst} at which this plane starts
+     * @throws WhatsAppCallException.H264 if the plane pointer is null
      */
     private void copyPlane(int planeIndex, int planeWidth, int planeHeight, int stride,
                            byte[] dst, int dstOffset) {
@@ -247,11 +306,23 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Calls {@code ISVCDecoder.Initialize(SDecodingParam *)} with
-     * defaults appropriate for WebRTC realtime decode — output
-     * format I420, no error-concealment IDR loop, postprocessing off.
+     * Calls the codec's {@code Initialize} method with realtime decode
+     * settings.
      *
-     * @param initHandle the cached Initialize vtable handle
+     * <p>Populates an {@code SDecodingParam} with full CPU availability, all
+     * dependency layers targeted, error concealment disabled, and parse-only
+     * mode off, then invokes the cached {@code Initialize} handle. The
+     * parameter struct lives in a per-call confined arena that is released as
+     * soon as initialisation returns.
+     *
+     * @param initHandle the cached downcall handle for the {@code Initialize}
+     *                   virtual table method
+     * @throws WhatsAppCallException.H264 if the codec call fails or returns a
+     *                                    non-zero status
+     * @implNote This implementation sets {@code uiTargetDqLayer} to {@code 0xff}
+     * (the all-layers sentinel) and {@code uiCpuLoad} to {@code 100}, which are
+     * openh264's documented defaults for decoding the highest available layer
+     * without artificial CPU throttling.
      */
     private void initialize(MethodHandle initHandle) {
         try (var scratch = Arena.ofConfined()) {
@@ -273,11 +344,12 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Builds a downcall handle from a vtable function-pointer slot.
+     * Binds a virtual-table function pointer to a downcall handle.
      *
-     * @param fnPtr the function pointer read from the vtable struct
-     * @param desc  the C-level signature descriptor
-     * @return a method handle suitable for {@code invokeExact}
+     * @param fnPtr the function pointer read from the virtual table struct
+     * @param desc  the native signature descriptor for the pointed-to function
+     * @return a method handle suitable for {@code invokeExact} dispatch
+     * @throws WhatsAppCallException.H264 if {@code fnPtr} is null
      */
     private static MethodHandle bindVtableFn(MemorySegment fnPtr, FunctionDescriptor desc) {
         if (fnPtr.equals(MemorySegment.NULL)) {
@@ -287,7 +359,9 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Throws if the decoder has been closed.
+     * Verifies that the decoder is still open.
+     *
+     * @throws IllegalStateException if the decoder has been closed
      */
     private void requireOpen() {
         if (self == null || self.equals(MemorySegment.NULL)) {
@@ -296,8 +370,11 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Calls {@code WelsDestroyDecoder} if the decoder pointer is
-     * still live.
+     * Destroys the native decoder instance if it is still live.
+     *
+     * <p>Calls {@code WelsDestroyDecoder} and nulls {@link #self} so subsequent
+     * calls become no-ops. Any failure inside the native destroy call is
+     * swallowed because teardown must not raise.
      */
     private void destroyDecoder() {
         if (self == null || self.equals(MemorySegment.NULL)) {
@@ -311,9 +388,11 @@ public final class H264Decoder implements AutoCloseable {
     }
 
     /**
-     * Tears down the decoder: calls {@code Uninitialize} via the
-     * vtable, then {@code WelsDestroyDecoder}, then closes the
-     * arena. Idempotent.
+     * Releases the decoder and all native resources it holds.
+     *
+     * <p>Calls {@code Uninitialize} through the virtual table, destroys the
+     * codec instance, and closes the arena. The call is idempotent: once the
+     * decoder has been closed, further calls return immediately.
      */
     @Override
     public void close() {

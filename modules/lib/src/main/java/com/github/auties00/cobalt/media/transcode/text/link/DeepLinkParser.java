@@ -16,227 +16,186 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
- * The deep-link recogniser consumed by the link-preview pipeline.
+ * Recognises the deep-link shapes consumed by the link-preview pipeline.
  *
- * @apiNote
- * Mirrors the link-preview-relevant subset of
- * {@code WAWebApiParse.parseAPICmd}: group-invite
- * ({@code chat.whatsapp.com/...}), business catalog
- * ({@code wa.me/c/...}), business product ({@code wa.me/p/.../...}),
- * and payment links ({@code wa.me/pay/...}). The parser strips the
- * relevant identifiers out of the URL so the per-source resolvers
- * can fetch the right data.
+ * <p>Recognises the four link-preview-relevant deep-link families: group invites
+ * ({@code chat.whatsapp.com/...}), business catalogs ({@code wa.me/c/...}), business
+ * products ({@code wa.me/p/.../...}), and payment links ({@code wa.me/pay/...}). The
+ * relevant identifiers are stripped out of the URL so the per-source resolvers can fetch
+ * the right data. Any URL that none of the four families matches resolves to
+ * {@link DeepLink.NotApplicable#INSTANCE}, leaving the regular fetch path to run.
  *
  * @implNote
- * This implementation is intentionally narrower than
- * {@code parseAPICmd}: WA Web's parser also recognises around twenty
- * other deep-link shapes (open-chat, call-link, message-yourself,
- * registration campaigns, sticker pack, etc.) all of which fall
- * through the JS pipeline as {@code APICmd.MSG_SEND} /
- * {@code NEW_CHAT} / etc. and are routed by a different module.
- * Those shapes never produce a preview card, so Cobalt collapses
- * everything outside the four supported shapes to
- * {@link DeepLink.NotApplicable#INSTANCE}, matching WA's outcome on
- * this code path.
+ * This implementation is intentionally narrower than the WA Web parser, which also
+ * recognises around twenty other deep-link shapes (open-chat, call-link, message-yourself,
+ * registration campaigns, sticker pack, and so on); those shapes fall through the JS
+ * pipeline as a message-send or new-chat command routed by a different module and never
+ * produce a preview card, so collapsing everything outside the four supported shapes to
+ * {@link DeepLink.NotApplicable#INSTANCE} matches the JS outcome on this code path.
  */
 @WhatsAppWebModule(moduleName = "WAWebApiParse")
 @WhatsAppWebModule(moduleName = "WAWebPaymentLinkUrlMetaData")
 @WhatsAppWebModule(moduleName = "WAWebMobilePlatforms")
 public final class DeepLinkParser {
     /**
-     * The cache of parsed payment-link regex maps keyed by the raw
-     * AB-prop value.
+     * Caches parsed payment-link regex maps keyed by the raw AB-prop value.
      *
-     * @apiNote
-     * Backs {@link #paymentLink(WhatsAppClient, ABPropsService, String)};
-     * a single AB-prop refresh costs one parse, not one per outgoing
-     * message.
+     * <p>Backs {@link #paymentLink(WhatsAppClient, ABPropsService, String)} so a single
+     * AB-prop refresh costs one parse, not one parse per outgoing message.
      *
      * @implNote
-     * A {@link ConcurrentHashMap} is used because outgoing messages
-     * run on virtual threads and several sends may race on the first
-     * parse after an AB-prop refresh.
+     * This implementation uses a {@link ConcurrentHashMap} because outgoing messages run
+     * on virtual threads and several sends may race on the first parse after an AB-prop
+     * refresh.
      */
     private static final Map<String, Map<Pattern, String>> PAYMENT_REGEX_CACHE = new ConcurrentHashMap<>();
 
     /**
-     * The web-origin prefix accepted by the catalog / product / group
-     * patterns.
+     * Holds the web-origin prefix accepted by the catalog, product, and group patterns.
      *
-     * @apiNote
-     * Mirrors {@code WAWebApiParseUtils.ORIGIN}; covers the
-     * {@code whatsapp.com}, {@code web.whatsapp.com}, and
+     * <p>Covers the {@code whatsapp.com}, {@code web.whatsapp.com}, and
      * {@code chat.whatsapp.com} hosts under either scheme.
      */
     private static final String WEB_ORIGIN = "https?://(?:web\\.|chat\\.)?whatsapp\\.com";
 
     /**
-     * The optional locale-tag path segment that may follow the
-     * origin.
+     * Holds the optional locale-tag path segment that may follow the origin.
      *
-     * @apiNote
-     * Mirrors {@code WAWebApiParseUtils.OPTIONAL_PATH_PART}; matches
-     * {@code /xx} or {@code /xx-yy} where {@code xx} and {@code yy}
-     * are two-letter language tags.
+     * <p>Matches {@code /xx} or {@code /xx-yy} where {@code xx} and {@code yy} are
+     * two-letter language tags.
      */
     private static final String OPTIONAL_PATH_PART = "(?:/(?:[a-z]{2}|[a-z]{2}-[a-z]{2}))?";
 
     /**
-     * The pattern matching {@code chat.whatsapp.com/...?code=...}
-     * accept-style group invites.
+     * Matches {@code chat.whatsapp.com/...?code=...} accept-style group invites.
      *
-     * @apiNote
-     * Mirrors the {@code _} regex in {@code WAWebApiParse}; the
-     * second capture group carries the invite code.
+     * <p>The second capture group carries the invite code.
      */
     private static final Pattern ACCEPT_GROUP_INVITE = Pattern.compile(
             "^" + WEB_ORIGIN + OPTIONAL_PATH_PART + "/accept/?\\?code=(\\w+)(?:&.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching {@code chat.whatsapp.com/invite/<code>}
-     * URLs.
+     * Matches {@code chat.whatsapp.com/invite/<code>} URLs.
      *
-     * @apiNote
-     * Mirrors the {@code f} regex in {@code WAWebApiParse}; capture
-     * group 1 carries the invite code.
+     * <p>Capture group one carries the invite code.
      */
     private static final Pattern INVITE_GROUP_INVITE = Pattern.compile(
             "^https?://chat\\.whatsapp\\.com/invite/(\\w+)(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching {@code chat.whatsapp.com/<code>} short
-     * invite URLs.
+     * Matches {@code chat.whatsapp.com/<code>} short invite URLs.
      *
-     * @apiNote
-     * Mirrors the {@code g} regex in {@code WAWebApiParse}; capture
-     * group 1 carries the invite code.
+     * <p>Capture group one carries the invite code.
      */
     private static final Pattern SHORT_GROUP_INVITE = Pattern.compile(
             "^https?://chat\\.whatsapp\\.com/(\\w+)(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching {@code whatsapp://chat?code=<code>} URLs.
+     * Matches {@code whatsapp://chat?code=<code>} URLs.
      *
-     * @apiNote
-     * Mirrors the {@code h} regex in {@code WAWebApiParse}; capture
-     * group 1 carries the invite code.
+     * <p>Capture group one carries the invite code.
      */
     private static final Pattern SCHEME_GROUP_INVITE = Pattern.compile(
             "^whatsapp://chat/?\\?code=(\\w+)(?:&.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching {@code wa.me/c/<jid>} catalog URLs.
+     * Matches {@code wa.me/c/<jid>} catalog URLs.
      *
-     * @apiNote
-     * Mirrors the {@code xe} regex in {@code WAWebApiParse}; capture
-     * group 1 carries the catalog owner's phone number.
+     * <p>Capture group one carries the catalog owner's phone number.
      */
     private static final Pattern WAME_CATALOG = Pattern.compile(
             "^https?://wa\\.me/c/([0-9]{0,20})(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching {@code whatsapp://catalog/<jid>} URLs.
+     * Matches {@code whatsapp://catalog/<jid>} URLs.
      *
-     * @apiNote
-     * Mirrors the {@code $e} regex in {@code WAWebApiParse}.
+     * <p>Capture group one carries the catalog owner's phone number.
      */
     private static final Pattern SCHEME_CATALOG = Pattern.compile(
             "^whatsapp://catalog/([0-9]{0,20})(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching catalog URLs hosted on the
-     * {@code whatsapp.com} origin
+     * Matches catalog URLs hosted on the {@code whatsapp.com} origin
      * ({@code https://whatsapp.com/catalog/<jid>}).
      *
-     * @apiNote
-     * Mirrors the {@code Pe} / {@code Ne} regexes in
-     * {@code WAWebApiParse}; collapsed here because both shapes
-     * resolve to the same {@link DeepLink.Catalog}.
+     * <p>Both the bare-host and locale-prefixed shapes collapse to this single pattern
+     * because both resolve to the same {@link DeepLink.Catalog}.
      */
     private static final Pattern WEB_CATALOG = Pattern.compile(
             "^" + WEB_ORIGIN + OPTIONAL_PATH_PART + "/catalog/([0-9]{0,20})(/?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching {@code wa.me/p/<productId>/<businessJid>}
-     * URLs with numeric product ids.
+     * Matches {@code wa.me/p/<productId>/<businessJid>} URLs with numeric product ids.
      *
-     * @apiNote
-     * Mirrors the {@code j} regex in {@code WAWebApiParse}; capture
-     * group 1 carries the product id, group 2 the business owner's
-     * phone number.
+     * <p>Capture group one carries the product id, group two the business owner's phone
+     * number.
      */
     private static final Pattern WAME_PRODUCT = Pattern.compile(
             "^https?://wa\\.me/p/([0-9]{0,20})/([0-9]{0,20})(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching
-     * {@code whatsapp://product/<productId>/<businessJid>} URLs.
+     * Matches {@code whatsapp://product/<productId>/<businessJid>} URLs.
      *
-     * @apiNote
-     * Mirrors the {@code K} regex in {@code WAWebApiParse}.
+     * <p>Capture group one carries the product id, group two the business owner's phone
+     * number.
      */
     private static final Pattern SCHEME_PRODUCT = Pattern.compile(
             "^whatsapp://product/([0-9]{0,20})/([0-9]{0,20})(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching product URLs hosted on the
-     * {@code whatsapp.com} origin
+     * Matches product URLs hosted on the {@code whatsapp.com} origin
      * ({@code https://whatsapp.com/product/<productId>/<businessJid>}).
      *
-     * @apiNote
-     * Mirrors the {@code Q} regex in {@code WAWebApiParse}.
+     * <p>Capture group one carries the product id, group two the business owner's phone
+     * number.
      */
     private static final Pattern WEB_PRODUCT = Pattern.compile(
             "^" + WEB_ORIGIN + OPTIONAL_PATH_PART + "/product/([0-9]{0,20})/([0-9]{0,20})(/?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching
-     * {@code wa.me/p/<retailerId>/<businessJid>} URLs where the
-     * product identifier is a free-form retailer id.
+     * Matches {@code wa.me/p/<retailerId>/<businessJid>} URLs whose product identifier is
+     * a free-form retailer id.
      *
-     * @apiNote
-     * Mirrors the {@code Z} regex in {@code WAWebApiParse}; permits
-     * any non-slash characters in capture group 1 so non-numeric
-     * retailer SKUs match.
+     * <p>Permits any non-slash characters in capture group one so non-numeric retailer
+     * SKUs match; group two carries the business owner's phone number.
      */
     private static final Pattern WAME_PRODUCT_RETAILER = Pattern.compile(
             "^https?://wa\\.me/p/([^/]{0,200})/([0-9]{0,20})(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching
-     * {@code whatsapp://product/<retailerId>/<businessJid>} URLs.
+     * Matches {@code whatsapp://product/<retailerId>/<businessJid>} URLs whose product
+     * identifier is a free-form retailer id.
      *
-     * @apiNote
-     * Mirrors the {@code ee} regex in {@code WAWebApiParse}.
+     * <p>Permits any non-slash characters in capture group one; group two carries the
+     * business owner's phone number.
      */
     private static final Pattern SCHEME_PRODUCT_RETAILER = Pattern.compile(
             "^whatsapp://product/([^/]{0,200})/([0-9]{0,20})(?:\\?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The pattern matching retailer-product URLs hosted on the
-     * {@code whatsapp.com} origin.
+     * Matches retailer-product URLs hosted on the {@code whatsapp.com} origin.
      *
-     * @apiNote
-     * Mirrors the {@code te} regex in {@code WAWebApiParse}.
+     * <p>Permits any non-slash characters in capture group one; group two carries the
+     * business owner's phone number.
      */
     private static final Pattern WEB_PRODUCT_RETAILER = Pattern.compile(
             "^" + WEB_ORIGIN + OPTIONAL_PATH_PART + "/product/([^/]{0,200})/([0-9]{0,20})(/?.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * The hidden constructor of the utility class.
+     * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -247,28 +206,23 @@ public final class DeepLinkParser {
     /**
      * Recognises the deep-link shape of {@code url}.
      *
-     * @apiNote
-     * Called by the link-preview pipeline before issuing the rich
-     * fetch so the catalog, group-invite, and payment branches can
-     * short-circuit the og-tag scrape; returns
-     * {@link DeepLink.NotApplicable#INSTANCE} for any URL the four
-     * supported shapes do not match, leaving the regular fetch path
-     * to run.
+     * <p>Tries the group-invite, catalog, and product shapes in order, then falls back to
+     * {@link #paymentLink(WhatsAppClient, ABPropsService, String)}. Returns
+     * {@link DeepLink.NotApplicable#INSTANCE} for a {@code null} {@code url} and for any
+     * URL none of the four supported shapes matches, allowing the link-preview pipeline to
+     * short-circuit the og-tag scrape on the recognised branches and run the regular fetch
+     * otherwise.
      *
      * @implNote
-     * This implementation tries the group-invite, catalog, and
-     * product shapes in JS source order and finally falls back to
-     * {@link #paymentLink} so the recognised PSP set tracks the
-     * {@link ABProp#SMB_PAYMENT_LINKS_URL_REGEX_LIST} AB-prop rather
-     * than being hard-coded.
+     * This implementation falls back to {@link #paymentLink(WhatsAppClient, ABPropsService, String)}
+     * last so the recognised payment-service-provider set tracks the
+     * {@link ABProp#SMB_PAYMENT_LINKS_URL_REGEX_LIST} AB-prop rather than being hard-coded.
      *
-     * @param client         the WhatsApp client used to derive SMB
-     *                       status for the payment-link branch
-     * @param abPropsService the AB-props service consulted by the
+     * @param client         the WhatsApp client used to derive SMB status for the
      *                       payment-link branch
+     * @param abPropsService the AB-props service consulted by the payment-link branch
      * @param url            the URL to inspect
-     * @return the parsed deep-link, or
-     *         {@link DeepLink.NotApplicable#INSTANCE}
+     * @return the parsed deep-link, or {@link DeepLink.NotApplicable#INSTANCE}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiParse", exports = "parseAPICmd",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -313,20 +267,19 @@ public final class DeepLinkParser {
     }
 
     /**
-     * Returns the {@link DeepLink.PaymentLink} matching {@code url}
-     * against the AB-prop-driven PSP regex map, or {@code null} when
-     * no configured regex matches.
+     * Returns the {@link DeepLink.PaymentLink} matching {@code url} against the
+     * AB-prop-driven payment-service-provider regex map.
      *
-     * @apiNote
-     * Mirrors {@code WAWebPaymentLinkUrlMetaData.getPaymentLinkUrlMetaData};
-     * iterated in JSON-declaration order so the first matching entry
-     * wins. The {@code shouldDetectInComposer} flag on the returned
-     * variant is {@code true} only on SMB clients
-     * (Android-Business or iOS-Business), matching the JS
-     * {@code o("WAWebMobilePlatforms").isSMB()} call.
+     * <p>Reads {@link ABProp#SMB_PAYMENT_LINKS_URL_REGEX_LIST}, iterates its entries in
+     * JSON-declaration order so the first matching entry wins, and returns the matched
+     * payment-link. Returns {@code null} when any argument is {@code null}, when the
+     * AB-prop is unset or empty, or when no configured regex matches. The
+     * {@link DeepLink.PaymentLink#shouldDetectInComposer()} flag on the returned variant is
+     * {@code true} only on SMB clients (Android-Business or iOS-Business), as decided by
+     * {@link #isSmb(WhatsAppClient)}.
      *
-     * @param client         the WhatsApp client used to determine SMB
-     *                       status from the local device platform
+     * @param client         the WhatsApp client used to determine SMB status from the
+     *                       local device platform
      * @param abPropsService the AB-props service consulted for
      *                       {@link ABProp#SMB_PAYMENT_LINKS_URL_REGEX_LIST}
      * @param url            the URL to inspect
@@ -356,20 +309,18 @@ public final class DeepLinkParser {
     }
 
     /**
-     * Parses the AB-prop JSON value into a regex-to-PSP-label map.
+     * Parses the AB-prop JSON value into a regex-to-payment-service-provider-label map.
      *
-     * @apiNote
-     * Called from {@link #paymentLink} via
-     * {@link Map#computeIfAbsent(Object, java.util.function.Function)}
-     * so the parse happens at most once per distinct AB-prop value.
+     * <p>Invoked from {@link #paymentLink(WhatsAppClient, ABPropsService, String)} via
+     * {@link Map#computeIfAbsent(Object, java.util.function.Function)} so the parse happens
+     * at most once per distinct AB-prop value. Returns an empty map for a {@code null},
+     * empty, or malformed top-level JSON object.
      *
      * @implNote
-     * This implementation silently skips malformed entries (broken
-     * regexes, non-string values) to mirror the JS, which iterates
-     * the parsed object with a {@code for ... in} loop that ignores
-     * any entry whose value is not a string and propagates the
-     * {@code SyntaxError} a bad regex would raise at match time, not
-     * parse time.
+     * This implementation silently skips individual malformed entries (broken regexes,
+     * non-string values) to mirror the JS, which iterates the parsed object with a
+     * {@code for ... in} loop that ignores any entry whose value is not a string and only
+     * raises a bad regex at match time, not at parse time.
      *
      * @param raw the AB-prop JSON value
      * @return the parsed map, possibly empty
@@ -397,19 +348,17 @@ public final class DeepLinkParser {
     }
 
     /**
-     * Returns whether the local client runs the SMB (WhatsApp
-     * Business) variant.
+     * Returns whether the local client runs the SMB (WhatsApp Business) variant.
      *
-     * @apiNote
-     * Mirrors {@code WAWebMobilePlatforms.isSMB()} which returns
-     * {@code true} for {@code SMBA} (Android Business) and
-     * {@code SMBI} (iOS Business). The flag decides whether the
-     * payment-link card materialises in the composer; non-SMB
-     * clients still see the URL but no preview card.
+     * <p>Returns {@code true} when the local device platform is one of the
+     * {@code _BUSINESS} variants ({@link ClientPlatformType#ANDROID_BUSINESS} or
+     * {@link ClientPlatformType#IOS_BUSINESS}), and {@code false} when the device is unset
+     * or runs a consumer platform. The flag decides whether the payment-link card
+     * materialises in the composer; non-SMB clients still see the URL but no preview card.
      *
      * @param client the WhatsApp client
-     * @return {@code true} when the device platform is one of the
-     *         {@code _BUSINESS} variants
+     * @return {@code true} when the device platform is one of the {@code _BUSINESS}
+     *         variants
      */
     @WhatsAppWebExport(moduleName = "WAWebMobilePlatforms", exports = "isSMB",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -424,26 +373,19 @@ public final class DeepLinkParser {
     }
 
     /**
-     * The tagged union of deep-link shapes the link-preview pipeline
-     * dispatches on.
+     * Represents the tagged union of deep-link shapes the link-preview pipeline dispatches
+     * on.
      *
-     * @apiNote
-     * Switched on by
-     * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run};
-     * the four concrete variants map to the four
-     * link-preview-relevant {@code APICmd} result types from
-     * {@code WAWebApi}.
+     * <p>The four concrete variants map to the four link-preview-relevant deep-link result
+     * types; {@link NotApplicable} covers every other URL. The pipeline switches on the
+     * variant to pick the resolver, comparing {@link NotApplicable#INSTANCE} by identity.
      */
     public sealed interface DeepLink {
         /**
-         * The URL is a {@code chat.whatsapp.com} group invite link.
+         * Represents a {@code chat.whatsapp.com} group invite link.
          *
-         * @apiNote
-         * Dispatched to
-         * {@link com.github.auties00.cobalt.media.transcode.text.preview.GroupInvitePreviewResolver}
-         * which queries the group metadata via
-         * {@code WAWebQueryGroupInfoJob} and downloads the group's
-         * profile picture as the inline thumbnail.
+         * <p>Dispatched to the group-invite preview resolver, which queries the group
+         * metadata and downloads the group's profile picture as the inline thumbnail.
          *
          * @param code the group invite code
          */
@@ -451,14 +393,10 @@ public final class DeepLinkParser {
         }
 
         /**
-         * The URL is a business catalog link without a specific
-         * product.
+         * Represents a business catalog link without a specific product.
          *
-         * @apiNote
-         * Dispatched to
-         * {@link com.github.auties00.cobalt.media.transcode.text.preview.CatalogPreviewResolver}
-         * with a {@code null} product id, which renders the
-         * "View {owner}'s catalog on WhatsApp" card.
+         * <p>Dispatched to the catalog preview resolver with a {@code null} product id,
+         * which renders the catalog-of-owner card.
          *
          * @param catalogOwnerJid the JID of the catalog owner, in
          *                        {@code <number>@s.whatsapp.net} form
@@ -467,71 +405,52 @@ public final class DeepLinkParser {
         }
 
         /**
-         * The URL is a business product link pointing at a specific
-         * product.
+         * Represents a business product link pointing at a specific product.
          *
-         * @apiNote
-         * Dispatched to
-         * {@link com.github.auties00.cobalt.media.transcode.text.preview.CatalogPreviewResolver}
-         * which renders the product name, description, and price as
-         * the card.
+         * <p>Dispatched to the catalog preview resolver, which renders the product name,
+         * description, and price as the card.
          *
-         * @param productId        the product identifier (may be a
-         *                         numeric id or a free-form retailer
-         *                         SKU)
+         * @param productId        the product identifier (a numeric id or a free-form
+         *                         retailer SKU)
          * @param businessOwnerJid the JID of the business owner, in
-         *                         {@code <number>@s.whatsapp.net}
-         *                         form
+         *                         {@code <number>@s.whatsapp.net} form
          */
         record Product(String productId, String businessOwnerJid) implements DeepLink {
         }
 
         /**
-         * The URL is a payment-link deep link.
+         * Represents a payment-link deep link.
          *
-         * @apiNote
-         * Materialised onto the wire as a
-         * {@code PaymentLinkMetadata} carrying the PSP label; the
-         * preview card is only rendered when
-         * {@link #shouldDetectInComposer()} is {@code true} (SMB
-         * clients only), matching WA Web's
-         * {@code WAWebPaymentLinkUrlMetaData.isSMB()} check.
+         * <p>Materialised onto the wire as payment-link metadata carrying the
+         * payment-service-provider label; the preview card is rendered only when
+         * {@link #shouldDetectInComposer()} is {@code true}, which holds for SMB clients
+         * only.
          *
-         * @param psp                    the payment service provider
-         *                               matched from
+         * @param psp                    the payment service provider matched from
          *                               {@link ABProp#SMB_PAYMENT_LINKS_URL_REGEX_LIST}
-         * @param shouldDetectInComposer whether the composer should
-         *                               materialise a payment-link
-         *                               card
+         * @param shouldDetectInComposer whether the composer should materialise a
+         *                               payment-link card
          */
         record PaymentLink(String psp, boolean shouldDetectInComposer) implements DeepLink {
         }
 
         /**
-         * The URL is a regular web link, not a recognised WhatsApp
-         * deep-link.
+         * Represents a regular web link rather than a recognised WhatsApp deep-link.
          *
-         * @apiNote
-         * Returned for every URL outside the four
-         * preview-pipeline-relevant deep-link shapes; the rich-fetch
-         * branch of
-         * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline}
-         * runs in this case.
+         * <p>Returned for every URL outside the four preview-pipeline-relevant deep-link
+         * shapes, signalling that the rich-fetch branch of the text pipeline runs.
          */
         final class NotApplicable implements DeepLink {
             /**
-             * The shared singleton.
+             * Holds the shared singleton instance.
              *
-             * @apiNote
-             * Compared against by identity in the switch inside
-             * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run};
-             * Cobalt never instantiates a second
-             * {@code NotApplicable}.
+             * <p>Compared against by identity in the link-preview pipeline switch; a second
+             * {@code NotApplicable} is never instantiated.
              */
             public static final NotApplicable INSTANCE = new NotApplicable();
 
             /**
-             * The hidden constructor that enforces the singleton.
+             * Prevents instantiation and enforces the singleton.
              */
             private NotApplicable() {
             }

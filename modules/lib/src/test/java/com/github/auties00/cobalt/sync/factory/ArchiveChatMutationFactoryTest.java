@@ -12,27 +12,16 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 /**
- * Exercises {@link ArchiveChatMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing archive-chat mutation against the
- * {@code WAWebArchiveChatSync} JS encoder. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.ArchiveChatHandler}
- * whose inbound-side coverage lives in
- * {@code ArchiveChatHandlerTest}.
- *
- * @implNote
- * This implementation rebuilds the {@link SyncActionValueBuilder} graph
- * inline rather than calling {@link ArchiveChatMutationFactory} so the
- * test pins the exact field shape that the WA Web oracle captures
- * (archived flag, no message range), independent of any helper code in the
- * factory.
+ * Covers {@link ArchiveChatMutationFactory} against the captured WhatsApp Web
+ * encode oracle for {@code handler/archive-chat/encode}. The
+ * {@link SyncActionValueBuilder} graph is rebuilt inline rather than through
+ * the factory so the test pins the exact field shape the oracle captures
+ * (archived flag, no message range). The check is gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so it no-ops cleanly until
+ * the fixture is present.
  */
 @DisplayName("ArchiveChatMutationFactory")
 class ArchiveChatMutationFactoryTest {
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
     void byteParityWithOracle() {

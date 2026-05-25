@@ -29,23 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link PeerMessageSender}'s wire-stanza shape against the
- * {@code WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg} contract.
- *
- * @apiNote
- * Peer messages target one of the user's own devices, are encrypted
- * per-device via the Signal session cipher, and are wire-tagged with
- * {@code category="peer"} and {@code push_priority="high"} so the server
- * routes them on the linked-device shelf. The first send on a fresh
- * session yields a {@code PKMSG} envelope and a sibling
- * {@code <device-identity>} child; subsequent sends drop the identity
- * child once the recipient has processed the prekey.
- *
- * @implNote
- * This implementation drives the sender through a captured
- * {@link TestWhatsAppClient} and a
- * pre-established {@link TestSignalSession}
- * so the encryption stage runs against a real Signal session.
+ * Covers the {@link PeerMessageSender} wire-stanza shape. Peer messages target
+ * one of the user's own devices, encrypt per-device via the Signal session
+ * cipher, and carry {@code category="peer"} plus {@code push_priority="high"};
+ * the first send on a fresh session yields a {@code PKMSG} envelope with a
+ * sibling {@code <device-identity>}. The sender runs against a captured
+ * {@link TestWhatsAppClient} and a pre-established {@link TestSignalSession} so
+ * the encryption stage runs against a real Signal session.
  */
 @DisplayName("PeerMessageSender")
 class PeerMessageSenderTest {
@@ -53,12 +43,6 @@ class PeerMessageSenderTest {
     private static final Jid SELF_PRIMARY = Jid.of("12025550100:0@s.whatsapp.net");
     private static final Jid SELF_COMPANION = Jid.of("12025550100:73@s.whatsapp.net");
 
-    /**
-     * Asserts that a fresh-session peer send emits a
-     * {@code <message category="peer" push_priority="high">} with a
-     * {@code <enc type="pkmsg">} and a sibling
-     * {@code <device-identity>}.
-     */
     @Test
     @DisplayName("send: emits <message category=\"peer\" push_priority=\"high\"> with <enc> and <device-identity>")
     void sendShape() {
@@ -92,7 +76,6 @@ class PeerMessageSenderTest {
         assertNotNull(stanza, "PeerMessageSender must emit exactly one outbound <message>");
         assertEquals("message", stanza.description());
 
-        // Outer attrs the WAWebSendMsgCreateDeviceStanza pin.
         assertEquals("3EB0CAFEBABE", stanza.getAttributeAsString("id").orElseThrow());
         assertEquals(SELF_COMPANION.toString(), stanza.getAttributeAsString("to").orElseThrow(),
                 "outer to must be the target device JID");
@@ -115,10 +98,6 @@ class PeerMessageSenderTest {
         assertTrue(ack.isSuccess(), "stub returned a t-only ack so AckParser reports success");
     }
 
-    /**
-     * Asserts that {@code deviceService.ensureSessions} is invoked exactly
-     * once per peer send and receives the target device.
-     */
     @Test
     @DisplayName("send: invokes deviceService.ensureSessions exactly once with the target device")
     void ensureSessionsCalled() {
@@ -153,11 +132,6 @@ class PeerMessageSenderTest {
                 "ensureSessions must receive the target device JID");
     }
 
-    /**
-     * Asserts that the outer {@code type} attribute is derived from the
-     * payload (an {@code ExtendedTextMessage} body yields
-     * {@code type="text"}).
-     */
     @Test
     @DisplayName("send: stanza type is derived from the payload (text content -> type=\"text\")")
     void stanzaTypeFromContent() {
@@ -186,19 +160,6 @@ class PeerMessageSenderTest {
                 "ExtendedTextMessage payload must produce a type=\"text\" peer stanza");
     }
 
-    /**
-     * Builds a peer-bound
-     * {@link ChatMessageInfo} for
-     * the supplied target device.
-     *
-     * @apiNote
-     * Helper used by every peer-send test cell; pairs the target device
-     * JID as both the parent JID and the wire {@code to} attribute.
-     *
-     * @param id           the wire message id
-     * @param targetDevice the target device {@link Jid}
-     * @return the configured message info
-     */
     private static ChatMessageInfo peerMessageInfo(
             String id, Jid targetDevice) {
         var key = new MessageKeyBuilder()

@@ -30,22 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link TimeFormatHandler}'s parity with
- * {@code WAWebTimeFormatSync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * writes the boolean preference into
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)},
- * the malformed branch for missing or wrong-typed values, the
- * non-{@code SET} unsupported branch, the
- * {@link TimeFormatMutationFactory#getTimeFormatMutation(boolean)}
- * outgoing builder, and the default conflict-resolution tiebreaker.
- *
- * @implNote
- * The fixture seeds the store with the local identity only; each test
- * exercising the apply path resets the {@code twentyFourHourFormat}
- * field implicitly by recreating the store.
+ * Verifies {@link TimeFormatHandler} and the outgoing
+ * {@link TimeFormatMutationFactory}: applying an incoming time-format
+ * mutation and asserting the boolean preference written into
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)}.
+ * Each test recreates the store so the {@code twentyFourHourFormat} field
+ * starts at its default value.
  */
 @DisplayName("TimeFormatHandler")
 class TimeFormatHandlerTest {
@@ -54,35 +44,13 @@ class TimeFormatHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
-     * {@code twentyFourHourFormat} field starts at its default value.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given enabled flag and operation into a trusted
-     * mutation under the canonical {@code ["time_format"]} index.
-     *
-     * @apiNote
-     * The boxed {@link Boolean} {@code enabled} lets tests pass
-     * {@code null} to exercise the nullable-boolean-coalesces-to-false
-     * convention; the index is one-element because the action carries
-     * no per-instance qualifier.
-     *
-     * @param enabled the new 24-hour-enabled flag, or {@code null} to omit
-     * @param op      the mutation operation
-     * @param ts      the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null enabled flag exercises the nullable-boolean-coalesces-to-false convention.
     private static DecryptedMutation.Trusted timeFormatMutation(Boolean enabled, SyncdOperation op, Instant ts) {
         var action = new TimeFormatActionBuilder().isTwentyFourHourFormatEnabled(enabled).build();
         var value = new SyncActionValueBuilder().timestamp(ts).timeFormatAction(action).build();
@@ -168,9 +136,8 @@ class TimeFormatHandlerTest {
         @Test
         @DisplayName("WA Web does not validate index parts for time_format (singleton index)")
         void indexNotValidated() {
-            // The index for this singleton action carries only the action name. WA Web
-            // (and Cobalt) do not look at any trailing element, so a non-JSON or zero-arity
-            // index never reaches a malformed-index branch. Document this as n/a explicitly.
+            // The singleton time_format index carries only the action name; no trailing
+            // element is read, so a malformed index never reaches a malformed branch.
             var result = new TimeFormatHandler().applyMutation(
                     client, timeFormatMutation(Boolean.TRUE, SyncdOperation.SET, Instant.now()));
             assertEquals(SyncActionState.SUCCESS, result.actionState(),
@@ -184,9 +151,8 @@ class TimeFormatHandlerTest {
             var value = new SyncActionValueBuilder().timestamp(Instant.now()).timeFormatAction(action).build();
             var mutation = new DecryptedMutation.Trusted(
                     "not-json", value, SyncdOperation.SET, Instant.now(), 7);
-            // The handler never parses the index for the singleton time_format action, so
-            // the mutation still applies cleanly. This pins down the surface for future
-            // regressions: if a parse step is added, this test catches the behaviour change.
+            // The handler never parses the index, so even a non-JSON index applies cleanly;
+            // this regression-guards the surface against a future index-parse step.
             var result = new TimeFormatHandler().applyMutation(client, mutation);
             assertEquals(SyncActionState.SUCCESS, result.actionState());
         }
@@ -265,9 +231,8 @@ class TimeFormatHandlerTest {
         @Test
         @DisplayName("the default applyMutationBatch dispatches per-mutation to applyMutation")
         void defaultBatch() {
-            // TimeFormatHandler does NOT override applyMutationBatch, so the default
-            // implementation calls applyMutation once per mutation. Confirm by feeding
-            // a two-element batch and asserting the parallel result list.
+            // TimeFormatHandler does not override applyMutationBatch, so the default
+            // implementation dispatches applyMutation once per mutation.
             var batch = List.of(
                     timeFormatMutation(Boolean.TRUE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L)),
                     timeFormatMutation(Boolean.FALSE, SyncdOperation.REMOVE, Instant.ofEpochSecond(1700000010L)));

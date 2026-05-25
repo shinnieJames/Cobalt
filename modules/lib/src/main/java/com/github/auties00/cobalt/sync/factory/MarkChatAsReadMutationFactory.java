@@ -18,32 +18,22 @@ import java.util.List;
 /**
  * Builds outgoing mark-chat-as-read sync mutations.
  *
- * @apiNote
- * Drives the swipe-to-read and mark-unread gestures in the chat list;
- * receiving devices apply the read state via
- * {@code WAWebBackendApi.frontendSendAndReceive("updateChatReadStatus")}
- * and merge the carried message range into their active-message-range
- * map. Mutations produced here are consumed on the inbound side by
+ * <p>Backs the swipe-to-read and mark-unread gestures in the chat list. Receiving devices apply
+ * the read state and merge the carried message range into their active-message-range map.
+ * Mutations produced here are consumed on the inbound side by
  * {@link com.github.auties00.cobalt.sync.handler.MarkChatAsReadHandler}.
  *
  * @implNote
- * This implementation mirrors
- * {@code WAWebMarkChatAsReadSync.getMarkChatAsReadMutation} but takes the
- * pre-constructed {@link SyncActionMessageRange} as a parameter rather
- * than calling {@code WAWebMessageRangeUtils.constructMessageRange}
- * inline; building the range requires store infrastructure that lives at
- * a higher layer in Cobalt.
+ * This implementation mirrors {@code WAWebMarkChatAsReadSync.getMarkChatAsReadMutation} but takes
+ * the pre-constructed {@link SyncActionMessageRange} as a parameter rather than calling
+ * {@code WAWebMessageRangeUtils.constructMessageRange} inline; building the range requires store
+ * infrastructure that lives at a higher layer in Cobalt.
  */
 public final class MarkChatAsReadMutationFactory {
     /**
      * Constructs a mark-chat-as-read mutation factory.
      *
-     * @apiNote
-     * Required by the dependency-injection container before the factory
-     * is wired into the public mark-as-read setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient}. The
-     * factory keeps no state, so a single instance is sufficient per
-     * client.
+     * <p>The factory keeps no state, so a single instance is sufficient per client.
      */
     public MarkChatAsReadMutationFactory() {
 
@@ -52,31 +42,23 @@ public final class MarkChatAsReadMutationFactory {
     /**
      * Builds a pending mutation for marking a chat as read or unread.
      *
-     * @apiNote
-     * Invoked from the public mark-as-read setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient}. Receiving
-     * devices match the carried message range against their local range
-     * via {@code compareMessageRanges} and update the chat-table read
-     * counter only when the incoming range encloses the local one. The
-     * caller is responsible for supplying a non-null
-     * {@link SyncActionMessageRange}; the message-range conflict
-     * resolution on the receiver depends on it.
+     * <p>Receiving devices match the carried message range against their local range and update
+     * the chat-table read counter only when the incoming range encloses the local one. The caller
+     * is responsible for supplying a non-null {@link SyncActionMessageRange}; the message-range
+     * conflict resolution on the receiver depends on it.
      *
      * @implNote
-     * This implementation passes the supplied {@code chatJid} verbatim
-     * into the index. WA Web's {@code getChatJidMutationIndexForChat}
-     * would swap a PN for its paired LID under LID1x1 migration; Cobalt
-     * does not yet track the outgoing-mutation LID/PN swap at this
-     * layer.
+     * This implementation passes the supplied {@code chatJid} verbatim into the index. WA Web's
+     * {@code getChatJidMutationIndexForChat} would swap a PN for its paired LID under LID1x1
+     * migration; Cobalt does not yet track the outgoing-mutation LID/PN swap at this layer.
      *
      * @param timestamp    the mutation timestamp
-     * @param read         {@code true} to mark the chat as read,
-     *                     {@code false} to mark it as unread
+     * @param read         {@code true} to mark the chat as read, {@code false} to mark it as
+     *                     unread
      * @param chatJid      the JID of the chat
-     * @param messageRange the outgoing message range to embed in the
-     *                     {@code markChatAsReadAction} value; receiving
-     *                     devices use it to resolve conflicts with their
-     *                     local active range
+     * @param messageRange the outgoing message range to embed in the {@code markChatAsReadAction}
+     *                     value; receiving devices use it to resolve conflicts with their local
+     *                     active range
      * @return the pending mutation for the mark-chat-as-read operation
      */
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "getMarkChatAsReadMutation", adaptation = WhatsAppAdaptation.ADAPTED)

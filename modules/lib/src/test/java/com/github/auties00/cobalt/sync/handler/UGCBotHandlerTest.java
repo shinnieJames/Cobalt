@@ -28,22 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link UGCBotHandler}'s forward-looking adapter for the
- * {@code ugc_bot} action.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * persists the {@link UGCBotAction#definition()} bytes on
- * {@link WhatsAppStore#setUserCreatedBotDefinition(byte[])}, the
- * malformed branches (missing action, empty definition), the
- * {@link SyncdOperation#REMOVE} unsupported branch, and the default
- * conflict-resolution tiebreaker. WA Web ships no concrete handler so
- * the test surface enforces the Cobalt-inferred shape.
- *
- * @implNote
- * The fixture instantiates a handler per test rather than using a
- * singleton because the production constructor is public; each test
- * still runs against a fresh store.
+ * Verifies {@link UGCBotHandler}: applying an incoming {@code ugc_bot}
+ * mutation and asserting the {@link UGCBotAction#definition()} bytes
+ * persisted on {@link WhatsAppStore#setUserCreatedBotDefinition(byte[])}.
+ * Each test instantiates a fresh handler against a fresh store, so the
+ * user-created bot definition starts unset.
  */
 @DisplayName("UGCBotHandler")
 class UGCBotHandlerTest {
@@ -54,14 +43,6 @@ class UGCBotHandlerTest {
     private WhatsAppClient client;
     private UGCBotHandler handler;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} so the
-     * user-created bot definition starts at {@code null}.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -69,19 +50,7 @@ class UGCBotHandlerTest {
         handler = new UGCBotHandler();
     }
 
-    /**
-     * Wraps the given action and operation into a trusted mutation
-     * under the canonical {@code [actionName]} index.
-     *
-     * @apiNote
-     * Pass {@code null} for {@code action} to exercise the
-     * missing-action malformed branch.
-     *
-     * @param action the {@code ugc_bot} action, or {@code null} to omit
-     * @param op     the mutation operation
-     * @param ts     the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null action omits the payload to drive the missing-action malformed branch.
     private DecryptedMutation.Trusted build(UGCBotAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) {

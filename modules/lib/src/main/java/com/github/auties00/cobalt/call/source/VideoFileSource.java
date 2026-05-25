@@ -21,99 +21,105 @@ import java.util.Deque;
 import java.util.Objects;
 
 /**
- * Plays a media file as a {@link VideoSource}. Demuxes the first
- * video stream, decodes it, and runs each decoded frame through
- * libswscale to produce I420 (matching {@link VideoFrame}'s wire
- * layout).
+ * Plays a media file as a {@link VideoSource} for transmission in a call.
  *
- * <p>Output PTS is in milliseconds (rescaled from the stream's
- * native time base). End-of-stream is signalled by returning
- * {@code null} from {@link #next()}.
+ * <p>Opens the file, picks its first video stream, decodes it, and converts each decoded picture to
+ * I420 with libswscale so the output matches {@link VideoFrame}'s layout. Each frame's presentation
+ * timestamp is rescaled from the stream's native time base to milliseconds. End-of-stream is
+ * signalled by returning {@code null} from {@link #next()}.
  *
- * <p>Lifecycle: {@link #close()} releases all libav* resources.
- * Use with try-with-resources.
+ * @apiNote Wire this source into a call to stream a file's video to the remote participant. Always
+ * close the source (it is {@link AutoCloseable}, so prefer {@code try-with-resources}) to release
+ * the native demuxer, decoder, and scaler; otherwise their memory leaks for the life of the JVM.
  */
 public final class VideoFileSource implements VideoSource, AutoCloseable {
     /**
-     * Lifetime arena for native allocations.
+     * Holds the arena owning every native allocation this source makes, closed when the source
+     * closes.
      */
     private final Arena arena;
 
     /**
-     * libavformat demuxer context.
+     * Holds the libavformat demuxer context pointer, which owns the input file handle.
      */
     private final MemorySegment formatCtx;
 
     /**
-     * libavcodec decoder context.
+     * Holds the libavcodec decoder context pointer.
      */
     private final MemorySegment codecCtx;
 
     /**
-     * libswscale converter — input pixfmt → AV_PIX_FMT_YUV420P.
+     * Holds the libswscale converter pointer that scales the decoded pixel format to
+     * {@code AV_PIX_FMT_YUV420P}, lazily built and rebuilt when the frame geometry changes.
      */
     private MemorySegment swsCtx;
 
     /**
-     * Reusable demuxer packet.
+     * Holds the reusable demuxer packet pointer driven by the read loop.
      */
     private final MemorySegment packet;
 
     /**
-     * Reusable decoder output frame.
+     * Holds the reusable decoder output frame pointer that the decoder writes into.
      */
     private final MemorySegment frame;
 
     /**
-     * Index of the picked video stream.
+     * Holds the index of the video stream chosen from the container.
      */
     private final int streamIndex;
 
     /**
-     * Stream time base numerator — for PTS rescaling.
+     * Holds the numerator of the stream's time base, used to rescale presentation timestamps to
+     * milliseconds.
      */
     private final int timeBaseNum;
 
     /**
-     * Stream time base denominator — for PTS rescaling.
+     * Holds the denominator of the stream's time base, used to rescale presentation timestamps to
+     * milliseconds.
      */
     private final int timeBaseDen;
 
     /**
-     * Pre-converted output frames awaiting emission.
+     * Holds the queue of converted frames awaiting emission by {@link #next()}.
      */
     private final Deque<VideoFrame> ready = new ArrayDeque<>();
 
     /**
-     * Whether the demuxer has hit EOF and the decoder has been
-     * flushed.
+     * Holds whether the demuxer has reached end-of-input and the decoder has been flushed.
      */
     private boolean drained;
 
     /**
-     * The width of the most recently configured swscale context.
+     * Holds the width the current {@link #swsCtx} converter was built for.
      */
     private int swsW;
 
     /**
-     * The height of the most recently configured swscale context.
+     * Holds the height the current {@link #swsCtx} converter was built for.
      */
     private int swsH;
 
     /**
-     * The pixel format the swscale converter was built for. If a
-     * later frame uses a different format, the converter is torn
-     * down and rebuilt.
+     * Holds the source pixel format the current {@link #swsCtx} converter was built for.
+     *
+     * <p>When a later frame uses a different format, the converter is torn down and rebuilt.
      */
     private int swsFmt;
 
     /**
-     * Opens {@code path} and prepares the video decode pipeline.
+     * Opens the given media file and prepares the video decode pipeline.
+     *
+     * <p>Ensures the FFmpeg libraries are loaded, opens the file, picks its first video stream,
+     * records that stream's time base for timestamp rescaling, and opens a decoder for its codec. If
+     * any step fails the arena is closed before the exception propagates, so a failed construction
+     * leaks no native resources.
      *
      * @param path the media file to open
-     * @throws NullPointerException  if {@code path} is null
-     * @throws IllegalStateException if the file can't be opened
-     *                               or has no video stream
+     * @throws NullPointerException  if {@code path} is {@code null}
+     * @throws IllegalStateException if the file cannot be opened or has no video stream
      */
     public VideoFileSource(Path path) {
         Objects.requireNonNull(path, "path cannot be null");
@@ -159,10 +165,12 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Returns the next decoded I420 frame, or {@code null} on
-     * end-of-stream.
+     * {@inheritDoc}
      *
-     * @return the next frame, or {@code null}
+     * <p>Drives the demux-decode-convert pipeline until a frame is ready, then returns it. Returns
+     * {@code null} once the file is fully drained and no further frames remain.
+     *
+     * @return {@inheritDoc}
      */
     @Override
     public VideoFrame next() {
@@ -173,7 +181,11 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Drives one round of demux → decode → convert.
+     * Drives one round of demux, decode, and convert.
+     *
+     * <p>Reads one packet; on end-of-input it flushes the decoder and marks the source drained.
+     * Otherwise it feeds packets belonging to the chosen video stream to the decoder and converts
+     * the resulting frames.
      */
     private void pump() {
         var read = Ffmpeg.av_read_frame(formatCtx, packet);
@@ -200,8 +212,10 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Pulls every available frame out of the decoder and converts
-     * each to I420.
+     * Pulls every available frame out of the decoder and converts each to I420, queuing them for
+     * emission.
+     *
+     * @throws IllegalStateException if the decoder reports a hard failure
      */
     private void drainDecoder() {
         while (true) {
@@ -222,11 +236,17 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Runs libswscale to produce an I420 byte array for the
-     * current {@link #frame}, then wraps it in a {@link VideoFrame}
-     * with PTS rescaled to milliseconds.
+     * Converts the current {@link #frame} to I420 and wraps it in a {@link VideoFrame} with its
+     * presentation timestamp rescaled to milliseconds.
+     *
+     * <p>Rejects frames whose dimensions are below {@code 2} or odd, since I420's half-resolution
+     * chroma planes require even dimensions. Rebuilds the converter when the geometry changes, scales
+     * the three planes into a contiguous I420 buffer, and rescales the frame's best-effort timestamp
+     * from the stream time base to a non-negative millisecond value.
      *
      * @return the converted frame
+     * @throws IllegalStateException if the decoded frame has unsupported dimensions or the scale
+     *                               fails
      */
     private VideoFrame convertCurrentFrame() {
         var w = AVFrame.width(frame);
@@ -271,12 +291,17 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * (Re)builds the libswscale context when dimensions or pixel
-     * format change between frames.
+     * Rebuilds the libswscale converter when the frame dimensions or pixel format change between
+     * frames.
      *
-     * @param w   target width
-     * @param h   target height
-     * @param fmt source pixel format
+     * <p>Returns immediately when the current converter already matches the requested geometry;
+     * otherwise frees the old converter and builds one targeting {@code AV_PIX_FMT_YUV420P} at the
+     * same dimensions.
+     *
+     * @param w   the target width
+     * @param h   the target height
+     * @param fmt the source pixel format
+     * @throws IllegalStateException if the converter cannot be built
      */
     private void rebuildSwsIfNeeded(int w, int h, int fmt) {
         if (swsCtx != null && swsCtx.address() != 0L
@@ -297,7 +322,11 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Releases all native resources.
+     * Releases every native resource allocated by the source.
+     *
+     * <p>Frees the libswscale converter, the decoder output frame, the demuxer packet, the decoder
+     * context, and the demuxer context, then closes the owning arena. Guards each pointer against
+     * {@code null} and a zero address, so the call is idempotent.
      */
     @Override
     public void close() {
@@ -337,11 +366,10 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Walks {@code formatCtx.streams[]} and returns the index of
-     * the first video stream, or {@code -1}.
+     * Returns the index of the first video stream in the container, or {@code -1} when none exists.
      *
      * @param formatCtx the demuxer context
-     * @return the video stream index, or -1
+     * @return the video stream index, or {@code -1} if the container has no video stream
      */
     private static int pickVideoStream(MemorySegment formatCtx) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -359,11 +387,11 @@ public final class VideoFileSource implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Returns the {@code AVStream*} at the given index.
+     * Returns the {@code AVStream} pointer at the given index in the container.
      *
      * @param formatCtx the demuxer context
      * @param index     the stream index
-     * @return the stream pointer
+     * @return the stream pointer at that index
      */
     private static MemorySegment streamPointer(MemorySegment formatCtx, int index) {
         var n = AVFormatContext.nb_streams(formatCtx);

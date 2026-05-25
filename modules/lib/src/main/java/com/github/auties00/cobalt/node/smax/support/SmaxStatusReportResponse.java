@@ -14,39 +14,35 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound replies to {@link SmaxStatusReportRequest}, modelling the two
- * outcomes WA Web's {@code WASmaxSpamStatusReportRPC.sendStatusReportRPC} switches between:
- * accepted report and rejected report.
- *
- * @apiNote
- * Drives the "Report status" submit-result UI consumed by WA Web's {@code WAWebReportSpamJob};
- * a {@link Success} carries the optional report id used for follow-up, while {@link Error}
- * surfaces the relay's rejection code/text for banner rendering.
+ * Models the inbound reply to a {@link SmaxStatusReportRequest}.
+ * <p>
+ * This is a sealed family with exactly two variants: {@link Success} acknowledges that the
+ * report was accepted and carries the optional follow-up report id, while {@link Error}
+ * carries the relay's {@code (code, text)} rejection pair. The {@link #of(Node, Node)} factory
+ * selects the matching variant for an inbound {@code spam} IQ stanza.
  *
  * @implNote
- * This implementation matches WA Web's parser order: {@link Success} first, then
- * {@link Error}. An inbound stanza that fits neither shape returns an empty {@link Optional}
- * instead of WA Web's {@code SmaxParsingFailure}.
+ * This implementation matches WA Web's parser order by trying {@link Success} first and
+ * {@link Error} second. An inbound stanza that fits neither shape yields an empty
+ * {@link Optional} rather than raising a parse failure.
  */
 public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
         permits SmaxStatusReportResponse.Success, SmaxStatusReportResponse.Error {
 
     /**
-     * Parses the inbound status-report reply against each {@link SmaxStatusReportResponse}
-     * variant and returns the first that matches.
-     *
-     * @apiNote
-     * Use after the relay's IQ arrives in response to a {@link SmaxStatusReportRequest}; an
-     * empty {@link Optional} means the inbound stanza did not fit either of the two documented
-     * shapes.
+     * Parses the inbound status-report reply and returns the first matching variant.
+     * <p>
+     * Callers invoke this once the relay's IQ arrives in response to a
+     * {@link SmaxStatusReportRequest}. An empty {@link Optional} means the inbound stanza did
+     * not fit either of the two documented shapes.
      *
      * @implNote
      * This implementation tries {@link Success#of(Node, Node)} first and falls back to
-     * {@link Error#of(Node, Node)}; no parse exception is raised on total miss.
+     * {@link Error#of(Node, Node)}; no parse exception is raised when both miss.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the originating outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
+     * @return an {@link Optional} carrying the parsed variant, or empty when neither matches
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxSpamStatusReportRPC",
@@ -62,34 +58,24 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
     }
 
     /**
-     * Accepted-report variant carrying the optional opaque report id.
-     *
-     * @apiNote
-     * Surfaces the relay's "report queued" acknowledgement; {@link #reportId()} is empty when
-     * the relay did not assign a follow-up id.
-     *
-     * @implNote
-     * This implementation reads the id from the {@code <report id>} attribute per WA Web's
-     * {@code WASmaxInSpamReportIdMixin}.
+     * Models the accepted-report outcome carrying the optional opaque report id.
+     * <p>
+     * This variant represents the relay's acknowledgement that the report was queued.
+     * {@link #reportId()} is empty when the relay did not assign a follow-up id.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSpamStatusReportResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInSpamReportIdMixin")
     final class Success implements SmaxStatusReportResponse {
         /**
-         * The optional opaque report id assigned by the relay.
-         *
-         * @apiNote
-         * Surfaces the value of the {@code <report id>} attribute, or {@code null} when the
+         * Holds the optional opaque report id assigned by the relay.
+         * <p>
+         * This is the value of the {@code <report id>} attribute, or {@code null} when the
          * relay omitted it.
          */
         private final String reportId;
 
         /**
-         * Constructs an accepted-report reply from the parsed fields.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code <iq type="result"/>} envelope
-         * validated.
+         * Constructs an accepted-report reply from the parsed report id.
          *
          * @param reportId the optional report id; may be {@code null}
          */
@@ -99,9 +85,8 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
 
         /**
          * Returns the optional opaque report id.
-         *
-         * @apiNote
-         * Empty when the relay did not assign a follow-up id.
+         * <p>
+         * The result is empty when the relay did not assign a follow-up id.
          *
          * @return an {@link Optional} carrying the id, or empty when omitted
          */
@@ -111,9 +96,8 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
 
         /**
          * Tries to parse an inbound stanza as a {@link Success}.
-         *
-         * @apiNote
-         * Returns empty when the IQ envelope does not match a result for {@code request}.
+         * <p>
+         * Returns empty when the IQ envelope does not validate as a result for {@code request}.
          *
          * @implNote
          * This implementation defers IQ-envelope validation to
@@ -138,6 +122,12 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
             return Optional.of(new Success(reportId));
         }
 
+        /**
+         * Compares this reply to another for equality by report id.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success} with an equal report id
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -150,11 +140,21 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
             return Objects.equals(this.reportId, that.reportId);
         }
 
+        /**
+         * Returns a hash code derived from the report id.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(reportId);
         }
 
+        /**
+         * Returns a debug string carrying the report id.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxStatusReportResponse.Success[reportId=" + reportId + ']';
@@ -162,43 +162,38 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
     }
 
     /**
-     * Rejected-report variant carrying the relay's {@code (code, text)} error pair.
-     *
-     * @apiNote
-     * Surfaces the relay refusal; the caller renders an error banner. WA Web's
-     * {@code WASmaxInSpamSpamIqErrors} aliases the documented {@code (code, text)} combinations
-     * to UI strings; Cobalt forwards the raw pair.
+     * Models the rejected-report outcome carrying the relay's {@code (code, text)} error pair.
+     * <p>
+     * This variant represents the relay's refusal of the report. The numeric code and optional
+     * text are surfaced verbatim so the caller can render an error banner.
      *
      * @implNote
-     * This implementation delegates IQ-envelope and {@code <error/>} extraction to
-     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} (4xx) and
-     * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} (5xx).
+     * This implementation forwards the raw {@code (code, text)} pair rather than mapping the
+     * documented combinations to UI strings as WA Web does, leaving any such mapping to the
+     * caller. Extraction is delegated to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+     * for the 4xx range and {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} for
+     * the 5xx range.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSpamStatusReportResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInSpamSpamIqErrors")
     final class Error implements SmaxStatusReportResponse {
         /**
-         * The numeric error code from the {@code <error/>} envelope.
-         *
-         * @apiNote
-         * Surfaces the relay's classification of the rejection.
+         * Holds the numeric error code from the {@code <error/>} envelope.
+         * <p>
+         * This is the relay's classification of the rejection.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
-         *
-         * @apiNote
-         * Surfaces the paired text from {@code <error text="..."/>}; {@code null} when the
+         * Holds the optional human-readable error text.
+         * <p>
+         * This is the paired text from {@code <error text="..."/>}, or {@code null} when the
          * envelope omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a rejected-report reply from the parsed fields.
-         *
-         * @apiNote
-         * Invoked by {@link #of(Node, Node)} after the {@code <error/>} envelope validated.
+         * Constructs a rejected-report reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be {@code null}
@@ -210,9 +205,8 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
 
         /**
          * Returns the numeric error code.
-         *
-         * @apiNote
-         * Surfaces the relay's rejection classification.
+         * <p>
+         * This is the relay's classification of the rejection.
          *
          * @return the error code
          */
@@ -222,9 +216,9 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
 
         /**
          * Returns the optional error text.
-         *
-         * @apiNote
-         * Empty when the {@code <error/>} envelope omitted the {@code text} attribute.
+         * <p>
+         * The result is empty when the {@code <error/>} envelope omitted the {@code text}
+         * attribute.
          *
          * @return an {@link Optional} carrying the text, or empty when omitted
          */
@@ -234,9 +228,8 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
 
         /**
          * Tries to parse an inbound stanza as an {@link Error}.
-         *
-         * @apiNote
-         * Returns empty when neither the 4xx nor 5xx envelope matched.
+         * <p>
+         * Returns empty when neither the 4xx nor the 5xx envelope matched.
          *
          * @implNote
          * This implementation tries {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
@@ -262,6 +255,12 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
             return Optional.empty();
         }
 
+        /**
+         * Compares this reply to another for equality by error code and text.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link Error} with equal code and text
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -274,11 +273,21 @@ public sealed interface SmaxStatusReportResponse extends SmaxOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "SmaxStatusReportResponse.Error[errorCode=" + errorCode

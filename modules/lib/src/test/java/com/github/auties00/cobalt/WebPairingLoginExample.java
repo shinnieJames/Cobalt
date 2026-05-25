@@ -4,6 +4,11 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 import com.github.auties00.cobalt.util.SchedulerUtils;
 
+/**
+ * Runnable example that logs a Web client in via a phone-number pairing code, prints the code to
+ * stdout for entry on the phone, and on login sends a self-message after a short delay; run it as a
+ * single-file program through the launcher protocol.
+ */
 void main() throws IOException {
     var phoneNumber = 393495089819L;
     WhatsAppClient.builder()

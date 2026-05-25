@@ -10,23 +10,20 @@ import java.security.MessageDigest;
  *
  * <p>Points are held in extended twisted-Edwards coordinates as a
  * 4-element array of {@link Ed25519Field#LIMBS}-limb field elements
- * {@code {X, Y, Z, T}} satisfying {@code x = X/Z}, {@code y = Y/Z},
- * and {@code x*y = T/Z}, matching the {@code p3Element} layout of
- * {@link WhatsAppWebModule WACryptoEd25519} and the {@code lowlevel}
- * routines of {@link WhatsAppWebModule WACryptoPrimitives}.
+ * {@code {X, Y, Z, T}} satisfying {@code x = X/Z}, {@code y = Y/Z}, and
+ * {@code x*y = T/Z}.
  *
- * <p>The point operations and compressed-encoding helpers mirror
- * those WA Web exports byte-for-byte. Every operation is constant
- * time with respect to point coordinates and scalar bits; branches
- * on point or scalar data are implemented as masked
- * {@link Ed25519Field#sel25519} swaps.
+ * <p>Every operation is constant time with respect to point coordinates
+ * and scalar bits; branches on point or scalar data are implemented as
+ * masked {@link Ed25519Field#sel25519} swaps rather than data-dependent
+ * control flow.
  */
 @WhatsAppWebModule(moduleName = "WACryptoEd25519")
 @WhatsAppWebModule(moduleName = "WACryptoPrimitives")
 public final class Ed25519Point {
     /**
-     * The Edwards-curve constant {@code d = -121665 / 121666 (mod p)},
-     * encoded as 16 little-endian radix-{@code 2^16} limbs.
+     * Holds the Edwards-curve constant {@code d = -121665 / 121666 (mod
+     * p)}, encoded as 16 little-endian radix-{@code 2^16} limbs.
      */
     private static final long[] D = {
             0x78a3, 0x1359, 0x4dca, 0x75eb,
@@ -36,7 +33,7 @@ public final class Ed25519Point {
     };
 
     /**
-     * The constant {@code 2 * d}, used in the extended-Edwards
+     * Holds the constant {@code 2 * d}, used in the extended-Edwards
      * addition formula in {@link #add}.
      */
     private static final long[] D2 = {
@@ -47,8 +44,8 @@ public final class Ed25519Point {
     };
 
     /**
-     * The affine x-coordinate of the Ed25519 base point {@code B},
-     * encoded as 16 little-endian radix-{@code 2^16} limbs.
+     * Holds the affine x-coordinate of the Ed25519 base point
+     * {@code B}, encoded as 16 little-endian radix-{@code 2^16} limbs.
      */
     private static final long[] BASE_X = {
             0xd51a, 0x8f25, 0x2d60, 0xc956,
@@ -58,8 +55,8 @@ public final class Ed25519Point {
     };
 
     /**
-     * The affine y-coordinate of the Ed25519 base point {@code B},
-     * equal to {@code 4/5 (mod p)}.
+     * Holds the affine y-coordinate of the Ed25519 base point
+     * {@code B}, equal to {@code 4/5 (mod p)}.
      */
     private static final long[] BASE_Y = {
             0x6658, 0x6666, 0x6666, 0x6666,
@@ -69,7 +66,7 @@ public final class Ed25519Point {
     };
 
     /**
-     * The field element {@code sqrt(-1) mod p}, used in
+     * Holds the field element {@code sqrt(-1) mod p}, used in
      * {@link #unpackNeg} as the alternate square-root branch.
      */
     private static final long[] I = {
@@ -91,11 +88,10 @@ public final class Ed25519Point {
     /**
      * Allocates a fresh extended-Edwards point.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoEd25519}
-     * {@code p3Element}. Consumed wherever the package builds a
-     * scratch point before invoking {@link #scalarMult},
-     * {@link #scalarMultBase}, or {@link #unpack}.
+     * <p>The four field elements are zero-initialised; the caller fills
+     * them before use. This is the standard scratch allocation made
+     * before invoking {@link #scalarMult}, {@link #scalarMultBase}, or
+     * {@link #unpack}.
      *
      * @return a new {@code long[4][LIMBS]} array of zero-initialised
      *         field elements
@@ -112,14 +108,14 @@ public final class Ed25519Point {
     /**
      * Adds two extended-Edwards points in place: {@code p = p + q}.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.add}.
+     * <p>The right operand {@code q} is read only; the result
+     * overwrites {@code p}.
      *
      * @implNote
      * This implementation uses the unified Hisil-Wong-Carter-Dawson
-     * addition formula on extended twisted-Edwards coordinates; no
-     * branch depends on whether {@code p} and {@code q} are equal.
+     * addition formula on extended twisted-Edwards coordinates; the
+     * formula is complete, so it is correct even when {@code p} and
+     * {@code q} are equal, and no branch depends on that case.
      *
      * @param p the destination point (mutated)
      * @param q the right operand (read only)
@@ -157,13 +153,14 @@ public final class Ed25519Point {
     }
 
     /**
-     * Performs a constant-time conditional swap of two points: if
+     * Performs a constant-time conditional swap of two points: when
      * {@code b == 1} swaps {@code p} and {@code q} coordinate by
      * coordinate, otherwise leaves both unchanged.
      *
-     * @apiNote
-     * Used by {@link #scalarMult} for constant-time bit handling
-     * inside the Montgomery ladder.
+     * <p>Each coordinate is swapped through the masked
+     * {@link Ed25519Field#sel25519} primitive, so no branch depends on
+     * {@code b}. This drives the constant-time bit handling inside the
+     * Montgomery ladder of {@link #scalarMult}.
      *
      * @param p the first point
      * @param q the second point
@@ -176,14 +173,12 @@ public final class Ed25519Point {
     }
 
     /**
-     * Returns the parity of the canonical 32-byte encoding of a
-     * field element (the least-significant bit of byte 0).
+     * Returns the parity of the canonical 32-byte encoding of a field
+     * element, the least-significant bit of byte 0.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.par25519}; the parity bit is packed into the
-     * high bit of byte 31 by {@link #pack} to record the sign of an
-     * Edwards x-coordinate.
+     * <p>The parity bit is packed into the high bit of byte 31 by
+     * {@link #pack} to record the sign of an Edwards x-coordinate, and
+     * read back during decoding.
      *
      * @param a the field element
      * @return {@code 0} or {@code 1}
@@ -195,18 +190,15 @@ public final class Ed25519Point {
     }
 
     /**
-     * Performs a constant-time inequality test on two field
-     * elements.
+     * Performs a constant-time inequality test on two field elements.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.neq25519} which delegates to
-     * {@code crypto_verify_32}.
+     * <p>Compares the canonical encodings of {@code a} and {@code b} and
+     * reports whether they differ, without an early-exit branch on the
+     * compared bytes.
      *
      * @implNote
-     * This implementation compares the canonical 32-byte encodings
-     * via {@link MessageDigest#isEqual}, which has been documented
-     * constant time since JDK 7.
+     * This implementation compares the canonical 32-byte encodings via
+     * {@link MessageDigest#isEqual}, which is documented constant time.
      *
      * @param a the left field element
      * @param b the right field element
@@ -222,15 +214,14 @@ public final class Ed25519Point {
     }
 
     /**
-     * Encodes a point in compressed Edwards form: 32 bytes holding
-     * the y-coordinate, with the sign of x packed into the high bit
-     * of the last byte.
+     * Encodes a point in compressed Edwards form: 32 bytes holding the
+     * y-coordinate, with the sign of x packed into the high bit of the
+     * last byte.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoEd25519} {@code pack}
-     * (the local {@code j} helper) and tweetnacl's
-     * {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.pack}.
+     * <p>The projective coordinates are first normalised to affine form
+     * by dividing through by {@code Z}, then the y-coordinate is
+     * serialised and the sign of x is recorded in bit 255 via
+     * {@link #par25519}.
      *
      * @param r the 32-byte destination buffer
      * @param p the point to encode
@@ -250,21 +241,19 @@ public final class Ed25519Point {
      * Decodes a 32-byte compressed Edwards point and stores its
      * negation into {@code r}.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoEd25519}
-     * {@code unpackneg} and tweetnacl's
-     * {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.unpackneg}. The "negation on decode"
-     * convention comes from NaCl/SUPERCOP: Ed25519 verification uses
-     * {@code -A} where it would mathematically use {@code A}, so the
-     * public unpack routine pre-negates. Callers that want the
-     * actual decoded point must negate the X coordinate after, as
-     * {@link #unpack} does.
+     * <p>The "negation on decode" convention follows NaCl/SUPERCOP:
+     * Ed25519 verification uses {@code -A} where it would mathematically
+     * use {@code A}, so the public unpack routine pre-negates. Callers
+     * that want the actual decoded point must negate the X coordinate
+     * afterwards, as {@link #unpack} does. The y-coordinate is recovered
+     * from the low 255 bits and the x-coordinate from its packed sign
+     * bit; a candidate that does not satisfy the curve equation is
+     * rejected.
      *
      * @param r the destination point
      * @param p the 32-byte compressed encoding
-     * @return {@code 0} on success, {@code -1} when {@code p} does
-     *         not encode a valid curve point
+     * @return {@code 0} on success, {@code -1} when {@code p} does not
+     *         encode a valid curve point
      */
     public static int unpackNeg(long[][] r, byte[] p) {
         var t = Ed25519Field.gf();
@@ -316,24 +305,18 @@ public final class Ed25519Point {
     }
 
     /**
-     * Decodes a 32-byte compressed Edwards point as the actual
-     * encoded point, undoing the negation that {@link #unpackNeg}
-     * performs.
-     *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoEd25519} {@code unpack}
-     * (the local {@code U} helper), which exposes the
-     * positive-unpack on top of {@code unpackneg}.
+     * Decodes a 32-byte compressed Edwards point as the actual encoded
+     * point, undoing the negation that {@link #unpackNeg} performs.
      *
      * @implNote
-     * This implementation calls {@link #unpackNeg} into a scratch
-     * point and then negates X and T in place (Edwards negation maps
-     * {@code (X, Y, Z, T)} to {@code (-X, Y, Z, -T)}).
+     * This implementation calls {@link #unpackNeg} into a scratch point
+     * and then negates X and T in place, since Edwards negation maps
+     * {@code (X, Y, Z, T)} to {@code (-X, Y, Z, -T)}.
      *
      * @param r the destination point
      * @param p the 32-byte compressed encoding
-     * @return {@code 0} on success, {@code -1} when {@code p} does
-     *         not encode a valid curve point
+     * @return {@code 0} on success, {@code -1} when {@code p} does not
+     *         encode a valid curve point
      */
     public static int unpack(long[][] r, byte[] p) {
         var tmp = p3();
@@ -350,20 +333,17 @@ public final class Ed25519Point {
     }
 
     /**
-     * Variable-base scalar multiplication:
-     * {@code p = s * q} where {@code s} is a 32-byte little-endian
-     * scalar.
+     * Performs variable-base scalar multiplication: {@code p = s * q}
+     * where {@code s} is a 32-byte little-endian scalar.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.scalarmult}. The {@code q} input is used as
-     * scratch space by the ladder and must be a copy of any point
-     * the caller wants to keep.
+     * <p>The {@code q} input is used as scratch space by the ladder and
+     * is overwritten; callers must pass a copy of any point they want to
+     * keep.
      *
      * @implNote
      * This implementation runs a constant-time Montgomery ladder over
      * the 256 bits of {@code s}, using {@link #cswap} to mask the
-     * bit-dependent swap.
+     * bit-dependent swap so no branch reveals a scalar bit.
      *
      * @param p the destination point
      * @param q the base point (mutated as scratch space)
@@ -384,19 +364,15 @@ public final class Ed25519Point {
     }
 
     /**
-     * Fixed-base scalar multiplication: {@code p = s * B} where
+     * Performs fixed-base scalar multiplication: {@code p = s * B} where
      * {@code B} is the Ed25519 base point and {@code s} is a 32-byte
      * little-endian scalar.
      *
-     * @apiNote
-     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
-     * {@code lowlevel.scalarbase}.
-     *
      * @implNote
      * This implementation materialises the base point in extended
-     * coordinates and delegates to {@link #scalarMult}; the WA Web
-     * source does the same. A precomputed comb table would be
-     * faster but would diverge from the reference layout.
+     * coordinates and delegates to {@link #scalarMult}. A precomputed
+     * comb table would be faster but is deliberately avoided to keep the
+     * layout identical to the reference for diff-validation.
      *
      * @param p the destination point
      * @param s the scalar, 32 bytes little endian

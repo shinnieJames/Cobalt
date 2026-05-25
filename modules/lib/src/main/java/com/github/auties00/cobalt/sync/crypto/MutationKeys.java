@@ -27,14 +27,10 @@ import java.util.Objects;
  * derive an instance via {@link #ofSyncKey(byte[])}. The derived material is
  * never persisted; it is destroyed on {@link #close()}.
  *
- * @apiNote
- * Cobalt embedders rarely instantiate this directly; the sync pipeline drives
- * it from {@link EncryptedMutation#of}, {@link DecryptedMutation.Untrusted#of},
- * and {@link MutationIntegrityVerifier}. The class is exposed so test fixtures
- * and tools that need to round-trip wire bytes against a captured sync key can
- * reach the same primitives that {@code WAWebSyncdCrypto} and
- * {@code WAWebSyncdMutationsCryptoUtils} expose to the rest of WA Web's sync
- * stack.
+ * <p>The sync pipeline drives this class from {@link EncryptedMutation#of},
+ * {@link DecryptedMutation.Untrusted#of}, and {@link MutationIntegrityVerifier}.
+ * It is also reachable by test fixtures and tools that round-trip wire bytes
+ * against a captured sync key.
  *
  * @implNote
  * This implementation derives the keys eagerly on every {@link #ofSyncKey}
@@ -219,12 +215,11 @@ public final class MutationKeys implements AutoCloseable {
     /**
      * Derives the five mutation keys for a single sync key via HKDF-SHA256.
      *
-     * @apiNote
-     * Called by the sync pipeline at the boundary between the
+     * <p>Called by the sync pipeline at the boundary between the
      * {@code AppStateSyncKey} table (raw 32-byte secrets shared with the
-     * companion device) and the per-mutation crypto helpers in this class.
-     * The returned instance is reusable across every mutation that names the
-     * same {@code keyId} on the wire.
+     * companion device) and the per-mutation crypto helpers in this class. The
+     * returned instance is reusable across every mutation that names the same
+     * {@code keyId} on the wire.
      *
      * @implNote
      * This implementation performs HKDF-Extract with no salt (RFC 5869 default
@@ -275,12 +270,12 @@ public final class MutationKeys implements AutoCloseable {
      * Returns the HMAC-SHA256 of {@code indexBytes} under this instance's
      * index key.
      *
-     * @apiNote
-     * Used both to compute the {@code indexMac} attached to every outgoing
+     * <p>Used both to compute the {@code indexMac} attached to every outgoing
      * mutation (by {@link EncryptedMutation#of}) and to verify the wire
      * {@code indexMac} on an incoming mutation (by
      * {@link DecryptedMutation.Untrusted#of}). The index bytes are the UTF-8
-     * encoding of the JSON-array index string ({@code ["archive","jid"]}-style).
+     * encoding of the JSON-array index string, for example
+     * {@code ["archive","jid"]}.
      *
      * @param indexBytes the raw index bytes to authenticate
      * @return the 32-byte HMAC-SHA256 value
@@ -297,8 +292,7 @@ public final class MutationKeys implements AutoCloseable {
      * Slices the trailing {@value #MAC_LENGTH} bytes off an
      * {@code IV || ciphertext || valueMac} buffer.
      *
-     * @apiNote
-     * Helper used by both the encryption and decryption paths to recover the
+     * <p>Used by both the encryption and decryption paths to recover the
      * authenticator without recomputing it. The argument is the wire
      * {@code indexAndValueCipherText} blob exactly as it appears in
      * {@code SyncdMutation.value.blob}.
@@ -323,10 +317,9 @@ public final class MutationKeys implements AutoCloseable {
      * Builds the associated-data prefix that authenticates the
      * {@code (operation, keyId)} pair against the encrypted value.
      *
-     * @apiNote
-     * Mixed into the value MAC so that flipping a SET into a REMOVE, or
-     * replaying a ciphertext under a different sync key, fails MAC
-     * verification rather than silently succeeding. The layout is
+     * <p>Mixed into the value MAC so that flipping a SET into a REMOVE, or
+     * replaying a ciphertext under a different sync key, fails MAC verification
+     * rather than silently succeeding. The layout is
      * {@snippet :
      *     // [0x01 for SET, 0x02 for REMOVE]
      *     // || keyId (raw bytes, typically a 6-byte timestamp-based id)
@@ -357,11 +350,11 @@ public final class MutationKeys implements AutoCloseable {
     /**
      * Produces the random padding appended to a plaintext before AES-CBC encryption.
      *
-     * @apiNote
-     * Encryption-side helper used by {@link EncryptedMutation#of}. The padding
-     * is a length-disguising filler: WA Web pads the combined
-     * {@code (indexLength + valueLength)} up to a server-defined minimum so
-     * that very small mutations do not leak their size to a wire observer.
+     * <p>Encryption-side helper used by {@link EncryptedMutation#of}. The
+     * padding is a length-disguising filler: the combined
+     * {@code (indexLength + valueLength)} is padded up to a server-defined
+     * minimum so that very small mutations do not leak their size to a wire
+     * observer.
      *
      * @implNote
      * This implementation observes that the current server value
@@ -387,8 +380,7 @@ public final class MutationKeys implements AutoCloseable {
      * Encrypts a plaintext under this instance's value-encryption key, drawing
      * a fresh random IV.
      *
-     * @apiNote
-     * Convenience overload around
+     * <p>Convenience overload around
      * {@link #generateCipherText(byte[], byte[])} used on the outgoing path.
      * Every call returns a new {@code [IV || ciphertext]} pair, so the wire
      * value differs even when the plaintext is identical across calls.
@@ -408,9 +400,8 @@ public final class MutationKeys implements AutoCloseable {
      * Encrypts a plaintext under this instance's value-encryption key with a
      * caller-supplied IV and prepends the IV to the ciphertext.
      *
-     * @apiNote
-     * The fixed-IV overload exists for byte-exact fixture replay against a
-     * captured WA Web ciphertext; production paths always go through
+     * <p>The fixed-IV overload exists for byte-exact fixture replay against a
+     * captured ciphertext; production paths always go through
      * {@link #generateCipherText(byte[])}.
      *
      * @param iv        the {@value #IV_LENGTH}-byte IV
@@ -434,10 +425,9 @@ public final class MutationKeys implements AutoCloseable {
      * Computes the truncated HMAC-SHA512 over the AAD, the ciphertext, and a
      * trailing 8-byte length suffix.
      *
-     * @apiNote
-     * Produces the trailing 32 bytes of every wire {@code encryptedValue}.
-     * The same routine runs on both sides: encryption emits it,
-     * decryption recomputes it and compares against the wire value.
+     * <p>Produces the trailing 32 bytes of every wire {@code encryptedValue}.
+     * The same routine runs on both sides: encryption emits it, decryption
+     * recomputes it and compares against the wire value.
      *
      * @implNote
      * This implementation appends an 8-byte buffer whose last byte holds
@@ -468,10 +458,9 @@ public final class MutationKeys implements AutoCloseable {
     /**
      * Decrypts an AES-CBC ciphertext under this instance's value-encryption key.
      *
-     * @apiNote
-     * Driven by {@link DecryptedMutation.Untrusted#of} after the value MAC has
-     * validated. The IV must be the leading {@value #IV_LENGTH} bytes of the
-     * wire {@code encryptedValue} and the ciphertext must be the slice that
+     * <p>Driven by {@link DecryptedMutation.Untrusted#of} after the value MAC
+     * has validated. The IV must be the leading {@value #IV_LENGTH} bytes of
+     * the wire {@code encryptedValue} and the ciphertext must be the slice that
      * sits between the IV and the trailing MAC.
      *
      * @param iv         the {@value #IV_LENGTH}-byte IV
@@ -572,10 +561,9 @@ public final class MutationKeys implements AutoCloseable {
     /**
      * Returns the HMAC-SHA256 key used for snapshot MACs.
      *
-     * @apiNote
-     * Exposed for {@link MutationIntegrityVerifier#computeSnapshotMac} and
-     * the outgoing-patch MAC computation helpers; not consumed by the
-     * encrypt or decrypt paths.
+     * <p>Consumed by {@link MutationIntegrityVerifier#computeSnapshotMac} and
+     * the outgoing-patch MAC computation helpers, not by the encrypt or decrypt
+     * paths.
      *
      * @return the snapshot MAC key
      */
@@ -586,10 +574,9 @@ public final class MutationKeys implements AutoCloseable {
     /**
      * Returns the HMAC-SHA256 key used for patch MACs.
      *
-     * @apiNote
-     * Exposed for {@link MutationIntegrityVerifier#computePatchMac} and
-     * the outgoing-patch MAC computation helpers; not consumed by the
-     * encrypt or decrypt paths.
+     * <p>Consumed by {@link MutationIntegrityVerifier#computePatchMac} and the
+     * outgoing-patch MAC computation helpers, not by the encrypt or decrypt
+     * paths.
      *
      * @return the patch MAC key
      */

@@ -13,27 +13,24 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Applies the {@code quick_reply} app-state action that creates,
- * updates, or deletes WhatsApp Business quick reply templates.
+ * Applies the {@code quick_reply} app-state action that creates, updates, or
+ * deletes WhatsApp Business quick reply templates.
  *
- * @apiNote
- * Drives the WhatsApp Business "Quick replies" surface: each mutation
- * upserts or deletes a {@code (shortcut, message, keywords, count)}
- * record keyed by quick reply id. The mutation index keys each entry
- * by the quick reply id, formatted as {@snippet :
+ * <p>Each mutation upserts or deletes a
+ * {@code (shortcut, message, keywords, count)} record keyed by quick reply id.
+ * The mutation index keys each entry by the quick reply id, formatted as
+ * {@snippet :
  *     ["quick_reply", quickReplyId]
  * }
  *
  * @implNote
  * This implementation persists each entry on
  * {@link com.github.auties00.cobalt.store.WhatsAppStore} via
- * {@code addQuickReply}/{@code removeQuickReply} keyed by id; WA Web
- * stores the same shape in the {@code quick-reply} IndexedDB table
- * via {@code WAWebSchemaQuickReply.getQuickReplyTable().createOrReplace}/{@code .remove}.
- * The {@code WAWebBackendApi.frontendFireAndForget("updateQuickReplyCollection" /
- * "removeQuickReplyFromCollection")} dispatches are dropped because
- * Cobalt has no UI consumer; the per-batch
- * {@code WALogger.WARN} counters are also dropped.
+ * {@code addQuickReply}/{@code removeQuickReply} keyed by id; WA Web stores the
+ * same shape in the {@code quick-reply} IndexedDB table. The
+ * {@code WAWebBackendApi.frontendFireAndForget} dispatches are dropped because
+ * Cobalt has no UI consumer; the per-batch {@code WARN} counters are also
+ * dropped.
  */
 @WhatsAppWebModule(moduleName = "WAWebQuickRepliesSync")
 public final class QuickReplyHandler implements WebAppStateActionHandler {
@@ -41,13 +38,9 @@ public final class QuickReplyHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton quick reply sync handler.
      *
-     * @apiNote
-     * Used by the sync handler registry; consumers should never need to
-     * call this constructor directly.
-     *
      * @implNote
-     * This implementation is stateless; no AB-prop, store, or WAM
-     * dependency is held.
+     * This implementation is stateless; no AB-prop, store, or WAM dependency is
+     * held.
      */
     @WhatsAppWebExport(moduleName = "WAWebQuickRepliesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public QuickReplyHandler() {
@@ -87,17 +80,16 @@ public final class QuickReplyHandler implements WebAppStateActionHandler {
      * @implNote
      * This implementation walks the per-mutation arms of WA Web's
      * {@code WAWebQuickRepliesSync.applyMutations}: only
-     * {@link SyncdOperation#SET} is accepted; a missing quick reply id
-     * surfaces as {@link SyncdIndexUtils#malformedActionIndex(String, String)};
-     * a missing {@link QuickReplyAction} payload as
+     * {@link SyncdOperation#SET} is accepted; a missing quick reply id surfaces
+     * as {@link SyncdIndexUtils#malformedActionIndex(String, String)}; a
+     * missing {@link QuickReplyAction} payload as
      * {@link SyncdIndexUtils#malformedActionValue(String)};
-     * {@link QuickReplyAction#deleted()} {@code == true} removes the
-     * entry by id; otherwise the {@code shortcut} and {@code message}
-     * fields must both be non-empty (mirroring WA Web's
-     * {@code (c == null || c === "" || u == null || u === "") -> malformedActionValue}
-     * guard); {@code keywords} defaults to an empty list and
-     * {@code count} to {@code 0}. Per-mutation exceptions surface as
-     * {@link MutationApplicationResult#failed()}.
+     * {@link QuickReplyAction#deleted()} {@code == true} removes the entry by
+     * id; otherwise the {@link QuickReplyAction#shortcut()} and
+     * {@link QuickReplyAction#message()} fields must both be non-empty;
+     * {@link QuickReplyAction#keywords()} defaults to an empty list and
+     * {@link QuickReplyAction#count()} to {@code 0}. Per-mutation exceptions
+     * surface as {@link MutationApplicationResult#failed()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQuickRepliesSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

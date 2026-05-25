@@ -10,77 +10,70 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 /**
- * Routes inbound {@code <notification>} stanzas whose category falls under the
- * authenticated account (status, contacts, disappearing mode, privacy tokens,
- * picture, about) to the matching per-type handler.
+ * Routes inbound {@code <notification>} stanzas in the account category to the matching per-type handler.
  *
- * @apiNote
- * Cobalt's {@code NotificationStreamHandler} forwards every stanza whose
- * {@code type} attribute names an account-scoped notification to this
- * dispatcher; embedders do not invoke it directly. The dispatcher owns one
- * instance of each concrete handler and is the single fan-in point for the
- * account branch of WhatsApp Web's {@code handleLoggedInStanza} switch.
+ * <p>The parent notification stream forwards every stanza whose {@code type} attribute names an
+ * account-scoped notification (status, contacts, disappearing mode, privacy tokens, picture, about)
+ * to this dispatcher, which owns one instance of each concrete sub-handler and selects the branch on
+ * the {@code type} attribute. Stanzas with no {@code type} attribute and stanzas whose type is not
+ * owned by this dispatcher return without side-effects; the surrounding pipeline owns the ACK or NACK
+ * decision for unmatched stanzas.</p>
  *
- * @implNote
- * This implementation collapses six WA Web notification handler modules
- * (account_sync, contacts, disappearing_mode, privacy_token, picture,
- * status) into one Java type with five fields; WA Web instead routes each
- * type through the central {@code WAWebCommsHandleLoggedInStanza} switch
- * to a dedicated handler module. The grouping has no protocol effect; it
- * keeps the dependency graph in {@code NotificationStreamHandler}
- * manageable.
+ * @implNote This implementation collapses six WA Web notification handler modules (account_sync,
+ * contacts, disappearing_mode, privacy_token, picture, status) into one Java type with five fields,
+ * whereas WA Web routes each type through the central {@code WAWebCommsHandleLoggedInStanza} switch to
+ * a dedicated handler module. The grouping has no protocol effect; it keeps the dependency graph in the
+ * parent notification stream manageable.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
 public final class NotificationAccountDispatcher implements SocketStream.Handler {
     /**
-     * Handler for {@code type="account_sync"} notifications covering status,
-     * text status, privacy, devices, blocklist, picture, disappearing mode,
-     * TOS, notice, user, and business-opt-out updates for the authenticated
-     * account.
+     * Handles {@code type="account_sync"} notifications.
+     *
+     * <p>Covers status, text status, privacy, devices, blocklist, picture, disappearing mode, TOS,
+     * notice, user, and business-opt-out updates for the authenticated account.</p>
      */
     private final NotificationAccountStreamHandler accountHandler;
 
     /**
-     * Handler for {@code type="contacts"} notifications that announce
-     * contact updates, phone-number changes, and full contact resyncs.
+     * Handles {@code type="contacts"} notifications.
+     *
+     * <p>Covers contact updates, phone-number changes, and full contact resyncs.</p>
      */
     private final NotificationContactStreamHandler contactHandler;
 
     /**
-     * Handler for {@code type="disappearing_mode"} notifications that
-     * update a chat's per-chat ephemeral timer.
+     * Handles {@code type="disappearing_mode"} notifications.
+     *
+     * <p>Covers per-chat ephemeral-timer changes.</p>
      */
     private final NotificationDisappearingModeStreamHandler disappearingModeHandler;
 
     /**
-     * Handler for {@code type="privacy_token"} notifications that carry
-     * trusted-contact tokens for end-to-end identity verification.
+     * Handles {@code type="privacy_token"} notifications.
+     *
+     * <p>Covers trusted-contact tokens for end-to-end identity verification.</p>
      */
     private final NotificationPrivacyStreamHandler privacyHandler;
 
     /**
-     * Handler for {@code type="picture"} and {@code type="status"}
-     * notifications that announce profile-picture and about-text changes.
+     * Handles {@code type="picture"} and {@code type="status"} notifications.
+     *
+     * <p>Covers profile-picture and about-text changes.</p>
      */
     private final NotificationProfileStreamHandler profileHandler;
 
     /**
-     * Constructs the dispatcher and eagerly instantiates every sub-handler
-     * with the shared client and device service.
+     * Constructs the dispatcher and eagerly instantiates every sub-handler with the shared client and
+     * device service.
      *
-     * @apiNote
-     * Called once during {@link SocketStream}
-     * setup. The dispatcher is held as a final field by the parent
-     * {@code NotificationStreamHandler}; embedders do not construct it
-     * directly.
+     * <p>The {@code deviceService} is forwarded only to {@link NotificationAccountStreamHandler}, which
+     * uses it when refreshing the authenticated user's own device list; the {@code whatsapp} client and
+     * {@code ackSender} are forwarded to every sub-handler.</p>
      *
      * @param whatsapp      the {@link WhatsAppClient} forwarded to every sub-handler for store and node access
-     * @param deviceService the {@link DeviceService} consumed only by the
-     *                      {@link NotificationAccountStreamHandler} when refreshing
-     *                      the authenticated user's own device list
-     * @param ackSender     the {@link AckSender} forwarded to every
-     *                      sub-handler for emitting the per-notification
-     *                      outbound {@code <ack>} stanza
+     * @param deviceService the {@link DeviceService} consumed only by {@link NotificationAccountStreamHandler}
+     * @param ackSender     the {@link AckSender} forwarded to every sub-handler for the per-notification {@code <ack>} stanza
      */
     public NotificationAccountDispatcher(WhatsAppClient whatsapp, DeviceService deviceService, AckSender ackSender) {
         this.accountHandler = new NotificationAccountStreamHandler(whatsapp, deviceService, ackSender);
@@ -91,23 +84,15 @@ public final class NotificationAccountDispatcher implements SocketStream.Handler
     }
 
     /**
-     * Forwards {@code node} to the sub-handler whose category matches the
-     * stanza's {@code type} attribute; ignores types this dispatcher does
-     * not own.
+     * Forwards {@code node} to the sub-handler whose category matches the stanza's {@code type} attribute.
      *
-     * @apiNote
-     * Invoked by {@code NotificationStreamHandler}. Stanzas with no
-     * {@code type} attribute and stanzas whose type is unknown to this
-     * dispatcher return without side-effects. The outer pipeline owns
-     * the ACK/NACK decision for unmatched stanzas.
+     * <p>Stanzas with no {@code type} attribute and stanzas whose type is unknown to this dispatcher
+     * return without side-effects. The {@code "picture"} and {@code "status"} types both route to
+     * {@link NotificationProfileStreamHandler}; all other owned types route to their dedicated handler.</p>
      *
-     * @implNote
-     * This implementation maps {@code "picture"} and {@code "status"} to
-     * the same {@link NotificationProfileStreamHandler}, mirroring WA Web's
-     * {@code WAWebHandleProfilePicNotification} and
-     * {@code WAWebHandleAboutNotification} which share enough structure
-     * (action child, hash-vs-jid resolution, ack format) that Cobalt
-     * merges them into one handler.
+     * @implNote This implementation maps {@code "picture"} and {@code "status"} to the same
+     * {@link NotificationProfileStreamHandler} because WA Web's two source modules share enough structure
+     * (action child, hash-vs-jid resolution, ack format) that Cobalt merges them into one handler.
      *
      * @param node the incoming {@code <notification>} stanza
      */
@@ -131,13 +116,10 @@ public final class NotificationAccountDispatcher implements SocketStream.Handler
     }
 
     /**
-     * Propagates {@link SocketStream.Handler#reset()} to every sub-handler
-     * so per-session caches (pending acks, in-flight refresh jobs) are
-     * cleared on a socket reconnect.
+     * Propagates the reset signal to every sub-handler so per-session caches are cleared on a socket reconnect.
      *
-     * @apiNote
-     * Invoked by the parent {@code NotificationStreamHandler} when the
-     * stream reset signal fires. Embedders do not call this directly.
+     * <p>Invoked by the parent notification stream when {@link SocketStream.Handler#reset()} fires, clearing
+     * each sub-handler's pending acks and in-flight refresh jobs.</p>
      */
     @Override
     public void reset() {

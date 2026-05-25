@@ -16,29 +16,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pure-Java unit tests for the {@link DcepMessage} codec — verifies
- * RFC 8832 wire-format compliance for both
- * {@link DcepMessage.Open DATA_CHANNEL_OPEN} and
- * {@link DcepMessage.Ack DATA_CHANNEL_ACK} across all six channel
+ * Pure-Java unit tests for the {@link DcepMessage} codec, verifying RFC 8832 wire-format
+ * compliance for both {@link DcepMessage.Open} and {@link DcepMessage.Ack} across all six channel
  * types.
  */
 public class DcepMessageTest {
 
-    /**
-     * The canonical {@code DATA_CHANNEL_ACK} wire form is exactly one
-     * byte 0x02.
-     */
     @Test
     public void ackEncodesAsSingleByte() {
         var encoded = DcepMessage.Ack.INSTANCE.encode();
         assertArrayEquals(new byte[]{0x02}, encoded);
     }
 
-    /**
-     * Decoding a single 0x02 byte yields the {@link DcepMessage.Ack}
-     * singleton (record equality holds across {@code new Ack()}
-     * instances).
-     */
     @Test
     public void ackDecodesFromSingleByte() {
         var decoded = DcepMessage.decode(new byte[]{0x02});
@@ -46,11 +35,6 @@ public class DcepMessageTest {
         assertEquals(DcepMessage.Ack.INSTANCE, decoded);
     }
 
-    /**
-     * The {@link DcepMessage.Ack#INSTANCE} singleton is shared across
-     * every {@link DcepMessage#decode(byte[])} call — by record
-     * equality, not by reference.
-     */
     @Test
     public void ackEqualsAcrossInstances() {
         var first = DcepMessage.decode(new byte[]{0x02});
@@ -59,10 +43,6 @@ public class DcepMessageTest {
         assertEquals(first.hashCode(), second.hashCode());
     }
 
-    /**
-     * A reliable, ordered open round-trips with the expected
-     * channel_type 0x00.
-     */
     @Test
     public void reliableOrderedOpenRoundTrips() {
         var original = new DcepMessage.Open(DcepMessage.CHANNEL_RELIABLE,
@@ -78,10 +58,6 @@ public class DcepMessageTest {
         assertTrue(decoded.maxLifetimeMs().isEmpty());
     }
 
-    /**
-     * A reliable, unordered open uses channel_type 0x80 and reports
-     * unordered.
-     */
     @Test
     public void reliableUnorderedOpenChannelTypeIs0x80() {
         var original = new DcepMessage.Open(DcepMessage.CHANNEL_RELIABLE_UNORDERED,
@@ -92,10 +68,6 @@ public class DcepMessageTest {
         assertTrue(decoded.unordered());
     }
 
-    /**
-     * A partial-reliable rexmit channel propagates the
-     * reliability parameter as max-retransmits.
-     */
     @Test
     public void partialReliableRexmitOpenExposesMaxRetransmits() {
         var original = new DcepMessage.Open(DcepMessage.CHANNEL_PARTIAL_RELIABLE_REXMIT,
@@ -106,11 +78,6 @@ public class DcepMessageTest {
         assertFalse(decoded.unordered());
     }
 
-    /**
-     * A partial-reliable timed channel propagates the reliability
-     * parameter as max-lifetime, in ms, and the high bit propagates
-     * unordered.
-     */
     @Test
     public void partialReliableTimedUnorderedOpenExposesLifetime() {
         var original = new DcepMessage.Open(
@@ -122,10 +89,6 @@ public class DcepMessageTest {
         assertTrue(decoded.unordered());
     }
 
-    /**
-     * The {@link DcepMessage#channelType(DataChannelOptions)} mapper
-     * picks each of the six wire bytes correctly.
-     */
     @Test
     public void channelTypeMappingIsCompleteForAllSixVariants() {
         assertEquals(DcepMessage.CHANNEL_RELIABLE,
@@ -142,10 +105,6 @@ public class DcepMessageTest {
                 DcepMessage.channelType(DataChannelOptions.partialReliableByLifetime(500, false)));
     }
 
-    /**
-     * UTF-8 multi-byte labels and protocols round-trip without
-     * mojibake.
-     */
     @Test
     public void utf8LabelAndProtocolRoundTrip() {
         var label = "café-streaming";
@@ -162,10 +121,6 @@ public class DcepMessageTest {
         assertEquals(12 + labelBytes.length + protocolBytes.length, encoded.length);
     }
 
-    /**
-     * Empty label and empty protocol round-trip — neither length
-     * field is required to be non-zero by RFC 8832.
-     */
     @Test
     public void emptyLabelAndProtocolRoundTrip() {
         var original = new DcepMessage.Open(DcepMessage.CHANNEL_RELIABLE,
@@ -175,10 +130,6 @@ public class DcepMessageTest {
         assertEquals("", decoded.protocol());
     }
 
-    /**
-     * Decoding an empty buffer raises a {@link WhatsAppCallException.DataChannel}
-     * with a useful message.
-     */
     @Test
     public void decodeEmptyPayloadThrows() {
         var ex = assertThrows(WhatsAppCallException.DataChannel.class,
@@ -186,10 +137,6 @@ public class DcepMessageTest {
         assertTrue(ex.getMessage().contains("empty"));
     }
 
-    /**
-     * Decoding a buffer with an unknown leading byte raises
-     * {@link WhatsAppCallException.DataChannel} naming the byte.
-     */
     @Test
     public void decodeUnknownTypeThrows() {
         var ex = assertThrows(WhatsAppCallException.DataChannel.class,
@@ -197,10 +144,6 @@ public class DcepMessageTest {
         assertTrue(ex.getMessage().contains("ab"));
     }
 
-    /**
-     * A header that declares more label/protocol bytes than the
-     * payload contains is rejected as truncated.
-     */
     @Test
     public void decodeTruncatedOpenThrows() {
         var truncated = new byte[]{
@@ -213,20 +156,12 @@ public class DcepMessageTest {
         assertThrows(WhatsAppCallException.DataChannel.class, () -> DcepMessage.decode(truncated));
     }
 
-    /**
-     * A type=0x03 buffer shorter than the 12-byte fixed header is
-     * rejected.
-     */
     @Test
     public void decodeShortOpenHeaderThrows() {
         var tooShort = new byte[]{0x03, 0x00, 0x00, 0x00};
         assertThrows(WhatsAppCallException.DataChannel.class, () -> DcepMessage.decode(tooShort));
     }
 
-    /**
-     * The reliability parameter survives values up to 0xFFFFFFFF
-     * (treated as unsigned per RFC 8832).
-     */
     @Test
     public void reliabilityParameterPreservesFullUnsigned32() {
         var original = new DcepMessage.Open(DcepMessage.CHANNEL_PARTIAL_RELIABLE_REXMIT,
@@ -235,9 +170,6 @@ public class DcepMessageTest {
         assertEquals(0xFFFFFFFFL, decoded.reliabilityParameter());
     }
 
-    /**
-     * The priority field survives values up to 0xFFFF.
-     */
     @Test
     public void priorityPreservesFullUnsigned16() {
         var original = new DcepMessage.Open(DcepMessage.CHANNEL_RELIABLE,
@@ -246,10 +178,6 @@ public class DcepMessageTest {
         assertEquals(0xFFFF, decoded.priority());
     }
 
-    /**
-     * {@link DcepMessage.Open#from} maps options ↔ channel type +
-     * reliability faithfully for the rexmit case.
-     */
     @Test
     public void openFromOptionsEncodesRexmit() {
         var options = DataChannelOptions.partialReliableByRetransmit(5, false)
@@ -261,10 +189,6 @@ public class DcepMessageTest {
         assertEquals("rexmit-test", open.protocol());
     }
 
-    /**
-     * {@link DcepMessage.Open#from} sets {@code reliabilityParameter}
-     * to 0 for fully reliable channels.
-     */
     @Test
     public void openFromOptionsZeroesReliabilityForReliable() {
         var open = DcepMessage.Open.from("plain", DataChannelOptions.reliable());
@@ -272,27 +196,17 @@ public class DcepMessageTest {
         assertEquals(DcepMessage.CHANNEL_RELIABLE, open.channelType());
     }
 
-    /**
-     * {@link DcepMessage#decode(byte[])} rejects {@code null}.
-     */
     @Test
     public void decodeNullThrows() {
         assertThrows(NullPointerException.class, () -> DcepMessage.decode(null));
     }
 
-    /**
-     * The Open record's compact constructor rejects negative priority.
-     */
     @Test
     public void openConstructorRejectsNegativePriority() {
         assertThrows(IllegalArgumentException.class, () -> new DcepMessage.Open(
                 DcepMessage.CHANNEL_RELIABLE, -1, 0L, "x", ""));
     }
 
-    /**
-     * The Open record's compact constructor rejects out-of-range
-     * reliability parameter.
-     */
     @Test
     public void openConstructorRejectsOutOfRangeReliability() {
         assertThrows(IllegalArgumentException.class, () -> new DcepMessage.Open(
@@ -301,10 +215,6 @@ public class DcepMessageTest {
                 DcepMessage.CHANNEL_PARTIAL_RELIABLE_REXMIT, 0, 1L << 32, "x", ""));
     }
 
-    /**
-     * Encoding always allocates a fresh array; mutating one does not
-     * affect the next call.
-     */
     @Test
     public void ackEncodingReturnsFreshArray() {
         var first = DcepMessage.Ack.INSTANCE.encode();
@@ -314,10 +224,6 @@ public class DcepMessageTest {
         assertNotNull(second);
     }
 
-    /**
-     * The four reliable/unreliable identity helpers behave correctly
-     * for both ordered and unordered cases.
-     */
     @Test
     public void isUnorderedHelper() {
         assertFalse(DcepMessage.isUnordered(DcepMessage.CHANNEL_RELIABLE));
@@ -328,10 +234,6 @@ public class DcepMessageTest {
         assertTrue(DcepMessage.isUnordered(DcepMessage.CHANNEL_PARTIAL_RELIABLE_TIMED_UNORDERED));
     }
 
-    /**
-     * {@link DcepMessage.Ack#INSTANCE} is identity-stable so callers
-     * can rely on {@code ==} for fast-path comparisons.
-     */
     @Test
     public void ackInstanceIsStable() {
         assertSame(DcepMessage.Ack.INSTANCE, DcepMessage.Ack.INSTANCE);

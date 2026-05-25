@@ -24,47 +24,35 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
 import java.util.Objects;
 
 /**
- * Builds the optional {@code <meta>} child of an outgoing {@code <message>}
- * stanza carrying routing and classification attributes the server uses
- * for analytics, comment threading, AI thread bookkeeping, hosted-business
- * routing, status privacy, and view-once handling.
- *
- * @apiNote
- * Composed by {@link ChatFanoutStanza} and {@link GroupSkmsgFanoutStanza}
- * once per outgoing message. The set of attributes the node may carry is
- * the union of every signal the WA Web sender writes onto {@code <meta>}:
- * {@code origin} (LID-origin code or bot-entry-point name when the
- * recipient is Meta AI), {@code destination_id} (the bot metrics
- * destination id), {@code sender_intent="hosted"} (when the recipient is a
- * hosted business), {@code polltype} ({@code "creation"} /
- * {@code "vote"} / {@code "result_snapshot"}), {@code event_type}
- * ({@code "creation"} / {@code "response"} / {@code "edit"}),
- * {@code thread_msg_id} and {@code thread_msg_sender_jid} (comment-thread
- * reply target), {@code appdata} ({@code "member_tag"} /
- * {@code "default"} / {@code "group_history"}),
- * {@code view_once="true"} for view-once media, {@code conversation_thread_id}
- * for AI threads, {@code tag_reason} ({@code "user_delete"} /
- * {@code "user_update"}) for member-label changes, and {@code status_setting}
- * for status messages. When none of the signals applies the build method
- * returns {@code null} and the caller suppresses the empty child entirely.
- * The newsletter helpers ({@link #buildNewsletterQuestion},
- * {@link #buildNewsletterQuestionReply},
- * {@link #buildNewsletterQuestionResponse}) build a specialised
- * {@code <meta questiontype="...">} child for SMAX newsletter publishes.
+ * Builds the optional {@code <meta>} child of an outgoing {@code <message>} stanza carrying routing and classification
+ * attributes the server uses for analytics, comment threading, AI thread bookkeeping, hosted-business routing, status
+ * privacy, and view-once handling.
+ * <p>
+ * Composed by {@link ChatFanoutStanza} and {@link GroupSkmsgFanoutStanza} once per outgoing message. The set of
+ * attributes the node may carry is the union of every signal the sender writes onto {@code <meta>}: {@code origin}
+ * (LID-origin code or bot-entry-point name when the recipient is Meta AI), {@code destination_id} (the bot metrics
+ * destination id), {@code sender_intent="hosted"} (when the recipient is a hosted business), {@code polltype}
+ * ({@code "creation"} / {@code "vote"} / {@code "result_snapshot"}), {@code event_type} ({@code "creation"} /
+ * {@code "response"} / {@code "edit"}), {@code thread_msg_id} and {@code thread_msg_sender_jid} (comment-thread reply
+ * target), {@code appdata} ({@code "member_tag"} / {@code "default"} / {@code "group_history"}),
+ * {@code view_once="true"} for view-once media, {@code conversation_thread_id} for AI threads, {@code tag_reason}
+ * ({@code "user_delete"} / {@code "user_update"}) for member-label changes, and {@code status_setting} for status
+ * messages. When none of the signals applies the build method returns {@code null} and the caller suppresses the empty
+ * child entirely. The newsletter helpers ({@link #buildNewsletterQuestion()}, {@link #buildNewsletterQuestionReply()},
+ * {@link #buildNewsletterQuestionResponse()}) build a specialised {@code <meta questiontype="...">} child for SMAX
+ * newsletter publishes.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgMetaNode")
 public final class MetaStanza {
     /**
-     * The {@link WhatsAppStore} consulted for chat LID origin and verified
-     * business name lookup.
+     * Holds the store consulted for chat LID origin and verified business name lookup.
      */
     private final WhatsAppStore store;
 
     /**
      * Constructs a builder backed by the given store.
-     *
-     * @apiNote
-     * Constructed once per client; the builder is stateless and reusable.
+     * <p>
+     * The builder is stateless and reusable.
      *
      * @param store the {@link WhatsAppStore}
      * @throws NullPointerException if {@code store} is {@code null}
@@ -77,30 +65,20 @@ public final class MetaStanza {
 
     /**
      * Builds the {@code <meta>} child for an E2E-encrypted message.
+     * <p>
+     * Returns {@code null} when every gating signal is absent so the caller can suppress the {@code <meta>} child
+     * entirely. The {@code statusSetting} input is non-null only for status messages (typically one of
+     * {@code "contacts"}, {@code "allowlist"}, {@code "denylist"}); the {@code hashedAiThreadId} input is the HMAC of the
+     * AI conversation thread id and is non-null only inside an AI thread.
      *
-     * @apiNote
-     * Returns {@code null} when every gating signal is absent so the
-     * caller can suppress the {@code <meta>} child entirely. Inputs:
-     * {@code statusSetting} is non-null only for status messages
-     * (typically one of {@code "contacts"}, {@code "allowlist"},
-     * {@code "denylist"}); {@code hashedAiThreadId} is the HMAC of the AI
-     * conversation thread id and is non-null only inside an AI thread.
-     *
-     * @implNote
-     * This implementation extracts the thread-message target by scanning
-     * {@link ChatMessageContextInfo#threadId()} for the first non-AI
-     * entry; that matches WA Web's
-     * {@code extractCommentTargetIdAndSenderLid}. The view-once flag is
-     * read from {@link MessageContainer#futureProofContentType()} rather
-     * than the WA Web {@code mediaData.isViewOnce} field; the two are
-     * semantically equivalent in the wrappers that reach this builder.
+     * @implNote This implementation extracts the thread-message target by scanning {@link ChatMessageContextInfo#threadId()}
+     * for the first non-AI entry. The view-once flag is read from {@link MessageContainer#futureProofContentType()}
+     * rather than a dedicated media flag; the two are semantically equivalent in the wrappers that reach this builder.
      *
      * @param chatJid          the recipient chat {@link Jid}
      * @param container        the outgoing {@link MessageContainer}
-     * @param statusSetting    the status-privacy label, or {@code null}
-     *                         for non-status messages
-     * @param hashedAiThreadId the HMAC-hashed AI thread id, or
-     *                         {@code null} when not in an AI thread
+     * @param statusSetting    the status-privacy label, or {@code null} for non-status messages
+     * @param hashedAiThreadId the HMAC-hashed AI thread id, or {@code null} when not in an AI thread
      * @return the {@code <meta>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
@@ -182,13 +160,10 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds the {@code <meta>} child without a pre-computed AI thread id
-     * hash.
-     *
-     * @apiNote
-     * Convenience overload for the non-AI-thread send path; delegates to
-     * {@link #buildChat(Jid, MessageContainer, String, String)} with
-     * {@code null} for the AI thread id.
+     * Builds the {@code <meta>} child without a pre-computed AI thread id hash.
+     * <p>
+     * Delegates to {@link #buildChat(Jid, MessageContainer, String, String)} with {@code null} for the AI thread id, for
+     * the non-AI-thread send path.
      *
      * @param chatJid       the recipient chat {@link Jid}
      * @param container     the outgoing {@link MessageContainer}
@@ -203,12 +178,9 @@ public final class MetaStanza {
 
     /**
      * Resolves the {@code polltype} attribute from the unwrapped message.
-     *
-     * @apiNote
-     * Returns one of {@code "creation"}, {@code "vote"},
-     * {@code "result_snapshot"}, or {@code null} for non-poll content.
-     * Poll-update messages are tagged only when they carry a
-     * {@link PollUpdateMessage#vote()}.
+     * <p>
+     * Returns one of {@code "creation"}, {@code "vote"}, {@code "result_snapshot"}, or {@code null} for non-poll
+     * content. Poll-update messages are tagged only when they carry a {@link PollUpdateMessage#vote()}.
      *
      * @param message the unwrapped {@link Message}, possibly {@code null}
      * @return the poll-type label, or {@code null}
@@ -225,13 +197,10 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code event_type} attribute from the unwrapped
-     * message.
-     *
-     * @apiNote
-     * Returns one of {@code "creation"}, {@code "response"},
-     * {@code "edit"}, or {@code null} for non-event content. The edit
-     * value applies only to {@link SecretEncMessage} payloads of subtype
+     * Resolves the {@code event_type} attribute from the unwrapped message.
+     * <p>
+     * Returns one of {@code "creation"}, {@code "response"}, {@code "edit"}, or {@code null} for non-event content. The
+     * edit value applies only to {@link SecretEncMessage} payloads of subtype
      * {@link SecretEncMessage.SecretEncType#EVENT_EDIT}.
      *
      * @param message the unwrapped {@link Message}, possibly {@code null}
@@ -251,14 +220,11 @@ public final class MetaStanza {
 
     /**
      * Resolves the {@code appdata} attribute from the unwrapped message.
-     *
-     * @apiNote
-     * Returns {@code "member_tag"} for the group member-label change
-     * protocol message, {@code "default"} for the ephemeral-sync response
-     * protocol message, {@code "group_history"} for the
-     * {@link MessageHistoryNotice}, and {@code null} otherwise. The
-     * {@code "default"} value for peer-routed protocol messages is handled
-     * by {@code PeerMessageSender} (which builds its own {@code <meta>}).
+     * <p>
+     * Returns {@code "member_tag"} for the group member-label change protocol message, {@code "default"} for the
+     * ephemeral-sync response protocol message, {@code "group_history"} for the {@link MessageHistoryNotice}, and
+     * {@code null} otherwise. The {@code "default"} value for peer-routed protocol messages is handled by the peer
+     * message sender, which builds its own {@code <meta>}.
      *
      * @param message the unwrapped {@link Message}, possibly {@code null}
      * @return the appdata label, or {@code null}
@@ -281,15 +247,11 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code tag_reason} attribute for group-member label
-     * change protocol messages.
-     *
-     * @apiNote
-     * The label-change message carries a label payload whose presence
-     * distinguishes an addition/update from a deletion: an empty or absent
-     * label maps to {@code "user_delete"}, a non-empty label maps to
-     * {@code "user_update"}. Returns {@code null} for every other message
-     * type.
+     * Resolves the {@code tag_reason} attribute for group-member label change protocol messages.
+     * <p>
+     * The label-change message carries a label payload whose presence distinguishes an addition or update from a
+     * deletion: an empty or absent label maps to {@code "user_delete"}, a non-empty label maps to {@code "user_update"}.
+     * Returns {@code null} for every other message type.
      *
      * @param message the unwrapped {@link Message}, possibly {@code null}
      * @return the tag-reason label, or {@code null}
@@ -308,14 +270,10 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code origin} attribute for LID chats whose chat
-     * record carries a LID-origin tag.
-     *
-     * @apiNote
-     * Currently only the {@code "ctwa"} LID-origin survives onto the
-     * {@code <meta>}; other LID origins (e.g. {@code "pn_share"}) are
-     * dropped to match WA Web's filter inside
-     * {@code WAWebSendMsgMetaNode.getOriginAttribute}.
+     * Resolves the {@code origin} attribute for LID chats whose chat record carries a LID-origin tag.
+     * <p>
+     * Only the {@code "ctwa"} LID-origin survives onto the {@code <meta>}; other LID origins (e.g. {@code "pn_share"})
+     * are dropped.
      *
      * @param chatJid the recipient chat {@link Jid}
      * @return the origin label, or {@code null}
@@ -334,13 +292,10 @@ public final class MetaStanza {
     }
 
     /**
-     * Returns whether the given {@link Jid} identifies the Meta AI bot
-     * account.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code WAWebBotUtils.isMetaAiBot}: matches both
-     * the FBID Meta AI bot ({@link Jid#metaAiBotAccount()}) and the
-     * legacy PN-form bot user {@code 13135550002@c.us}.
+     * Returns whether the given {@link Jid} identifies the Meta AI bot account.
+     * <p>
+     * Matches both the FBID Meta AI bot ({@link Jid#metaAiBotAccount()}) and the legacy PN-form bot user
+     * {@code 13135550002@c.us}.
      *
      * @param jid the {@link Jid} to test
      * @return {@code true} when the JID is a Meta AI bot
@@ -353,22 +308,14 @@ public final class MetaStanza {
     }
 
     /**
-     * Maps a {@link BotMetricsEntryPoint} to its {@code origin} attribute
-     * label.
+     * Maps a {@link BotMetricsEntryPoint} to its {@code origin} attribute label.
+     * <p>
+     * Used only when the message targets the Meta AI bot. Entry points with no canonical label (e.g. unmapped surface
+     * codes) return {@code null} so the {@link #resolveOrigin(Jid)} LID fallback can apply.
      *
-     * @apiNote
-     * Used only when the message targets the Meta AI bot. Entry points
-     * with no canonical label (e.g. unmapped surface codes) return
-     * {@code null} so the {@link #resolveOrigin(Jid)} LID fallback can
-     * apply.
-     *
-     * @implNote
-     * This implementation enumerates the subset of entry points WA Web's
-     * {@code WAWebBotLoggingUtils.getBotOriginFromBotMetricsEntryPoint}
-     * maps to a non-null label and falls through to {@code null} for
-     * unrecognised codes (e.g. {@code WEB_INTRO_PANEL},
-     * {@code WEB_NAVIGATION_BAR}); the unmapped codes match WA Web's own
-     * {@code null} returns for the surfaces Cobalt does not expose.
+     * @implNote This implementation enumerates the subset of entry points that map to a non-null label and falls through
+     * to {@code null} for unrecognised codes (e.g. {@code WEB_INTRO_PANEL}, {@code WEB_NAVIGATION_BAR}), matching the
+     * surfaces Cobalt does not expose.
      *
      * @param entryPoint the {@link BotMetricsEntryPoint}
      * @return the origin label, or {@code null}
@@ -394,12 +341,9 @@ public final class MetaStanza {
 
     /**
      * Returns whether the recipient is a hosted business account.
-     *
-     * @apiNote
-     * Drives the {@code sender_intent="hosted"} attribute. A hosted
-     * business has a verified-business-name record whose
-     * {@link com.github.auties00.cobalt.model.business.BusinessVerifiedName#hostStorage()}
-     * is present.
+     * <p>
+     * Drives the {@code sender_intent="hosted"} attribute. A hosted business has a verified-business-name record whose
+     * {@link com.github.auties00.cobalt.model.business.BusinessVerifiedName#hostStorage()} is present.
      *
      * @param chatJid the recipient chat {@link Jid}
      * @return {@code true} when the recipient has a hosted-storage record
@@ -413,13 +357,9 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds the SMAX {@code <meta questiontype="question">} child for a
-     * newsletter question publish.
-     *
-     * @apiNote
-     * Mirrors {@code WASmaxOutMessagePublishQuestionTypeQuestionMixin.applyMixin};
-     * used by the newsletter publish pipeline alongside
-     * {@link NewsletterStanza#buildPlaintext(byte[])}.
+     * Builds the SMAX {@code <meta questiontype="question">} child for a newsletter question publish.
+     * <p>
+     * Used by the newsletter publish pipeline alongside {@link NewsletterStanza#buildPlaintext(byte[])}.
      *
      * @return the {@code <meta>} {@link Node}
      */
@@ -433,13 +373,9 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds the SMAX {@code <meta questiontype="reply">} child for a
-     * newsletter question reply publish.
-     *
-     * @apiNote
-     * Mirrors {@code WASmaxOutMessagePublishQuestionTypeReplyMixin.applyMixin};
-     * used by the newsletter publish pipeline for the reply-to-question
-     * subflow.
+     * Builds the SMAX {@code <meta questiontype="reply">} child for a newsletter question reply publish.
+     * <p>
+     * Used by the newsletter publish pipeline for the reply-to-question subflow.
      *
      * @return the {@code <meta>} {@link Node}
      */
@@ -453,13 +389,9 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds the SMAX {@code <meta questiontype="response">} child for a
-     * newsletter question response publish.
-     *
-     * @apiNote
-     * Mirrors {@code WASmaxOutMessagePublishQuestionTypeResponseMixin.applyMixin};
-     * used by the newsletter publish pipeline for the response-to-question
-     * subflow.
+     * Builds the SMAX {@code <meta questiontype="response">} child for a newsletter question response publish.
+     * <p>
+     * Used by the newsletter publish pipeline for the response-to-question subflow.
      *
      * @return the {@code <meta>} {@link Node}
      */

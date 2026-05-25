@@ -17,58 +17,42 @@ import java.util.Objects;
 /**
  * Builds outgoing time-format sync mutations.
  *
- * @apiNote
- * Drives the 12h/24h time-format toggle on the Settings general surface;
- * one call produces a single {@link SyncPendingMutation} that propagates
- * the chosen format to every linked device and is consumed on receiving
- * devices by
+ * <p>This factory backs the 12h/24h time-format toggle; one call produces a single
+ * {@link SyncPendingMutation} that propagates the chosen format to every linked device and is
+ * consumed on receiving devices by
  * {@link com.github.auties00.cobalt.sync.handler.TimeFormatHandler}.
  *
  * @implNote
- * This implementation has no direct WA Web counterpart on the
- * {@code WAWebTimeFormatSync} module, which exposes only the inbound
- * {@code applyMutations} half; outgoing time-format changes there are
- * wrapped via the generic
- * {@code WAWebSyncdActionUtils.buildPendingMutation} pathway shared by
- * every {@code AccountSyncdActionBase} subclass. Cobalt surfaces the
- * typed helper directly so the public time-format setter can build a
+ * This factory has no direct WA Web counterpart on the time-format module, which exposes only the
+ * inbound apply half; outgoing time-format changes there are wrapped via the generic
+ * {@code WAWebSyncdActionUtils.buildPendingMutation} pathway shared by every account-scoped syncd
+ * action. Cobalt surfaces the typed helper directly so the public time-format setter can build a
  * single mutation without hand-rolling the protobuf wrapping.
  */
 public final class TimeFormatMutationFactory {
     /**
      * Constructs a time-format mutation factory.
      *
-     * @apiNote
-     * Required by the dependency-injection container before the factory
-     * is wired into the public 24-hour-format setter. The factory keeps
-     * no state, so a single instance is sufficient per client.
+     * <p>The factory keeps no state, so a single instance is sufficient per client.
      */
     public TimeFormatMutationFactory() {
 
     }
 
     /**
-     * Builds a pending {@code time_format} mutation that broadcasts the
-     * given 12h/24h preference to every linked device.
+     * Builds a pending {@code time_format} mutation that broadcasts the given 12h/24h preference to
+     * every linked device.
      *
-     * @apiNote
-     * Invoked from the public 24-hour-format setter; receiving devices
-     * call {@code WAWebBackendApi.frontendFireAndForget("setIs24Hour")}
-     * with the carried boolean. The index carries only the action name
-     * because the preference is a singleton per account.
+     * <p>The index carries only the action name because the preference is a singleton per account.
      *
      * @implNote
-     * This implementation models the
-     * {@code SyncActionValue.timeFormatAction} protobuf shape as used by
-     * {@code WAWebSyncdActionUtils.buildPendingMutation}; the mutation
-     * is routed through the {@code RegularLow} collection alongside the
-     * other account-scoped device settings.
+     * This implementation models the {@code SyncActionValue.timeFormatAction} protobuf shape as used
+     * by WA Web's generic pending-mutation builder; the mutation is routed through the
+     * {@code RegularLow} collection alongside the other account-scoped device settings.
      *
-     * @param timestamp            the mutation timestamp recorded on
-     *                             both the outer mutation and the inner
-     *                             {@code SyncActionValue}
-     * @param twentyFourHourFormat {@code true} to enable 24-hour
-     *                             display, {@code false} for 12-hour
+     * @param timestamp            the mutation timestamp recorded on both the outer mutation and the
+     *                             inner {@code SyncActionValue}
+     * @param twentyFourHourFormat {@code true} to enable 24-hour display, {@code false} for 12-hour
      *                             display
      * @return a pending mutation carrying the {@code time_format} action
      * @throws NullPointerException if {@code timestamp} is {@code null}

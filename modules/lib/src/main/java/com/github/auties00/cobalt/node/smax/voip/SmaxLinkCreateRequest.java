@@ -13,24 +13,22 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <call><link_create/></call>} request that mints a fresh
- * shareable call-link token on the VoIP relay.
+ * Mints a fresh shareable call-link token on the VoIP relay.
  *
- * @apiNote
- * Backs the "Create call link" UI surface and the scheduled-event call-link
- * generator. {@link SmaxLinkCreateResponse.Success#linkCreateToken()}
- * is suffixed onto {@code https://call.whatsapp.com/voice/} or
- * {@code https://call.whatsapp.com/video/} to produce the link the user shares.
+ * <p>This is the outbound {@code <call><link_create/></call>} request behind the
+ * "Create call link" surface and the scheduled-event call-link generator. The
+ * token returned in {@link SmaxLinkCreateResponse.Success#linkCreateToken()} is
+ * suffixed onto {@code https://call.whatsapp.com/voice/} or
+ * {@code https://call.whatsapp.com/video/} to produce the URL the user shares.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutVoipLinkCreateRequest")
 public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     /**
      * The optional media type carried by the {@code media} attribute.
      *
-     * @apiNote
-     * Either {@code "audio"} or {@code "video"} on the wire; kept as a raw
-     * {@link String} so future relay-side enum extensions do not require a
-     * Cobalt rebuild.
+     * <p>Holds {@code "audio"} or {@code "video"} on the wire, kept as a raw
+     * {@link String} so relay-side enum extensions do not force a Cobalt
+     * rebuild.
      */
     private final String linkCreateMedia;
 
@@ -38,35 +36,32 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
      * The optional creator-device JID carried by the {@code call-creator}
      * attribute.
      *
-     * @apiNote
-     * Supplied when the link should be associated with a specific device of
-     * the caller rather than the user's primary device.
+     * <p>Set when the link should be associated with a specific device of the
+     * caller rather than the user's primary device.
      */
     private final Jid linkCreateCallCreator;
 
     /**
      * The optional call identifier carried by the {@code call-id} attribute.
      *
-     * @apiNote
-     * Populated when the call link is generated from an already in-flight
-     * call rather than minted standalone.
+     * <p>Set when the call link is generated from an already in-flight call
+     * rather than minted standalone.
      */
     private final String linkCreateCallId;
 
     /**
-     * The optional creator-username displayed by the join-prompt surface.
+     * The optional creator-username carried by the {@code link_creator_username}
+     * attribute.
      *
-     * @apiNote
-     * Resolved by {@code WAWebVoipCreateCallLink.createCallLink} when
-     * username-based calling is gated on for the local account.
+     * <p>Populated when username-based calling is gated on for the local
+     * account so the join-prompt surface can display the creator's username.
      */
     private final String linkCreateLinkCreatorUsername;
 
     /**
      * Whether the {@code waiting_room_enabled="1"} marker is emitted.
      *
-     * @apiNote
-     * Maps to the "Require approval to join" toggle on the call-link create
+     * <p>Maps to the "Require approval to join" toggle on the call-link create
      * sheet. When {@code false} the attribute is omitted, which the relay
      * treats as disabled.
      */
@@ -75,21 +70,19 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     /**
      * The optional scheduled-event start instant.
      *
-     * @apiNote
-     * Supplied by the scheduled-call surface; rendered as an
-     * {@code <event start_time="..."/>} child whose value is seconds since
-     * the epoch.
+     * <p>Supplied by the scheduled-call surface and rendered as an inner
+     * {@code <event start_time="..."/>} child whose value is seconds since the
+     * epoch.
      */
     private final Instant eventStartTime;
 
     /**
      * Constructs a request with every wire-level attribute spelled out.
      *
-     * @apiNote
-     * Most embedders should leave the optional fields {@code null} and let
-     * the relay supply defaults; the only field most call-link UIs set
-     * is {@code linkCreateMedia} ({@code "audio"} or {@code "video"}) and,
-     * for scheduled calls, {@code eventStartTime}.
+     * <p>Most callers leave the optional fields {@code null} and let the relay
+     * supply defaults; the fields a call-link UI typically sets are
+     * {@code linkCreateMedia} ({@code "audio"} or {@code "video"}) and, for
+     * scheduled calls, {@code eventStartTime}.
      *
      * @param linkCreateMedia               the optional media type; may be {@code null}
      * @param linkCreateCallCreator         the optional creator-device JID; may be {@code null}
@@ -113,7 +106,7 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional media type to be carried by the {@code media} attribute.
+     * Returns the optional media type carried by the {@code media} attribute.
      *
      * @return an {@link Optional} carrying the media type, or empty when omitted
      */
@@ -122,7 +115,8 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional creator-device JID to be carried by the {@code call-creator} attribute.
+     * Returns the optional creator-device JID carried by the
+     * {@code call-creator} attribute.
      *
      * @return an {@link Optional} carrying the device JID, or empty when omitted
      */
@@ -131,7 +125,8 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional pre-allocated call identifier to be carried by the {@code call-id} attribute.
+     * Returns the optional pre-allocated call identifier carried by the
+     * {@code call-id} attribute.
      *
      * @return an {@link Optional} carrying the call id, or empty when omitted
      */
@@ -140,7 +135,8 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional creator-username to be carried by the {@code link_creator_username} attribute.
+     * Returns the optional creator-username carried by the
+     * {@code link_creator_username} attribute.
      *
      * @return an {@link Optional} carrying the username, or empty when omitted
      */
@@ -149,7 +145,7 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the {@code waiting_room_enabled="1"} marker will be emitted.
+     * Returns whether the {@code waiting_room_enabled="1"} marker is emitted.
      *
      * @return {@code true} when the gate is requested, {@code false} otherwise
      */
@@ -170,11 +166,11 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a {@code <call to="call">} envelope around a
-     * {@code <link_create/>} child, mirroring
-     * {@code WASmaxOutVoipLinkCreateRequest.makeLinkCreateRequest}. The
-     * scheduled-event payload, when present, is rendered as the inner
-     * {@code <event start_time="..."/>} child with seconds-since-epoch.
+     * This implementation wraps a {@code <link_create/>} child in a
+     * {@code <call to="call">} envelope, emitting each optional attribute only
+     * when its backing field is set. A present {@link #eventStartTime()} is
+     * rendered as an inner {@code <event start_time="..."/>} child whose value
+     * is seconds since the epoch.
      *
      * @return a {@link NodeBuilder} carrying the {@code <call><link_create/></call>}
      *         stanza
@@ -213,6 +209,13 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
                 .content(linkCreateBuilder.build());
     }
 
+    /**
+     * Compares this request to another object for value equality.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxLinkCreateRequest}
+     *         with equal fields, {@code false} otherwise
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -230,12 +233,22 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
                 && Objects.equals(this.eventStartTime, that.eventStartTime);
     }
 
+    /**
+     * Returns a hash code derived from every field of this request.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(linkCreateMedia, linkCreateCallCreator, linkCreateCallId,
                 linkCreateLinkCreatorUsername, linkCreateWaitingRoomEnabled, eventStartTime);
     }
 
+    /**
+     * Returns a debug string listing every field of this request.
+     *
+     * @return the string representation of this request
+     */
     @Override
     public String toString() {
         return "SmaxLinkCreateRequest[linkCreateMedia=" + linkCreateMedia

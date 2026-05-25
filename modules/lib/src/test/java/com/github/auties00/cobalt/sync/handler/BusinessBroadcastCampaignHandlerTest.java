@@ -28,16 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastCampaignHandler} - Cobalt's adapter
- * for {@code WAWebBroadcastCampaignSync}.
- *
- * <p>The handler upserts business broadcast campaigns keyed by
- * {@code indexParts[1]} and supports both SET (replace) and REMOVE
- * (drop). SET payloads require non-null {@code broadcastJid},
- * {@code deviceId}, and {@code status}. These tests pin the wire
- * metadata, the SET / REMOVE behaviours, the malformed-input fallbacks,
- * the default timestamp-based conflict resolution, the batch fan-out,
- * and the static outbound-mutation builders.
+ * Covers {@link BusinessBroadcastCampaignHandler}, which upserts business broadcast campaigns keyed
+ * by {@code indexParts[1]} and supports both SET (replace) and REMOVE (drop). A SET payload is
+ * rejected as MALFORMED unless it carries non-null {@code broadcastJid}, {@code deviceId}, and
+ * {@code status}.
  */
 @DisplayName("BusinessBroadcastCampaignHandler")
 class BusinessBroadcastCampaignHandlerTest {
@@ -58,15 +52,6 @@ class BusinessBroadcastCampaignHandlerTest {
         factory = new BusinessBroadcastCampaignMutationFactory();
     }
 
-    /**
-     * Builds a trusted mutation carrying the given campaign action.
-     *
-     * @param indexId   the campaign id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action    the campaign action payload, may be {@code null}
-     * @param operation the sync operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted buildMutation(String indexId, BusinessBroadcastCampaignAction action,
                                                     SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);

@@ -12,28 +12,23 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the fetch-newsletter-is-domain-previewable
- * query built by {@link FetchNewsletterIsDomainPreviewableMexRequest}.
+ * Parses the MEX response of the fetch-newsletter-is-domain-previewable query built by
+ * {@link FetchNewsletterIsDomainPreviewableMexRequest}.
  *
- * @apiNote
- * Exposes the per-domain allowlist verdict echoed under
- * {@code xwa2_newsletter_message_integrity}; the {@link UrlPreviews}
- * entries pair the queried domain with a boolean indicating whether the
- * relay permits a link preview for that domain inside newsletter
- * messages.
+ * <p>Exposes the per-domain allowlist verdict echoed under
+ * {@code xwa2_newsletter_message_integrity}. The {@link UrlPreviews} entries pair the queried
+ * domain with a boolean indicating whether the relay permits a link preview for that domain inside
+ * newsletter messages.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterIsDomainPreviewableJob")
 public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexOperation.Response.Json {
     /**
-     * The per-domain previewability verdicts.
+     * Holds the per-domain previewability verdicts.
      */
     private final List<UrlPreviews> urlPreviews;
 
     /**
      * Constructs a response wrapping the parsed verdicts.
-     *
-     * @apiNote
-     * Reserved for the static parser.
      *
      * @param urlPreviews the per-domain previewability verdicts
      */
@@ -44,15 +39,13 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_newsletter_message_integrity} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser. The returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_newsletter_message_integrity} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result
+     *         payload
      */
     public static Optional<FetchNewsletterIsDomainPreviewableMexResponse> of(Node node) {
         return node.getChild("result")
@@ -72,27 +65,22 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
     /**
      * Wraps one entry of the {@code url_previews} array.
      *
-     * @apiNote
-     * Each entry carries the queried {@code url_domain} string and the
-     * boolean verdict; WA Web collapses the list into a
-     * {@code Map<domain, boolean>} before consumption.
+     * <p>Each entry carries the queried {@code url_domain} string and the boolean verdict; WhatsApp
+     * Web collapses the list into a domain-keyed boolean map before consumption.
      */
     public static final class UrlPreviews {
         /**
-         * The queried domain.
+         * Holds the queried domain.
          */
         private final String urlDomain;
 
         /**
-         * Whether the relay permits a preview for the domain.
+         * Holds whether the relay permits a preview for the domain.
          */
         private final Boolean isPreviewable;
 
         /**
          * Constructs a verdict wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param urlDomain     the queried domain
          * @param isPreviewable the relay verdict, may be {@code null}
@@ -114,9 +102,8 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
         /**
          * Returns whether the relay permits a preview for the domain.
          *
-         * @return {@code true} when the relay reported the domain as
-         *         previewable, {@code false} otherwise or when it omitted
-         *         the field
+         * @return {@code true} when the relay reported the domain as previewable, {@code false}
+         *         otherwise or when it omitted the field
          */
         public boolean isPreviewable() {
             return isPreviewable != null && isPreviewable;
@@ -125,14 +112,8 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
         /**
          * Parses an {@link UrlPreviews} from the given JSON object.
          *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterIsDomainPreviewableMexResponse#of(byte[])}
-         * to hydrate one entry of the {@code url_previews} array.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed entry, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed entry, or empty when {@code obj} is {@code null}
          */
         static Optional<UrlPreviews> of(JSONObject obj) {
             if (obj == null) {
@@ -145,13 +126,7 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
         }
 
         /**
-         * Parses a list of {@link UrlPreviews} entries from the given JSON
-         * array.
-         *
-         * @apiNote
-         * Used by
-         * {@link FetchNewsletterIsDomainPreviewableMexResponse#of(byte[])}
-         * to hydrate the {@code url_previews} array.
+         * Parses a list of {@link UrlPreviews} entries from the given JSON array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -170,20 +145,14 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_newsletter_message_integrity} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_newsletter_message_integrity} root
      */
     private static Optional<FetchNewsletterIsDomainPreviewableMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

@@ -10,20 +10,19 @@ import com.github.auties00.cobalt.model.newsletter.NewsletterLinkPreview;
 import java.util.Base64;
 
 /**
- * The per-source resolver that builds preview cards for URLs sent
- * inside a newsletter chat.
+ * Builds preview cards for URLs sent inside a newsletter chat.
  *
- * @apiNote
- * Mirrors {@code WAWebNewsletterFetchLinkPreviewAction.fetchPlaintextLinkPreviewAction};
- * called from {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run} for newsletter recipients
- * because the previewability of a URL inside a channel is gated by
- * server-side rules that cannot be evaluated client-side, so the
- * rich og-tag fetch must happen on the server.
+ * <p>This resolver is called from
+ * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run}
+ * for newsletter recipients because the previewability of a URL inside a
+ * channel is gated by server-side rules that cannot be evaluated
+ * client-side, so the rich og-tag fetch must happen on the server. The
+ * server response is then stamped onto the outgoing message.
  */
 @WhatsAppWebModule(moduleName = "WAWebNewsletterFetchLinkPreviewAction")
 public final class NewsletterPreviewResolver {
     /**
-     * The hidden constructor of the utility class.
+     * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -32,31 +31,32 @@ public final class NewsletterPreviewResolver {
     }
 
     /**
-     * Resolves the preview for a newsletter URL and stamps the
-     * result onto {@code message}.
+     * Resolves the preview for a newsletter URL and stamps the result
+     * onto {@code message}.
      *
-     * @apiNote
-     * Issues the MEX {@code mexFetchPlaintextLinkPreview} request
-     * via {@link WhatsAppClient#queryNewsletterLinkPreview(String)}
-     * and writes every populated field of the response onto
-     * {@code message} in place: {@code title}, {@code description},
-     * {@code previewType}, {@code doNotPlayInline},
-     * {@code jpegThumbnail} (LQ placeholder),
-     * {@code thumbnailDirectPath} (HQ download), the matching
-     * SHA-256, and the {@code thumbnailWidth} / {@code thumbnailHeight}
-     * advisory dimensions.
+     * <p>Issues the server link-preview request via
+     * {@link WhatsAppClient#queryNewsletterLinkPreview(String)} and
+     * writes every populated field of the response onto {@code message}
+     * in place: {@code title}, {@code description}, {@code previewType},
+     * {@code doNotPlayInline}, {@code jpegThumbnail} (the low-quality
+     * placeholder), {@code thumbnailDirectPath} (the high-quality
+     * download path), the matching SHA-256, and the
+     * {@code thumbnailWidth} and {@code thumbnailHeight} advisory
+     * dimensions. Returns {@code false} without mutating {@code message}
+     * when {@code client}, {@code url}, or {@code message} is
+     * {@code null}, or when the server round-trip fails or yields no
+     * response.
      *
-     * @implNote
-     * This implementation returns {@code false} on any
-     * {@link RuntimeException} from the server round-trip; the
-     * link-preview pipeline then falls back to the minimal preview
-     * card so the recipient still sees a clickable URL.
+     * @implNote This implementation returns {@code false} on any
+     * {@link RuntimeException} from the server round-trip so the
+     * link-preview pipeline falls back to the minimal preview card,
+     * leaving the recipient a clickable URL.
      *
      * @param client  the WhatsApp client used to query the server
      * @param url     the URL whose preview is requested
-     * @param message the outgoing message to enrich; mutated in
-     *                place
-     * @return {@code true} when a preview was applied
+     * @param message the outgoing message to enrich; mutated in place
+     * @return {@code true} when a preview was applied, {@code false}
+     *         otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebNewsletterFetchLinkPreviewAction", exports = "fetchPlaintextLinkPreviewAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -92,14 +92,14 @@ public final class NewsletterPreviewResolver {
      * Issues the newsletter link-preview query and swallows any
      * transport-level error.
      *
-     * @apiNote
-     * Called from {@link #resolve}; on failure the link-preview
-     * pipeline falls back to the minimal preview card.
+     * <p>Returns {@code null} when the query fails so that
+     * {@link #resolve(WhatsAppClient, String, ExtendedTextMessage)}
+     * short-circuits and the link-preview pipeline falls back to the
+     * minimal preview card.
      *
      * @param client the WhatsApp client used to query the server
      * @param url    the URL to resolve
-     * @return the server response, or {@code null} when the query
-     *         failed
+     * @return the server response, or {@code null} when the query failed
      */
     private static NewsletterLinkPreview querySafely(
             WhatsAppClient client, String url) {
@@ -113,10 +113,9 @@ public final class NewsletterPreviewResolver {
     /**
      * Decodes a base64-encoded thumbnail string.
      *
-     * @apiNote
-     * Returns {@code null} on malformed input so the link-preview
-     * pipeline can fall back to a minimal preview instead of
-     * propagating the {@link IllegalArgumentException}.
+     * <p>Returns {@code null} on malformed input so the link-preview
+     * pipeline can fall back to a minimal preview instead of propagating
+     * the {@link IllegalArgumentException}.
      *
      * @param base64 the base64 string
      * @return the decoded bytes, or {@code null} when the input is

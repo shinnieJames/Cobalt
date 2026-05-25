@@ -28,34 +28,20 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Live-oracle tests for {@link CallReceiver}. Each captured inbound
- * {@code <call>} stanza is replayed through a real {@link CallReceiver}
- * wired to a {@link TestWhatsAppClient} + a real {@link CallService}; the
- * test asserts:
- * <ul>
- *   <li>the outgoing receipt / ack stanza shape;</li>
- *   <li>which {@link WhatsAppClientListener} method fired and with what
- *       arguments;</li>
- *   <li>store-side effects (LID-to-PN mapping, push name updates, call
- *       registry add/remove).</li>
- * </ul>
+ * Replays captured inbound {@code <call>} stanzas through a real {@link CallReceiver} wired to a
+ * {@link TestWhatsAppClient} and a real {@link CallService}, then asserts the outgoing receipt or ack
+ * stanza shape, which {@link WhatsAppClientListener} callback fired and with what arguments, and the
+ * store-side effects (LID-to-PN mapping, push name updates, call registry add/remove).
  *
- * <p>Fixtures live under {@code fixtures/call/}; each topic's
- * {@code .callee.jsonl} file carries the inbound side captured by the
- * primary session of {@code capture-call-corpus.mjs}.
- *
- * <p>Tests are guarded with {@link CallFixtures#isAvailable(String)} so
- * regenerated corpora without a given topic skip cleanly.
+ * <p>Fixtures live under {@code fixtures/call/}; each topic's {@code .callee.jsonl} file carries the
+ * inbound side captured by the primary session of {@code capture-call-corpus.mjs}. The {@code Harness}
+ * helper installs a recording {@link WhatsAppClientListener} that captures both the listener-method
+ * invocations and the outgoing stanzas seen via {@code onNodeSent}. Tests are guarded with
+ * {@link CallFixtures#isAvailable(String)} so regenerated corpora without a given topic skip cleanly.
  */
 @DisplayName("CallReceiver live wire oracle")
 class CallReceiverLiveOracleTest {
 
-    /**
-     * Test helper: wires a real {@link CallReceiver} + {@link CallService}
-     * over a {@link TestWhatsAppClient}, installs a recording listener,
-     * and exposes both the recorded outgoing stanzas (via
-     * {@code onNodeSent}) and the listener-method invocations.
-     */
     private static final class Harness {
         final TestWhatsAppClient client;
         final CallService service;
@@ -82,10 +68,6 @@ class CallReceiverLiveOracleTest {
         }
     }
 
-    /**
-     * Recording {@link WhatsAppClientListener} that captures every
-     * call-related callback into queues the test can poll.
-     */
     private static final class ListenerRecorder implements WhatsAppClientListener {
         final ConcurrentLinkedQueue<IncomingCall> calls = new ConcurrentLinkedQueue<>();
         final ConcurrentLinkedQueue<EndedCall> ended = new ConcurrentLinkedQueue<>();
@@ -130,11 +112,6 @@ class CallReceiverLiveOracleTest {
     private static final Jid SELF_PN  = Jid.of("19153544650@s.whatsapp.net");
     private static final Jid SELF_LID = Jid.of("39110693621863@lid");
 
-    /**
-     * Loads every inbound {@code <call>} event from a fixture and feeds
-     * each into the harness's receiver. Returns the harness so the test
-     * can inspect outgoing stanzas + listener state.
-     */
     private static Harness replayInbound(String topic) {
         var h = new Harness(SELF_PN, SELF_LID);
         for (var event : CallFixtures.loadEvents(topic)) {
@@ -158,14 +135,14 @@ class CallReceiverLiveOracleTest {
             if (!CallFixtures.isAvailable(topic)) return;
             var h = replayInbound(topic);
 
-            // Listener — at least one IncomingCall delivered (the inbound offer).
+            // At least one IncomingCall delivered (the inbound offer).
             assertFalse(h.listener.calls.isEmpty(),
                     "onCall listener must fire on inbound offer");
             var first = h.listener.calls.peek();
             assertNotNull(first.callId());
             assertNotNull(first.peer());
 
-            // Outgoing — a <receipt> wrapping <offer call-id call-creator/>.
+            // A <receipt> wrapping <offer call-id call-creator/>.
             var receipt = h.sentNodes.stream()
                     .filter(n -> "receipt".equals(n.description()))
                     .filter(n -> n.getChild("offer").isPresent())
@@ -335,7 +312,7 @@ class CallReceiverLiveOracleTest {
             // offer_notice for redelivery only when EVERY device of the
             // account is offline at offer-time. Our capture pair has the
             // `primary` emulator running its WhatsApp app continuously,
-            // and the server marks the call delivered to that device —
+            // and the server marks the call delivered to that device,
             // so when the linked web session reconnects after the
             // offer, no offer_notice fires (verified by waiting 60s
             // post-restart with the web session online and the
@@ -345,7 +322,7 @@ class CallReceiverLiveOracleTest {
             // offer.
             //
             // Once that capture lands, replace this stub with a strict
-            //   assertFalse(h.listener.notices.isEmpty(), …)
+            //   assertFalse(h.listener.notices.isEmpty(), ...)
             // assertion against the fixture.
         }
     }

@@ -14,11 +14,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsSetDescriptionRequest}.
+ * Models the sealed reply family for a {@link SmaxGroupsSetDescriptionRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsSetDescriptionRPC}.
- * {@link Success} additionally carries the optional {@code t} timestamp echoed by the relay, which callers use
- * to stamp the local revision row.
+ * <p>The three permitted variants are {@link Success}, {@link ClientError}, and {@link ServerError}.
+ * {@link Success} additionally carries the optional {@code t} timestamp echoed by the relay, which callers use to
+ * stamp the local revision row.
  */
 public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.Response
         permits SmaxGroupsSetDescriptionResponse.Success, SmaxGroupsSetDescriptionResponse.ClientError, SmaxGroupsSetDescriptionResponse.ServerError {
@@ -27,11 +27,11 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
      * Dispatches the inbound IQ across each {@link SmaxGroupsSetDescriptionResponse} variant in priority order
      * and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsSetDescriptionRPC}.
+     * <p>The variants are tried in the order {@link Success}, {@link ClientError}, {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
-     * caller so it can apply its own error-handling policy.
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the caller so
+     * it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound {@link SmaxGroupsSetDescriptionRequest} stanza, used to validate
@@ -56,10 +56,10 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay committed the description mutation.
+     * Represents the reply variant emitted when the relay committed the description mutation.
      *
-     * @apiNote {@link #timestamp()} carries the optional {@code t} attribute echoed by the relay (unix epoch
-     * seconds); callers use it as the local revision wall-clock when persisting the new description.
+     * <p>{@link #timestamp()} carries the optional {@code t} attribute echoed by the relay (unix epoch seconds);
+     * callers use it as the local revision wall-clock when persisting the new description.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetDescriptionResponseSuccess")
     final class Success implements SmaxGroupsSetDescriptionResponse {
@@ -80,7 +80,7 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         /**
          * Returns the optional {@code t} timestamp.
          *
-         * @apiNote Empty when the relay omitted the attribute; present values are unix epoch seconds.
+         * <p>The result is empty when the relay omitted the attribute; present values are unix epoch seconds.
          *
          * @return an {@link Optional} carrying the timestamp
          */
@@ -91,8 +91,9 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseSetDescriptionResponseSuccess}: the IQ must be a valid
-         * {@code type="result"} echo of the request; the optional {@code t} attribute is captured when present.
+         * <p>The IQ must be a valid {@code type="result"} echo of {@code request}, validated through
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}; the optional {@code t} attribute is captured
+         * when present.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -149,8 +150,8 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised,
-     * referencing a non-existent group, or failing the revision-chain check.
+     * Represents the reply variant emitted when the relay rejected the request envelope as malformed,
+     * unauthorised, referencing a non-existent group, or failing the revision-chain check.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetDescriptionResponseClientError")
     final class ClientError implements SmaxGroupsSetDescriptionResponse {
@@ -196,8 +197,9 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -255,7 +257,7 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Represents the reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetDescriptionResponseServerError")
     final class ServerError implements SmaxGroupsSetDescriptionResponse {
@@ -301,8 +303,9 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>The shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope is validated through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, and its code and text populate the
+         * returned variant.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

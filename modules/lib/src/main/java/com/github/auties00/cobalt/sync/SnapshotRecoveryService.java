@@ -39,78 +39,66 @@ import java.util.logging.Logger;
 import java.util.zip.GZIPInputStream;
 
 /**
- * Drives the {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} peer-data
+ * Drives the companion-to-primary syncd snapshot recovery peer-data
  * operation that lets a companion ask the primary device for a corrected
- * syncd snapshot when its local snapshot MAC fails to validate.
+ * snapshot when its local snapshot MAC fails to validate.
  *
- * @apiNote Cobalt embedders never call this directly; the service is
- * invoked by {@link WebAppStateService} as part of the syncd patch
- * pipeline, after a {@code WhatsAppWebAppStateSyncException} marked as
- * fatal is raised. The recovery covers the same scenarios as WA Web's
- * {@code WAWebRequestSyncdSnapshotRecovery.SyncdSnapshotRecoveryModule}:
- * a snapshot mismatch on a non-{@code CRITICAL_BLOCK} collection where
- * the AB-prop gate is on, the primary device supports recovery, and the
- * mutation count is within the configured budget.
+ * <p>The service is invoked by {@link WebAppStateService} as part of the
+ * syncd patch pipeline, after a {@link WhatsAppWebAppStateSyncException}
+ * marked as fatal is raised; embedders never call it directly. Recovery
+ * covers a snapshot mismatch on a non-{@link SyncPatchType#CRITICAL_BLOCK}
+ * collection when the AB-prop gate is on, the primary device supports
+ * recovery, and the mutation count is within the configured budget.
  */
 @WhatsAppWebModule(moduleName = "WAWebRequestSyncdSnapshotRecovery")
 @WhatsAppWebModule(moduleName = "WAWebSyncdSnapshotRecoveryGatingUtils")
 @WhatsAppWebModule(moduleName = "WAWebSendNonMessageDataRequest")
 public final class SnapshotRecoveryService {
     /**
-     * The logger used for non-fatal recovery diagnostics; recovery
-     * failures are logged here and the call returns {@code null} so the
-     * caller can fall back to a full re-link.
+     * The logger used for non-fatal recovery diagnostics; recovery failures
+     * are logged here and the call returns {@code null} so the caller can
+     * fall back to a full re-link.
      */
     private static final Logger LOGGER = Logger.getLogger(SnapshotRecoveryService.class.getName());
 
     /**
-     * The hard upper bound, in milliseconds, on a single recovery call,
-     * matching WA Web's {@code p = 6e4} timeout in
-     * {@code WAWebRequestSyncdSnapshotRecovery.requestRecoveryWithTimeout}.
+     * The hard upper bound, in milliseconds, on a single recovery call.
      */
     private static final long RECOVERY_TIMEOUT_MS = 60_000;
 
     /**
-     * The {@link WhatsAppClient} used to send the peer-data operation
-     * request to the primary device.
+     * The {@link WhatsAppClient} used to send the peer-data operation request
+     * to the primary device.
      */
     private final WhatsAppClient client;
 
     /**
-     * The {@link ABPropsService} used to read the
-     * {@code enable_peer_snapshot_recovery} and
-     * {@code snapshot_recovery_max_mutations_count_allowed} gates.
+     * The {@link ABPropsService} used to read the recovery-enabled and
+     * maximum-mutation-count gates.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * The {@link WamService} used to commit the
-     * {@code NonMessagePeerDataRequestEvent} per outgoing recovery
-     * request.
+     * The {@link WamService} used to commit the per-request telemetry event.
      */
     private final WamService wamService;
 
     /**
-     * The map of in-flight per-collection recovery futures, mirroring
-     * WA Web's
-     * {@code WAWebRequestSyncdSnapshotRecovery.recoveryPromise}.
+     * The map of in-flight per-collection recovery futures.
      */
     private final Map<SyncPatchType, CompletableFuture<SyncdSnapshotRecovery>> pendingRecoveries;
 
     /**
      * The semaphore that serialises concurrent recovery attempts across
-     * collections, mirroring WA Web's
-     * {@code WAWebRequestSyncdSnapshotRecovery.recoveryInflight}
-     * {@code Resolvable}.
+     * collections.
      */
     private final Semaphore recoverySemaphore;
 
     /**
      * Builds a new recovery service.
      *
-     * @apiNote Called once by {@link WebAppStateService} during its own
-     * construction; the service caches its dependencies and lives for
-     * the lifetime of the parent client.
+     * <p>Constructed once by {@link WebAppStateService}; the service caches
+     * its dependencies and lives for the lifetime of the parent client.
      *
      * @param client         the {@link WhatsAppClient} used to send the
      *                       recovery peer-message
@@ -131,15 +119,11 @@ public final class SnapshotRecoveryService {
     /**
      * Returns whether snapshot recovery is enabled for this device.
      *
-     * @apiNote Combines the persisted
-     * {@code primaryDeviceSupportsSyncdRecovery} flag with the
-     * {@code enable_peer_snapshot_recovery} AB-prop, matching the
-     * {@code syncdSnapshotRecoveryEnabled} gate of
-     * {@code WAWebSyncdSnapshotRecoveryGatingUtils}. Both must be true
-     * for recovery to be attempted.
+     * <p>Both the persisted primary-device support flag and the
+     * recovery-enabled AB-prop must be set for recovery to be attempted.
      *
-     * @return {@code true} when both the primary-device support flag and
-     *         the AB-prop are enabled
+     * @return {@code true} when both the primary-device support flag and the
+     *         AB-prop are enabled
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdSnapshotRecoveryGatingUtils", exports = "syncdSnapshotRecoveryEnabled", adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean isRecoveryEnabled() {
@@ -151,15 +135,12 @@ public final class SnapshotRecoveryService {
     }
 
     /**
-     * Persists the flag indicating whether the primary device supports
-     * syncd snapshot recovery.
+     * Persists the flag indicating whether the primary device supports syncd
+     * snapshot recovery.
      *
-     * @apiNote Called from the device-capabilities ingest path when the
-     * primary advertises (or stops advertising) recovery support; the
-     * flag is read back by {@link #isRecoveryEnabled()}. Mirrors WA
-     * Web's {@code updatePrimaryDeviceSupportsSyncdRecovery}, which
-     * writes to the {@code WAPrimaryDeviceSupportsSyncdRecovery}
-     * user-prefs row.
+     * <p>Called from the device-capabilities ingest path when the primary
+     * advertises (or stops advertising) recovery support; the flag is read
+     * back by {@link #isRecoveryEnabled()}.
      *
      * @param supported {@code true} when the primary supports recovery
      */
@@ -172,24 +153,20 @@ public final class SnapshotRecoveryService {
      * Returns whether a recovery attempt should be made for the given
      * collection.
      *
-     * @apiNote Composes {@link #isRecoveryEnabled()} with the
-     * collection-name and mutation-count gates from WA Web's
-     * {@code WAWebSyncdSnapshotRecoveryGatingUtils.shouldPreformSnapshotRecovery}:
-     * recovery is rejected when the global gate is off, when the
-     * collection is {@link SyncPatchType#CRITICAL_BLOCK}, or when the
-     * mutation count is strictly greater than the
-     * {@code snapshot_recovery_max_mutations_count_allowed} AB-prop.
+     * <p>Composes {@link #isRecoveryEnabled()} with the collection-name and
+     * mutation-count gates: recovery is rejected when the global gate is off,
+     * when the collection is {@link SyncPatchType#CRITICAL_BLOCK}, or when the
+     * mutation count is strictly greater than the configured maximum.
      *
      * @implNote This implementation expects the caller (typically
-     * {@link WebAppStateService}) to have already classified the
-     * triggering exception as fatal; WA Web's equivalent runs an
-     * {@code instanceof SyncdFatalError} check up front, which Cobalt's
-     * sealed exception hierarchy enforces statically at call sites.
+     * {@link WebAppStateService}) to have already classified the triggering
+     * exception as fatal; Cobalt's sealed exception hierarchy enforces that
+     * statically at call sites rather than with an {@code instanceof} check
+     * here.
      *
-     * @param collectionName the collection that failed snapshot
-     *                       validation
-     * @param mutationCount  the number of decrypted mutations in the
-     *                       failing snapshot
+     * @param collectionName the collection that failed snapshot validation
+     * @param mutationCount  the number of decrypted mutations in the failing
+     *                       snapshot
      * @return {@code true} when recovery should be attempted
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdSnapshotRecoveryGatingUtils", exports = "shouldPreformSnapshotRecovery", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -207,30 +184,26 @@ public final class SnapshotRecoveryService {
     }
 
     /**
-     * Sends a recovery request for {@code collectionName} and blocks
-     * until the primary device responds or the timeout elapses.
+     * Sends a recovery request for {@code collectionName} and blocks until
+     * the primary device responds or the timeout elapses.
      *
-     * @apiNote Called by {@link WebAppStateService} when an incoming
-     * snapshot fails validation and {@link #shouldAttemptRecovery} has
-     * already returned {@code true}. Returns {@code null} on any
-     * failure (timeout, semaphore-acquisition timeout, primary error)
-     * so the caller can fall back to a full re-link.
+     * <p>Called by {@link WebAppStateService} when an incoming snapshot fails
+     * validation and {@link #shouldAttemptRecovery(SyncPatchType, int)} has
+     * already returned {@code true}. Returns {@code null} on any failure
+     * (timeout, semaphore-acquisition timeout, primary error) so the caller
+     * can fall back to a full re-link.
      *
-     * @implNote This implementation funnels every concurrent recovery
-     * through {@link #recoverySemaphore} so two collections cannot
-     * race the primary's promise registry, mirroring WA Web's
-     * {@code recoveryInflight} {@code Resolvable}. The same
-     * {@value #RECOVERY_TIMEOUT_MS} budget covers both the semaphore
-     * acquisition and the response wait, so a slow concurrent recovery
-     * does not extend the effective per-call timeout. The
-     * {@code primaryDevice == null} bail-out is Cobalt-specific
-     * because the caller's JID may not be set yet during early
-     * startup; WA Web throws on the same condition through
-     * {@code getMeDevicePnOrThrow_DO_NOT_USE}.
+     * @implNote This implementation funnels every concurrent recovery through
+     * {@link #recoverySemaphore} so two collections cannot race the primary's
+     * promise registry. The same {@value #RECOVERY_TIMEOUT_MS} ms budget
+     * covers both the semaphore acquisition and the response wait, so a slow
+     * concurrent recovery does not extend the effective per-call timeout. The
+     * {@code primaryDevice == null} bail-out is Cobalt-specific because the
+     * caller's JID may not be set yet during early startup.
      *
      * @param collectionName the collection to recover
-     * @return the decoded snapshot returned by the primary, or
-     *         {@code null} on any failure
+     * @return the decoded snapshot returned by the primary, or {@code null}
+     *         on any failure
      */
     @WhatsAppWebExport(moduleName = "WAWebRequestSyncdSnapshotRecovery", exports = "SyncdSnapshotRecoveryModule", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncdSnapshotRecovery requestRecovery(SyncPatchType collectionName) {
@@ -268,23 +241,18 @@ public final class SnapshotRecoveryService {
     }
 
     /**
-     * Completes the in-flight recovery future for {@code collectionName}
-     * with the decoded snapshot.
+     * Completes the in-flight recovery future for {@code collectionName} with
+     * the decoded snapshot.
      *
-     * @apiNote Called by the protocol-message receiver when a
-     * {@code PEER_DATA_OPERATION_REQUEST_MESSAGE} response of type
-     * {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} arrives; the
-     * receiver is responsible for calling
-     * {@link #decodeRecoverySnapshot} first and forwarding the decoded
-     * value here, matching the order in WA Web's
-     * {@code WAWebNonMessageDataRequestHandler.m} where the snapshot is
-     * decoded before {@code resolveRecoveryPromise} is invoked. A
-     * missing future is logged at FINE and silently dropped, matching
-     * WA Web's {@code recoveryPromise.get(t)?.resolve(n)} no-op when
-     * the entry is absent.
+     * <p>Called by the protocol-message receiver when a peer-data operation
+     * response of the snapshot fatal-recovery type arrives; the receiver
+     * decodes the snapshot via
+     * {@link #decodeRecoverySnapshot(PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse)}
+     * first and forwards the decoded value here. A missing future is logged
+     * at FINE and silently dropped.
      *
-     * @param collectionName    the collection name carried by the
-     *                          decoded snapshot
+     * @param collectionName    the collection name carried by the decoded
+     *                          snapshot
      * @param recoveredSnapshot the decoded {@link SyncdSnapshotRecovery}
      */
     @WhatsAppWebExport(moduleName = "WAWebRequestSyncdSnapshotRecovery", exports = "SyncdSnapshotRecoveryModule", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -301,28 +269,22 @@ public final class SnapshotRecoveryService {
     }
 
     /**
-     * Decodes a {@code SyncDSnapshotFatalRecoveryResponse} payload into
-     * a {@link SyncdSnapshotRecovery}.
+     * Decodes a snapshot fatal-recovery response payload into a
+     * {@link SyncdSnapshotRecovery}.
      *
-     * @apiNote Called by the protocol-message receiver before invoking
-     * {@link #resolveRecovery(SyncPatchType, SyncdSnapshotRecovery)} so
-     * that the same decoded value is shared between the resolver and
-     * any downstream consumer. Transparently handles gzip-compressed
-     * responses by streaming the bytes through a
-     * {@link GZIPInputStream}, matching WA Web's
-     * {@code yield inflate(l.readByteArrayView())} branch in
-     * {@code WAWebNonMessageDataRequestHandler.m}.
+     * <p>Called by the protocol-message receiver before invoking
+     * {@link #resolveRecovery(SyncPatchType, SyncdSnapshotRecovery)} so that
+     * the same decoded value is shared between the resolver and any
+     * downstream consumer. Gzip-compressed responses are streamed through a
+     * {@link GZIPInputStream} transparently.
      *
-     * @param response the raw {@code SyncDSnapshotFatalRecoveryResponse}
-     *                 carried by the
-     *                 {@code PEER_DATA_OPERATION_REQUEST_MESSAGE}
-     *                 response
+     * @param response the raw snapshot fatal-recovery response carried by the
+     *                 peer-data operation response
      * @return the decoded {@link SyncdSnapshotRecovery}
-     * @throws NoSuchElementException                                  if
-     *         the response carries no {@code collectionSnapshot} bytes
+     * @throws NoSuchElementException                                if the
+     *         response carries no {@code collectionSnapshot} bytes
      * @throws WhatsAppWebAppStateSyncException.ExternalDecodeFailed if the
-     *         bytes cannot be decoded as
-     *         {@code SyncdSnapshotRecoverySpec}
+     *         bytes cannot be decoded
      */
     @WhatsAppWebExport(moduleName = "WAWebNonMessageDataRequestHandler", exports = "m", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncdSnapshotRecovery decodeRecoverySnapshot(
@@ -344,28 +306,23 @@ public final class SnapshotRecoveryService {
     }
 
     /**
-     * Builds and sends the
-     * {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} peer-data
-     * operation request to the primary device.
+     * Builds and sends the snapshot fatal-recovery peer-data operation
+     * request to the primary device.
      *
-     * @implNote This implementation wraps the request in a
-     * {@link ProtocolMessage} of type
-     * {@link ProtocolMessage.Type#PEER_DATA_OPERATION_REQUEST_MESSAGE}
-     * and a {@link com.github.auties00.cobalt.model.message.MessageContainer}
-     * before sending via {@link WhatsAppClient#sendPeerMessage}, because
-     * Cobalt does not have WA Web's
-     * {@code WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg} helper
-     * that performs the same wrapping inline. Per-request telemetry is
-     * committed through {@link WamService#commit} as a
+     * <p>The request is wrapped in a {@link ProtocolMessage} of type
+     * {@link ProtocolMessage.Type#PEER_DATA_OPERATION_REQUEST_MESSAGE} and a
+     * {@link com.github.auties00.cobalt.model.message.MessageContainer} before
+     * being sent via {@link WhatsAppClient#sendPeerMessage}. Per-request
+     * telemetry is committed through {@link WamService#commit} as a
      * {@link com.github.auties00.cobalt.wam.event.NonMessagePeerDataRequestEvent}
-     * keyed on the outbound peer-message id, mirroring WA Web's
-     * {@code WAWebNonMessageDataRequestLoggingUtils.logNonMessagePeerDataRequest}
-     * call site for this request type.
+     * keyed on the outbound peer-message id.
+     *
+     * @implNote This implementation performs the message wrapping inline
+     * because Cobalt has no shared key-message send helper.
      *
      * @param collectionName the collection to recover
-     * @throws IllegalStateException if no primary device JID can be
-     *                               resolved or the local user's JID is
-     *                               not set
+     * @throws IllegalStateException if no primary device JID can be resolved
+     *                               or the local user's JID is not set
      */
     @WhatsAppWebExport(moduleName = "WAWebSendNonMessageDataRequest", exports = "sendPeerDataOperationRequest", adaptation = WhatsAppAdaptation.ADAPTED)
     private void sendRecoveryRequest(SyncPatchType collectionName) {
@@ -421,14 +378,11 @@ public final class SnapshotRecoveryService {
     /**
      * Builds the device-zero JID of the primary device.
      *
-     * @apiNote Internal helper used by
-     * {@link #sendRecoveryRequest(SyncPatchType)} to resolve the
-     * destination of the peer-data operation request, mirroring WA
-     * Web's {@code createDeviceWidFromUserAndDevice(..., 0)} idiom in
-     * {@code WAWebSendNonMessageDataRequest.D}.
+     * <p>Resolves the destination of the recovery peer-data operation request
+     * for {@link #sendRecoveryRequest(SyncPatchType)}.
      *
-     * @return the primary device JID, or {@code null} when the local
-     *         user's JID has not been set yet
+     * @return the primary device JID, or {@code null} when the local user's
+     *         JID has not been set yet
      */
     @WhatsAppWebExport(moduleName = "WAWebSendNonMessageDataRequest", exports = "D", adaptation = WhatsAppAdaptation.ADAPTED)
     private Jid getPrimaryDevice() {

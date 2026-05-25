@@ -5,101 +5,97 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 /**
- * Wire body for the gzipped POST against
- * {@code android.clients.google.com/checkin}, the first step of the
- * Android device-registration handshake.
+ * Models the wire body for the gzipped POST against
+ * {@code android.clients.google.com/checkin}, the first step of the Android device-registration handshake.
  *
- * @apiNote
- * Field numbers come from Google's internal AndroidCheckin protobuf
- * (the public reference is the leaked {@code checkin.proto} schema);
- * only the subset Cobalt actually needs is encoded. The corresponding
- * response is decoded by {@link FcmCheckinResponse}.
+ * <p>The encoded message carries the synthetic device profile and a single bootstrap event that Google's
+ * checkin service requires before it hands back an Android id and security token. The paired response is
+ * decoded by {@link FcmCheckinResponse}.
+ *
+ * @implNote This implementation models only the subset of fields Cobalt actually sends; the field indices
+ * mirror Google's internal AndroidCheckin protobuf (the public reference is the leaked {@code checkin.proto}
+ * schema), and unused fields are deliberately omitted from the schema so the encoder emits the smallest body
+ * the server still accepts.
  */
 @ProtobufMessage(name = "FcmCheckinRequest")
 public final class FcmCheckinRequest {
     /**
-     * Existing Android id.
+     * Holds the existing Android id, or {@code 0} for a fresh registration.
      *
-     * @apiNote
-     * {@code 0} for a fresh registration; non-zero when the device
-     * is re-confirming a previously assigned id.
+     * <p>A non-zero value re-confirms a previously assigned id; Cobalt sends {@code 0} on the first checkin.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.INT64)
     long id;
 
     /**
-     * Nested device description.
+     * Holds the nested device-and-event description carried as field 4 of the request.
      */
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
     Checkin checkin;
 
     /**
-     * UI locale.
+     * Holds the UI locale reported to the checkin service.
      *
-     * @apiNote
-     * Cobalt sends {@code "en_US"} unconditionally.
+     * @implNote This implementation sends {@code "en_US"} unconditionally rather than deriving the locale
+     * from the host environment.
      */
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String locale;
 
     /**
-     * Random per-checkin logging id.
+     * Holds the random per-checkin logging id.
      *
-     * @apiNote
-     * Generated as {@code SecureRandom.nextLong() & MAX_LONG} so the
-     * server cannot fingerprint Cobalt across calls via a stable
-     * value.
+     * @implNote This implementation generates the value as {@code SecureRandom.nextLong() & Long.MAX_VALUE}
+     * so the server cannot fingerprint Cobalt across calls via a stable logging id; masking off the sign bit
+     * keeps the value positive for the {@code INT64} wire type.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.INT64)
     long loggingId;
 
     /**
-     * Time zone.
+     * Holds the time zone reported to the checkin service.
      *
-     * @apiNote
-     * Cobalt sends {@code "UTC"} unconditionally.
+     * @implNote This implementation sends {@code "UTC"} unconditionally rather than deriving the zone from
+     * the host environment.
      */
     @ProtobufProperty(index = 12, type = ProtobufType.STRING)
     String timeZone;
 
     /**
-     * Checkin protocol version.
+     * Holds the checkin protocol version.
      *
-     * @apiNote
-     * The native Android client sends {@code 3}.
+     * @implNote This implementation sends {@code 3}, matching the value the native Android client emits.
      */
     @ProtobufProperty(index = 14, type = ProtobufType.INT32)
     int version;
 
     /**
-     * Numeric flag Cobalt sets to {@code 0}.
+     * Holds a numeric flag the server expects in the wire body.
      *
-     * @apiNote
-     * Carried so the wire body matches what the server expects;
-     * non-zero values are not modeled.
+     * <p>Carried so the encoded message matches what the checkin service accepts; non-zero values are not
+     * modeled and Cobalt always sets it to {@code 0}.
      */
     @ProtobufProperty(index = 20, type = ProtobufType.INT64)
     long fragment;
 
     /**
-     * Numeric flag Cobalt sets to {@code 0}.
+     * Holds the multi-user serial number flag the server expects in the wire body.
      *
-     * @apiNote
-     * Same rationale as {@link #fragment}: shipped to keep the wire
-     * body intact.
+     * <p>Shipped for the same reason as {@link #fragment}: to keep the encoded message intact. Cobalt always
+     * sets it to {@code 0}.
      */
     @ProtobufProperty(index = 22, type = ProtobufType.INT64)
     long userSerialNumber;
 
     /**
-     * Constructs a new request with the given values.
+     * Constructs a new request with the given field values.
      *
-     * @param id               the existing Android id
-     * @param checkin          the nested device description
+     * @param id               the existing Android id, or {@code 0} for a fresh registration
+     * @param checkin          the nested device-and-event description
      * @param locale           the UI locale
      * @param loggingId        the random per-checkin logging id
      * @param timeZone         the time zone
-     * @param version          the protocol version
+     * @param version          the checkin protocol version
      * @param fragment         the fragment flag
      * @param userSerialNumber the multi-user serial number flag
      */
@@ -116,40 +112,39 @@ public final class FcmCheckinRequest {
     }
 
     /**
-     * Nested device-and-event payload (field 4 of the outer request).
+     * Models the nested device-and-event payload carried as field 4 of the outer {@link FcmCheckinRequest}.
+     *
+     * <p>The block pairs a {@link Build} device description with a single synthetic {@link Event} and the
+     * last-checkin bookkeeping the service uses to decide whether this is a fresh registration.
      */
     @ProtobufMessage(name = "FcmCheckinRequest.Checkin")
     public static final class Checkin {
         /**
-         * Build description of the device being impersonated.
+         * Holds the build description of the device being impersonated.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
         Build build;
 
         /**
-         * Last-checkin timestamp, in milliseconds since epoch.
+         * Holds the last-checkin timestamp, in milliseconds since the epoch.
          *
-         * @apiNote
-         * {@code 0} for a fresh registration.
+         * <p>Cobalt sends {@code 0} for a fresh registration, signalling that the device has never checked
+         * in before.
          */
         @ProtobufProperty(index = 2, type = ProtobufType.INT64)
         long lastCheckinMs;
 
         /**
-         * One synthetic event entry.
+         * Holds one synthetic event entry.
          *
-         * @apiNote
-         * Cobalt always sends a single {@code event_log_start}
-         * event; the server expects at least one event to be present.
+         * <p>The checkin service expects at least one event to be present; Cobalt always supplies a single
+         * {@code event_log_start} entry.
          */
         @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
         Event event;
 
         /**
-         * Multi-user serial number.
-         *
-         * @apiNote
-         * {@code 0} on stock Android.
+         * Holds the multi-user serial number, {@code 0} on stock Android.
          */
         @ProtobufProperty(index = 9, type = ProtobufType.INT64)
         long userNumber;
@@ -158,7 +153,7 @@ public final class FcmCheckinRequest {
          * Constructs a new checkin block.
          *
          * @param build         the device build description
-         * @param lastCheckinMs the last-checkin timestamp
+         * @param lastCheckinMs the last-checkin timestamp, in milliseconds since the epoch
          * @param event         the synthetic event entry
          * @param userNumber    the multi-user serial number
          */
@@ -171,82 +166,81 @@ public final class FcmCheckinRequest {
     }
 
     /**
-     * Build description (field 1 of {@link Checkin}).
+     * Models the device build description carried as field 1 of {@link Checkin}.
      *
-     * @apiNote
-     * Cobalt impersonates a Nexus 7
-     * ({@code "google/razor/flo:5.0.1/..."}) running SDK 30; the
-     * synthetic profile is deliberately stable across embedders.
+     * <p>The fields together describe the device the registration impersonates: its fingerprint, hardware
+     * codes, marketing names, and OS level.
+     *
+     * @implNote This implementation impersonates a Nexus 7 ({@code "google/razor/flo:5.0.1/..."}) running
+     * SDK 30; the synthetic profile is held stable across embedders so the server fingerprint stays
+     * consistent.
      */
     @ProtobufMessage(name = "FcmCheckinRequest.Build")
     public static final class Build {
         /**
-         * Build fingerprint, e.g.
+         * Holds the build fingerprint, for example
          * {@code "google/razor/flo:5.0.1/LRX22C/1602158:user/release-keys"}.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String fingerprint;
 
         /**
-         * Hardware id, e.g. {@code "flo"}.
+         * Holds the hardware id, for example {@code "flo"}.
          */
         @ProtobufProperty(index = 2, type = ProtobufType.STRING)
         String hardware;
 
         /**
-         * Brand, e.g. {@code "google"}.
+         * Holds the brand, for example {@code "google"}.
          */
         @ProtobufProperty(index = 3, type = ProtobufType.STRING)
         String brand;
 
         /**
-         * Client identifier.
+         * Holds the client identifier.
          *
-         * @apiNote
-         * Always {@code "android-google"} in Cobalt's synthetic
-         * profile.
+         * @implNote This implementation always reports {@code "android-google"} as part of its synthetic
+         * device profile.
          */
         @ProtobufProperty(index = 6, type = ProtobufType.STRING)
         String clientId;
 
         /**
-         * Build timestamp, in epoch seconds.
+         * Holds the build timestamp, in epoch seconds.
          */
         @ProtobufProperty(index = 7, type = ProtobufType.INT64)
         long timeMs;
 
         /**
-         * SDK version (Android API level).
+         * Holds the SDK version (Android API level).
          *
-         * @apiNote
-         * Cobalt sends {@code 30}.
+         * @implNote This implementation sends {@code 30} to match the rest of the synthetic device profile.
          */
         @ProtobufProperty(index = 10, type = ProtobufType.INT32)
         int sdkVersion;
 
         /**
-         * Marketing model, e.g. {@code "Nexus 7"}.
+         * Holds the marketing model, for example {@code "Nexus 7"}.
          */
         @ProtobufProperty(index = 11, type = ProtobufType.STRING)
         String model;
 
         /**
-         * OEM, e.g. {@code "asus"}.
+         * Holds the OEM, for example {@code "asus"}.
          */
         @ProtobufProperty(index = 12, type = ProtobufType.STRING)
         String manufacturer;
 
         /**
-         * Internal product code, e.g. {@code "razor"}.
+         * Holds the internal product code, for example {@code "razor"}.
          */
         @ProtobufProperty(index = 13, type = ProtobufType.STRING)
         String product;
 
         /**
-         * Whether an OTA update is installed.
+         * Holds whether an over-the-air update is installed.
          *
-         * @apiNote
-         * {@code false} for a fresh synthetic device.
+         * <p>Cobalt reports {@code false} for its fresh synthetic device.
          */
         @ProtobufProperty(index = 14, type = ProtobufType.BOOL)
         boolean otaInstalled;
@@ -258,12 +252,12 @@ public final class FcmCheckinRequest {
          * @param hardware     the hardware id
          * @param brand        the brand
          * @param clientId     the client identifier
-         * @param timeMs       the build timestamp
+         * @param timeMs       the build timestamp, in epoch seconds
          * @param sdkVersion   the SDK version
          * @param model        the marketing model
          * @param manufacturer the OEM
          * @param product      the internal product code
-         * @param otaInstalled whether an OTA update is installed
+         * @param otaInstalled whether an over-the-air update is installed
          */
         Build(String fingerprint, String hardware, String brand, String clientId,
               long timeMs, int sdkVersion, String model, String manufacturer,
@@ -282,22 +276,23 @@ public final class FcmCheckinRequest {
     }
 
     /**
-     * Single event entry (field 3 of {@link Checkin}).
+     * Models a single event entry carried as field 3 of {@link Checkin}.
+     *
+     * <p>The entry pairs a textual tag with the time the event occurred and satisfies the checkin service's
+     * requirement that every checkin carry at least one event.
      */
     @ProtobufMessage(name = "FcmCheckinRequest.Event")
     public static final class Event {
         /**
-         * Event tag.
+         * Holds the event tag.
          *
-         * @apiNote
-         * Cobalt always sends {@code "event_log_start"} for a
-         * synthetic checkin.
+         * @implNote This implementation always sends {@code "event_log_start"} for a synthetic checkin.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String tag;
 
         /**
-         * Event timestamp, in epoch milliseconds.
+         * Holds the event timestamp, in epoch milliseconds.
          */
         @ProtobufProperty(index = 3, type = ProtobufType.INT64)
         long timeMs;
@@ -306,7 +301,7 @@ public final class FcmCheckinRequest {
          * Constructs a new event entry.
          *
          * @param tag    the event tag
-         * @param timeMs the event timestamp
+         * @param timeMs the event timestamp, in epoch milliseconds
          */
         Event(String tag, long timeMs) {
             this.tag = tag;

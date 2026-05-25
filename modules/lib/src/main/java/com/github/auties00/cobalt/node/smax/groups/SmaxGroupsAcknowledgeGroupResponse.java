@@ -13,12 +13,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed reply family for a {@link SmaxGroupsAcknowledgeGroupRequest}.
+ * Sealed reply family for a {@link SmaxGroupsAcknowledgeGroupRequest}.
  *
- * @apiNote The three variants mirror the WA Web RPC dispatcher's
- * {@code Success}/{@code ClientError}/{@code ServerError} cases. The caller in
- * {@code WAWebConversationSpamUtils.acknowledgeGroupAsNotSpam} dispatches fire-and-forget and discards every
- * variant; this type still ships the typed reply for callers that want richer error reporting.
+ * The three variants partition every reply the relay can return: {@link Success}, {@link ClientError} and
+ * {@link ServerError}. The acknowledgement is dispatched fire-and-forget and callers usually discard every
+ * variant; the typed reply is still surfaced for callers that want richer error reporting.
  */
 public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation.Response
         permits SmaxGroupsAcknowledgeGroupResponse.Success, SmaxGroupsAcknowledgeGroupResponse.ClientError, SmaxGroupsAcknowledgeGroupResponse.ServerError {
@@ -27,10 +26,10 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
      * Dispatches the inbound IQ across each {@link SmaxGroupsAcknowledgeGroupResponse} variant in priority order
      * and returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsAcknowledgeGroupRPC}.
+     * {@link Success} is probed first, then {@link ClientError}, then {@link ServerError}.
      *
-     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
-     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * @implNote This implementation returns an empty {@link Optional} when the stanza shape matches none of the
+     * documented variants; WA Web throws a parsing failure on the same path, but Cobalt defers the decision to the
      * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
@@ -56,18 +55,17 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
     }
 
     /**
-     * The reply variant emitted when the relay accepted the acknowledgement.
+     * Reply variant emitted when the relay accepted the acknowledgement.
      *
-     * @apiNote Carries no payload beyond the envelope echo; the WA Web parser only validates the
-     * {@code <iq from="..." id="..." type="result">} shape and emits a singleton {@code {type: "result"}}
-     * record.
+     * The variant carries no payload beyond the envelope echo; the relay's {@code <iq type="result">} shape is the
+     * only signal.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseSuccess")
     final class Success implements SmaxGroupsAcknowledgeGroupResponse {
         /**
          * Constructs a marker {@link Success}.
          *
-         * @apiNote The instance carries no payload; the relay's envelope is the only signal.
+         * The instance carries no payload; the relay's envelope is the only signal.
          */
         public Success() {
         }
@@ -75,8 +73,7 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches the WA Web parser {@code parseAcknowledgeGroupResponseSuccess}: the IQ must be a
-         * valid {@code type="result"} echo of the request.
+         * The IQ must be a valid {@code type="result"} echo of the request.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -128,18 +125,18 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
     }
 
     /**
-     * The reply variant emitted when the relay rejected the acknowledgement as malformed, unauthorised, or
-     * referencing a non-existent group.
+     * Reply variant emitted when the relay rejected the acknowledgement as malformed, unauthorised, or referencing
+     * a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseClientError")
     final class ClientError implements SmaxGroupsAcknowledgeGroupResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -175,8 +172,8 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -234,17 +231,17 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
     }
 
     /**
-     * The reply variant emitted on transient relay-side failure.
+     * Reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseServerError")
     final class ServerError implements SmaxGroupsAcknowledgeGroupResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the relay.
+         * Holds the optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
@@ -280,8 +277,8 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * Delegates the envelope validation to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
+         * which checks the shared {@code <iq type="error"><error code="..." text="..."/></iq>} shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

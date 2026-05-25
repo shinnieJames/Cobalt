@@ -22,13 +22,10 @@ import java.util.Collection;
  * Applies the {@code interactive_message_action} app-state sync action that
  * disables the call-to-action on a Galaxy interactive message.
  *
- * @apiNote
- * Drives the cross-device "disable CTA" flow surfaced by Galaxy
- * commerce/CTWA messages: when the primary device hides a CTA the
- * resulting mutation fans out across the {@link SyncPatchType#REGULAR_LOW}
- * collection so companions stop offering the action. The mutation index
- * is the standard message-keyed shape with an extra {@code subId} slot
- * for the per-CTA discriminator, formatted as
+ * <p>The action fans out across the {@link SyncPatchType#REGULAR_LOW}
+ * collection so companions stop offering the action once the primary device
+ * hides a CTA. The mutation index is the standard message-keyed shape with an
+ * extra {@code subId} slot for the per-CTA discriminator, formatted as
  * {@snippet :
  *     ["interactive_message_action", chatJid, messageId, fromMe, participant, subId]
  * }
@@ -36,17 +33,12 @@ import java.util.Collection;
  * @implNote
  * This implementation persists the per-CTA state through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#putInteractiveMessageState(InteractiveMessageState)}
- * keyed by {@code agmId|<id>}, {@code messageId|<id>} and the full
- * composite index, replacing WA Web's
- * {@code frontendFireAndForget("addGalaxyDisableCTAByAgmId" / "addGalaxyDisableCTAMessageId")}
- * RPCs. Chat resolution is direct via
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#findChatByJid(Jid)}
- * rather than through WA Web's
- * {@code WAWebSyncdResolveMessages.resolveMessagesForMutations} batch
- * cache, and message lookup uses
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#findMessageById}
- * in place of the {@code msgKeyToDbIdWithoutFromMeParticipant} prefix
- * scan.
+ * keyed by {@code agmId|<id>}, {@code messageId|<id>} and the full composite
+ * index, resolving the chat directly via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findChatByJid(com.github.auties00.cobalt.model.jid.JidProvider)}
+ * and the message via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findMessageById(com.github.auties00.cobalt.model.chat.Chat, String)}
+ * rather than through a batched resolution cache.
  */
 @WhatsAppWebModule(moduleName = "WAWebInteractiveMessageSync")
 public final class InteractiveMessageHandler implements WebAppStateActionHandler {
@@ -89,19 +81,23 @@ public final class InteractiveMessageHandler implements WebAppStateActionHandler
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()}, a short or empty index
+     * as malformed, and an absent chat as
+     * {@link MutationApplicationResult#orphan(String, String)} with model type
+     * {@code "Msg"}. When the action carries an {@code agmId} the AGM state is
+     * recorded first; when the message is found and the action is
+     * {@link InteractiveMessageActionMode#DISABLE_CTA} the per-message and
+     * per-composite-index entries are written and a
+     * {@link MutationApplicationResult#success()} is returned. A present
+     * message with a non-{@link InteractiveMessageActionMode#DISABLE_CTA}
+     * action yields {@link MutationApplicationResult#skipped()}.
+     *
      * @implNote
-     * This implementation records the {@code agmId} state before the
-     * message lookup so that an absent message still publishes the AGM
-     * mapping (matching WA Web's order); when the message is found and
-     * the action is
-     * {@link InteractiveMessageActionMode#DISABLE_CTA} the per-message
-     * and per-composite-index entries are written. A {@code null}
-     * {@code agmId} combined with an absent message yields
-     * {@link MutationApplicationResult#orphan(String, String)} with model
-     * type {@code "Msg"}; a non-{@link InteractiveMessageActionMode#DISABLE_CTA}
-     * action with a present message resolves to
-     * {@link MutationApplicationResult#skipped()} matching WA Web's
-     * {@code Skipped} branch.
+     * This implementation records the {@code agmId} state before the message
+     * lookup so that an absent message still publishes the AGM mapping; a
+     * {@code null} {@code agmId} combined with an absent message yields an
+     * orphan result rather than a success.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebInteractiveMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -196,23 +192,17 @@ public final class InteractiveMessageHandler implements WebAppStateActionHandler
     }
 
     /**
-     * Builds the {@link InteractiveMessageAction} payload that callers
-     * embed inside an outgoing pending mutation.
+     * Builds the {@link InteractiveMessageAction} payload that callers embed
+     * inside an outgoing pending mutation.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code $InteractiveMessageSync$p_1} factory shape so that
-     * {@link com.github.auties00.cobalt.sync.WebAppStateSender} can
-     * assemble the mutation envelope without duplicating the typed
-     * action body. The remaining wiring (chat-jid resolution,
-     * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
-     * wrapping, signing) lives in the sender pipeline because Cobalt
-     * splits envelope construction from action authoring.
+     * <p>Sets the action {@code type} and, when {@code agmId} is non-{@code
+     * null}, the AGM identifier; the chat-jid resolution, value wrapping and
+     * signing are performed by the outgoing-mutation pipeline rather than here.
      *
      * @param type  the interactive-message action mode, normally
      *              {@link InteractiveMessageActionMode#DISABLE_CTA}
-     * @param agmId the optional Galaxy AGM identifier; pass {@code null}
-     *              when the action is not bound to a specific AGM
+     * @param agmId the optional Galaxy AGM identifier; pass {@code null} when
+     *              the action is not bound to a specific AGM
      * @return a freshly built {@link InteractiveMessageAction}
      */
     @WhatsAppWebExport(moduleName = "WAWebInteractiveMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -227,36 +217,26 @@ public final class InteractiveMessageHandler implements WebAppStateActionHandler
     /**
      * Returns whether the given string is {@code null} or empty.
      *
-     * @apiNote
-     * Mirrors the JavaScript falsy check {@code (!value)} that WA Web
-     * applies to every part of the five-element index before treating
-     * the mutation as malformed.
-     *
      * @param value the candidate string
-     * @return {@code true} when {@code value} is {@code null} or has
-     *         length zero
+     * @return {@code true} when {@code value} is {@code null} or has length
+     *         zero
      */
     private static boolean isNullOrEmpty(String value) {
         return value == null || value.isEmpty();
     }
 
     /**
-     * Returns the per-AGM and per-message
-     * {@link InteractiveMessageState} entries currently tracked in the
-     * store.
+     * Returns the per-AGM and per-message {@link InteractiveMessageState}
+     * entries currently tracked in the store.
      *
-     * @apiNote
-     * Provided as a test seam so suites that exercise the handler can
-     * read the state recorded by
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * without exposing
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#interactiveMessageStates()}
-     * to every caller.
+     * <p>Reads the live, immutable view recorded by
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)} so test
+     * suites can inspect the handler's effect without holding a direct
+     * reference to the store.
      *
-     * @param client the {@link WhatsAppClient} whose store should be
-     *               read
-     * @return the live, immutable view of the store's interactive
-     *         message states
+     * @param client the {@link WhatsAppClient} whose store should be read
+     * @return the live, immutable view of the store's interactive message
+     *         states
      */
     public Collection<InteractiveMessageState> interactiveMessageStates(WhatsAppClient client) {
         return client.store().interactiveMessageStates();

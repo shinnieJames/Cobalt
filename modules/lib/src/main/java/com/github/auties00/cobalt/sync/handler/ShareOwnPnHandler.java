@@ -17,13 +17,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Records that a LID-identified contact may now see the local user's phone
  * number.
  *
- * @apiNote
- * Cobalt embedders never invoke this handler directly; the sync dispatcher
- * routes incoming {@code shareOwnPn} mutations here whenever the user
- * promotes a LID-only contact to phone-number-visible (typical trigger: a
- * primary-device prompt that asks "share your phone number with this
- * contact?"). The handler flips
- * {@link com.github.auties00.cobalt.model.contact.Contact#phoneNumberShared()}
+ * <p>The sync dispatcher routes incoming {@code shareOwnPn} mutations here
+ * whenever the user promotes a LID-only contact to phone-number-visible. The
+ * handler flips
+ * {@link com.github.auties00.cobalt.model.contact.Contact#isPhoneNumberShared()}
  * on the matching contact, upserting the contact when it is not yet in the
  * local store.
  */
@@ -37,10 +34,8 @@ public final class ShareOwnPnHandler implements WebAppStateActionHandler {
     /**
      * Constructs the handler.
      *
-     * @apiNote
-     * The handler is stateful only through the injected
-     * {@link ABPropsService}; Cobalt's sync registry holds a single
-     * instance per client.
+     * <p>The handler is stateful only through the injected {@link ABPropsService};
+     * Cobalt's sync registry holds a single instance per client.
      *
      * @param abPropsService the AB-props service consulted on every mutation
      */
@@ -79,20 +74,19 @@ public final class ShareOwnPnHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>The mutation is gated on {@link ABProp#SHARE_OWN_PN_SYNC} and requires a
+     * {@link SyncdOperation#SET}; either gate failing reports
+     * {@link MutationApplicationResult#unsupported()}. Index slot {@code [1]} is
+     * read as a wid-like string and parsed into a {@link Jid} that must carry the
+     * LID server, reporting malformed otherwise. The matching LID contact is then
+     * upserted with {@code phoneNumberShared = true}.
+     *
      * @implNote
-     * This implementation mirrors WA Web's per-mutation closure inside
-     * {@code WAWebShareOwnPnSync.applyMutations}: it gates on
-     * {@link ABProp#SHARE_OWN_PN_SYNC}, requires a {@link SyncdOperation#SET},
-     * extracts {@code indexParts[1]} as a wid-like string, parses it into a
-     * {@link Jid} that must carry the LID server, then upserts the LID
-     * contact with {@code phoneNumberShared = true}. WA Web accumulates
-     * valid entries across the whole batch and flushes them once via
-     * {@code WAWebUpdateLidMetadataJob.updateLidMetadataJob -> WAWebApiContact.updateLidMetadata -> WAWebLidAwareContactsDB.bulkCreateOrMerge};
-     * Cobalt collapses that pipeline into a direct per-mutation contact
-     * update because the unified {@code WhatsAppStore} is itself the
-     * source of truth and there is no IDB layer to batch. The frontend
-     * {@code bulkUpdateLidContactState} mirror and the
-     * {@code WALogger.WARN} counters are omitted as telemetry.
+     * WA Web accumulates valid entries across the whole batch and flushes them
+     * once through {@code WAWebUpdateLidMetadataJob}; Cobalt collapses that
+     * pipeline into a direct per-mutation contact update because the unified
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} is itself the source
+     * of truth and there is no IDB layer to batch.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebShareOwnPnSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

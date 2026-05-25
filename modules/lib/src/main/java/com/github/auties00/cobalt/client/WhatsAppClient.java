@@ -124,11 +124,11 @@ public interface WhatsAppClient {
      * {@link WhatsAppClient}.
      *
      * @apiNote
-     * The returned {@link WhatsAppClientBuilder} is a static singleton
-     * because every per-session knob (id, serializer, error handler) is
-     * supplied through fluent {@code newConnection*} methods rather than
-     * constructor arguments. Embedders call this once at startup and
-     * chain {@code newConnection(...).build()} to obtain a ready
+     * Embedders call this once at startup and chain a flavour selector
+     * ({@link WhatsAppClientBuilder#webClient()},
+     * {@link WhatsAppClientBuilder#mobileClient()}, or
+     * {@link WhatsAppClientBuilder#customClient()}) followed by the
+     * connection and verification steps to obtain a ready
      * {@code WhatsAppClient}.
      *
      * @return the shared {@link WhatsAppClientBuilder} singleton
@@ -858,9 +858,8 @@ public interface WhatsAppClient {
      * @throws NullPointerException            if {@code edit} is
      *                                         {@code null}
      * @throws NoSuchElementException          if the response carries
-     *                                         no
-     *                                         {@code <merchant_info>}
-     *                                         child
+     *                                         no merchant-compliance
+     *                                         data
      * @throws WhatsAppSessionException.Closed if the socket is no
      *                                         longer open
      */
@@ -5302,8 +5301,9 @@ public interface WhatsAppClient {
      * nonce is then echoed back to the Meta-side surface as proof of
      * possession.
      *
-     * @param identifierScope the optional {@code <identifier scope/>}
-     *                        attribute; {@code null} omits the child
+     * @param identifierScope the optional scope qualifying the issued
+     *                        identifier; {@code null} leaves it
+     *                        unscoped
      * @return an {@link Optional} carrying the issued nonce, or empty
      *         when the relay did not return a documented
      *         {@code Success} variant
@@ -5449,10 +5449,9 @@ public interface WhatsAppClient {
      *
      * @param participants     the non-{@code null} recipient JIDs;
      *                         must be in the 1..2000 range
-     * @param useAdAccount     whether to attach the
-     *                         {@code <use_ad_account/>} marker
-     * @param skipDedupe       whether to attach the
-     *                         {@code <skip_dedupe/>} marker
+     * @param useAdAccount     whether to bill the campaign against the
+     *                         linked ad account
+     * @param skipDedupe       whether to skip recipient deduplication
      * @param offerId          the optional offer id; may be {@code null}
      * @param pendingCampaigns optional pending-campaign list (max 200);
      *                         may be {@code null}
@@ -5732,12 +5731,10 @@ public interface WhatsAppClient {
      *
      * @apiNote
      * Called after the client has fully ingested the resources the
-     * relay marked dirty (typical examples: {@code account_sync},
-     * {@code groups}, {@code blocklist}). Without the
-     * acknowledgement the relay re-publishes the same info-bulletin
-     * stanzas on every reconnect. Each
-     * {@code (resource, timestamp)} entry maps to one
-     * {@code <clean/>} child on the outbound IQ.
+     * server marked dirty (typical examples: {@code account_sync},
+     * {@code groups}, {@code blocklist}). Without the acknowledgement
+     * the server re-announces the same dirty resources on every
+     * reconnect.
      *
      * @param dirtyBits the non-{@code null} and non-empty
      *                  {@code (type, timestamp)} entries to clear
@@ -6078,10 +6075,9 @@ public interface WhatsAppClient {
      * snapshot.
      *
      * @apiNote
-     * Called after the local store has consumed the {@code <dirty/>}
-     * notification carrying the group's pending updates. Without
-     * the ack the relay redelivers the same notification on every
-     * reconnect.
+     * Called after the local store has consumed the dirty notification
+     * carrying the group's pending updates. Without the acknowledgement
+     * the server redelivers the same notification on every reconnect.
      *
      * @param group the non-{@code null} group JID being acknowledged
      * @throws NullPointerException            if {@code group} is {@code null}
@@ -6953,11 +6949,10 @@ public interface WhatsAppClient {
      * newsletter.
      *
      * @apiNote
-     * Once acknowledged the relay starts pushing
-     * {@code <notification type="newsletter">} stanzas carrying the
-     * live message and status delta stream. The subscription is
-     * bounded by the returned duration (the relay clamps it to
-     * {@code [30s, 600s]}); the caller is expected to refresh
+     * Once acknowledged the server starts pushing the newsletter's live
+     * message and status delta stream to this connection. The
+     * subscription is bounded by the returned duration (clamped by the
+     * server to {@code [30s, 600s]}); the caller is expected to refresh
      * before it expires to keep the stream alive.
      *
      * @param newsletter the non-{@code null} newsletter JID being
@@ -6997,9 +6992,8 @@ public interface WhatsAppClient {
      * Fetches the per-group A/B-experiment configuration.
      *
      * @apiNote
-     * Refreshes group-scoped feature gates after the relay pushes a
-     * {@code <notification type="abprops">} bump that names a
-     * specific group.
+     * Refreshes group-scoped feature gates after the server signals an
+     * A/B-props change for a specific group.
      *
      * @param group     the non-{@code null} target group JID
      * @param propsHash the cached group-props hash, or {@code null}

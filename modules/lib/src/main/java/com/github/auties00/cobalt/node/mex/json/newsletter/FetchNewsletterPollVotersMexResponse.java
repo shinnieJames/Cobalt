@@ -19,29 +19,22 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parses the MEX response of the fetch-newsletter-poll-voters query
- * built by {@link FetchNewsletterPollVotersMexRequest}.
+ * Parses the MEX response of the fetch-newsletter-poll-voters query built by
+ * {@link FetchNewsletterPollVotersMexRequest}.
  *
- * @apiNote
- * Exposes the per-option voter lists echoed under {@code voter_list};
- * each {@link Votes} carries one option (keyed by its base64-encoded
- * {@code vote_hash}) and the Relay-style edges of voters that selected
- * it. WA Web converts the {@code vote_hash} to hex via
- * {@code WAWebPollOptionHashUtils.base64ToHex} before keying its in-memory
- * map.
+ * <p>Exposes the per-option voter lists echoed under {@code voter_list}; each {@link Votes} carries
+ * one option (keyed by its base64-encoded {@code vote_hash}) and the Relay-style edges of voters
+ * that selected it. WA Web converts the {@code vote_hash} to hex before keying its in-memory map.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterPollVotersJob")
 public final class FetchNewsletterPollVotersMexResponse implements MexOperation.Response.Json {
     /**
-     * The per-option voter groups.
+     * Holds the per-option voter groups.
      */
     private final List<Votes> votes;
 
     /**
      * Constructs a response wrapping the parsed voter groups.
-     *
-     * @apiNote
-     * Reserved for the static parser.
      *
      * @param votes the per-option voter groups
      */
@@ -52,15 +45,12 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.voter_list} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser; the returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.voter_list} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result payload
      */
     public static Optional<FetchNewsletterPollVotersMexResponse> of(Node node) {
         return node.getChild("result")
@@ -78,31 +68,25 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
     }
 
     /**
-     * Wraps one entry of the {@code votes} array: one poll option and
-     * its voters.
+     * Wraps one entry of the {@code votes} array: one poll option and its voters.
      *
-     * @apiNote
-     * The {@code vote_hash} is the base64-encoded server hash of the
-     * option text (so the same option produces the same hash across all
-     * voters); the {@link VoterList} carries the Relay-style edges of
-     * voters that picked the option.
+     * <p>The {@code vote_hash} is the base64-encoded server hash of the option text, so the same
+     * option produces the same hash across all voters; the {@link VoterList} carries the Relay-style
+     * edges of voters that picked the option.
      */
     public static final class Votes {
         /**
-         * The base64-encoded option hash.
+         * Holds the base64-encoded option hash.
          */
         private final String voteHash;
 
         /**
-         * The voters that picked the option.
+         * Holds the voters that picked the option.
          */
         private final VoterList voterList;
 
         /**
          * Constructs a votes wrapper from the parsed sub-fields.
-         *
-         * @apiNote
-         * Reserved for the static parser.
          *
          * @param voteHash  the base64-encoded option hash
          * @param voterList the voters that picked the option
@@ -115,8 +99,7 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
         /**
          * Returns the base64-encoded option hash.
          *
-         * @return the option hash, or empty when the relay omitted the
-         *         field
+         * @return the option hash, or empty when the relay omitted the field
          */
         public Optional<String> voteHash() {
             return Optional.ofNullable(voteHash);
@@ -125,8 +108,7 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
         /**
          * Returns the voters that picked the option.
          *
-         * @return the parsed {@link VoterList}, or empty when the relay
-         *         omitted the field
+         * @return the parsed {@link VoterList}, or empty when the relay omitted the field
          */
         public Optional<VoterList> voterList() {
             return Optional.ofNullable(voterList);
@@ -135,20 +117,16 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
         /**
          * Wraps the {@code voter_list} sub-object.
          *
-         * @apiNote
-         * Holds the Relay-style {@code edges} array of voters.
+         * <p>Holds the Relay-style {@code edges} array of voters.
          */
         public static final class VoterList {
             /**
-             * The Relay-style edges.
+             * Holds the Relay-style edges.
              */
             private final List<Edges> edges;
 
             /**
              * Constructs a voter-list wrapper from the parsed sub-fields.
-             *
-             * @apiNote
-             * Reserved for the static parser.
              *
              * @param edges the Relay-style edges
              */
@@ -168,27 +146,22 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
             /**
              * Wraps one entry of the {@code edges} array.
              *
-             * @apiNote
-             * Carries the vote {@code action_time} (microseconds since
-             * epoch on the wire, which WA Web divides by {@code 1e6} to
-             * convert to seconds) and the voter profile {@link Node}.
+             * <p>Carries the vote {@code action_time} (microseconds since epoch on the wire, which WA
+             * Web divides by {@code 1e6} to convert to seconds) and the voter profile {@link Node}.
              */
             public static final class Edges {
                 /**
-                 * The vote action time, in microseconds since the epoch.
+                 * Holds the vote action time, in microseconds since the epoch.
                  */
                 private final Long actionTime;
 
                 /**
-                 * The voter profile sub-object.
+                 * Holds the voter profile sub-object.
                  */
                 private final Node node;
 
                 /**
                  * Constructs an edge wrapper from the parsed sub-fields.
-                 *
-                 * @apiNote
-                 * Reserved for the static parser.
                  *
                  * @param actionTime the vote action time, in microseconds
                  * @param node       the voter profile sub-object
@@ -201,8 +174,7 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                 /**
                  * Returns the voter profile sub-object.
                  *
-                 * @return the parsed {@link Node}, or empty when the relay
-                 *         omitted the field
+                 * @return the parsed {@link Node}, or empty when the relay omitted the field
                  */
                 public Optional<Node> node() {
                     return Optional.ofNullable(node);
@@ -211,22 +183,17 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                 /**
                  * Wraps the voter profile {@code node} sub-object.
                  *
-                 * @apiNote
-                 * Carries only the voter Jid string; WA Web logs a warning
-                 * via {@code WAWebNewsletterPollsUtils.logIfPollVoterIdNotPlainUser}
-                 * when the id does not resolve to a plain-user Jid.
+                 * <p>Carries only the voter Jid string; WA Web logs a warning when the id does not
+                 * resolve to a plain-user Jid.
                  */
                 public static final class Node {
                     /**
-                     * The voter Jid string.
+                     * Holds the voter Jid string.
                      */
                     private final String id;
 
                     /**
                      * Constructs a node wrapper from the parsed sub-fields.
-                     *
-                     * @apiNote
-                     * Reserved for the static parser.
                      *
                      * @param id the voter Jid string
                      */
@@ -237,8 +204,7 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                     /**
                      * Returns the voter Jid string.
                      *
-                     * @return the Jid string, or empty when the relay
-                     *         omitted the field
+                     * @return the Jid string, or empty when the relay omitted the field
                      */
                     public Optional<String> id() {
                         return Optional.ofNullable(id);
@@ -247,13 +213,8 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                     /**
                      * Parses a {@link Node} from the given JSON object.
                      *
-                     * @apiNote
-                     * Used by {@link Edges#of(JSONObject)} to hydrate the
-                     * nested {@code node} entry.
-                     *
                      * @param obj the JSON object to parse
-                     * @return the parsed entry, or empty when {@code obj}
-                     *         is {@code null}
+                     * @return the parsed entry, or empty when {@code obj} is {@code null}
                      */
                     static Optional<Node> of(JSONObject obj) {
                         if (obj == null) {
@@ -265,15 +226,10 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                     }
 
                     /**
-                     * Parses a list of {@link Node} entries from the given
-                     * JSON array.
-                     *
-                     * @apiNote
-                     * Provided for symmetry.
+                     * Parses a list of {@link Node} entries from the given JSON array.
                      *
                      * @param arr the JSON array to parse
-                     * @return the parsed list, empty when {@code arr} is
-                     *         {@code null}
+                     * @return the parsed list, empty when {@code arr} is {@code null}
                      */
                     static List<Node> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -291,13 +247,8 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                 /**
                  * Parses an {@link Edges} from the given JSON object.
                  *
-                 * @apiNote
-                 * Used by {@link VoterList#of(JSONObject)} to hydrate one
-                 * entry of the {@code edges} array.
-                 *
                  * @param obj the JSON object to parse
-                 * @return the parsed entry, or empty when {@code obj} is
-                 *         {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is {@code null}
                  */
                 static Optional<Edges> of(JSONObject obj) {
                     if (obj == null) {
@@ -310,16 +261,10 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
                 }
 
                 /**
-                 * Parses a list of {@link Edges} entries from the given
-                 * JSON array.
-                 *
-                 * @apiNote
-                 * Used by {@link VoterList#of(JSONObject)} to hydrate the
-                 * {@code edges} array.
+                 * Parses a list of {@link Edges} entries from the given JSON array.
                  *
                  * @param arr the JSON array to parse
-                 * @return the parsed list, empty when {@code arr} is
-                 *         {@code null}
+                 * @return the parsed list, empty when {@code arr} is {@code null}
                  */
                 static List<Edges> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -337,13 +282,8 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
             /**
              * Parses a {@link VoterList} from the given JSON object.
              *
-             * @apiNote
-             * Used by {@link Votes#of(JSONObject)} to hydrate the nested
-             * {@code voter_list} entry.
-             *
              * @param obj the JSON object to parse
-             * @return the parsed entry, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed entry, or empty when {@code obj} is {@code null}
              */
             static Optional<VoterList> of(JSONObject obj) {
                 if (obj == null) {
@@ -355,16 +295,10 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
             }
 
             /**
-             * Parses a list of {@link VoterList} entries from the given
-             * JSON array.
-             *
-             * @apiNote
-             * Provided for symmetry; the envelope does not carry a
-             * {@code voter_list} array.
+             * Parses a list of {@link VoterList} entries from the given JSON array.
              *
              * @param arr the JSON array to parse
-             * @return the parsed list, empty when {@code arr} is
-             *         {@code null}
+             * @return the parsed list, empty when {@code arr} is {@code null}
              */
             static List<VoterList> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -382,13 +316,8 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
         /**
          * Parses a {@link Votes} from the given JSON object.
          *
-         * @apiNote
-         * Used by {@link FetchNewsletterPollVotersMexResponse#of(byte[])}
-         * to hydrate one entry of the {@code votes} array.
-         *
          * @param obj the JSON object to parse
-         * @return the parsed entry, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed entry, or empty when {@code obj} is {@code null}
          */
         static Optional<Votes> of(JSONObject obj) {
             if (obj == null) {
@@ -401,12 +330,7 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
         }
 
         /**
-         * Parses a list of {@link Votes} entries from the given JSON
-         * array.
-         *
-         * @apiNote
-         * Used by {@link FetchNewsletterPollVotersMexResponse#of(byte[])}
-         * to hydrate the {@code votes} array.
+         * Parses a list of {@link Votes} entries from the given JSON array.
          *
          * @param arr the JSON array to parse
          * @return the parsed list, empty when {@code arr} is {@code null}
@@ -425,20 +349,14 @@ public final class FetchNewsletterPollVotersMexResponse implements MexOperation.
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.voter_list} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.voter_list} root
      */
     private static Optional<FetchNewsletterPollVotersMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

@@ -7,24 +7,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link AiThreadRenameMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing AI-thread-rename mutation. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.AiThreadRenameHandler}
- * whose inbound-side coverage lives in
- * {@code AiThreadRenameHandlerTest}.
- *
- * @implNote
- * This implementation gates the encode test on
- * {@link SyncFixtures#isOracleAvailable(String)} so the suite remains green
- * until a real WAWeb-captured encode fixture is added.
+ * Covers {@link AiThreadRenameMutationFactory} against captured WhatsApp Web
+ * encode payloads. The encode check is gated on
+ * {@link SyncFixtures#isOracleAvailable(String)} so it no-ops cleanly until a
+ * real captured fixture for {@code handler/ai-thread-rename/encode} exists.
  */
 @DisplayName("AiThreadRenameMutationFactory")
 class AiThreadRenameMutationFactoryTest {
-    /**
-     * Asserts that the captured encode oracle is loadable when present.
-     */
     @Test
     @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
     void oracle() {

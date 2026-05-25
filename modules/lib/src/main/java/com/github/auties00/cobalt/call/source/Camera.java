@@ -18,117 +18,129 @@ import java.lang.foreign.ValueLayout;
 import java.util.Objects;
 
 /**
- * A {@link VideoSource} that captures from an OS camera. The
- * default constructor auto-detects the running platform and opens
- * its conventional default camera; advanced callers can pass an
- * explicit libavdevice {@code (indev, url)} pair via
- * {@link #Camera(String, String)}.
+ * Captures call video from an operating-system camera as a {@link VideoSource}.
+ *
+ * <p>Opens a libavdevice capture device, demuxes its video stream, decodes it, and converts each
+ * decoded picture to I420 with libswscale so the output matches {@link VideoFrame}'s layout. The
+ * no-argument constructor auto-detects the running platform and opens its conventional default
+ * camera; {@link #Camera(String)} opens a named device using the platform-default input format; and
+ * {@link #Camera(String, String)} is the power-user entry point that opens an explicit libavdevice
+ * input-format and URL pair for cases the platform default does not cover. The same pipeline backs
+ * the screen-grab sources created through {@link Screen}.
  *
  * <h2>Platform defaults</h2>
  *
  * <ul>
  *   <li>Linux: {@code v4l2} on {@code /dev/video0}</li>
  *   <li>macOS: {@code avfoundation} on device index {@code 0}</li>
- *   <li>Windows: requires explicit selection — use
- *       {@link #Camera(String)} with the device's friendly name
- *       (e.g. {@code "Integrated Camera"}) since libavdevice's
- *       {@code dshow} input format does not have a stable
- *       default index</li>
+ *   <li>Windows: requires explicit selection, so {@link #Camera(String)} must be given the device's
+ *       friendly name (for example {@code "Integrated Camera"}), because libavdevice's {@code dshow}
+ *       input format has no stable default index</li>
  * </ul>
  *
- * <p>Each captured frame is converted to I420 via libswscale and
- * delivered through {@link #next()}. Camera capture is blocking;
- * {@code next()} returns once a frame is available or {@code null}
- * if the device closes.
+ * @apiNote Wire this source into a call to transmit live camera video. Prefer the no-argument
+ * {@link #Camera()} on Linux and macOS; on Windows there is no conventional default, so use
+ * {@link #Camera(String)} with the device's friendly name. Capture is blocking: {@link #next()}
+ * returns once a frame is available, or {@code null} when the device closes. Always close the source
+ * (it is {@link AutoCloseable}) so the operating-system device and native decoder are released.
  */
 public final class Camera implements VideoSource, AutoCloseable {
     /**
-     * Lifetime arena.
+     * Holds the arena owning every native allocation this source makes, closed when the source
+     * closes.
      */
     private final Arena arena;
 
     /**
-     * libavformat input context — owns the device handle.
+     * Holds the libavformat input context pointer, which owns the capture device handle.
      */
     private final MemorySegment formatCtx;
 
     /**
-     * libavcodec decoder context.
+     * Holds the libavcodec decoder context pointer.
      */
     private final MemorySegment codecCtx;
 
     /**
-     * Reusable demuxer packet.
+     * Holds the reusable demuxer packet pointer driven by the read loop.
      */
     private final MemorySegment packet;
 
     /**
-     * Reusable decoded frame.
+     * Holds the reusable decoded-frame pointer that the decoder writes into.
      */
     private final MemorySegment frame;
 
     /**
-     * The video stream's index inside the device's container.
+     * Holds the index of the video stream chosen from the device's container.
      */
     private final int streamIndex;
 
     /**
-     * libswscale converter, lazily (re)built per
-     * (width, height, srcFmt) triple.
+     * Holds the libswscale converter pointer, lazily built and rebuilt whenever the
+     * {@code (width, height, source pixel format)} triple changes between captured frames.
      */
     private MemorySegment swsCtx;
 
     /**
-     * Width the swscale converter was built for.
+     * Holds the width the current {@link #swsCtx} converter was built for.
      */
     private int swsW;
 
     /**
-     * Height the swscale converter was built for.
+     * Holds the height the current {@link #swsCtx} converter was built for.
      */
     private int swsH;
 
     /**
-     * Source pixel format the swscale converter was built for.
+     * Holds the source pixel format the current {@link #swsCtx} converter was built for.
      */
     private int swsFmt;
 
     /**
-     * Opens the platform's default camera. Equivalent to
-     * {@code new Camera(defaultIndev(), defaultUrl())}.
+     * Opens the platform's default camera.
      *
-     * @throws UnsupportedOperationException if the platform has no
-     *                                       conventional default
-     *                                       (e.g. Windows)
+     * <p>Equivalent to {@link #Camera(String, String)} with the platform's default input format and
+     * default device URL.
+     *
+     * @throws UnsupportedOperationException if the platform has no conventional default camera (such
+     *                                       as Windows)
+     * @throws IllegalStateException         if the device cannot be opened or has no video stream
      */
     public Camera() {
         this(defaultIndev(), defaultUrl());
     }
 
     /**
-     * Opens a camera at the given device URL using the platform's
-     * default libavdevice indev (v4l2 on Linux, avfoundation on
-     * macOS, dshow on Windows). On Windows the URL is taken as a
-     * device friendly name and prefixed with {@code "video="}.
+     * Opens a named camera using the platform's default libavdevice input format.
      *
-     * @param deviceUrl the device URL or name (e.g.
-     *                  {@code "/dev/video1"} on Linux,
-     *                  {@code "1"} on macOS,
-     *                  {@code "Integrated Camera"} on Windows)
+     * <p>Uses {@code v4l2} on Linux, {@code avfoundation} on macOS, and {@code dshow} on Windows.
+     * On Windows the argument is treated as a device friendly name and prefixed with
+     * {@code "video="} as {@code dshow} requires.
+     *
+     * @param deviceUrl the device URL or name (for example {@code "/dev/video1"} on Linux,
+     *                  {@code "1"} on macOS, or {@code "Integrated Camera"} on Windows)
+     * @throws IllegalStateException if the device cannot be opened or has no video stream
      */
     public Camera(String deviceUrl) {
         this(defaultIndev(), normalizeUrlForPlatform(deviceUrl));
     }
 
     /**
-     * Opens the given libavdevice {@code (indev, url)} pair and
-     * sets up the demux + decode pipeline. The power-user
-     * constructor for cases where the platform default isn't
-     * appropriate.
+     * Opens an explicit libavdevice input-format and URL pair and prepares the demux and decode
+     * pipeline.
      *
-     * @param indev the libavdevice input format name
-     *              (e.g. {@code "v4l2"})
+     * <p>Ensures the FFmpeg libraries are loaded, registers libavdevice, resolves the named input
+     * format, opens the device, picks its first video stream, and opens a decoder for that stream's
+     * codec. This is the power-user constructor for cases where neither {@link #Camera()} nor
+     * {@link #Camera(String)} selects the right device. If any step fails the arena is closed before
+     * the exception propagates, so a failed construction leaks no native resources.
+     *
+     * @param indev the libavdevice input-format name (for example {@code "v4l2"})
      * @param url   the device URL
+     * @throws NullPointerException  if {@code indev} or {@code url} is {@code null}
+     * @throws IllegalStateException if the named input format is unavailable in this build, the
+     *                               device cannot be opened, or it has no video stream
      */
     public Camera(String indev, String url) {
         Objects.requireNonNull(indev, "indev cannot be null");
@@ -179,11 +191,14 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Captures and returns the next I420 frame from the camera.
-     * Returns {@code null} only when the underlying device emits
-     * an unrecoverable EOF.
+     * {@inheritDoc}
      *
-     * @return the next frame, or {@code null} on device end
+     * <p>Reads packets from the device until one decodes into a frame, converts that frame to I420,
+     * and returns it. Packets belonging to other streams and decoder "need more input" results are
+     * skipped transparently. Returns {@code null} only when the device reports an unrecoverable
+     * end-of-input.
+     *
+     * @return {@inheritDoc}
      */
     @Override
     public VideoFrame next() {
@@ -220,10 +235,12 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Returns the libavdevice indev name conventional for the
-     * running platform.
+     * Returns the libavdevice input-format name conventional for the running platform.
      *
-     * @return the indev name
+     * <p>Resolves to {@code avfoundation} on macOS, {@code dshow} on Windows, and {@code v4l2}
+     * elsewhere.
+     *
+     * @return the platform's conventional input-format name
      */
     static String defaultIndev() {
         var os = System.getProperty("os.name", "").toLowerCase();
@@ -233,32 +250,35 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Returns the libavdevice URL conventional for the running
-     * platform's default camera.
+     * Returns the device URL conventional for the running platform's default camera.
      *
-     * @return the URL
-     * @throws UnsupportedOperationException on Windows, where
-     *                                       there is no stable
-     *                                       default
+     * <p>Resolves to {@code "0"} on macOS and {@code "/dev/video0"} on Linux. Windows has no stable
+     * default device, so it is unsupported here.
+     *
+     * @return the platform's conventional default-camera URL
+     * @throws UnsupportedOperationException on Windows, where there is no stable default device
      */
     private static String defaultUrl() {
         var os = System.getProperty("os.name", "").toLowerCase();
         if (os.contains("mac")) return "0";
         if (os.contains("win")) {
             throw new UnsupportedOperationException(
-                    "Windows has no default camera URL — pass a device "
+                    "Windows has no default camera URL - pass a device "
                             + "name to Camera(String), e.g. \"Integrated Camera\"");
         }
         return "/dev/video0";
     }
 
     /**
-     * Adjusts a user-supplied device URL into the form the
-     * platform's libavdevice indev expects (e.g. wraps a Windows
-     * dshow name with {@code "video="}).
+     * Adjusts a caller-supplied device URL into the form the platform's libavdevice input format
+     * expects.
      *
-     * @param url the user-supplied URL
-     * @return the platform-correct URL
+     * <p>Wraps a Windows {@code dshow} name with {@code "video="} when it is not already prefixed,
+     * and leaves the URL unchanged on other platforms.
+     *
+     * @param url the caller-supplied device URL
+     * @return the platform-correct device URL
+     * @throws NullPointerException if {@code url} is {@code null}
      */
     private static String normalizeUrlForPlatform(String url) {
         Objects.requireNonNull(url, "url cannot be null");
@@ -270,11 +290,15 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Finds the {@code AVInputFormat*} matching the given name
-     * in libavdevice's registered set.
+     * Returns the {@code AVInputFormat} matching the given name from libavdevice's registered video
+     * devices.
      *
-     * @param name the input format name
-     * @return the format pointer, or {@code null} if not found
+     * <p>Walks the registered input-device list and returns the first whose name equals the
+     * argument, or {@code null} when none matches.
+     *
+     * @param name the input-format name to find
+     * @return the matching input-format pointer, or {@code null} if none is registered under that
+     *         name
      */
     private static MemorySegment findInputDevice(String name) {
         var cursor = MemorySegment.NULL;
@@ -296,10 +320,18 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * libswscale-driven conversion of the current decoded frame
-     * into I420.
+     * Converts the current decoded frame to I420 with libswscale and wraps it in a
+     * {@link VideoFrame}.
      *
-     * @return the converted {@link VideoFrame}
+     * <p>Rejects frames whose dimensions are below {@code 2} or odd, since I420's half-resolution
+     * chroma planes require even dimensions. Rebuilds the libswscale converter when the frame's
+     * dimensions or source pixel format differ from the converter's current configuration, scales
+     * the three planes into a contiguous I420 buffer, and stamps the frame with the current wall
+     * clock.
+     *
+     * @return the converted frame
+     * @throws IllegalStateException if the captured frame has unsupported dimensions, the converter
+     *                               cannot be built, or the scale fails
      */
     private VideoFrame convertCurrentFrame() {
         var w = AVFrame.width(frame);
@@ -350,7 +382,10 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Releases all device + decoder resources. Idempotent.
+     * Releases the capture device and decoder resources.
+     *
+     * <p>Frees the libswscale converter and every libav* allocation, then closes the owning arena.
+     * Guards each pointer against {@code null} and a zero address, so the call is idempotent.
      */
     @Override
     public void close() {
@@ -390,11 +425,11 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Walks {@code formatCtx.streams[]} and returns the first
-     * video stream's index.
+     * Returns the index of the first video stream in the device's container, or {@code -1} when none
+     * exists.
      *
      * @param formatCtx the device input context
-     * @return the stream index, or -1
+     * @return the video stream index, or {@code -1} if the container has no video stream
      */
     private static int pickVideoStream(MemorySegment formatCtx) {
         var n = AVFormatContext.nb_streams(formatCtx);
@@ -412,11 +447,11 @@ public final class Camera implements VideoSource, AutoCloseable {
     }
 
     /**
-     * Returns the {@code AVStream*} at the given index.
+     * Returns the {@code AVStream} pointer at the given index in the device's container.
      *
-     * @param formatCtx the input context
+     * @param formatCtx the device input context
      * @param index     the stream index
-     * @return the stream pointer
+     * @return the stream pointer at that index
      */
     private static MemorySegment streamPointer(MemorySegment formatCtx, int index) {
         var n = AVFormatContext.nb_streams(formatCtx);

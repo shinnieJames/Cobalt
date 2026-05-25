@@ -3,80 +3,68 @@ package com.github.auties00.cobalt.call.internal.rtp;
 import java.util.TreeMap;
 
 /**
- * A small fixed-capacity reorder + miss-detection buffer for inbound
- * RTP packets, keyed on 16-bit sequence numbers.
+ * Reorders inbound {@link RtpPacket}s by sequence number and detects gaps so the codec can run
+ * packet-loss concealment.
  *
- * <p>The buffer holds up to {@link #capacity} most-recent packets in
- * a {@link TreeMap} sorted by sequence number. {@link #poll()} drains
- * the next-in-order packet; {@link #pollMissing()} reports a gap of
- * lost packets so the codec can run packet-loss concealment.
+ * <p>The buffer holds up to {@code capacity} of the most recent packets in a {@link TreeMap} keyed
+ * by an extended (32-bit, non-wrapping) sequence number. {@link #poll()} drains the next in-order
+ * packet; {@link #pollMissing()} reports a run of lost packets so the decoder can conceal them.
+ * Sequence-number wraparound of the 16-bit wire field is absorbed by mapping each wire sequence to
+ * an extended sequence via a rollover counter: a packet whose extended sequence is at or below the
+ * last emitted is rejected as late, and a packet that would push the buffer past {@code capacity}
+ * evicts the oldest buffered entry.
  *
- * <p>Sequence-number wraparound is handled by interpreting the 16-bit
- * sequence number as a signed-distance from the last emitted: a packet
- * whose seq is "before" the last emitted (mod 65536) is rejected as
- * late, while a packet whose seq is "after" by more than the capacity
- * window forces eviction of older packets.
- *
- * <p>Threading: not safe for concurrent use. The receiver drives all
- * mutating calls from a single thread.
+ * <p>This type is not safe for concurrent use; the receiver drives every mutating call from a
+ * single thread.
  */
 public final class JitterBuffer {
     /**
-     * Maximum number of packets the buffer holds before it starts
-     * dropping the oldest entries to make room.
+     * Maximum number of packets retained before the oldest entries are evicted to make room.
      */
     private final int capacity;
 
     /**
-     * Packet-loss concealment threshold: if {@link #poll()} sees a
-     * gap of more than this many sequence numbers, it surfaces the
-     * gap as a missing-packet signal so the decoder can run PLC.
+     * Largest run of consecutive missing packets that {@link #pollMissing()} surfaces as a
+     * packet-loss-concealment trigger; longer gaps are skipped rather than concealed.
      */
     private final int maxGap;
 
     /**
-     * In-order buffer keyed by extended sequence number (the
-     * 32-bit unwrapped seq we get by tracking wraparounds).
+     * In-order buffer keyed by extended (32-bit, non-wrapping) sequence number.
      */
     private final TreeMap<Long, RtpPacket> buffered = new TreeMap<>();
 
     /**
-     * The extended sequence number of the last packet emitted by
-     * {@link #poll()} or {@link #pollMissing()}, or {@code -1L} if
-     * nothing has been emitted yet.
+     * Extended sequence number of the last packet emitted by {@link #poll()} or
+     * {@link #pollMissing()}, or {@code -1L} before anything has been emitted.
      */
     private long lastEmittedSeq = -1L;
 
     /**
-     * The 16-bit ROC (rollover counter) — number of times the
-     * 16-bit sequence has wrapped since the stream started. Combined
-     * with the 16-bit seq it gives the "extended" 32-bit seq used
-     * internally.
+     * Number of times the 16-bit wire sequence has wrapped since the stream started; combined with
+     * the wire sequence it yields the extended 32-bit sequence used as the buffer key.
      */
     private int rolloverCounter;
 
     /**
-     * The high-watermark 16-bit sequence number observed —
-     * {@code -1} until the first packet arrives.
+     * Highest 16-bit wire sequence number observed, or {@code -1} before the first packet arrives.
      */
     private int highestSeq = -1;
 
     /**
-     * Constructs a new jitter buffer.
+     * Constructs a jitter buffer with the given capacity and concealment bound.
      *
      * @param capacity the maximum number of buffered packets
-     * @param maxGap   the largest run of missing packets the buffer
-     *                 will tolerate before {@link #pollMissing()}
-     *                 surfaces a PLC trigger
-     * @throws IllegalArgumentException if {@code capacity} or
-     *                                  {@code maxGap} is &lt; 1
+     * @param maxGap   the largest run of missing packets surfaced for concealment by
+     *                 {@link #pollMissing()} before the gap is skipped instead
+     * @throws IllegalArgumentException if {@code capacity} or {@code maxGap} is less than {@code 1}
      */
     public JitterBuffer(int capacity, int maxGap) {
         if (capacity < 1) {
-            throw new IllegalArgumentException("capacity must be ≥ 1");
+            throw new IllegalArgumentException("capacity must be >= 1");
         }
         if (maxGap < 1) {
-            throw new IllegalArgumentException("maxGap must be ≥ 1");
+            throw new IllegalArgumentException("maxGap must be >= 1");
         }
         this.capacity = capacity;
         this.maxGap = maxGap;
@@ -85,36 +73,37 @@ public final class JitterBuffer {
     /**
      * Returns the configured capacity.
      *
-     * @return the capacity
+     * @return the maximum number of buffered packets
      */
     public int capacity() {
         return capacity;
     }
 
     /**
-     * Returns the configured maximum gap.
+     * Returns the configured maximum concealable gap.
      *
-     * @return the max gap
+     * @return the largest run of missing packets surfaced by {@link #pollMissing()}
      */
     public int maxGap() {
         return maxGap;
     }
 
     /**
-     * Returns the current number of buffered packets.
+     * Returns the number of packets currently buffered.
      *
-     * @return the size
+     * @return the buffer size
      */
     public int size() {
         return buffered.size();
     }
 
     /**
-     * Adds one inbound packet to the buffer. The packet is keyed on
-     * its extended sequence number (16-bit wire seq + ROC) so
-     * wraparounds are handled. Late packets (older than the last
-     * emitted) are silently dropped. Packets that would exceed
-     * {@link #capacity} evict the oldest buffered entry.
+     * Adds one inbound packet to the buffer.
+     *
+     * <p>The packet is keyed on its extended sequence number, so 16-bit wraparound is absorbed. A
+     * packet whose extended sequence is at or below {@link #poll() the last emitted sequence} is
+     * silently dropped as late. When the buffer would exceed {@code capacity}, the oldest buffered
+     * entry is evicted.
      *
      * @param packet the inbound packet
      */
@@ -131,26 +120,19 @@ public final class JitterBuffer {
     }
 
     /**
-     * Drains the next-in-order packet, or returns {@code null} when
-     * the buffer is empty or the next-expected sequence number is
-     * not yet present.
+     * Drains the next in-order packet, or returns {@code null} when one is not yet available.
      *
-     * <p>Behaviour:
+     * <p>The outcome depends on the lowest buffered sequence relative to the last emitted one:
      *
      * <ul>
-     *   <li>If the buffer is empty, returns {@code null}.</li>
-     *   <li>If the lowest-buffered seq equals
-     *       {@code lastEmittedSeq + 1}, removes and returns it.</li>
-     *   <li>If the lowest-buffered seq is &gt;
-     *       {@code lastEmittedSeq + 1} (a gap), this method returns
-     *       {@code null} — the caller can call
-     *       {@link #pollMissing()} to advance over the gap with PLC.</li>
-     *   <li>For the very first packet (no prior emission), returns
-     *       the lowest buffered packet unconditionally.</li>
+     *   <li>An empty buffer returns {@code null}.</li>
+     *   <li>A lowest sequence equal to {@code lastEmittedSeq + 1} is removed and returned.</li>
+     *   <li>A lowest sequence greater than {@code lastEmittedSeq + 1} (a gap) returns
+     *       {@code null}; the caller advances over the gap via {@link #pollMissing()}.</li>
+     *   <li>The first packet of the stream (nothing emitted yet) is returned unconditionally.</li>
      * </ul>
      *
-     * @return the next ordered packet, or {@code null} if waiting
-     *         for in-order delivery
+     * @return the next in-order packet, or {@code null} while waiting for in-order delivery
      */
     public RtpPacket poll() {
         var entry = buffered.firstEntry();
@@ -166,17 +148,17 @@ public final class JitterBuffer {
     }
 
     /**
-     * Returns the number of consecutive missing packets between
-     * {@code lastEmittedSeq} and the lowest buffered packet — or
-     * {@code 0} when there's no gap or the gap is larger than
-     * {@link #maxGap()}.
+     * Reports the run of consecutive missing packets between the last emitted sequence and the
+     * lowest buffered packet, advancing one step into the gap.
      *
-     * <p>If the gap exceeds {@link #maxGap()}, the buffer fast-
-     * forwards {@code lastEmittedSeq} so the next {@link #poll()}
-     * returns the first buffered packet and the lost packets are
-     * effectively dropped.
+     * <p>Returns the gap length when it is between {@code 1} and {@link #maxGap()} inclusive,
+     * after advancing the last-emitted sequence by one so the caller can run concealment for the
+     * packet now at that position. Returns {@code 0} when the buffer is empty, nothing has been
+     * emitted yet, or there is no gap. When the gap exceeds {@link #maxGap()}, the last-emitted
+     * sequence is fast-forwarded to just before the lowest buffered packet so the next
+     * {@link #poll()} returns it, the skipped packets are dropped, and {@code 0} is returned.
      *
-     * @return the gap length, or {@code 0}
+     * @return the gap length in packets, or {@code 0}
      */
     public int pollMissing() {
         var entry = buffered.firstEntry();
@@ -188,21 +170,17 @@ public final class JitterBuffer {
             return 0;
         }
         if (gap > maxGap) {
-            // Beyond what we'll conceal — fast-forward, drop them.
             lastEmittedSeq = entry.getKey() - 1;
             return 0;
         }
-        // Advance one step into the gap; the caller will run PLC
-        // for the missing packet at lastEmittedSeq+1.
         lastEmittedSeq++;
         return (int) gap;
     }
 
     /**
-     * Returns whether the next-in-order packet is immediately
-     * available (i.e. {@link #poll()} would return non-null).
+     * Returns whether {@link #poll()} would currently return a non-null packet.
      *
-     * @return {@code true} if there's an in-order packet ready
+     * @return {@code true} if an in-order packet is ready
      */
     public boolean hasNext() {
         var entry = buffered.firstEntry();
@@ -213,13 +191,22 @@ public final class JitterBuffer {
     }
 
     /**
-     * Maps a 16-bit wire sequence number to a 32-bit extended
-     * sequence number that doesn't wrap, by tracking the rollover
-     * counter against the highest-seen seq. RFC 3711 §3.3.1 uses the
-     * same scheme for SRTP replay protection.
+     * Maps a 16-bit wire sequence number to a non-wrapping 32-bit extended sequence number.
      *
-     * @param wireSeq the 16-bit sequence number from the packet
-     * @return the extended sequence
+     * <p>The first wire sequence seeds {@link #highestSeq} and is extended with the current
+     * rollover counter. Subsequent sequences are compared against {@link #highestSeq}: a backward
+     * jump of more than half the 16-bit space is treated as a late packet from before the most
+     * recent wrap (extended with {@code rolloverCounter - 1}), a forward jump of more than half the
+     * space is treated as a fresh wrap (incrementing {@code rolloverCounter} and {@link #highestSeq}),
+     * and any other forward movement advances {@link #highestSeq}. The extended value is the
+     * rollover counter shifted left 16 bits, OR-ed with the wire sequence.
+     *
+     * @param wireSeq the 16-bit sequence number carried by the packet
+     * @return the extended, non-wrapping sequence number
+     * @implNote This implementation reuses the SRTP rollover-counter scheme of RFC 3711 section
+     * 3.3.1: the half-space threshold {@code 0x8000} distinguishes a wrap from ordinary reordering,
+     * and the 16-bit left shift packs the rollover counter into the high half of the 32-bit
+     * extended sequence.
      */
     private long extendSequence(int wireSeq) {
         if (highestSeq < 0) {
@@ -228,14 +215,9 @@ public final class JitterBuffer {
         }
         var delta = wireSeq - highestSeq;
         if (delta > 0x8000) {
-            // Wire seq jumped backwards by more than half the space
-            // — peer wrapped the counter once and we're seeing a
-            // packet from before the wrap.
             return ((long) (rolloverCounter - 1) << 16) | wireSeq;
         }
         if (delta < -0x8000) {
-            // Wire seq jumped forwards by more than half the space
-            // — peer wrapped the counter once.
             rolloverCounter++;
             highestSeq = wireSeq;
             return ((long) rolloverCounter << 16) | wireSeq;

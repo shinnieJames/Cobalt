@@ -15,13 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link WavFileSink}.
+ * Covers {@link WavFileSink}: emitting a valid 44-byte WAV header with chunk sizes patched in on
+ * close, idempotent close, and rejection of writes after close.
  */
 class WavFileSinkTest {
-    /**
-     * Writing two frames produces a valid WAV header with the
-     * correct chunk sizes patched in on close.
-     */
     @Test
     void writesValidWavHeader(@TempDir Path tmp) throws IOException, InterruptedException {
         var path = tmp.resolve("out.wav");
@@ -30,7 +27,7 @@ class WavFileSinkTest {
             sink.write(new AudioFrame(new short[]{5, 6, 7, 8}, 10L));
         }
         var bytes = Files.readAllBytes(path);
-        // 44-byte header + 8 samples × 2 bytes
+        // 44-byte header + 8 samples * 2 bytes each
         assertEquals(44 + 16, bytes.length);
         assertEquals('R', bytes[0]);
         assertEquals('I', bytes[1]);
@@ -48,9 +45,6 @@ class WavFileSinkTest {
         assertArrayEquals(new short[]{1, 2, 3, 4, 5, 6, 7, 8}, samples);
     }
 
-    /**
-     * Close is idempotent.
-     */
     @Test
     void closeIsIdempotent(@TempDir Path tmp) {
         var sink = new WavFileSink(tmp.resolve("idempotent.wav"));
@@ -58,9 +52,6 @@ class WavFileSinkTest {
         sink.close();
     }
 
-    /**
-     * Writing after close throws.
-     */
     @Test
     void writeAfterCloseThrows(@TempDir Path tmp) {
         var sink = new WavFileSink(tmp.resolve("closed.wav"));

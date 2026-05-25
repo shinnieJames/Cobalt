@@ -13,47 +13,19 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises the outgoing-mutation wire shape produced by
- * {@link LabelReorderingMutationFactory}.
- *
- * @apiNote
- * Pairs with {@link com.github.auties00.cobalt.sync.handler.LabelReorderingHandler}
- * whose incoming-side coverage lives in
- * {@code LabelReorderingHandlerTest}; the production class has no
- * dedicated WA Web outgoing helper so this test verifies the
- * {@code WAWebSyncdActionUtils.buildPendingMutation}-shaped output against
- * a captured oracle.
- *
- * @implNote
- * This implementation skips when the oracle fixture is unavailable so
- * developers running the suite without a corpus dump still see a green
- * build; when the oracle is present, the encoded
- * {@link SyncActionValueSpec} bytes must match exactly.
+ * Verifies that {@link LabelReorderingMutationFactory} encodes its {@link SyncActionValueSpec} bytes
+ * byte-for-byte against the captured WhatsApp Web encode oracle under
+ * {@code handler/label-reordering/encode}. The test skips when the oracle fixture is absent.
  */
 @DisplayName("LabelReorderingMutationFactory")
 class LabelReorderingMutationFactoryTest {
-    /**
-     * The factory under test, freshly constructed per test method.
-     */
     private LabelReorderingMutationFactory factory;
 
-    /**
-     * Constructs the per-test factory instance.
-     *
-     * @apiNote
-     * Required by JUnit's per-method fixture lifecycle; refreshing the
-     * factory ensures no state leaks between tests even though the
-     * production class is currently stateless.
-     */
     @BeforeEach
     void setUp() {
         factory = new LabelReorderingMutationFactory();
     }
 
-    /**
-     * Verifies that the encoded {@link SyncActionValueSpec} bytes match
-     * the captured WA Web oracle when the fixture is present.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
     void byteEqualityWithOracle() {

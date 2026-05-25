@@ -27,27 +27,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link NctSaltSyncHandler} against the
- * {@code WAWebNctSaltSync} mutation shapes.
+ * Covers {@link NctSaltSyncHandler}: a {@link SyncdOperation#SET} with a non-{@code null} salt
+ * writes the bytes via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setNotificationContentTokenSalt(byte[])},
+ * {@link SyncdOperation#REMOVE} clears it, a SET with the wrong action type or with no salt field
+ * surfaces as {@link SyncActionState#MALFORMED}, the default {@code resolveConflicts} chooses the
+ * later timestamp, and the default batch path applies each mutation in order.
  *
- * @apiNote
- * Verifies that the Cobalt handler matches WA Web's per-mutation
- * classification:
- * {@link SyncdOperation#SET}
- * with a non-{@code null} salt writes the bytes via
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#setNotificationContentTokenSalt(byte[])};
- * {@link SyncdOperation#REMOVE}
- * clears it; a {@code SET} with the wrong action type or with no
- * salt field surfaces as
- * {@link SyncActionState#MALFORMED};
- * the default {@code resolveConflicts} chooses the later timestamp;
- * the default batch path applies each mutation in order.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link NctSaltSyncHandler#applyMutation} with hand-built
- * {@link DecryptedMutation.Trusted} mutations because no public
- * outgoing-mutation factory exists for this action.
+ * <p>No public outgoing-mutation factory exists for this action, so each test drives the handler
+ * directly through {@link NctSaltSyncHandler#applyMutation} with hand-built
+ * {@link DecryptedMutation.Trusted} mutations.
  */
 @DisplayName("NctSaltSyncHandler")
 class NctSaltSyncHandlerTest {
@@ -70,7 +59,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the NctSaltSyncAction wire constant")
@@ -95,7 +84,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("SET with a non-null salt writes the bytes into the store and returns SUCCESS")
@@ -111,7 +100,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE clears the stored salt")
+    @DisplayName("applyMutation - REMOVE clears the stored salt")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE wipes the stored salt and returns SUCCESS")
@@ -126,7 +115,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("NCT salt is a global setting; no per-entity orphan path")
@@ -138,7 +127,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SET mutation whose value is not an NctSaltSyncAction returns MALFORMED (via malformedActionIndex path)")
@@ -164,7 +153,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the NCT-salt handler ignores the index shape (global setting)")
@@ -181,7 +170,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” other operations are UNSUPPORTED")
+    @DisplayName("applyMutation - other operations are UNSUPPORTED")
     class OtherOperations {
         @Test
         @DisplayName("operations that are neither SET nor REMOVE cannot be expressed (enum has only SET and REMOVE today); confirmed via SET/REMOVE coverage")
@@ -193,10 +182,10 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutation(new byte[]{1}, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(new byte[]{2}, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -205,7 +194,7 @@ class NctSaltSyncHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutation(new byte[]{1}, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(new byte[]{2}, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -215,7 +204,7 @@ class NctSaltSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” inherits default sequential apply")
+    @DisplayName("applyMutationBatch - inherits default sequential apply")
     class ApplyBatch {
         @Test
         @DisplayName("default batch path applies each mutation in order")

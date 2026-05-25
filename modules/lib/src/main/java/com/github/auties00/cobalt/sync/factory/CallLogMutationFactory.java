@@ -18,29 +18,23 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that record a call-log entry.
  *
- * @apiNote
- * Drives WhatsApp's call-history surface. The single consumer in WA Web is
- * {@code WAWebVoipHandleNativeCallEventCallLogHandlers}, which calls
- * {@code WAWebCallLogSync.getCallLogMutation} when a VoIP call ends and
- * pushes the result through {@code WAWebSyncdCoreApi.lockForSync} so the
- * call appears in every linked device's call tab. The factory is the
- * outgoing-mutation counterpart of
+ * <p>When a VoIP call ends, the resulting mutation is pushed so the call
+ * appears in every linked device's call tab. This factory builds the outgoing
+ * mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.CallLogHandler}.
  *
  * @implNote
  * This implementation takes the resolved caller JID as a parameter. WA Web
- * derives it inline by reading {@code callCreatorJid} first, then falling
- * back to the local-device PN ({@code WAWebUserPrefsMeUser.getMeDevicePnOrThrow})
- * when {@code fromMe}, or to the {@code peerJid} otherwise; Cobalt callers
- * resolve that upstream because the Me-user lookup is store-side.
+ * derives it inline by reading {@code callCreatorJid} first, then falling back
+ * to the local-device PN when {@code fromMe} or to the {@code peerJid}
+ * otherwise; Cobalt callers resolve that upstream because the Me-user lookup is
+ * store-side.
  */
 public final class CallLogMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public CallLogMutationFactory() {
 
@@ -49,8 +43,7 @@ public final class CallLogMutationFactory {
     /**
      * Returns a SET mutation that records the given call in the cross-device call log.
      *
-     * @apiNote
-     * Emit one mutation per terminated VoIP call. The mutation index follows
+     * <p>Emit one mutation per terminated VoIP call. The mutation index follows
      * {@snippet :
      *     ["call_log", callerJid.toString(), callId, fromMe ? "1" : "0"]
      * }
@@ -59,14 +52,10 @@ public final class CallLogMutationFactory {
      * scheduled-call metadata).
      *
      * @implNote
-     * This implementation passes through {@code log} verbatim into the
-     * {@link CallLogAction}. WA Web's
-     * {@code WAWebCallLogSync.getCallLogMutation} builds the
-     * {@code callLogRecord} payload field-by-field via
-     * {@code WAWebVoipWaCallEnums.getSyncCallResultFromCallLogResult} and
-     * the per-participant projection; Cobalt has the same shape on
-     * {@link CallLog} already so the projection collapses into a single
-     * builder field.
+     * This implementation passes {@code log} through verbatim into the
+     * {@link CallLogAction} because {@link CallLog} already carries the same
+     * shape WA Web builds field-by-field, so its per-participant projection
+     * collapses into a single builder field.
      *
      * @param timestamp the mutation timestamp
      * @param callerJid the JID used as the first index segment (pre-resolved

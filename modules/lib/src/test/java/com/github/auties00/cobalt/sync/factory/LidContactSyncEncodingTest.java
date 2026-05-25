@@ -29,8 +29,6 @@ class LidContactSyncEncodingTest {
         var oracle = SyncFixtures.loadOracle("handler/lid-contact/encode");
         var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
 
-        // Build the same canonical SyncActionValue the oracle captures: a representative
-        // lid_contact payload encoded into bytes for byte-equality with WA Web's wire output.
         var action = new LidContactActionBuilder()
                 .fullName("Maria Garcia")
                 .firstName("Maria")

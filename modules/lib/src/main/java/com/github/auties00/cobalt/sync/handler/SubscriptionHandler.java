@@ -22,15 +22,11 @@ import java.util.logging.Logger;
  * Mirrors the paid-business subscriptions and feature flags across linked
  * devices via the {@code subscriptions_sync_v2} mutation.
  *
- * @apiNote
- * Cobalt embedders never invoke this handler directly; the sync dispatcher
- * routes incoming mutations here whenever a Business-account subscription
- * state changes (typical trigger: a new subscription is purchased,
- * cancelled, or its bundled feature flags rotate). The handler rewrites
- * the
- * {@link com.github.auties00.cobalt.store.WhatsAppStore} business feature
- * flag and subscription tables in full ("rewrite" semantics) so the next
- * read sees only the new snapshot.
+ * <p>The sync dispatcher routes incoming mutations here whenever a
+ * Business-account subscription state changes. The handler rewrites the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} business feature flag
+ * and subscription tables in full ("rewrite" semantics) so the next read sees
+ * only the new snapshot.
  */
 @WhatsAppWebModule(moduleName = "WAWebSubscriptionsSyncV2Sync")
 public final class SubscriptionHandler implements WebAppStateActionHandler {
@@ -57,8 +53,7 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
     /**
      * Constructs the handler.
      *
-     * @apiNote
-     * The handler is stateless; Cobalt's sync registry holds a single
+     * <p>The handler is stateless; Cobalt's sync registry holds a single
      * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebSubscriptionsSyncV2Sync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -96,22 +91,19 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>On {@link SyncdOperation#SET} the decoded {@link SubscriptionsSyncV2Action}
+     * clears and refills the two {@link com.github.auties00.cobalt.store.WhatsAppStore}
+     * maps that back business feature flags and subscriptions; a value that does
+     * not decode is reported as malformed. {@link SyncdOperation#REMOVE} returns
+     * {@link MutationApplicationResult#success()} without mutating state; any other
+     * operation, and any thrown exception, resolves to
+     * {@link MutationApplicationResult#failed()}.
+     *
      * @implNote
-     * This implementation mirrors WA Web's per-mutation closure inside
-     * {@code WAWebSubscriptionsSyncV2Sync.applyMutations}: on
-     * {@link SyncdOperation#SET} it decodes the
-     * {@link SubscriptionsSyncV2Action}, then clears and refills the two
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} maps that
-     * back business feature flags and subscriptions. WA Web's
-     * {@code WAWebSubscriptions.applySubscriptionsAndFeatureFlags(..., "rewrite")}
-     * is collapsed into direct store updates because Cobalt's flattened
-     * store IS the persistence layer. {@link SyncdOperation#REMOVE}
-     * returns {@link MutationApplicationResult#success()} without
-     * mutating state, matching WA Web's REMOVE no-op semantics; any
-     * other operation surfaces as {@link MutationApplicationResult#failed()}.
-     * The {@code WAWebODS} subscription-sync counter increments and the
-     * outer {@code try/catch -> Failed} wrapper are kept; the underlying
-     * ODS telemetry calls themselves are dropped.
+     * WA Web's {@code WAWebSubscriptions.applySubscriptionsAndFeatureFlags(..., "rewrite")}
+     * is collapsed into direct store updates because Cobalt's flattened store is
+     * the persistence layer; the {@code WAWebODS} subscription-sync telemetry calls
+     * are dropped while the outer {@code try/catch -> Failed} wrapper is kept.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSubscriptionsSyncV2Sync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -164,14 +156,16 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
+     * <p>Applies each mutation through
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}, counts the
+     * successful {@link SyncdOperation#REMOVE} operations, and logs a single
+     * batch-level warning when at least one was observed.
+     *
      * @implNote
-     * This implementation tracks the per-batch {@code REMOVE} count
-     * locally rather than as a mutable field on the handler because
-     * Cobalt treats handlers as stateless services. WA Web aggregates
-     * the count across the closure capture of the singleton then emits
-     * a trailing {@code WALogger.WARN("[SubscriptionsSyncV2Sync] N REMOVE ops (singleton)")};
-     * the same WARN is emitted here via {@link Logger} only if any
-     * successful REMOVE was observed.
+     * This implementation tracks the per-batch {@code REMOVE} count in a local
+     * variable rather than as a mutable field because Cobalt treats handlers as
+     * stateless services; the warning matches WA Web's trailing
+     * {@code WALogger.WARN("[SubscriptionsSyncV2Sync] N REMOVE ops (singleton)")}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSubscriptionsSyncV2Sync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

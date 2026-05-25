@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.wam.processor.generator;
 
+import com.github.auties00.cobalt.wam.binary.WamWireValue;
 import com.github.auties00.cobalt.wam.processor.element.WamEventElement;
 import com.github.auties00.cobalt.wam.processor.element.WamPropertyElement;
 import com.github.auties00.cobalt.wam.model.WamType;
@@ -7,6 +8,10 @@ import com.palantir.javapoet.*;
 
 import javax.lang.model.element.Modifier;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 /**
  * Generates the companion {@code *Builder} class for a {@code @WamEvent}-annotated
@@ -25,6 +30,14 @@ public final class WamBuilderGenerator {
     private static final ClassName STRING = ClassName.get(String.class);
     private static final ClassName DOUBLE = ClassName.get(Double.class);
     private static final ClassName INSTANT = ClassName.get(Instant.class);
+    private static final ClassName NAVIGABLE_MAP = ClassName.get(NavigableMap.class);
+    private static final ClassName CONCURRENT_SKIP_LIST_MAP = ClassName.get(ConcurrentSkipListMap.class);
+    private static final ClassName MAP = ClassName.get(Map.class);
+    private static final ClassName HASH_MAP = ClassName.get(HashMap.class);
+    private static final ClassName WAM_WIRE_VALUE = ClassName.get(WamWireValue.class);
+    private static final ClassName WAM_WIRE_INT = WAM_WIRE_VALUE.nestedClass("WamInt");
+    private static final ClassName WAM_WIRE_FLOAT = WAM_WIRE_VALUE.nestedClass("WamFloat");
+    private static final ClassName WAM_WIRE_STRING = WAM_WIRE_VALUE.nestedClass("WamString");
 
     private WamBuilderGenerator() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
@@ -38,6 +51,10 @@ public final class WamBuilderGenerator {
      * @return the generated Java file ready to be written
      */
     public static JavaFile generate(WamEventElement event) {
+        if (event.properties().size() > WamImplGenerator.MAP_THRESHOLD) {
+            return generateMapBased(event);
+        }
+
         var builderName = event.className().simpleName() + "Builder";
         var builderClassName = ClassName.get(event.packageName(), builderName);
         var builderBuilder = TypeSpec.classBuilder(builderName)
@@ -121,6 +138,101 @@ public final class WamBuilderGenerator {
 
         method.addStatement("return new $T(\n        $L\n)", implClassName, args.toString());
         return method.build();
+    }
+
+    /**
+     * Generates a map-backed {@code *Builder} for an event whose field count
+     * exceeds {@link WamImplGenerator#MAP_THRESHOLD}.
+     *
+     * <p>Setters write directly into a sorted {@code NavigableMap} of decoded
+     * wire values rather than into per-field instance fields, so neither the
+     * setters nor {@code build()} grow with the field count. The populated map
+     * is handed to the matching map-based {@code *Impl} constructor.
+     *
+     * @param event the parsed event metadata
+     * @return the generated Java file ready to be written
+     */
+    private static JavaFile generateMapBased(WamEventElement event) {
+        var builderName = event.className().simpleName() + "Builder";
+        var builderClassName = ClassName.get(event.packageName(), builderName);
+        var implClassName = ClassName.get(event.packageName(), event.className().simpleName() + "Impl");
+        var builderBuilder = TypeSpec.classBuilder(builderName)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+
+        var valuesType = ParameterizedTypeName.get(NAVIGABLE_MAP, INTEGER, WAM_WIRE_VALUE);
+        builderBuilder.addField(FieldSpec.builder(valuesType, "values", Modifier.PRIVATE, Modifier.FINAL)
+                .initializer("new $T<>()", CONCURRENT_SKIP_LIST_MAP)
+                .build());
+
+        var hasTimer = event.properties().stream().anyMatch(prop -> prop.wamType() == WamType.TIMER);
+        if (hasTimer) {
+            var startsType = ParameterizedTypeName.get(MAP, INTEGER, INSTANT);
+            builderBuilder.addField(FieldSpec.builder(startsType, "timerStarts", Modifier.PRIVATE, Modifier.FINAL)
+                    .initializer("new $T<>()", HASH_MAP)
+                    .build());
+        }
+
+        for (var prop : event.properties()) {
+            var fieldType = resolveFieldType(prop);
+            var setter = MethodSpec.methodBuilder(prop.fieldName())
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(builderClassName)
+                    .addParameter(fieldType, prop.fieldName());
+            addMapSetterBody(setter, prop);
+            setter.addStatement("return this");
+            builderBuilder.addMethod(setter.build());
+
+            if (prop.wamType() == WamType.TIMER) {
+                builderBuilder.addMethod(
+                        MethodSpec.methodBuilder("start" + capitalize(prop.fieldName()))
+                                .addModifiers(Modifier.PUBLIC)
+                                .returns(builderClassName)
+                                .addStatement("this.timerStarts.put($L, $T.now())", prop.index(), INSTANT)
+                                .addStatement("return this")
+                                .build()
+                );
+                builderBuilder.addMethod(
+                        MethodSpec.methodBuilder("stop" + capitalize(prop.fieldName()))
+                                .addModifiers(Modifier.PUBLIC)
+                                .returns(builderClassName)
+                                .addStatement("$T start = this.timerStarts.remove($L)", INSTANT, prop.index())
+                                .beginControlFlow("if (start != null)")
+                                .addStatement("this.values.put($L, new $T($T.now().toEpochMilli() - start.toEpochMilli()))",
+                                        prop.index(), WAM_WIRE_INT, INSTANT)
+                                .endControlFlow()
+                                .addStatement("return this")
+                                .build()
+                );
+            }
+        }
+
+        builderBuilder.addMethod(MethodSpec.methodBuilder("build")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(event.className())
+                .addStatement("return new $T(this.values)", implClassName)
+                .build());
+
+        WamImplGenerator.addEnumEncoders(builderBuilder, event);
+
+        return JavaFile.builder(event.packageName(), builderBuilder.build())
+                .indent("    ")
+                .skipJavaLangImports(true)
+                .build();
+    }
+
+    private static void addMapSetterBody(MethodSpec.Builder setter, WamPropertyElement prop) {
+        var name = prop.fieldName();
+        setter.beginControlFlow("if ($N != null)", name);
+        switch (prop.wamType()) {
+            case INTEGER -> setter.addStatement("this.values.put($L, new $T($N))", prop.index(), WAM_WIRE_INT, name);
+            case BOOLEAN -> setter.addStatement("this.values.put($L, new $T($N ? 1L : 0L))", prop.index(), WAM_WIRE_INT, name);
+            case STRING -> setter.addStatement("this.values.put($L, new $T($N))", prop.index(), WAM_WIRE_STRING, name);
+            case FLOAT -> setter.addStatement("this.values.put($L, new $T($N))", prop.index(), WAM_WIRE_FLOAT, name);
+            case TIMER -> setter.addStatement("this.values.put($L, new $T($N.toEpochMilli()))", prop.index(), WAM_WIRE_INT, name);
+            case ENUM -> setter.addStatement("this.values.put($L, new $T($N($N)))",
+                    prop.index(), WAM_WIRE_INT, WamImplGenerator.enumEncoderName(prop), name);
+        }
+        setter.endControlFlow();
     }
 
     private static TypeName resolveFieldType(WamPropertyElement prop) {

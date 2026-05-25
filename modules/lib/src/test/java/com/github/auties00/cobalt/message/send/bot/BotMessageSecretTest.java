@@ -12,27 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Structural tests for {@link BotMessageSecret#derive(byte[])}.
- *
- * @apiNote
- * Pins the structural contract that backs WA Web's
- * {@code WAWebBotMessageSecret.genBotMsgSecretFromMsgSecret}: deterministic
- * 32-byte output keyed by the supplied {@code messageSecret} via HKDF-SHA-256
- * with a null salt and the fixed info string {@code "Bot Message"}. Drift on
- * any of those axes silently breaks the bot encryption envelope.
- * @implNote
- * The byte-equal known-answer test against WA Web is captured separately once
- * the live corpus lands; these tests assert structure (length, determinism,
- * input-sensitivity, no-mutation, arbitrary-IKM length) rather than a fixed
- * output vector.
+ * Structural coverage for {@link BotMessageSecret#derive(byte[])}: 32-byte output length,
+ * determinism, input-sensitivity, input non-mutation, and arbitrary input-keying-material
+ * length. These tests assert structure rather than a fixed output vector; the byte-equal
+ * known-answer vector against WhatsApp Web is captured separately.
  */
 @DisplayName("BotMessageSecret")
 class BotMessageSecretTest {
 
-    /**
-     * Verifies that {@link BotMessageSecret#derive(byte[])} produces exactly
-     * 32 bytes.
-     */
     @Test
     @DisplayName("derive produces exactly 32 bytes")
     void derivedLength() throws GeneralSecurityException {
@@ -41,10 +28,6 @@ class BotMessageSecretTest {
         assertEquals(32, derived.length, "HKDF expand length is the bot-secret slot size");
     }
 
-    /**
-     * Verifies that two calls with the same input produce byte-identical
-     * output.
-     */
     @Test
     @DisplayName("derive is deterministic: same input yields same output")
     void deterministic() throws GeneralSecurityException {
@@ -59,10 +42,6 @@ class BotMessageSecretTest {
                 "HKDF must produce identical output for the same input (derivation is stateless)");
     }
 
-    /**
-     * Verifies that a one-bit input difference propagates across every
-     * output byte.
-     */
     @Test
     @DisplayName("derive is input-sensitive: different inputs yield different outputs")
     void inputSensitive() throws GeneralSecurityException {
@@ -75,10 +54,6 @@ class BotMessageSecretTest {
                 "HKDF-SHA256 must propagate input differences through the full 32-byte output");
     }
 
-    /**
-     * Verifies that {@link BotMessageSecret#derive(byte[])} does not mutate
-     * the caller's buffer.
-     */
     @Test
     @DisplayName("derive does not mutate the input secret")
     void inputIsNotMutated() throws GeneralSecurityException {
@@ -92,14 +67,7 @@ class BotMessageSecretTest {
         assertArrayEquals(snapshot, secret, "derive must not modify the caller's secret buffer");
     }
 
-    /**
-     * Verifies that HKDF accepts inputs of any non-null length.
-     *
-     * @implNote
-     * HKDF-Extract collapses arbitrary IKM to a fixed-length PRK, so the
-     * derivation must work for any non-null secret length even though WA Web
-     * always passes 32 bytes.
-     */
+    // WhatsApp Web always passes a 32-byte secret; HKDF-Extract collapses any non-null length to a fixed PRK
     @Test
     @DisplayName("derive accepts non-32-byte secrets (HKDF is length-agnostic)")
     void acceptsArbitraryLengthSecret() throws GeneralSecurityException {
@@ -112,10 +80,6 @@ class BotMessageSecretTest {
         assertEquals(32, BotMessageSecret.derive(longSecret).length);
     }
 
-    /**
-     * Verifies that a {@code null} secret throws
-     * {@link NullPointerException}.
-     */
     @Test
     @DisplayName("null secret throws NullPointerException")
     void nullSecretThrows() {

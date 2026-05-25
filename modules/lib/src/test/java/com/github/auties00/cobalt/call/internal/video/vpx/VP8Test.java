@@ -9,19 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke tests for the libvpx FFM bindings and the
- * {@link VP8Encoder} / {@link VP8Decoder} wrapper pair. The tests
- * fail loudly if libvpx is not loadable on the running platform —
- * silently skipping would let a broken native bundle ship green.
+ * Smoke tests for the libvpx FFM bindings and the {@link VP8Encoder} / {@link VP8Decoder} wrapper
+ * pair. The tests fail loudly when libvpx is not loadable on the running platform; silently skipping
+ * would let a broken native bundle ship green.
  */
 public class VP8Test {
 
-    /**
-     * Encodes a forced keyframe and decodes it back, checking that
-     * the round-trip preserves frame dimensions and produces a
-     * non-empty output. This is enough to verify both halves of the
-     * binding are wired up.
-     */
     @Test
     public void encodeDecodeRoundTrip() {
         var width = 64;
@@ -29,9 +22,7 @@ public class VP8Test {
         try (var enc = new VP8Encoder(width, height, 100_000, 30);
              var dec = new VP8Decoder()) {
             var yuv = new byte[enc.frameByteSize()];
-            // Fill the Y plane with a gradient so the encoder has
-            // some real content to compress; U/V stay at zero
-            // (which is grey 128 after the unsigned cast).
+            // Gradient on the Y plane gives the encoder real content to compress; U/V stay zero (grey 128 unsigned).
             for (var i = 0; i < width * height; i++) {
                 yuv[i] = (byte) (i & 0xff);
             }
@@ -48,10 +39,6 @@ public class VP8Test {
         }
     }
 
-    /**
-     * Constructor argument validation — illegal frame sizes should
-     * fail before any libvpx call.
-     */
     @Test
     public void rejectsBadDimensions() {
         Assertions.assertThrows(IllegalArgumentException.class,

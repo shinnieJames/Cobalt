@@ -20,31 +20,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * End-to-end loopback tests for the {@link DataChannelTransport} —
- * spins up two transports back-to-back through their outbound sinks,
- * exercises in-band DCEP open/ack, bidirectional message routing,
- * and channel teardown.
- *
- * <p>The tests fail loudly if libusrsctp is not loadable on the
- * running platform — silently skipping would let a broken native
- * bundle ship green.
+ * End-to-end loopback tests for the {@link DataChannelTransport}, spinning up two transports
+ * back-to-back through their outbound sinks and exercising in-band DCEP open/ack, bidirectional
+ * message routing, and channel teardown. The harness in {@link LoopbackPair} cross-wires the two
+ * transports through queue-backed virtual-thread pumps to reproduce the SCTP simultaneous-open
+ * handshake. The tests fail loudly if libusrsctp is not loadable, since silently skipping would
+ * let a broken native bundle ship green.
  */
 public class DataChannelTransportTest {
 
-    /**
-     * Counter handing out a fresh SCTP port to each
-     * {@link LoopbackPair} so successive tests don't collide on
-     * port binds inside the process-singleton {@code usrsctp}
-     * stack.
-     */
+    // Fresh SCTP port per LoopbackPair: the process-singleton usrsctp stack would otherwise see a
+    // bind collision across tests.
     private static final AtomicInteger NEXT_PORT = new AtomicInteger(5000);
 
-    /**
-     * In-band channel open/ack handshake: the "client" side opens a
-     * channel; the "server" side observes a peer-open with the same
-     * label and protocol; the client side observes its channel
-     * transition to {@link DataChannelState#OPEN}.
-     */
     @Test
     public void inBandOpenHandshakeRoundTrips() throws Exception {
         try (var pair = new LoopbackPair()) {
@@ -76,11 +64,6 @@ public class DataChannelTransportTest {
         }
     }
 
-    /**
-     * Once both sides are OPEN, string and binary messages flow in
-     * both directions and PPID 56/57 (empty string/binary) round-trip
-     * cleanly.
-     */
     @Test
     public void bidirectionalMessagesRoundTrip() throws Exception {
         try (var pair = new LoopbackPair()) {
@@ -127,10 +110,6 @@ public class DataChannelTransportTest {
         }
     }
 
-    /**
-     * Stream-id parity follows RFC 8832 §6 — the client allocates
-     * odd, the server allocates even.
-     */
     @Test
     public void streamIdParityFollowsDtlsRole() throws Exception {
         try (var pair = new LoopbackPair()) {
@@ -152,12 +131,6 @@ public class DataChannelTransportTest {
         }
     }
 
-    /**
-     * An out-of-band negotiated channel skips DCEP entirely and is
-     * usable immediately on both sides once they've each
-     * {@link DataChannelTransport#open opened} with the same stream
-     * id.
-     */
     @Test
     public void negotiatedChannelSkipsDcep() throws Exception {
         try (var pair = new LoopbackPair()) {
@@ -185,10 +158,6 @@ public class DataChannelTransportTest {
         }
     }
 
-    /**
-     * {@link DataChannel#close()} unregisters the channel from the
-     * transport and fires the close listener exactly once.
-     */
     @Test
     public void closeIsIdempotentAndFiresListenerOnce() throws Exception {
         try (var pair = new LoopbackPair()) {
@@ -209,10 +178,6 @@ public class DataChannelTransportTest {
         }
     }
 
-    /**
-     * Sending on a {@link DataChannelState#CONNECTING} channel raises
-     * {@link IllegalStateException} naming the offending state.
-     */
     @Test
     public void sendOnConnectingChannelRejected() {
         try (var pair = new LoopbackPair()) {
@@ -224,16 +189,6 @@ public class DataChannelTransportTest {
         }
     }
 
-    /**
-     * Polls the channel's state until it reaches {@code target} or the
-     * timeout elapses.
-     *
-     * @param channel   the channel to observe
-     * @param target    the state to wait for
-     * @param timeoutMs the timeout in milliseconds
-     * @return {@code true} if {@code target} was observed in time
-     * @throws InterruptedException if the test thread is interrupted
-     */
     private static boolean awaitState(DataChannel channel, DataChannelState target, long timeoutMs)
             throws InterruptedException {
         var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
@@ -247,82 +202,27 @@ public class DataChannelTransportTest {
     }
 
     /**
-     * A pair of {@link DataChannelTransport} instances cross-wired
-     * through their outbound sinks. Each side's outbound packets are
-     * enqueued in a {@link LinkedBlockingQueue} and drained on a
-     * dedicated virtual thread that calls the other side's
-     * {@link DataChannelTransport#feedInboundPacket}.
-     *
-     * <p>Decoupling the outbound conn-output upcall from the inbound
-     * delivery is what makes RFC 4960 §5.2.4 simultaneous-open
-     * actually work: both sides can post their INIT and reach
-     * {@code COOKIE_WAIT} before either INIT is processed by the
-     * peer, so each peer's INIT-collision handler resolves the two
-     * pending associations into one.
+     * A pair of {@link DataChannelTransport} instances cross-wired through their outbound sinks:
+     * each side's outbound packets are enqueued and drained on a dedicated virtual thread that
+     * feeds the other side. The pumps gate on both sides having posted their first packet, which
+     * is what makes RFC 4960 5.2.4 simultaneous-open work; both sockets reach COOKIE_WAIT before
+     * either INIT is delivered, so each peer's INIT-collision handler merges the two pending
+     * associations into one.
      */
     private static final class LoopbackPair implements AutoCloseable {
-        /**
-         * The "DTLS client" side — uses odd stream ids.
-         */
+        // client uses odd stream ids, server uses even, per the DTLS role split in RFC 8832.
         final DataChannelTransport client;
-
-        /**
-         * The "DTLS server" side — uses even stream ids.
-         */
         final DataChannelTransport server;
 
-        /**
-         * Per-pair SCTP port — fresh for each test so the process
-         * singleton {@code usrsctp} stack does not see a collision
-         * across tests.
-         */
         private final int port = NEXT_PORT.getAndIncrement();
-
-        /**
-         * Outbound packets posted by the client; the
-         * {@link #clientPump} virtual thread drains this and pushes
-         * the bytes into {@code server.feedInboundPacket}.
-         */
         private final LinkedBlockingQueue<byte[]> clientToServer = new LinkedBlockingQueue<>();
-
-        /**
-         * Outbound packets posted by the server; the
-         * {@link #serverPump} virtual thread drains this and pushes
-         * the bytes into {@code client.feedInboundPacket}.
-         */
         private final LinkedBlockingQueue<byte[]> serverToClient = new LinkedBlockingQueue<>();
-
-        /**
-         * Latch fired the first time the client posts an outbound
-         * packet — indicates the client has entered
-         * {@code COOKIE_WAIT}.
-         */
+        // Tripped on the first outbound packet, i.e. once the side has entered COOKIE_WAIT.
         private final CountDownLatch clientPosted = new CountDownLatch(1);
-
-        /**
-         * Latch fired the first time the server posts an outbound
-         * packet — indicates the server has entered
-         * {@code COOKIE_WAIT}.
-         */
         private final CountDownLatch serverPosted = new CountDownLatch(1);
-
-        /**
-         * Pump draining {@link #clientToServer} into {@code server}.
-         */
         private final Thread clientPump;
-
-        /**
-         * Pump draining {@link #serverToClient} into {@code client}.
-         */
         private final Thread serverPump;
 
-        /**
-         * Builds the pair and starts both pump threads. The pumps
-         * block until both sides have posted their INIT — that's
-         * what makes RFC 4960 §5.2.4 simultaneous-open work, since
-         * each peer's INIT only reaches the other peer after both
-         * sockets are in {@code COOKIE_WAIT}.
-         */
         LoopbackPair() {
             this.client = new DataChannelTransport(true, packet -> {
                 clientPosted.countDown();
@@ -336,16 +236,6 @@ public class DataChannelTransportTest {
             this.serverPump = startPump("server→client-pump", serverToClient, client);
         }
 
-        /**
-         * Spawns a virtual thread that waits until both sides have
-         * posted their first outbound packet, then drains
-         * {@code source} into {@code dest.feedInboundPacket}.
-         *
-         * @param name   the thread name
-         * @param source the queue to drain
-         * @param dest   the transport to feed
-         * @return the started thread
-         */
         private Thread startPump(String name, LinkedBlockingQueue<byte[]> source,
                                  DataChannelTransport dest) {
             return Thread.ofVirtual().name(name).start(() -> {
@@ -364,21 +254,6 @@ public class DataChannelTransportTest {
             });
         }
 
-        /**
-         * Drives the SCTP simultaneous-open handshake — both peers
-         * bind, then call {@link DataChannelTransport#connect(int, long, TimeUnit)}
-         * concurrently on dedicated virtual threads. The pumps in
-         * the constructor are gated on both sides having posted, so
-         * each INIT only reaches the peer after both are in
-         * {@code COOKIE_WAIT}, allowing the SCTP INIT-collision rule
-         * to merge them into one association.
-         *
-         * @throws InterruptedException if the test thread is
-         *                              interrupted while waiting for
-         *                              the connect threads
-         * @throws AssertionError       if either side reports a
-         *                              handshake failure
-         */
         void connect() throws InterruptedException {
             server.bind(port);
             client.bind(port);

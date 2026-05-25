@@ -14,41 +14,36 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Inbound parsed response of the {@link UpdateGroupPropertyMexRequest}
- * mutation, exposing the affected group id and the resulting group state
- * echoed back by the relay.
+ * Inbound parsed response of the {@link UpdateGroupPropertyMexRequest} mutation, exposing the
+ * affected group id and the resulting group state echoed back by the relay.
  *
- * @apiNote The {@code state} scalar is the post-mutation lifecycle status.
- * WA Web's {@code WAWebMexUpdateGroupPropertyJob.mexUpdateGroupPropertyJob}
- * treats any state other than {@code "ACTIVE"} as a hard failure and
- * raises a {@code ServerStatusCodeError(405)}; Cobalt instead surfaces the
- * raw scalar so the caller decides how to react.
+ * <p>The {@code state} scalar is the post-mutation lifecycle status; any value other than
+ * {@code "ACTIVE"} indicates the relay rejected the mutation because the group is no longer in a
+ * writable state.
  *
- * @implNote This implementation does not reject non-{@code ACTIVE} states
- * inside the parser, in contrast to WA Web's inline throw; the choice is
- * deliberate per the Cobalt configurable-error-handler model. Callers may
- * compare {@link #state()} against {@code "ACTIVE"} explicitly.
+ * @implNote This implementation does not reject non-{@code ACTIVE} states inside the parser, in
+ * contrast to WA Web which raises a server-status error of 405; the choice is deliberate per
+ * Cobalt's configurable error model, and callers may compare {@link #state()} against
+ * {@code "ACTIVE"} explicitly.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUpdateGroupPropertyJob")
 public final class UpdateGroupPropertyMexResponse implements MexOperation.Response.Json {
     /**
-     * The group id scalar projected from
-     * {@code data.xwa2_group_update_property.id}, echoed back by the relay.
+     * Group id scalar projected from {@code data.xwa2_group_update_property.id}, echoed back by the
+     * relay.
      */
     private final String id;
 
     /**
-     * The post-mutation group state scalar projected from
-     * {@code data.xwa2_group_update_property.state}; expected to be
-     * {@code "ACTIVE"} on success.
+     * Post-mutation group state scalar projected from {@code data.xwa2_group_update_property.state};
+     * expected to be {@code "ACTIVE"} on success.
      */
     private final String state;
 
     /**
      * Constructs a new response wrapping the parsed scalar fields.
      *
-     * @apiNote Package-private; instances are produced by the
-     * {@link #of(Node)} parser.
+     * <p>Instances are produced by the {@link #of(Node)} parser.
      *
      * @param id    the echoed group id, or {@code null} if absent
      * @param state the post-mutation group state, or {@code null} if absent
@@ -61,14 +56,13 @@ public final class UpdateGroupPropertyMexResponse implements MexOperation.Respon
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Entry point for receivers handling the IQ reply of
-     * {@link UpdateGroupPropertyMexRequest}. The returned value is
-     * {@link Optional#empty()} when the reply lacks a {@code <result>}
-     * child or its JSON body cannot be parsed into the expected envelope.
+     * <p>This is the entry point for receivers handling the IQ reply of
+     * {@link UpdateGroupPropertyMexRequest}. The returned value is {@link Optional#empty()} when the
+     * reply lacks a {@code <result>} child or its JSON body cannot be parsed into the expected
+     * envelope.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the
-     *         expected JSON shape is absent
+     * @return the parsed response, or {@link Optional#empty()} if the expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateGroupPropertyJob", exports = "mexUpdateGroupPropertyJob",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -81,9 +75,8 @@ public final class UpdateGroupPropertyMexResponse implements MexOperation.Respon
     /**
      * Returns the group id scalar echoed back by the relay.
      *
-     * @apiNote Mirrors the {@code group_id} variable sent in
-     * {@link UpdateGroupPropertyMexRequest}; useful when correlating the
-     * reply against a batched dispatch.
+     * <p>This mirrors the {@code group_id} variable sent in {@link UpdateGroupPropertyMexRequest}; it
+     * is useful when correlating the reply against a batched dispatch.
      *
      * @return an {@link Optional} containing the value, or empty if absent
      */
@@ -94,10 +87,9 @@ public final class UpdateGroupPropertyMexResponse implements MexOperation.Respon
     /**
      * Returns the post-mutation group state scalar.
      *
-     * @apiNote Expected to be {@code "ACTIVE"} on success; values such as
-     * {@code "NON_EXISTENT"} or {@code "SUSPENDED"} indicate the relay
-     * rejected the mutation because the group is no longer in a writable
-     * state.
+     * <p>The value is expected to be {@code "ACTIVE"} on success; values such as
+     * {@code "NON_EXISTENT"} or {@code "SUSPENDED"} indicate the relay rejected the mutation because
+     * the group is no longer in a writable state.
      *
      * @return an {@link Optional} containing the value, or empty if absent
      */
@@ -109,15 +101,12 @@ public final class UpdateGroupPropertyMexResponse implements MexOperation.Respon
      * Parses the JSON payload carried by the {@code <result>} child into a
      * {@link UpdateGroupPropertyMexResponse}.
      *
-     * @implNote This implementation walks the
-     * {@code data.xwa2_group_update_property} envelope and returns
-     * {@link Optional#empty()} when any intermediate object is missing,
-     * mirroring the WA Web destructuring
-     * {@code (n = a.xwa2_group_update_property) != null ? n : {}}.
+     * <p>The {@code data.xwa2_group_update_property} envelope is walked, returning
+     * {@link Optional#empty()} when any intermediate object is missing.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the {@code data.xwa2_group_update_property} envelope is absent
+     * @return an {@link Optional} containing the parsed response, or empty if the
+     *         {@code data.xwa2_group_update_property} envelope is absent
      */
     private static Optional<UpdateGroupPropertyMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

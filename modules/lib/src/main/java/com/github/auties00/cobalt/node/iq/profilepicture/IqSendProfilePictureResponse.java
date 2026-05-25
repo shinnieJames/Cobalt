@@ -11,31 +11,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Roots the sealed family of inbound reply variants produced by the relay in response to an
  * {@link IqSendProfilePictureRequest}.
  *
- * @apiNote
- * WA Web's {@code photoResponseParser} returns either {@code {id}} on success or rejects
- * the whole flow with a {@code ServerStatusCodeError}; Cobalt instead routes failures to
- * {@link ClientError} and {@link ServerError} so the photo-thumb cache can decide whether
- * to surface a "couldn't update" toast (transient) or revert the optimistic UI update
- * (permanent).
+ * <p>The three permitted variants partition every documented reply: {@link Success} carries the
+ * relay-assigned picture id on an accepted set or clear, {@link ClientError} reports a caller-side
+ * rejection, and {@link ServerError} reports a transient relay-side failure. Splitting failures
+ * into two variants lets the caller distinguish a permanent rejection (for example, an optimistic
+ * picture update that must be reverted) from a transient one that may be retried.
  */
 public sealed interface IqSendProfilePictureResponse extends IqOperation.Response
         permits IqSendProfilePictureResponse.Success, IqSendProfilePictureResponse.ClientError, IqSendProfilePictureResponse.ServerError {
 
     /**
-     * Tries each {@link IqSendProfilePictureResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Tries each {@link IqSendProfilePictureResponse} variant in priority order and returns the
+     * first that parses cleanly.
      *
-     * @apiNote
-     * The priority order ({@link Success}, {@link ClientError}, {@link ServerError}) mirrors
-     * the order WA Web's reply parser tries.
+     * <p>Variants are attempted in the order {@link Success}, {@link ClientError},
+     * {@link ServerError}; the first non-empty parse wins, and an empty result means the stanza
+     * matched no documented variant.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound stanza
-     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
-     *         when no documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when
+     *         no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendProfilePictureJob",
@@ -55,22 +54,22 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
     }
 
     /**
-     * Reply variant signalling that the relay accepted the picture set or clear.
+     * Models the reply variant signalling that the relay accepted the picture set or clear.
      *
-     * @apiNote
-     * Carries the relay-assigned picture id when a picture was uploaded; the id is empty
-     * when the request cleared the existing picture (no {@code <picture/>} grandchild on
-     * the reply).
+     * <p>Carries the relay-assigned picture id when a picture was uploaded; the id is absent when
+     * the request cleared the existing picture, since the reply then carries no {@code <picture/>}
+     * grandchild.
      */
     @WhatsAppWebModule(moduleName = "WAWebSendProfilePictureJob")
     final class Success implements IqSendProfilePictureResponse {
         /**
-         * Relay-assigned picture identifier, or {@code null} when the picture was cleared.
+         * Holds the relay-assigned picture identifier, or {@code null} when the picture was
+         * cleared.
          */
         private final Long pictureId;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a successful reply from a nullable picture identifier.
          *
          * @param pictureId the relay-assigned picture identifier, or {@code null} when the
          *                  picture was cleared
@@ -82,8 +81,8 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         /**
          * Returns the relay-assigned picture identifier.
          *
-         * @return an {@link Optional} carrying the picture id, or {@link Optional#empty()}
-         *         when the picture was cleared
+         * @return an {@link Optional} carrying the picture id, or {@link Optional#empty()} when
+         *         the picture was cleared
          */
         public Optional<Long> pictureId() {
             return Optional.ofNullable(pictureId);
@@ -92,22 +91,22 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         /**
          * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the envelope is a
-         * {@code type="result"} echoing the {@code request} id; the {@code <picture id/>}
-         * grandchild is optional and its absence signals a clear-picture confirmation.
+         * <p>Yields a populated {@link Optional} only when the envelope is a {@code type="result"}
+         * echoing the {@code request} id, as enforced by
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}. The {@code <picture id/>}
+         * grandchild is optional, and its absence signals a clear-picture confirmation.
          *
          * @implNote
-         * This implementation mirrors WA Web's {@code photoResponseParser}:
-         * {@code e.hasChild("picture")} populates the id from {@code attrInt("id")}, and an
-         * absent {@code <picture/>} child collapses to {@code {id: null}}; a present
-         * {@code <picture/>} with no {@code id} attribute also folds to a {@code null} id
-         * rather than failing the parse.
+         * This implementation folds three input shapes to a {@code null} picture id: a missing
+         * {@code <picture/>} child, a present {@code <picture/>} child with no {@code id}
+         * attribute, and an explicit clear. Only a {@code <picture/>} child carrying a numeric
+         * {@code id} yields a non-{@code null} id; a malformed or absent {@code id} never fails
+         * the parse.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSendProfilePictureJob",
                 exports = "photoResponseParser",
@@ -128,7 +127,11 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply with another object for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link Success} carrying an equal picture id,
+         *         otherwise {@code false}
          */
         @Override
         public boolean equals(Object obj) {
@@ -143,7 +146,9 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash of the picture id
          */
         @Override
         public int hashCode() {
@@ -151,7 +156,9 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug representation of this reply.
+         *
+         * @return a string carrying the picture id
          */
         @Override
         public String toString() {
@@ -160,27 +167,27 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
     }
 
     /**
-     * Reply variant signalling that the relay rejected the picture set or clear.
+     * Models the reply variant signalling that the relay rejected the picture set or clear.
      *
-     * @apiNote
-     * Maps to the {@code 4xx} branch of WA Web's reply pipeline; typical codes are
-     * {@code 403} when the caller is not an admin of the target group, and {@code 406} when
-     * the JPEG bytes fail relay-side format validation.
+     * <p>Corresponds to the caller-side ({@code 4xx}) error branch; typical codes are {@code 403}
+     * when the caller is not an admin of the target group, and {@code 406} when the JPEG bytes
+     * fail relay-side format validation.
      */
     @WhatsAppWebModule(moduleName = "WAWebSendProfilePictureJob")
     final class ClientError implements IqSendProfilePictureResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text from the {@code <error text/>} attribute,
+         * or {@code null} when omitted.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
+         * Constructs a client-error reply from an error code and optional text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional text, or {@code null} when omitted
@@ -202,8 +209,7 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
-         *         omitted
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -212,17 +218,15 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         /**
          * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls in the {@code 4xx} range, per the parsing contract of
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
+         * <p>Yields a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope echoing the {@code request} id and carrying an {@code <error/>} child whose
+         * {@code code} attribute falls in the caller-side ({@code 4xx}) range, per the parsing
+         * contract of {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSendProfilePictureJob",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -235,7 +239,11 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply with another object for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link ClientError} carrying an equal code and
+         *         text, otherwise {@code false}
          */
         @Override
         public boolean equals(Object obj) {
@@ -251,7 +259,9 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the combined hash of the error code and text
          */
         @Override
         public int hashCode() {
@@ -259,7 +269,9 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug representation of this reply.
+         *
+         * @return a string carrying the error code and text
          */
         @Override
         public String toString() {
@@ -269,26 +281,27 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
     }
 
     /**
-     * Reply variant signalling a transient server-side failure on a picture set or clear.
+     * Models the reply variant signalling a transient server-side failure on a picture set or
+     * clear.
      *
-     * @apiNote
-     * Maps to the {@code 5xx} branch of WA Web's reply pipeline; callers may retry the same
-     * request after a short backoff once the socket has settled.
+     * <p>Corresponds to the relay-side ({@code 5xx}) error branch; the same request may be
+     * retried after a short backoff once the socket has settled.
      */
     @WhatsAppWebModule(moduleName = "WAWebSendProfilePictureJob")
     final class ServerError implements IqSendProfilePictureResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text from the {@code <error text/>} attribute,
+         * or {@code null} when omitted.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a server-error reply from an error code and optional text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional text, or {@code null} when omitted
@@ -310,8 +323,7 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
-         *         omitted
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -320,17 +332,15 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         /**
          * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing
-         * contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Yields a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope echoing the {@code request} id and carrying an {@code <error/>} child whose
+         * {@code code} attribute falls outside the caller-side ({@code 4xx}) range, per the
+         * parsing contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebSendProfilePictureJob",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -343,7 +353,11 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply with another object for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link ServerError} carrying an equal code and
+         *         text, otherwise {@code false}
          */
         @Override
         public boolean equals(Object obj) {
@@ -359,7 +373,9 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the combined hash of the error code and text
          */
         @Override
         public int hashCode() {
@@ -367,7 +383,9 @@ public sealed interface IqSendProfilePictureResponse extends IqOperation.Respons
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug representation of this reply.
+         *
+         * @return a string carrying the error code and text
          */
         @Override
         public String toString() {

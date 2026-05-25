@@ -9,6 +9,11 @@ import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.Properties;
 
+/**
+ * Test-harness configuration source that exposes typed test settings, reading them from a local
+ * {@code .test/config.properties} file when run on a developer machine and from environment
+ * variables when run under GitHub Actions.
+ */
 public sealed abstract class Config permits Config.Local, Config.GithubActions {
     private static final String GITHUB_ACTIONS = "GITHUB_ACTIONS";
 

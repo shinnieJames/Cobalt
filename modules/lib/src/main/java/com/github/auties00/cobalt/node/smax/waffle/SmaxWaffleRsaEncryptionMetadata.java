@@ -11,71 +11,49 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The shared {@code <encryption_metadata version="1" algorithm="rsa2048"/>}
- * subtree carried by every Waffle RPC that exchanges encrypted payloads.
+ * Models the shared encryption-metadata subtree carried by every Waffle RPC that exchanges encrypted payloads.
+ * <p>
+ * This subtree frames an RSA-2048-wrapped AES-GCM session over the WhatsApp Web account-linking surface,
+ * which negotiates Facebook account linking for federated features such as Channels, Crossposting, and the
+ * Communities entry-point. It holds four cryptographic blobs: the RSA-wrapped AES session key, the AES-GCM
+ * nonce, the AES-GCM ciphertext, and the AES-GCM authentication tag. Embedders construct an instance from
+ * a payload-wrap result, then hand it to whichever Waffle request they are dispatching, and parse the
+ * counterpart back out of the corresponding success reply.
  *
- * @apiNote
- * Powers the wire framing of WhatsApp Web's "Account Linking" surface
- * ({@code WAWebAccountLinkingAPI}), which negotiates Facebook account
- * linking for federated features such as Channels, Crossposting, and the
- * Communities entry-point. Each linking RPC pre-encrypts its payload via
- * {@code WAWebAccountLinkingCryptoUtils.wrapPayloadWithRSAAESEncryption}
- * (an RSA-2048-wrapped AES-GCM session key) and stages the four blobs
- * inside this subtree. Embedders that drive linking themselves construct
- * an instance from the wrap result, then hand it to whichever
- * {@code SmaxWaffle*Request} they are dispatching.
- *
- * @implNote
- * This implementation collapses the WA Web
- * {@code WASmaxOutWaffleRSAEncryptionMetadataMixin} merge helper and the
- * {@code WASmaxInWaffleRSAEncryptionMetadataMixin} parser into a single
- * Java value class, mirroring how Cobalt collapses every other
- * {@code Out/In} mixin pair into one type. The byte-array fields are
- * stored by reference rather than defensively copied; callers must not
- * mutate the supplied arrays after construction.
+ * @implNote This implementation collapses WhatsApp Web's separate outbound merge helper and inbound parser
+ * into a single Java value class. The byte-array fields are stored by reference rather than defensively
+ * copied; callers must not mutate the supplied arrays after construction.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleRSAEncryptionMetadataMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInWaffleRSAEncryptionMetadataMixin")
 public final class SmaxWaffleRsaEncryptionMetadata {
     /**
-     * The RSA-2048-wrapped AES session key.
+     * Holds the RSA-2048-wrapped AES session key.
      */
     private final byte[] encryptedKey;
 
     /**
-     * The AES-GCM nonce.
+     * Holds the AES-GCM nonce.
      */
     private final byte[] nonce;
 
     /**
-     * The AES-GCM ciphertext.
+     * Holds the AES-GCM ciphertext.
      */
     private final byte[] encryptedData;
 
     /**
-     * The AES-GCM authentication tag.
+     * Holds the AES-GCM authentication tag.
      */
     private final byte[] authTag;
 
     /**
-     * Constructs a new metadata instance from the four pre-computed
-     * cryptographic blobs.
+     * Constructs a metadata instance from the four pre-computed cryptographic blobs.
      *
-     * @apiNote
-     * Embedders typically build the four blobs by calling the WA Web
-     * equivalent of {@code wrapPayloadWithRSAAESEncryption} against the
-     * relay's certificate payload key, then hand the result here before
-     * embedding it in a {@link SmaxWaffleEncryptedPayloadRequestRequest},
-     * {@link SmaxWaffleGenerateWAEntACUserRequest},
-     * {@link SmaxWaffleRefreshAccessTokensRequest}, or
-     * {@link SmaxWaffleWFPingRequest}.
-     *
-     * @param encryptedKey  the RSA-wrapped AES session key; never
-     *                      {@code null}
+     * @param encryptedKey  the RSA-wrapped AES session key; never {@code null}
      * @param nonce         the AES-GCM nonce; never {@code null}
      * @param encryptedData the AES-GCM ciphertext; never {@code null}
-     * @param authTag       the AES-GCM authentication tag; never
-     *                      {@code null}
+     * @param authTag       the AES-GCM authentication tag; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxWaffleRsaEncryptionMetadata(byte[] encryptedKey, byte[] nonce,
@@ -123,19 +101,13 @@ public final class SmaxWaffleRsaEncryptionMetadata {
     }
 
     /**
-     * Builds the {@code <encryption_metadata/>} subtree wrapping the four
-     * cryptographic blobs.
+     * Builds the {@code <encryption_metadata/>} subtree wrapping the four cryptographic blobs.
+     * <p>
+     * The subtree is the encryption-metadata child of the outer {@code <iq xmlns="waffle"/>} envelope and
+     * carries the encrypted-key, nonce, encrypted-data, and auth-tag children. The fixed {@code version="1"}
+     * and {@code algorithm="rsa2048"} attributes match the relay's RSA-2048 verification.
      *
-     * @apiNote
-     * Called by every {@code SmaxWaffle*Request.toNode()} that needs to
-     * embed encryption metadata; the subtree is the first child of the
-     * outer {@code <iq xmlns="waffle"/>} envelope. The fixed
-     * {@code version="1"} and {@code algorithm="rsa2048"} attributes
-     * match WA Web's hard-coded values and the relay's RSA-2048
-     * verification.
-     *
-     * @return the {@code <encryption_metadata/>} {@link Node}; never
-     *         {@code null}
+     * @return the {@code <encryption_metadata/>} {@link Node}; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleRSAEncryptionMetadataMixin",
             exports = "mergeRSAEncryptionMetadataMixin", adaptation = WhatsAppAdaptation.DIRECT)
@@ -166,28 +138,17 @@ public final class SmaxWaffleRsaEncryptionMetadata {
 
     /**
      * Parses an inbound {@code <encryption_metadata/>} subtree.
+     * <p>
+     * Used by every Waffle success reply that receives encryption metadata back from the relay. The returned
+     * instance owns the four extracted byte blobs that embedders subsequently decrypt. Returns an empty
+     * {@link Optional} when the stanza does not match the expected shape.
      *
-     * @apiNote
-     * Called by every {@code SmaxWaffle*Response.Success.of(...)} that
-     * receives encryption metadata back from the relay (the
-     * {@code GenerateWAEntACUser}, {@code RefreshAccessTokens}, and
-     * {@code EncryptedPayloadRequest} success replies all carry one).
-     * The returned instance owns the four extracted byte blobs that
-     * embedders subsequently feed into the WA Web counterpart of
-     * {@code decryptRSAEncryptedPayload}.
+     * @implNote This implementation gates on the fixed {@code version="1"} and {@code algorithm="rsa2048"}
+     * attributes and on the presence of all four child elements; the per-blob size ranges WhatsApp Web
+     * enforces (key 1-2048 bytes, nonce 1-128, data 1-8192, tag 1-128) are not re-checked after the presence test.
      *
-     * @implNote
-     * This implementation gates on the fixed {@code version="1"} and
-     * {@code algorithm="rsa2048"} attributes and on the presence of all
-     * four child elements; WA Web's parser additionally enforces
-     * per-blob size ranges (key 1-2048 bytes, nonce 1-128, data 1-8192,
-     * tag 1-128) which Cobalt does not currently re-check after the
-     * presence test.
-     *
-     * @param node the {@code <encryption_metadata/>} stanza; never
-     *             {@code null}
-     * @return an {@link Optional} carrying the parsed metadata, or empty
-     *         when the stanza does not match the expected shape
+     * @param node the {@code <encryption_metadata/>} stanza; never {@code null}
+     * @return an {@link Optional} carrying the parsed metadata, or empty when the stanza does not match the expected shape
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInWaffleRSAEncryptionMetadataMixin",
@@ -228,9 +189,9 @@ public final class SmaxWaffleRsaEncryptionMetadata {
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxWaffleRsaEncryptionMetadata} with equal cryptographic
-     * blobs.
+     * Returns whether the given object is a {@link SmaxWaffleRsaEncryptionMetadata} with equal cryptographic blobs.
+     * <p>
+     * The four byte arrays are compared element-wise.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when the four byte arrays match element-wise
@@ -253,8 +214,7 @@ public final class SmaxWaffleRsaEncryptionMetadata {
     /**
      * Returns a hash code derived from the four cryptographic blobs.
      *
-     * @return a content-based hash consistent with
-     *         {@link #equals(Object)}
+     * @return a content-based hash consistent with {@link #equals(Object)}
      */
     @Override
     public int hashCode() {
@@ -266,14 +226,10 @@ public final class SmaxWaffleRsaEncryptionMetadata {
     }
 
     /**
-     * Returns a debug rendering that summarises each blob as its length
-     * rather than its contents.
-     *
-     * @apiNote
-     * Bytes are summarised because the blobs are ciphertext and
-     * generally not useful to print verbatim; the length-only rendering
-     * keeps the {@code toString} bounded and avoids leaking sensitive
-     * material into log files.
+     * Returns a debug rendering of this metadata.
+     * <p>
+     * Each blob is summarised as its length rather than its contents, both to bound the output and to avoid
+     * leaking sensitive ciphertext into log files.
      *
      * @return a human-readable summary; never {@code null}
      */

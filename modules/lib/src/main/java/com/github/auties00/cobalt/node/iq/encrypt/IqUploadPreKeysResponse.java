@@ -15,13 +15,11 @@ import java.util.Optional;
  * Closed family of reply variants observable on the steady-state pre-key upload
  * {@link IqUploadPreKeysRequest} roundtrip.
  *
- * @apiNote
- * {@link Success} signals that the new pre-key bundle is live and the local Signal store should
- * flip {@code setServerHasPreKeys(true)}. {@link ClientError} surfaces {@code 4xx} envelopes,
+ * <p>{@link Success} signals that the new pre-key bundle is live and the local Signal store should
+ * record that the server now holds pre-keys. {@link ClientError} surfaces {@code 4xx} envelopes,
  * notably {@code 406} "uploaded invalid keys". {@link ServerError} surfaces {@code 5xx} envelopes
  * (the WA Web log labels these as "server requested backoff"); WA Web's retry loop drives the next
- * attempt through {@code PromiseRetryLoop} with a fibonacci backoff schedule capped at roughly
- * ten minutes.
+ * attempt with a fibonacci backoff schedule capped at roughly ten minutes.
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
 public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
@@ -32,9 +30,8 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     /**
      * Parses the inbound stanza into the first matching {@link IqUploadPreKeysResponse} variant.
      *
-     * @apiNote
-     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
-     * {@link ServerError#of(Node, Node)}.
+     * <p>Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)},
+     * then {@link ServerError#of(Node, Node)}.
      *
      * @param node    the inbound IQ stanza received from the relay
      * @param request the original outbound stanza
@@ -61,11 +58,9 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     /**
      * Successful echo from the relay; the new pre-key bundle is now live.
      *
-     * @apiNote
-     * Carries no payload because the relay's reply is just an envelope ack. Callers should mirror
-     * WA Web's behaviour and flip the local {@code setServerHasPreKeys(true)} flag so the next
-     * {@code PreKeyLow} push triggers another upload only after the server-side stash has been
-     * consumed.
+     * <p>Carries no payload because the relay's reply is just an envelope ack. Callers mirror WA
+     * Web's behaviour by recording locally that the server now holds pre-keys, so the next
+     * stash-low push triggers another upload only after the server-side stash has been consumed.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
     final class Success implements IqUploadPreKeysResponse {
@@ -78,8 +73,7 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         /**
          * Parses a {@link Success} variant from the inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
+         * <p>Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -97,8 +91,7 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         /**
          * Compares this success envelope to another instance for equality.
          *
-         * @apiNote
-         * All instances are interchangeable; equality reduces to a class-identity check.
+         * <p>All instances are interchangeable; equality reduces to a class-identity check.
          *
          * @param obj the candidate instance
          * @return {@code true} when {@code obj} is a non-{@code null} {@code Success}
@@ -135,9 +128,8 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     /**
      * Client-error variant; the relay rejected the upload with a {@code 4xx} envelope.
      *
-     * @apiNote
-     * The documented case is {@code 406} "uploaded invalid keys"; WA Web logs the failure and the
-     * retry loop drops out of the upload step.
+     * <p>The documented case is {@code 406} "uploaded invalid keys"; WA Web logs the failure and
+     * the retry loop drops out of the upload step.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
     final class ClientError implements IqUploadPreKeysResponse {
@@ -183,8 +175,7 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         /**
          * Parses a {@link ClientError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -244,10 +235,9 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     /**
      * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope.
      *
-     * @apiNote
-     * WA Web logs these as "server requested backoff" and lets {@code PromiseRetryLoop} schedule
-     * the next attempt with a fibonacci timer (first {@code 1s}, second {@code 2s}, capped at
-     * {@code 610s}). Callers that mirror the policy should defer retries accordingly.
+     * <p>WA Web logs these as "server requested backoff" and schedules the next attempt with a
+     * fibonacci timer (first {@code 1s}, second {@code 2s}, capped at {@code 610s}). Callers that
+     * mirror the policy should defer retries accordingly.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
     final class ServerError implements IqUploadPreKeysResponse {
@@ -293,8 +283,7 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         /**
          * Parses a {@link ServerError} variant from the inbound stanza.
          *
-         * @apiNote
-         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

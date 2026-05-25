@@ -8,20 +8,15 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.smax.SmaxOperation;
 
 /**
- * The outbound {@code <iq xmlns="passive" type="set">} stanza that pins the
- * connection back into passive mode.
+ * Models the outbound {@code <iq xmlns="passive" type="set">} stanza that pins the connection back into passive mode.
  *
- * @apiNote
- * Sent by Cobalt embedders who mirror WA Web's
- * {@code WAWebPassiveModeManager} lifecycle. While in passive mode the
- * relay buffers live messages so that the client can finish a long
- * startup task without dropped or interleaved deliveries; embedders that
- * never expose a passive-mode UI almost never need to call this.
+ * <p>While in passive mode the relay buffers live messages so that the client can finish a long startup task without
+ * dropped or interleaved deliveries. This stanza is the inverse of its {@link SmaxPassiveModeActiveIQRequest active}
+ * counterpart and is rarely needed by clients that never expose a passive-mode lifecycle. The request carries no
+ * payload beyond a single empty {@code <passive/>} child that discriminates the passive transition.
  *
  * @implNote
- * This implementation carries no per-call state, so a single instance can
- * be reused; the canonical caller is {@code WASendPassiveModeProtocol}
- * with the {@code "passive"} argument.
+ * This implementation carries no per-call state, so a single instance can be reused across the connection lifecycle.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPassiveModePassiveIQRequest")
 public final class SmaxPassiveModePassiveIQRequest implements SmaxOperation.Request {
@@ -29,9 +24,7 @@ public final class SmaxPassiveModePassiveIQRequest implements SmaxOperation.Requ
     /**
      * Constructs an empty request envelope.
      *
-     * @apiNote
-     * Useful for callers that explicitly hold the relay in passive mode
-     * for the duration of a startup task. There is no payload to supply.
+     * <p>There is no payload to supply; the stanza shape is fixed and rendered entirely by {@link #toNode()}.
      */
     public SmaxPassiveModePassiveIQRequest() {
     }
@@ -40,11 +33,10 @@ public final class SmaxPassiveModePassiveIQRequest implements SmaxOperation.Requ
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation hard-codes {@code xmlns="passive"},
-     * {@code type="set"}, and {@code to=s.whatsapp.net} per the
-     * {@code WASmaxOutPassiveModePassiveIQRequest.makePassiveIQRequest}
-     * fixture, then nests a single empty {@code <passive/>} child as the
-     * payload discriminator.
+     * This implementation hard-codes {@code xmlns="passive"}, {@code type="set"}, and {@code to=s.whatsapp.net}
+     * resolved via {@link JidServer#user()}, then nests a single empty {@code <passive/>} child as the payload
+     * discriminator.
+     * @return the outbound stanza builder; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPassiveModePassiveIQRequest",
@@ -62,11 +54,12 @@ public final class SmaxPassiveModePassiveIQRequest implements SmaxOperation.Requ
     }
 
     /**
-     * {@inheritDoc}
+     * Indicates whether the given object is equal to this request.
      *
-     * @implNote
-     * This implementation treats every instance as equal to every other
-     * because the type carries no per-instance state.
+     * <p>Any instance of this type is equal to any other because the request carries no per-instance state.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a {@code SmaxPassiveModePassiveIQRequest}
      */
     @Override
     public boolean equals(Object obj) {
@@ -77,11 +70,12 @@ public final class SmaxPassiveModePassiveIQRequest implements SmaxOperation.Requ
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code for this request.
      *
-     * @implNote
-     * This implementation returns a class-level hash to stay consistent
-     * with {@link #equals(Object)}.
+     * <p>The hash is class-level so that it stays consistent with {@link #equals(Object)}, which treats every instance
+     * as equal.
+     *
+     * @return the class-level hash code
      */
     @Override
     public int hashCode() {
@@ -89,11 +83,11 @@ public final class SmaxPassiveModePassiveIQRequest implements SmaxOperation.Requ
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the string representation of this request.
      *
-     * @implNote
-     * This implementation mirrors the record-like rendering used across
-     * the {@code Smax*} stanza family.
+     * <p>The rendering mirrors the record-like form used across the {@code Smax*} stanza family.
+     *
+     * @return the string representation
      */
     @Override
     public String toString() {

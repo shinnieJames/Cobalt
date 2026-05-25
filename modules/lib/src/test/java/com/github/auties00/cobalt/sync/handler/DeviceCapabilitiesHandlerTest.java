@@ -30,25 +30,20 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link DeviceCapabilitiesHandler} adapter for
- * {@code WAWebDeviceCapabilitiesSync}.
+ * Exercises the {@link DeviceCapabilitiesHandler} adapter for the
+ * {@code device_capabilities} app-state sync action across metadata, the
+ * non-primary (companion) device branch where the store is updated but no
+ * LID-migration side effects fire, the early-return paths (non-SET, foreign
+ * action, missing or blank JID), the per-device store write, and the default
+ * conflict resolution and batch dispatch. The primary-device branch reaches
+ * into {@link LidMigrationService}, which {@link TestWhatsAppClient} does not
+ * stub, so it is exercised by the integration suite rather than here.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code device_capabilities}
- * app-state sync action across metadata, the non-primary-device
- * branch (store is updated but no LID-migration side effects fire),
- * the early-return paths (non-SET, malformed value, missing JID) and
- * the per-device store write. The primary-device branch reaches
- * into {@link LidMigrationService} which {@link TestWhatsAppClient}
- * does not stub; that path is exercised by the integration suite.
- *
- * @implNote
- * This implementation builds the handler with a real
- * {@link DefaultWamService} and {@link LidMigrationService} so the
- * dependency graph matches production wiring; A/B props are stubbed
- * via {@link TestABPropsService}. Each test starts from a clean
- * {@link DeviceFixtures#temporaryStore} so device-capability writes
- * land in an empty per-JID map.
+ * <p>The handler is built with a real {@link DefaultWamService} and
+ * {@link LidMigrationService} so the dependency graph matches production wiring;
+ * A/B props are stubbed via {@link TestABPropsService}. Each test starts from a
+ * clean {@link DeviceFixtures#temporaryStore}, so device-capability writes land
+ * in an empty per-JID map.
  */
 @DisplayName("DeviceCapabilitiesHandler")
 class DeviceCapabilitiesHandlerTest {

@@ -13,19 +13,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that marks a group chat as not-spam.
+ * Outbound {@code <iq type="set" xmlns="w:g2">} stanza that marks a group chat as not-spam.
  *
- * @apiNote Drives the "report as not spam" affordance on the group safety panel:
- * {@code WAWebConversationSpamUtils.acknowledgeGroupAsNotSpam} and {@code WAWebSendNotSpamJob} both invoke this
- * RPC fire-and-forget when the local user dismisses the spam warning. Send one IQ per group; the relay does not
- * batch.
+ * This request backs the report-as-not-spam affordance on the group safety panel: it is dispatched
+ * fire-and-forget when the local user dismisses the spam warning. One IQ is sent per group; the relay does not
+ * batch acknowledgements.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsAcknowledgeGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Request {
     /**
-     * The group {@link Jid} being acknowledged.
+     * Holds the group {@link Jid} being acknowledged.
      */
     private final Jid groupJid;
 
@@ -42,7 +41,7 @@ public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Re
     /**
      * Returns the group {@link Jid} being acknowledged.
      *
-     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     * The value routes verbatim into the IQ's {@code to} attribute.
      *
      * @return the group {@link Jid}; never {@code null}
      */
@@ -53,7 +52,7 @@ public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Re
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="<groupJid>" type="set">
      *         <ack/>

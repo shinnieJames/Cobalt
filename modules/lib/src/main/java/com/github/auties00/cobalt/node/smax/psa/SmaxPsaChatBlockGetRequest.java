@@ -13,16 +13,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="get"><query><blocking_status/></query></iq>}
- * request that asks the relay whether the current account has muted the
- * PSA broadcast channel.
+ * Models the outbound {@code <iq type="get"><query><blocking_status/></query></iq>}
+ * request that asks the relay whether the current account has muted the PSA
+ * broadcast channel.
  *
- * @apiNote
- * Surfaces {@code WAWebQueryBlockListJob.getBlockingStatusForPSAUser}, which
- * the post-login blocklist refresh consults to populate the local "PSA
- * muted" preference. The reply
- * ({@link SmaxPsaChatBlockGetResponse}) is the typed projection of the
- * server response.
+ * <p>The request carries no fields; its stanza shape is fixed. The relay
+ * answers with a {@link SmaxPsaChatBlockGetResponse}, whose
+ * {@link SmaxPsaChatBlockGetResponse.Success} variant exposes the current
+ * {@link SmaxPsaChatBlockGetBlockingStatus} that callers fold into the local
+ * PSA-muted preference.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaChatBlockGetRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaBaseIQGetRequestMixin")
@@ -36,12 +35,9 @@ public final class SmaxPsaChatBlockGetRequest implements SmaxOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation emits the canonical
-     * {@code <iq xmlns="w:comms:chat" type="get" to="s.whatsapp.net">}
-     * envelope around a {@code <query><blocking_status/></query>} payload,
-     * mirroring the composition in
-     * {@code makeChatBlockGetRequest} + {@code mergeBaseIQGetRequestMixin}.
+     * <p>Builds the {@code <iq xmlns="w:comms:chat" type="get">} envelope,
+     * addressed to the {@linkplain JidServer#user() user server}, wrapping a
+     * {@code <query><blocking_status/></query>} payload.
      *
      * @return a {@link NodeBuilder} carrying the
      *         {@code <iq><query><blocking_status/></query></iq>} stanza

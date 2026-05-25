@@ -27,14 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BotWelcomeRequestHandler} - Cobalt's adapter for
- * {@code WAWebBotWelcomeRequestSync}.
- *
- * <p>The handler records whether the bot welcome message has been delivered
- * to a given bot chat, indexed by the chat's JID. The matrix covers
- * metadata, the happy SET path, orphan/malformed branches, the REMOVE-as-
- * UNSUPPORTED branch, the {@code getBotWelcomeRequestSetMutation} builder,
- * and the default timestamp-based conflict resolution.
+ * Covers {@link BotWelcomeRequestHandler}, which records whether the bot welcome message has been
+ * delivered to a given bot chat, indexed by the chat's JID. The SET path requires the chat to
+ * already exist in the store, so missing-chat cases assert the ORPHAN outcome.
  */
 @DisplayName("BotWelcomeRequestHandler")
 class BotWelcomeRequestHandlerTest {

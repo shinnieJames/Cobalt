@@ -20,46 +20,37 @@ import java.util.List;
 /**
  * Builds outgoing mute-chat sync mutations.
  *
- * @apiNote
- * Drives the chat-mute picker in the chat-info surface; supports muting
- * for a fixed duration, indefinitely ({@code muteEndSeconds == -1}), or
- * unmuting ({@code muteEndSeconds == 0}). Group chats additionally
- * support a separate mention-everyone mute window gated by the
- * {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} AB prop. Mutations
- * produced here are consumed on receiving devices by
+ * <p>Backs the chat-mute picker in the chat-info surface, supporting mutes for a fixed duration,
+ * indefinitely ({@code muteEndSeconds == -1}), or unmuting ({@code muteEndSeconds == 0}). Group
+ * chats additionally support a separate mention-everyone mute window gated by the
+ * {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} AB prop. Mutations produced here are
+ * consumed on receiving devices by
  * {@link com.github.auties00.cobalt.sync.handler.MuteChatHandler}.
  *
  * @implNote
- * This implementation mirrors {@code WAWebMuteChatSync.generateMuteMutation}
- * including its three-way sentinel for {@code muteEndTimestamp}:
- * {@code -1} stored verbatim (muted indefinitely), {@code 0} stored
- * verbatim (unmuted), every other value multiplied by 1000 to convert
- * seconds to milliseconds.
+ * This implementation mirrors {@code WAWebMuteChatSync.generateMuteMutation} including its
+ * three-way sentinel for {@code muteEndTimestamp}: {@code -1} stored verbatim (muted
+ * indefinitely), {@code 0} stored verbatim (unmuted), every other value multiplied by 1000 to
+ * convert seconds to milliseconds.
  */
 public final class MuteChatMutationFactory {
     /**
-     * The AB-props service consulted for the
-     * {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} gate when
-     * building the outgoing mute mutation.
+     * The AB-props service consulted for the {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER}
+     * gate when building the outgoing mute mutation.
      *
-     * @apiNote
-     * The mention-everyone mute window is only populated when the
-     * remote-config gate is enabled; otherwise the field is omitted from
-     * the {@code MuteAction} regardless of what the caller passes.
+     * <p>The mention-everyone mute window is only populated when the remote-config gate is
+     * enabled; otherwise the field is omitted from the {@link MuteAction} regardless of what the
+     * caller passes.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Constructs a mute-chat mutation factory bound to the given AB-props
-     * service.
+     * Constructs a mute-chat mutation factory bound to the given AB-props service.
      *
-     * @apiNote
-     * Required by the dependency-injection container; the AB-props
-     * service is consulted on every generated mute mutation for the
+     * <p>The AB-props service is consulted on every generated mute mutation for the
      * mention-everyone gate.
      *
-     * @param abPropsService the AB-props service consulted on every
-     *                       generated mute mutation
+     * @param abPropsService the AB-props service consulted on every generated mute mutation
      */
     public MuteChatMutationFactory(ABPropsService abPropsService) {
         this.abPropsService = abPropsService;
@@ -68,44 +59,32 @@ public final class MuteChatMutationFactory {
     /**
      * Builds a pending mutation for muting or unmuting a chat.
      *
-     * @apiNote
-     * Invoked from the public mute setter on
-     * {@link WhatsAppClient}.
-     * Receiving devices merge the resulting {@code muteExpiration} (in
-     * seconds) into the chat table and fire a
-     * {@code muteCollectionAdd} backend event. For group chats with an
-     * active {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} gate,
-     * the mention-everyone window propagates as a separate
-     * {@code mentionAllMuteExpiration} field.
+     * <p>Receiving devices merge the resulting mute expiration (in seconds) into the chat table
+     * and fire a mute-collection-add backend event. For group chats with an active
+     * {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} gate, the mention-everyone window
+     * propagates as a separate field.
      *
      * @implNote
-     * This implementation preserves the WA Web sentinel for indefinite
-     * mutes: {@code muteEndSeconds == -1} is stored verbatim in the
-     * protobuf {@code int64} field, all other non-zero values are scaled
-     * from seconds to milliseconds via {@link Instant#ofEpochMilli(long)},
-     * and {@code muteEndSeconds == 0} maps to {@code Instant.ofEpochMilli(0)}
-     * to match WA Web's {@code 0 * 1000 = 0} branch on the unmute path.
-     * The {@code mentionAllSeconds} value follows the same sentinel
-     * convention: non-positive values pass through unchanged, positive
-     * values are multiplied by 1000. The supplied {@code chatJid} is
-     * used verbatim in the index; WA Web's
-     * {@code getChatJidMutationIndexForChat} would swap a PN for its
-     * paired LID under LID1x1 migration, which Cobalt does not yet
-     * track at this layer.
+     * This implementation preserves the WA Web sentinel for indefinite mutes:
+     * {@code muteEndSeconds == -1} is stored verbatim in the protobuf {@code int64} field, all
+     * other non-zero values are scaled from seconds to milliseconds via
+     * {@link Instant#ofEpochMilli(long)}, and {@code muteEndSeconds == 0} maps to
+     * {@code Instant.ofEpochMilli(0)} to match WA Web's {@code 0 * 1000 = 0} branch on the unmute
+     * path. The {@code mentionAllSeconds} value follows the same sentinel convention: non-positive
+     * values pass through unchanged, positive values are multiplied by 1000. The supplied
+     * {@code chatJid} is used verbatim in the index; WA Web's
+     * {@code getChatJidMutationIndexForChat} would swap a PN for its paired LID under LID1x1
+     * migration, which Cobalt does not yet track at this layer.
      *
-     * @param client            the WhatsApp client, reserved for callers
-     *                          that need to thread the active session
-     *                          state through the factory
+     * @param client            the WhatsApp client, reserved for callers that need to thread the
+     *                          active session state through the factory
      * @param chatJid           the JID of the chat to mute or unmute
-     * @param muteEndSeconds    the mute end time in seconds since the
-     *                          epoch; {@code 0} means unmute, {@code -1}
-     *                          means muted indefinitely, any other
-     *                          positive value is the expiration
-     *                          timestamp
-     * @param mentionAllSeconds the optional mention-everyone mute end
-     *                          time in seconds, or {@code null} if the
-     *                          caller does not wish to set a
-     *                          mention-everyone mute
+     * @param muteEndSeconds    the mute end time in seconds since the epoch; {@code 0} means
+     *                          unmute, {@code -1} means muted indefinitely, any other positive
+     *                          value is the expiration timestamp
+     * @param mentionAllSeconds the optional mention-everyone mute end time in seconds, or
+     *                          {@code null} if the caller does not wish to set a mention-everyone
+     *                          mute
      * @return the pending mutation for the mute action
      */
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "generateMuteMutation", adaptation = WhatsAppAdaptation.ADAPTED)

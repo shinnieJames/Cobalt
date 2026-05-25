@@ -14,47 +14,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound reply variants the relay produces in
- * response to an {@link IqGroupExitRequest}.
+ * Models the sealed family of inbound reply variants the relay produces in response to an {@link IqGroupExitRequest}.
  *
- * @apiNote
- * After dispatching the leave request, pattern-match the returned
- * variant: {@link Success} carries one {@link Success.LeaveResult}
- * per requested target (with a per-target outcome code so partial
- * failures inside a batch are visible), while {@link ClientError}
- * and {@link ServerError} surface envelope-level rejections that
- * abort the entire batch.
+ * <p>After dispatching the leave request, callers pattern-match the returned variant.
+ * {@link Success} carries one {@link Success.LeaveResult} per requested target, with a per-target
+ * outcome code so partial failures inside a batch are visible; {@link ClientError} and
+ * {@link ServerError} surface envelope-level rejections that abort the entire batch.
  *
  * @implNote
- * This implementation collapses WA Web's
- * {@code leaveGroupsResultParser} and
- * {@code leaveCommunitiesResultParser} (two
- * {@link WhatsAppWebModule WAWebGroupExitJob}-internal
- * parsers fed into {@code deprecatedSendIq}) into a single sealed
- * sum; the grandchild-shape (whether to read {@code id} on
- * {@code <group>} or {@code parent_group_jid} on
- * {@code <linked_groups>}) is recovered from the outbound request.
+ * This implementation collapses the separate group-leave and community-leave parsers into a single
+ * sealed sum; the grandchild shape (whether to read {@code id} on {@code <group>} or
+ * {@code parent_group_jid} on {@code <linked_groups>}) is recovered from the outbound request
+ * rather than from the reply.
  */
 @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
 public sealed interface IqGroupExitResponse extends IqOperation.Response
         permits IqGroupExitResponse.Success, IqGroupExitResponse.ClientError, IqGroupExitResponse.ServerError {
 
     /**
-     * Tries each {@link IqGroupExitResponse} variant in priority order
-     * and returns the first that parses cleanly.
+     * Tries each {@link IqGroupExitResponse} variant in priority order and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Use this when dispatching through the typed {@link IqOperation}
-     * pipeline; the dispatcher hands the inbound {@link Node} together
-     * with the original outbound request so that the parser can
-     * recover the grandchild shape from the request rather than from
-     * the reply (the relay echoes whichever shape the caller used).
+     * <p>The dispatcher hands the inbound {@link Node} together with the original outbound request
+     * so that the parser can recover the grandchild shape from the request rather than from the
+     * reply, since the relay echoes whichever shape the caller used. Returns
+     * {@link Optional#empty()} when no documented variant matched the stanza shape.
      *
      * @implNote
-     * This implementation tries {@link Success} first, then
-     * {@link ClientError}, then {@link ServerError}; the order matches
-     * WA Web's promise resolution where the result branch is asserted
-     * before any error envelope is inspected.
+     * This implementation tries {@link Success} first, then {@link ClientError}, then
+     * {@link ServerError}, asserting the result branch before any error envelope is inspected.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza used to validate echoed identifiers and to discover the grandchild-shape mode; never {@code null}
@@ -82,45 +69,36 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant.
+     * Models the success reply variant carrying one per-target leave outcome.
      *
-     * @apiNote
-     * Carries one {@link LeaveResult} per requested target. Each
-     * carries an {@code error} code mirroring the relay's per-target
-     * status (defaulting to {@code 200} when the relay omits it,
-     * which signals a per-target success); a batch that nominally
-     * succeeded at the envelope level can still hold individual
-     * non-{@code 200} entries when one or more targets failed.
-     * Callers iterating {@link #results()} should treat any code
-     * other than {@code 200} as a per-target leave failure.
+     * <p>Carries one {@link LeaveResult} per requested target. Each {@link LeaveResult} carries an
+     * {@code error} code mirroring the relay's per-target status, defaulting to {@code 200} when
+     * the relay omits it, which signals a per-target success. A batch that nominally succeeded at
+     * the envelope level can still hold individual non-{@code 200} entries when one or more targets
+     * failed, so callers iterating {@link #results()} should treat any code other than {@code 200}
+     * as a per-target leave failure.
      *
      * @implNote
-     * This implementation matches WA Web's
-     * {@code leaveGroupsResultParser} / {@code leaveCommunitiesResultParser}
-     * output shape ({@code [{id, code}, ...]}) where the parser maps
-     * each {@code <group>} or {@code <linked_groups>} grandchild of
-     * the {@code <leave>} child to a {@code (jid, code)} pair.
+     * This implementation maps each {@code <group>} or {@code <linked_groups>} grandchild of the
+     * {@code <leave>} child to a {@code (jid, code)} pair.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
     final class Success implements IqGroupExitResponse {
         /**
-         * The per-target reply projection that pairs the echoed
-         * target JID with its (possibly partial) leave outcome code.
+         * Models the per-target reply projection pairing the echoed target JID with its leave outcome code.
          *
-         * @apiNote
-         * The {@link #code()} accessor returns {@code 200} on a clean
-         * leave; any other value is the relay's per-target error code
-         * (for example {@code 403} when the caller is not actually a
-         * member of the target group).
+         * <p>The {@link #code()} accessor returns {@code 200} on a clean leave; any other value is
+         * the relay's per-target error code, for example {@code 403} when the caller is not
+         * actually a member of the target group.
          */
         public static final class LeaveResult {
             /**
-             * The echoed target JID.
+             * Holds the echoed target JID.
              */
             private final Jid jid;
 
             /**
-             * The per-target outcome code.
+             * Holds the per-target outcome code.
              */
             private final int code;
 
@@ -154,6 +132,15 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
                 return code;
             }
 
+            /**
+             * Compares this result with another object for equality.
+             *
+             * <p>Two results are equal when they carry the same {@link #jid()} and the same
+             * {@link #code()}.
+             *
+             * @param obj the object to compare with; may be {@code null}
+             * @return {@code true} when {@code obj} is an equal result, {@code false} otherwise
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -167,11 +154,21 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
                         && Objects.equals(this.jid, that.jid);
             }
 
+            /**
+             * Returns a hash code derived from the JID and code.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, code);
             }
 
+            /**
+             * Returns a debug string describing the JID and code.
+             *
+             * @return the string representation
+             */
             @Override
             public String toString() {
                 return "IqGroupExitResponse.Success.LeaveResult[jid=" + jid
@@ -180,12 +177,12 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         }
 
         /**
-         * The list of per-target outcome projections.
+         * Holds the list of per-target outcome projections.
          */
         private final List<LeaveResult> results;
 
         /**
-         * Constructs a {@link Success} reply.
+         * Constructs a success reply.
          *
          * @param results the per-target outcome list; never {@code null}
          * @throws NullPointerException if {@code results} is {@code null}
@@ -205,27 +202,18 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqGroupExitResponse#of(Node, Node)}; this factory is
-         * exposed so callers can short-circuit when they already know
-         * the wire shape is a success.
+         * <p>Callers normally reach this through {@link IqGroupExitResponse#of(Node, Node)}; this
+         * factory is exposed so callers can short-circuit when they already know the wire shape is
+         * a success.
          *
          * @implNote
-         * This implementation recovers the grandchild shape from the
-         * outbound request: if the outbound {@code <leave>} carries
-         * any {@code <linked_groups>} child the parser reads
-         * {@code parent_group_jid} on each grandchild, otherwise it
-         * reads {@code id} on {@code <group>} children. This mirrors
-         * WA Web's separate {@code leaveGroupsResultParser} and
-         * {@code leaveCommunitiesResultParser} pair: WA Web picks the
-         * parser at dispatch time, Cobalt picks the attribute name at
-         * parse time. The {@code error} attribute defaults to
-         * {@code 200} when absent, matching the parser's
-         * {@code maybeAttrInt("error") != null ? ... : 200} contract.
+         * This implementation recovers the grandchild shape from the outbound request: if the
+         * outbound {@code <leave>} carries any {@code <linked_groups>} child the parser reads
+         * {@code parent_group_jid} on each grandchild, otherwise it reads {@code id} on
+         * {@code <group>} children. The {@code error} attribute defaults to {@code 200} when
+         * absent.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -274,6 +262,14 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             return Optional.of(new Success(results));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #results()} list.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -286,11 +282,21 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             return Objects.equals(this.results, that.results);
         }
 
+        /**
+         * Returns a hash code derived from the results.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(results);
         }
 
+        /**
+         * Returns a debug string describing the results.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqGroupExitResponse.Success[results=" + results + ']';
@@ -298,39 +304,31 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * Models the client-error reply variant for envelope-level caller-side rejections.
      *
-     * @apiNote
-     * Surfaces caller-side rejections of the whole leave batch:
-     * typically {@code 400} on a malformed stanza or {@code 401}
-     * when the caller's session no longer authorises group operations.
-     * Per-target failures are surfaced as non-{@code 200} entries
-     * inside a {@link Success} instead; this variant only fires when
-     * the relay rejects the envelope itself.
+     * <p>Surfaces caller-side rejections of the whole leave batch: typically {@code 400} on a
+     * malformed stanza or {@code 401} when the caller's session no longer authorises group
+     * operations. Per-target failures are surfaced as non-{@code 200} entries inside a
+     * {@link Success} instead; this variant only fires when the relay rejects the envelope itself.
      *
      * @implNote
-     * This implementation corresponds to the {@code 4xx} branch of
-     * WA Web's {@code ServerStatusCodeError} promise rejection inside
-     * {@code leaveGroup} / {@code leaveCommunity} /
-     * {@code leaveCommunities}; the {@code <error>} envelope's
-     * {@code code} and {@code text} attributes feed
-     * {@link #errorCode()} and {@link #errorText()}.
+     * This implementation reads the {@code <error>} envelope's {@code code} and {@code text}
+     * attributes into {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
     final class ClientError implements IqGroupExitResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text when the relay supplied one,
-         * otherwise {@code null}.
+         * Holds the human-readable error text when the relay supplied one, otherwise {@code null}.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ClientError} reply.
+         * Constructs a client-error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -359,21 +357,17 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqGroupExitResponse#of(Node, Node)}; this factory is
-         * exposed so callers can short-circuit when they already know
-         * the wire shape is a client error.
+         * <p>Callers normally reach this through {@link IqGroupExitResponse#of(Node, Node)}; this
+         * factory is exposed so callers can short-circuit when they already know the wire shape is
+         * a client error.
          *
          * @implNote
          * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * to validate the {@code type="error"} envelope and the
-         * {@code <error>} child's {@code 4xx} {@code code} before
-         * extracting code/text.
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to validate the
+         * {@code type="error"} envelope and the {@code <error>} child's {@code 4xx} {@code code}
+         * before extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -396,6 +390,15 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #errorCode()} and the same
+         * {@link #errorText()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -409,11 +412,21 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string describing the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqGroupExitResponse.ClientError[errorCode=" + errorCode
@@ -422,33 +435,29 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * Models the server-error reply variant for transient relay failures.
      *
-     * @apiNote
-     * Surfaces transient {@code 5xx} relay failures while processing
-     * the leave batch; the request may be retried after a backoff.
+     * <p>Surfaces transient {@code 5xx} relay failures while processing the leave batch; the
+     * request may be retried after a backoff.
      *
      * @implNote
-     * This implementation corresponds to the {@code 5xx} branch of
-     * WA Web's {@code ServerStatusCodeError} promise rejection inside
-     * {@code leaveGroup} / {@code leaveCommunity} /
-     * {@code leaveCommunities}.
+     * This implementation reads the {@code <error>} envelope's {@code code} and {@code text}
+     * attributes into {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
     final class ServerError implements IqGroupExitResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text when the relay supplied one,
-         * otherwise {@code null}.
+         * Holds the human-readable error text when the relay supplied one, otherwise {@code null}.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ServerError} reply.
+         * Constructs a server-error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -477,21 +486,17 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqGroupExitResponse#of(Node, Node)}; this factory is
-         * exposed so callers can short-circuit when they already know
-         * the wire shape is a server error.
+         * <p>Callers normally reach this through {@link IqGroupExitResponse#of(Node, Node)}; this
+         * factory is exposed so callers can short-circuit when they already know the wire shape is
+         * a server error.
          *
          * @implNote
          * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * to validate the {@code type="error"} envelope and the
-         * {@code <error>} child's {@code 5xx} {@code code} before
-         * extracting code/text.
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to validate the
+         * {@code type="error"} envelope and the {@code <error>} child's {@code 5xx} {@code code}
+         * before extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -514,6 +519,15 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #errorCode()} and the same
+         * {@link #errorText()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -527,11 +541,21 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string describing the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqGroupExitResponse.ServerError[errorCode=" + errorCode

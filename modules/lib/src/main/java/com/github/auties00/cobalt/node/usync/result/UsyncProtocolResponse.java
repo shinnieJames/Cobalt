@@ -1,31 +1,26 @@
 package com.github.auties00.cobalt.node.usync.result;
 
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.node.usync.UsyncProtocol;
 import com.github.auties00.cobalt.node.usync.UsyncProtocolResult;
 
 /**
- * Sealed family of every protocol-specific success variant returned by a
- * per-user, per-protocol USync parser.
+ * Groups every protocol-specific success variant a per-user, per-protocol USync parser can return.
  *
- * @apiNote
- * Sibling permit of {@link UsyncProtocolError} under
- * {@link UsyncProtocolResult}. Cobalt embedders never construct these
- * directly: instances are produced by the USync response dispatcher in
- * {@code WAWebUsync.m} (one parser per {@code <user>} child tag) and surfaced
- * through {@link UsyncUserResult#getProtocolResult(String)}. Switch on this
- * type when a single call site asks for several protocols at once and needs to
- * route each result without an intermediate cast.
+ * <p>This is the sibling permit of {@link UsyncProtocolError} under {@link UsyncProtocolResult}:
+ * the success branch carries a typed protocol payload, the error branch carries an
+ * {@link UsyncProtocolError}. Each permitted variant corresponds to one protocol and is produced
+ * by {@link UsyncProtocol#parseUserResult(com.github.auties00.cobalt.node.Node)}. A call site that
+ * asks for several protocols at once switches on this type to route each result to its handler
+ * without an intermediate cast, reaching the concrete payload through
+ * {@link UsyncUserResult#getProtocolResult(String)}.
  *
  * @implNote
- * This implementation enumerates exactly the eleven {@code WAWebUsync*}
- * protocol modules that ship a {@code *Parser} export today
- * ({@code WAWebUsyncBotProfile}, {@code WAWebUsyncBusiness},
- * {@code WAWebUsyncContact}, {@code WAWebUsyncDevice},
- * {@code WAWebUsyncDisappearingMode}, {@code WAWebUsyncFeature},
- * {@code WAWebUsyncLid}, {@code WAWebUsyncPicture},
- * {@code WAWebUsyncStatus}, {@code WAWebUsyncTextStatus},
- * {@code WAWebUsyncUsername}). Adding a twelfth parser on the WA side requires
- * extending this permits list to keep the {@code switch} pattern matching
+ * This implementation permits exactly the eleven protocols that ship a parser today:
+ * {@link BotProfileResult}, {@link BusinessResult}, {@link ContactResult}, {@link DeviceResult},
+ * {@link DisappearingModeResult}, {@link FeatureResult}, {@link LidResult}, {@link PictureResult},
+ * {@link StatusResult}, {@link TextStatusResult}, and {@link UsernameResult}. Adding a twelfth
+ * parser requires extending this permits list to keep the {@code switch} pattern matching
  * exhaustive.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")

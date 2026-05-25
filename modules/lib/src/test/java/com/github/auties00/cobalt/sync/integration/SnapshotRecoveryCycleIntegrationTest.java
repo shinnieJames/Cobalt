@@ -20,28 +20,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration cycle for snapshot-recovery driven by a snapshot MAC mismatch.
- *
- * <p>Per WA Web {@code WAWebRequestSyncdSnapshotRecovery}, when a snapshot MAC
- * fails validation during the per-collection apply step the client fires a
- * {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} peer-data-operation request to
- * the primary, waits up to 60s for the {@code PeerDataOperationRequestResponseMessage}
- * carrying the corrected snapshot, decodes it, and replaces the local
- * collection state. The cycle is gated on:
- * <ul>
- *   <li>{@code primaryDeviceSupportsSyncdRecovery} (store-side flag).</li>
- *   <li>{@code ENABLE_PEER_SNAPSHOT_RECOVERY} AB prop.</li>
- *   <li>Collection not being {@code CRITICAL_BLOCK}.</li>
- *   <li>Mutation count within {@code SNAPSHOT_RECOVERY_MAX_MUTATIONS_COUNT_ALLOWED}.</li>
- * </ul>
- *
- * <p>The full cycle requires the {@code integration/snapshot-recovery-cycle/}
- * corpus. Until those fixtures land the test exercises:
- * <ul>
- *   <li>Recovery-enabled gating composition.</li>
- *   <li>Per-collection shouldAttemptRecovery decision matrix.</li>
- *   <li>resolveRecovery on a never-requested collection (no-op safety).</li>
- * </ul>
+ * Exercises the snapshot-recovery cycle that runs when a snapshot MAC fails
+ * validation during a per-collection apply: the companion requests the corrected
+ * snapshot from the primary, waits for the response, decodes it, and replaces the
+ * local collection state. Recovery is gated on the primary advertising support,
+ * the {@link com.github.auties00.cobalt.model.props.ABProp#ENABLE_PEER_SNAPSHOT_RECOVERY}
+ * prop, the collection not being CRITICAL_BLOCK, and the mutation count staying
+ * within the configured maximum. The {@link SnapshotRecoveryService} is wired
+ * in-process via {@link TestWhatsAppClient}. The synthetic group asserts the
+ * gating composition directly; the captured group is gated on
+ * {@link SyncFixtures#isAvailable(String)} so it skips cleanly until the recorded
+ * corpus is committed.
  */
 @DisplayName("SnapshotRecoveryCycle integration")
 class SnapshotRecoveryCycleIntegrationTest {
@@ -107,9 +96,8 @@ class SnapshotRecoveryCycleIntegrationTest {
         @DisplayName("forced MAC mismatch → recovery request → captured response replaces collection state")
         void capturedRecoveryCycle() {
             if (!SyncFixtures.isAvailable("integration/snapshot-recovery-cycle/regular-low")) return;
-            // Reserved for the Phase 10 corpus. The fixture replays the captured
-            // PeerDataOperationRequestResponseMessage and asserts the store's
-            // post-recovery state matches the WA Web oracle projection.
+            // Fixture replays the captured recovery response and asserts the store's
+            // post-recovery state matches the oracle projection.
             assertNotNull(SyncFixtures.loadOracle(
                     "integration/snapshot-recovery-cycle/regular-low"));
         }

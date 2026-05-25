@@ -18,61 +18,62 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
 
 /**
- * Shared AES-GCM primitive used by every dual-encrypted WhatsApp addon: poll
- * votes, CAG reactions, encrypted comments, event responses, event edits,
- * poll edits, poll add-options, and message edits.
+ * Encrypts and decrypts the inner AES-GCM layer shared by every dual-encrypted
+ * WhatsApp addon: poll votes, community and announcement group reactions,
+ * encrypted comments, event responses, event edits, poll edits, poll
+ * add-options, and message edits.
  *
- * @apiNote Addon messages live inside the outer Signal envelope but carry
- * their own inner ciphertext so the server can route the addon without
- * correlating its content with the parent message. The inner layer uses a
- * 32-byte secret derived via HKDF-SHA256 from the parent message's
- * {@code messageSecret}, with the parent stanza id, original sender JID,
- * addon sender JID, and use-case label mixed into the info parameter. The
- * result is an AES-256-GCM ciphertext with a random 12-byte IV and a 128-bit
- * authentication tag. The {@link MessageAddonType#POLL_VOTE} and
- * {@link MessageAddonType#EVENT_RESPONSE} use cases additionally
- * authenticate {@code stanzaId + "\0" + addonSender} as AAD to prevent the
- * server from rebinding a vote or RSVP from one user to another.
+ * <p>Addon messages live inside the outer Signal envelope but carry their own
+ * inner ciphertext so the server can route the addon without correlating its
+ * content with the parent message. The inner layer uses a 32-byte secret
+ * derived via HKDF-SHA256 from the parent message's {@code messageSecret},
+ * with the parent stanza id, original sender JID, addon sender JID, and
+ * use-case label mixed into the info parameter. The result is an AES-256-GCM
+ * ciphertext with a random 12-byte IV and a 128-bit authentication tag. The
+ * {@link MessageAddonType#POLL_VOTE} and {@link MessageAddonType#EVENT_RESPONSE}
+ * use cases additionally authenticate {@code stanzaId + "\0" + addonSender} as
+ * AAD to prevent the server from rebinding a vote or RSVP from one user to
+ * another.
  *
- * @implNote This implementation rides directly on the JDK's
- * {@link KDF}/{@link Cipher} APIs. WA Web's {@code WAWebAddonEncryption}
- * additionally falls back through LID and PN variants of the sender JID on
- * decrypt failure (LID first, then PN, then the original WID); Cobalt does
- * not yet replay those fallbacks here, so a JID-form mismatch surfaces as a
- * decrypt {@link RuntimeException}.
+ * @implNote This implementation rides directly on the JDK's {@link KDF} and
+ * {@link Cipher} APIs. WA Web's {@code WAWebAddonEncryption} additionally falls
+ * back through LID and PN variants of the sender JID on decrypt failure (LID
+ * first, then PN, then the original WID); Cobalt does not yet replay those
+ * fallbacks, so a JID-form mismatch surfaces as a decrypt
+ * {@link RuntimeException}.
  */
 @WhatsAppWebModule(moduleName = "WAWebAddonEncryption")
 @WhatsAppWebModule(moduleName = "WAUseCaseSecret")
 public final class MessageAddonEncryption {
     /**
-     * Size of the AES-GCM initialisation vector, in bytes.
+     * Holds the size of the AES-GCM initialisation vector, in bytes.
      */
     private static final int AES_GCM_IV_SIZE = 12;
 
     /**
-     * Size of the AES-GCM authentication tag, in bits.
+     * Holds the size of the AES-GCM authentication tag, in bits.
      */
     private static final int AES_GCM_TAG_SIZE = 128;
 
     /**
-     * Output size of the HKDF-derived use-case secret, in bytes.
+     * Holds the output size of the HKDF-derived use-case secret, in bytes.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "createUseCaseSecret",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final int HKDF_OUTPUT_SIZE = 32;
 
     /**
-     * JCA algorithm identifier for AES-GCM with no padding.
+     * Holds the JCA algorithm identifier for AES-GCM with no padding.
      */
     private static final String AES_GCM_ALGORITHM = "AES/GCM/NoPadding";
 
     /**
-     * JCA algorithm identifier for HKDF-SHA256.
+     * Holds the JCA algorithm identifier for HKDF-SHA256.
      */
     private static final String HKDF_ALGORITHM = "HKDF-SHA256";
 
     /**
-     * Hidden constructor; this is a static helper class.
+     * Prevents instantiation of this static helper class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -84,19 +85,17 @@ public final class MessageAddonEncryption {
      * Encrypts an addon plaintext into an inner AES-GCM ciphertext bound to
      * the parent message's secret.
      *
-     * @apiNote Used by every addon wrapper that ships a dual-encrypted
-     * payload: comment, reaction, poll vote, event response, event edit,
-     * poll edit, poll add-option, message edit. The wrapper builds the
-     * plaintext and then defers the cryptographic work to this method. A
-     * fresh 12-byte IV is sampled from the system CSPRNG on each call, so
-     * two encryptions of the same plaintext under the same key never produce
-     * the same ciphertext.
-     *
-     * @implNote This implementation derives a fresh 32-byte use-case key from
-     * {@code messageSecret} via {@link #deriveUseCaseSecret}, encrypts the
-     * payload under AES-256-GCM, and authenticates
-     * {@code stanzaId + 0x00 + addonSender} as AAD when
-     * {@link MessageAddonType#usesAad()} returns {@code true}.
+     * <p>Every addon wrapper that ships a dual-encrypted payload (comment,
+     * reaction, poll vote, event response, event edit, poll edit, poll
+     * add-option, message edit) builds the plaintext and defers the
+     * cryptographic work to this method. A 32-byte use-case key is derived
+     * from {@code messageSecret} via {@link #deriveUseCaseSecret(byte[],
+     * String, Jid, Jid, MessageAddonType)}, a fresh 12-byte IV is sampled from
+     * the system CSPRNG on each call, and the payload is encrypted under
+     * AES-256-GCM; {@code stanzaId + 0x00 + addonSender} is authenticated as
+     * AAD when {@link MessageAddonType#usesAad()} returns {@code true}. Because
+     * the IV is random, two encryptions of the same plaintext under the same
+     * key never produce the same ciphertext.
      *
      * @param plaintext      the addon payload to encrypt
      * @param messageSecret  the parent message's 32-byte
@@ -157,21 +156,22 @@ public final class MessageAddonEncryption {
     }
 
     /**
-     * Decrypts an addon ciphertext produced by {@link #encrypt}.
+     * Decrypts an addon ciphertext produced by {@link #encrypt(byte[], byte[],
+     * String, Jid, Jid, MessageAddonType)}.
      *
-     * @apiNote Inverse of {@link #encrypt}; callers must supply the same
-     * {@code messageSecret}, {@code stanzaId}, {@code originalSender},
-     * {@code addonSender}, and {@code useCaseType} the producer used. A
-     * mismatch surfaces as a {@link RuntimeException} wrapping the underlying
-     * {@link GeneralSecurityException} that the JCA cipher raises when the
-     * authentication tag does not validate.
+     * <p>Callers must supply the same {@code messageSecret}, {@code stanzaId},
+     * {@code originalSender}, {@code addonSender}, and {@code useCaseType} the
+     * producer used. The 32-byte use-case key is re-derived via
+     * {@link #deriveUseCaseSecret(byte[], String, Jid, Jid, MessageAddonType)}
+     * and {@link #buildAad(String, Jid)} is replayed when the use case
+     * advertises AAD. A mismatch surfaces as a {@link RuntimeException}
+     * wrapping the underlying {@link GeneralSecurityException} that the JCA
+     * cipher raises when the authentication tag does not validate.
      *
-     * @implNote This implementation re-derives the same 32-byte use-case key
-     * via {@link #deriveUseCaseSecret} and replays {@link #buildAad} when the
-     * use case advertises AAD. WA Web additionally retries the decrypt under
-     * LID-form and PN-form sender JIDs before giving up
-     * ({@code WAWebAddonEncryption.decryptAddOn}); Cobalt does not yet do
-     * that here.
+     * @implNote WA Web additionally retries the decrypt under LID-form and
+     * PN-form sender JIDs before giving up ({@code
+     * WAWebAddonEncryption.decryptAddOn}); this implementation does not yet do
+     * that.
      *
      * @param encryptedAddon the ciphertext and IV produced by the sender
      * @param messageSecret  the parent message's 32-byte
@@ -232,17 +232,15 @@ public final class MessageAddonEncryption {
      * Runs HKDF-SHA256 extract-and-expand to derive the 32-byte AES-GCM key
      * for an addon.
      *
-     * @apiNote Mirrors {@code WAUseCaseSecret.createUseCaseSecret}: the
-     * parent {@code messageSecret} is used as input keying material, the
-     * info parameter is the concatenation of stanza id, original sender JID,
-     * addon sender JID, and use-case label (UTF-8 encoded, no separator,
-     * matching WA Web's {@code Binary.build} layout), and the output is 32
-     * bytes.
+     * <p>The parent {@code messageSecret} is used as input keying material,
+     * the info parameter is built by {@link #buildUseCaseInfo(String, Jid,
+     * Jid, MessageAddonType)} from the stanza id, original sender JID, addon
+     * sender JID, and use-case label, and the output is 32 bytes.
      *
      * @implNote This implementation uses a {@code null} salt for the extract
-     * step, which the JDK expands to a zero-filled SHA-256-length block;
-     * that matches WA Web's behaviour through
-     * {@code WACryptoHkdf.extractAndExpand} which omits the salt argument.
+     * step, which the JDK expands to a zero-filled SHA-256-length block; that
+     * matches WA Web's behaviour through {@code WACryptoHkdf.extractAndExpand}
+     * which omits the salt argument.
      *
      * @param messageSecret  the parent message's 32-byte
      *                       {@code messageSecret}
@@ -279,15 +277,15 @@ public final class MessageAddonEncryption {
     /**
      * Builds the HKDF info parameter used to derive the addon key.
      *
-     * @apiNote Concatenates the UTF-8 encodings of
+     * <p>Concatenates the UTF-8 encodings of
      * {@code stanzaId || originalSender || addonSender || useCaseType.value()}
      * without any separator, matching the byte layout WA Web produces via
      * {@code WABinary.Binary.build}.
      *
      * @implNote This implementation preallocates the destination array from
      * the four component lengths and copies each component with
-     * {@link System#arraycopy}, avoiding the {@code Binary.build} buffer
-     * abstraction WA Web carries.
+     * {@link System#arraycopy(Object, int, Object, int, int)}, avoiding the
+     * {@code Binary.build} buffer abstraction WA Web carries.
      *
      * @param stanzaId       the parent message's stanza id
      * @param originalSender the parent message author's JID
@@ -329,15 +327,14 @@ public final class MessageAddonEncryption {
      * Builds the AES-GCM AAD for {@link MessageAddonType#POLL_VOTE} and
      * {@link MessageAddonType#EVENT_RESPONSE}.
      *
-     * @apiNote Mirrors the WA Web format
-     * {@code stanzaId + "\0" + addonSenderJid} (UTF-8 encoded). Binding the
-     * stanza id and addon sender as AAD prevents the server from lifting an
-     * encrypted vote or RSVP emitted by one user and replaying it as if it
-     * came from another.
+     * <p>Produces the UTF-8 encoding of {@code stanzaId + "\0" + addonSenderJid},
+     * matching the WA Web format. Binding the stanza id and addon sender as
+     * AAD prevents the server from lifting an encrypted vote or RSVP emitted
+     * by one user and replaying it as if it came from another.
      *
      * @implNote This implementation packs the three components into a single
-     * pre-sized byte array with a zero-byte separator at the boundary
-     * between {@code stanzaId} and the sender JID.
+     * pre-sized byte array with a zero-byte separator at the boundary between
+     * {@code stanzaId} and the sender JID.
      *
      * @param stanzaId    the parent message's stanza id
      * @param addonSender the addon author's JID

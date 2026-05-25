@@ -14,19 +14,16 @@ import java.util.Optional;
 /**
  * Aggregated result of a {@link UsyncQuery}.
  *
- * @apiNote
- * Returned by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)}.
- * The relay structures its response in three layers: an optional top-level
- * IQ error (exposed via {@link #topLevelError()} and {@link #failed()}),
- * per-protocol metadata that applies to every user in the batch
- * (exposed via {@link #getProtocolError(UsyncProtocol)} and
+ * <p>Returned by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)}.
+ * The relay structures its response in three layers: an optional top-level IQ
+ * error (exposed via {@link #topLevelError()} and {@link #failed()}),
+ * per-protocol metadata that applies to every user in the batch (exposed via
+ * {@link #getProtocolError(UsyncProtocol)} and
  * {@link #getProtocolRefresh(UsyncProtocol)}), and a per-user, per-protocol
  * result list (exposed via {@link #users()}).
  *
  * @implNote
- * This implementation collapses three discrete fields of the JS result object
- * ({@code error}, {@code refresh}, {@code list}) into the same shape Cobalt
- * exposes, but funnels the per-protocol maps through accessors so the
+ * This implementation funnels the per-protocol maps through accessors so the
  * surface stays immutable and clients always go through a typed lookup.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
@@ -44,8 +41,8 @@ public final class UsyncResult {
     private final Map<String, UsyncProtocolError> protocolErrors;
 
     /**
-     * Maps protocol wire name to the {@code refresh} hint the relay attached
-     * to the per-protocol result envelope.
+     * Maps protocol wire name to the {@code refresh} hint the relay attached to
+     * the per-protocol result envelope.
      */
     private final Map<String, Duration> protocolRefreshes;
 
@@ -58,13 +55,11 @@ public final class UsyncResult {
     /**
      * Builds a new aggregated result from the parsed sections.
      *
-     * @apiNote
-     * Constructed exclusively by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)};
-     * not part of the public surface.
+     * <p>Constructed by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)}.
      *
      * @implNote
-     * This implementation defensively copies every collection so callers see
-     * an immutable snapshot.
+     * This implementation defensively copies every collection so callers see an
+     * immutable snapshot.
      *
      * @param users             the per-user results
      * @param protocolErrors    map from protocol wire name to error
@@ -85,8 +80,7 @@ public final class UsyncResult {
     /**
      * Returns the per-user results in relay order.
      *
-     * @apiNote
-     * The returned list is unmodifiable; iterate or pattern-match the
+     * <p>The returned list is unmodifiable; iterate or pattern-match the
      * per-protocol payloads inside each {@link UsyncUserResult}.
      *
      * @return the per-user results, never {@code null}
@@ -96,12 +90,10 @@ public final class UsyncResult {
     }
 
     /**
-     * Returns the per-protocol error that applied to every user, when
-     * present.
+     * Returns the per-protocol error that applied to every user, when present.
      *
-     * @apiNote
-     * Use this to detect "the relay refused this protocol for the whole
-     * batch" before iterating {@link #users()}. The error may carry an
+     * <p>Detects that the relay refused this protocol for the whole batch
+     * before iterating {@link #users()}. The error may carry an
      * {@link UsyncProtocolError#errorBackoff()} hint that drives
      * {@link UsyncBackoff#setProtocolBackoffMs(String, long)}.
      *
@@ -116,10 +108,8 @@ public final class UsyncResult {
     /**
      * Returns the per-protocol error for the named protocol, when present.
      *
-     * @apiNote
-     * Overload that takes a raw protocol wire name; prefer the
-     * {@link #getProtocolError(UsyncProtocol)} form when the descriptor is
-     * already in scope.
+     * <p>Takes a raw protocol wire name; the {@link #getProtocolError(UsyncProtocol)}
+     * form is preferred when the descriptor is already in scope.
      *
      * @param protocolName the protocol wire name
      * @return the per-protocol error, or empty
@@ -129,11 +119,10 @@ public final class UsyncResult {
     }
 
     /**
-     * Returns the {@code refresh} window the relay attached to a protocol,
-     * when present.
+     * Returns the {@code refresh} window the relay attached to a protocol, when
+     * present.
      *
-     * @apiNote
-     * The relay uses {@code refresh} to ask clients to re-query the protocol
+     * <p>The relay uses {@code refresh} to ask clients to re-query the protocol
      * after the supplied duration even though the current response succeeded.
      *
      * @param protocol the protocol descriptor
@@ -145,13 +134,10 @@ public final class UsyncResult {
     }
 
     /**
-     * Returns the {@code refresh} window for the named protocol, when
-     * present.
+     * Returns the {@code refresh} window for the named protocol, when present.
      *
-     * @apiNote
-     * Overload that takes a raw protocol wire name; prefer the
-     * {@link #getProtocolRefresh(UsyncProtocol)} form when the descriptor is
-     * already in scope.
+     * <p>Takes a raw protocol wire name; the {@link #getProtocolRefresh(UsyncProtocol)}
+     * form is preferred when the descriptor is already in scope.
      *
      * @param protocolName the protocol wire name
      * @return the refresh window, or empty
@@ -164,9 +150,7 @@ public final class UsyncResult {
      * Returns the top-level IQ error envelope when the request failed
      * wholesale.
      *
-     * @apiNote
-     * Mirrors the {@code error.all} entry the JS module attaches to its
-     * result object when the IQ {@code type} attribute is not {@code "result"}.
+     * <p>Populated when the IQ {@code type} attribute is not {@code "result"}.
      *
      * @return the top-level error, or empty
      */
@@ -177,8 +161,7 @@ public final class UsyncResult {
     /**
      * Returns whether the IQ failed wholesale.
      *
-     * @apiNote
-     * Shortcut for {@code topLevelError().isPresent()}.
+     * <p>Shortcut for {@link #topLevelError()} being present.
      *
      * @return {@code true} when the IQ returned an error envelope
      */

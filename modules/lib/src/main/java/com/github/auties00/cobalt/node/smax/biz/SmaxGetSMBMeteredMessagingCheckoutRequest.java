@@ -20,14 +20,9 @@ import java.util.OptionalInt;
  * The outbound stanza that asks the relay for an SMB metered-messaging
  * checkout projection over the supplied recipient list.
  *
- * @apiNote
- * Used by the SMB metered-messaging surface in
- * {@code WAWebGetSMBMeteredMessagingCheckoutJob.getSMBMeteredMessagingCheckout},
- * which precomputes the per-broadcast cost projection (price,
- * discounts, account balance, free-quota remaining) shown on the SMB
- * marketing-broadcast confirmation screen before the user commits.
- * Allows 1..2000 participant JIDs and up to 200 pending-campaign
- * entries.
+ * <p>This request precomputes the per-broadcast cost projection (price, discounts, account
+ * balance, free-quota remaining) shown on the SMB marketing-broadcast confirmation screen before
+ * the user commits. It admits 1..2000 participant JIDs and up to 200 pending-campaign entries.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutSmbMeteredMessagingAccountHackBaseIQGetRequestMixin")
@@ -61,10 +56,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Constructs a request directly.
      *
-     * @apiNote
-     * Prefer {@link #builder()} for fluent construction. The relay
-     * enforces the 1..2000 participant cap and the 0..200
-     * pending-campaign cap; this constructor mirrors both bounds.
+     * <p>Prefer {@link #builder()} for fluent construction. The relay enforces the 1..2000
+     * participant cap and the 0..200 pending-campaign cap; this constructor mirrors both bounds.
      *
      * @param participants     the recipient JIDs; never {@code null}; 1..2000
      * @param useAdAccount     whether to emit the
@@ -108,10 +101,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Returns a fresh {@link Builder}.
      *
-     * @apiNote
-     * The canonical entry point. Mandatory input is at least one
-     * participant via {@link Builder#addParticipant(Jid)}; every
-     * other setter is optional.
+     * <p>This is the canonical entry point. The only mandatory input is at least one participant
+     * via {@link Builder#addParticipant(Jid)}; every other setter is optional.
      *
      * @return a new {@link Builder}; never {@code null}
      */
@@ -122,9 +113,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Returns the recipient JIDs.
      *
-     * @apiNote
-     * Surfaces as the {@code <to jid/>} children of the outbound
-     * {@code <participants/>} payload.
+     * <p>These surface as the {@code <to jid/>} children of the outbound {@code <participants/>}
+     * payload.
      *
      * @return an unmodifiable list of 1..2000 JIDs
      */
@@ -135,9 +125,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Returns whether the {@code <use_ad_account/>} marker is set.
      *
-     * @apiNote
-     * When {@code true}, the projection bills the user's ad account
-     * rather than the standard wallet.
+     * <p>When {@code true}, the projection bills the user's ad account rather than the standard
+     * wallet.
      *
      * @return {@code true} when the marker child will be emitted
      */
@@ -148,9 +137,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Returns whether the {@code <skip_dedupe/>} marker is set.
      *
-     * @apiNote
-     * When {@code true}, the projection bypasses the relay's
-     * per-recipient deduplication and prices every entry.
+     * <p>When {@code true}, the projection bypasses the relay's per-recipient deduplication and
+     * prices every entry.
      *
      * @return {@code true} when the marker child will be emitted
      */
@@ -161,9 +149,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Returns the optional offer identifier.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when no offer is being
-     * applied. The relay treats the identifier as opaque.
+     * <p>Returns {@link Optional#empty()} when no offer is being applied. The relay treats the
+     * identifier as opaque.
      *
      * @return an {@link Optional} carrying the offer identifier
      */
@@ -174,10 +161,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Returns the pending-campaign entries.
      *
-     * @apiNote
-     * Returns an empty list when none were supplied. Each entry
-     * names a campaign that the projection should account for as
-     * already-scheduled spend.
+     * <p>Returns an empty list when none were supplied. Each entry names a campaign that the
+     * projection should account for as already-scheduled spend.
      *
      * @return an unmodifiable list of 0..200 entries; never
      *         {@code null}
@@ -189,13 +174,11 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Stamps {@code xmlns="w:biz"}, {@code type="get"}, emits the
-     * {@code <participants/>} payload, the optional
-     * {@code <use_ad_account/>} / {@code <skip_dedupe/>} markers,
-     * the optional {@code <offer id/>} child and the optional
-     * {@code <pending_campaigns/>} batch. The IQ {@code id} is
-     * assigned by the dispatcher.
+     * @implNote
+     * This implementation stamps {@code xmlns="w:biz"} and {@code type="get"}, emits the
+     * {@code <participants/>} payload, the optional {@code <use_ad_account/>} and
+     * {@code <skip_dedupe/>} markers, the optional {@code <offer id/>} child and the optional
+     * {@code <pending_campaigns/>} batch. The IQ {@code id} is assigned by the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRequest",
@@ -247,6 +230,9 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
                 .content(children);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -263,11 +249,17 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
                 && Objects.equals(this.pendingCampaigns, that.pendingCampaigns);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(participants, useAdAccount, skipDedupe, offerId, pendingCampaigns);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxGetSMBMeteredMessagingCheckoutRequest[participants=" + participants
@@ -280,11 +272,9 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
     /**
      * Fluent builder for {@link SmaxGetSMBMeteredMessagingCheckoutRequest}.
      *
-     * @apiNote
-     * Accumulates participants and pending-campaign entries
-     * incrementally, then materialises a request via
-     * {@link #build()}. Caller must add at least one participant
-     * before calling {@link #build()}.
+     * <p>Accumulates participants and pending-campaign entries incrementally, then materialises a
+     * request via {@link #build()}. At least one participant must be added before {@link #build()}
+     * is called.
      */
     public static final class Builder {
         /**
@@ -315,9 +305,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Constructs a fresh builder.
          *
-         * @apiNote
-         * Prefer {@link SmaxGetSMBMeteredMessagingCheckoutRequest#builder()}
-         * as the canonical entry point.
+         * <p>Prefer {@link SmaxGetSMBMeteredMessagingCheckoutRequest#builder()} as the canonical
+         * entry point.
          */
         public Builder() {
         }
@@ -325,9 +314,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Appends a single participant JID.
          *
-         * @apiNote
-         * Call once per recipient; the relay enforces a hard cap of
-         * 2000 entries at {@link #build()} time.
+         * <p>Call once per recipient; the relay enforces a hard cap of 2000 entries at
+         * {@link #build()} time.
          *
          * @param jid the recipient JID; never {@code null}
          * @return this builder
@@ -342,9 +330,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Appends every JID in the supplied list.
          *
-         * @apiNote
-         * Convenience over {@link #addParticipant(Jid)} for callers
-         * that already hold a list.
+         * <p>This is a convenience over {@link #addParticipant(Jid)} for callers that already hold
+         * a list.
          *
          * @param entries the JIDs; never {@code null}
          * @return this builder
@@ -362,9 +349,7 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Sets the {@code use_ad_account} toggle.
          *
-         * @apiNote
-         * Bills the projection against the user's ad account when
-         * {@code true}.
+         * <p>Bills the projection against the user's ad account when {@code true}.
          *
          * @param flag the desired flag value
          * @return this builder
@@ -377,9 +362,7 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Sets the {@code skip_dedupe} toggle.
          *
-         * @apiNote
-         * Bypasses the relay's per-recipient deduplication when
-         * {@code true}.
+         * <p>Bypasses the relay's per-recipient deduplication when {@code true}.
          *
          * @param flag the desired flag value
          * @return this builder
@@ -392,9 +375,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Sets the optional offer identifier.
          *
-         * @apiNote
-         * The relay treats the identifier as opaque. Pass
-         * {@code null} to clear a previously set value.
+         * <p>The relay treats the identifier as opaque. Pass {@code null} to clear a previously set
+         * value.
          *
          * @param offerId the offer identifier; may be {@code null}
          * @return this builder
@@ -407,10 +389,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Appends a pending-campaign entry.
          *
-         * @apiNote
-         * Call once per already-scheduled campaign the projection
-         * should account for. The relay enforces a 200-entry cap at
-         * {@link #build()} time.
+         * <p>Call once per already-scheduled campaign the projection should account for. The relay
+         * enforces a 200-entry cap at {@link #build()} time.
          *
          * @param entry the entry; never {@code null}
          * @return this builder
@@ -426,10 +406,8 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxOper
         /**
          * Materialises a {@link SmaxGetSMBMeteredMessagingCheckoutRequest}.
          *
-         * @apiNote
-         * Throws when the accumulated participant list is empty,
-         * exceeds 2000 entries, or when more than 200 pending
-         * campaigns have been added.
+         * <p>Throws when the accumulated participant list is empty, exceeds 2000 entries, or when
+         * more than 200 pending campaigns have been added.
          *
          * @return the constructed request; never {@code null}
          * @throws IllegalArgumentException when participant or

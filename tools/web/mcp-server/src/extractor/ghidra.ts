@@ -183,6 +183,80 @@ export async function decompileBinary(
   return JSON.parse(raw) as GhidraOutput;
 }
 
+export interface WasmDecompileResult {
+  funcIndex: number;
+  name: string;
+  address: string;
+  signature: string;
+  decompiled: boolean;
+  code: string;
+}
+
+/**
+ * Decompiles a single WASM function to C pseudocode via Ghidra headless and the
+ * nneonneo ghidra-wasm-plugin. The WasmLoader auto-detects the {@code \0asm}
+ * magic and binds language {@code Wasm:LE:32:default}, so no {@code -processor}
+ * is passed (unlike {@link decompileBinary}, which targets ARM64 native binaries
+ * and is left unchanged). Requires the plugin to be installed in the Ghidra
+ * Extensions directory; if Ghidra or the plugin is absent this rejects, and the
+ * caller should fall back to WAT.
+ *
+ * @param wasmPath path to the {@code .wasm} file
+ * @param funcIndex the WASM function index to decompile
+ * @param options Ghidra discovery and resource options
+ */
+export async function decompileWasmFunction(
+  wasmPath: string,
+  funcIndex: number,
+  options: GhidraOptions = {}
+): Promise<WasmDecompileResult> {
+  const ghidraDir = await findGhidraInstallation(options.ghidraPath);
+  const headless = ghidraDir ? analyzeHeadlessPath(ghidraDir) : "analyzeHeadless";
+
+  const projectDir = await mkdtemp(join(tmpdir(), "ghidra-wasm-"));
+  const outputPath = join(projectDir, "func.json");
+  const timeoutSec = options.analysisTimeoutSec ?? DEFAULT_ANALYSIS_TIMEOUT_SEC;
+
+  const args = [
+    projectDir,
+    "WasmProj",
+    "-import",
+    wasmPath,
+    // No -processor: the WasmLoader binds Wasm:LE:32:default automatically.
+    "-scriptPath",
+    SCRIPTS_DIR,
+    "-postScript",
+    "DecompileWasmFuncToJson.java",
+    String(funcIndex),
+    outputPath,
+    "-analysisTimeoutPerFile",
+    String(timeoutSec),
+    "-max-cpu",
+    String(options.maxCpu ?? DEFAULT_MAX_CPU),
+    "-deleteProject",
+  ];
+
+  log.info(`running headless wasm decompile on ${wasmPath} funcIndex=${funcIndex}`);
+  try {
+    await execFileAsync(headless, args, { timeout: timeoutSec * 1000 * 2, maxBuffer: 50 * 1024 * 1024 });
+  } catch (error) {
+    await rm(projectDir, { recursive: true, force: true }).catch(() => {});
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Ghidra wasm decompile failed (is the ghidra-wasm-plugin installed in the Ghidra Extensions dir?): ${message}`
+    );
+  }
+
+  if (!(await fileExists(outputPath))) {
+    await rm(projectDir, { recursive: true, force: true }).catch(() => {});
+    throw new Error("Ghidra wasm decompile produced no output (function index out of range or plugin missing).");
+  }
+
+  const raw = await readFile(outputPath, "utf8");
+  await rm(projectDir, { recursive: true, force: true }).catch(() => {});
+  return JSON.parse(raw) as WasmDecompileResult;
+}
+
 function analyzeHeadlessPath(ghidraDir: string): string {
   if (process.platform === "win32") {
     return join(ghidraDir, "support", "analyzeHeadless.bat");
@@ -204,14 +278,24 @@ function execFileAsync(
   args: string[],
   options?: { timeout?: number; maxBuffer?: number }
 ): Promise<{ stdout: string; stderr: string }> {
+  // Node 24 refuses to execFile a .bat/.cmd directly on Windows (the
+  // CVE-2024-27980 shell requirement -> spawn EINVAL). Route the batch launcher
+  // through the shell with every token double-quoted so space-containing paths
+  // (e.g. "New folder", the temp project dir) survive. POSIX is unchanged: the
+  // launcher there is a plain script that execs fine without a shell.
+  const isWindowsBatch = process.platform === "win32" && /\.(bat|cmd)$/i.test(command);
+  const spawnCommand = isWindowsBatch ? `"${command}"` : command;
+  const spawnArgs = isWindowsBatch ? args.map((arg) => `"${arg}"`) : args;
   return new Promise((resolve, reject) => {
     execFile(
-      command,
-      args,
+      spawnCommand,
+      spawnArgs,
       {
         timeout: options?.timeout ?? 0,
         maxBuffer: options?.maxBuffer ?? 10 * 1024 * 1024,
         encoding: "utf8",
+        shell: isWindowsBatch,
+        windowsHide: true,
       },
       (error, stdout, stderr) => {
         if (error) {

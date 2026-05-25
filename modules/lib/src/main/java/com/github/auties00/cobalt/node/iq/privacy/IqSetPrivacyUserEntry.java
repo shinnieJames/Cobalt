@@ -8,13 +8,12 @@ import java.util.Optional;
 /**
  * One {@code <user/>} entry in the user-list payload of an {@link IqSetPrivacyRequest} that targets
  * the {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST} value.
- *
- * @apiNote
- * Construct one entry per peer being added to or removed from a category's exclusion list. The
+ * <p>
+ * One entry exists per peer being added to or removed from a category's exclusion list. The
  * {@link #username()} and {@link #pnJid()} fields are only emitted under
  * {@link IqSetPrivacyAddressingMode#LID} and provide the legacy discriminator that lets the relay
- * resolve the LID back to a PN identity (matching WA Web's {@code createLidUserNode} branch in
- * {@code WAWebSetPrivacyJob}).
+ * resolve the LID back to a phone-number identity (matching WA Web's {@code createLidUserNode}
+ * branch in {@code WAWebSetPrivacyJob}).
  *
  * @implNote
  * This implementation is structurally final and value-equality based. The {@link #jid()} field is
@@ -29,35 +28,34 @@ public final class IqSetPrivacyUserEntry {
     private final IqSetPrivacyUserAction action;
 
     /**
-     * The user's JID; interpreted as a PN or LID per the enclosing request's
+     * The user's JID; interpreted as a phone-number identity or LID per the enclosing request's
      * {@link IqSetPrivacyAddressingMode}.
      */
     private final Jid jid;
 
     /**
-     * The optional WhatsApp username discriminator emitted on the LID variant when the contact has
-     * a username and the
-     * {@code username_contact_privacy_setting_allow_uncontact_set_enable} AB prop is on.
+     * The optional WhatsApp username discriminator emitted on the LID variant when the contact has a
+     * username and the {@code username_contact_privacy_setting_allow_uncontact_set_enable} AB prop
+     * is on.
      */
     private final String username;
 
     /**
-     * The optional PN-JID fallback emitted on the LID variant when the contact has no
-     * {@link #username} so the relay can still resolve a legacy PN identity.
+     * The optional phone-number JID fallback emitted on the LID variant when the contact has no
+     * {@link #username} so the relay can still resolve a legacy phone-number identity.
      */
     private final Jid pnJid;
 
     /**
      * Constructs a user entry.
-     *
-     * @apiNote
-     * Most callers pass {@code null} for {@code username} and {@code pnJid}; the discriminators
-     * are only used under {@link IqSetPrivacyAddressingMode#LID}.
+     * <p>
+     * Most callers pass {@code null} for {@code username} and {@code pnJid}; the discriminators are
+     * only used under {@link IqSetPrivacyAddressingMode#LID}.
      *
      * @param action   the action to apply; never {@code null}
      * @param jid      the user's JID; never {@code null}
      * @param username the optional WhatsApp username discriminator; may be {@code null}
-     * @param pnJid    the optional PN-JID fallback; may be {@code null}
+     * @param pnJid    the optional phone-number JID fallback; may be {@code null}
      * @throws NullPointerException if {@code action} or {@code jid} is {@code null}
      */
     public IqSetPrivacyUserEntry(IqSetPrivacyUserAction action, Jid jid, String username, Jid pnJid) {
@@ -78,9 +76,8 @@ public final class IqSetPrivacyUserEntry {
 
     /**
      * Returns the user's JID.
-     *
-     * @apiNote
-     * Interpreted as a PN-JID under {@link IqSetPrivacyAddressingMode#PN} or a LID under
+     * <p>
+     * Interpreted as a phone-number JID under {@link IqSetPrivacyAddressingMode#PN} or a LID under
      * {@link IqSetPrivacyAddressingMode#LID}; the mode is decided one level up on
      * {@link IqSetPrivacyRequest#addressingMode()}.
      *
@@ -92,8 +89,7 @@ public final class IqSetPrivacyUserEntry {
 
     /**
      * Returns the optional WhatsApp username discriminator.
-     *
-     * @apiNote
+     * <p>
      * Only emitted on the LID variant. Present when the contact has a username and the
      * {@code username_contact_privacy_setting_allow_uncontact_set_enable} AB prop is on.
      *
@@ -104,13 +100,12 @@ public final class IqSetPrivacyUserEntry {
     }
 
     /**
-     * Returns the optional PN-JID fallback.
-     *
-     * @apiNote
+     * Returns the optional phone-number JID fallback.
+     * <p>
      * Only emitted on the LID variant when the contact has no {@link #username()} so the relay can
-     * still resolve the legacy PN identity.
+     * still resolve the legacy phone-number identity.
      *
-     * @return the PN-JID, or {@link Optional#empty()} when omitted
+     * @return the phone-number JID, or {@link Optional#empty()} when omitted
      */
     public Optional<Jid> pnJid() {
         return Optional.ofNullable(pnJid);
@@ -153,8 +148,8 @@ public final class IqSetPrivacyUserEntry {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a debug-only representation of every field; the format is not
-     * stable and must not be parsed.
+     * This implementation emits a debug-only representation of every field; the format is not stable
+     * and must not be parsed.
      */
     @Override
     public String toString() {

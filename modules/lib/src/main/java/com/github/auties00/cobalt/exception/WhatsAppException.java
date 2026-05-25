@@ -5,18 +5,22 @@ import com.github.auties00.cobalt.client.WhatsAppClientErrorHandler;
 /**
  * Sealed root of every exception thrown by Cobalt while talking to WhatsApp.
  *
+ * Each concrete subtype names a single failure mode (a session conflict, a
+ * media download failure, an account device verification mismatch, and so
+ * on) and reports through {@link #isFatal()} whether that failure
+ * invalidates the current session. The permits list is closed, so a
+ * {@code switch} over a {@code WhatsAppException} can be exhaustive.
+ *
+ * Cobalt does not pin a recovery action to any exception. When a subtype
+ * is thrown, the configurable {@link WhatsAppClientErrorHandler} maps it
+ * to a {@link WhatsAppClientErrorHandler.Result}: discard the event,
+ * disconnect, reconnect, log out, or treat the account as banned.
+ *
  * @apiNote
- * Callers pattern-match on the concrete subtype to react to a specific
- * failure mode (a session conflict, a media download failure, an account
- * device verification mismatch, and so on). Each subtype documents the
- * WhatsApp feature it relates to and whether it should be treated as
- * fatal via {@link #isFatal()}. Cobalt does not pin a recovery action to
- * any exception: when a subtype is thrown, the configurable
- * {@link WhatsAppClientErrorHandler} decides whether the client should
- * discard the event, disconnect, reconnect, log out, or treat the account
- * as banned. Most embedders observe these exceptions through that handler
- * rather than through {@code try}/{@code catch} blocks around individual
- * calls.
+ * Most embedders observe these exceptions through the configured
+ * {@link WhatsAppClientErrorHandler} rather than through {@code try}/{@code catch}
+ * blocks around individual calls; pattern-match on the concrete subtype
+ * there to react to a specific failure mode.
  *
  * @implNote
  * This implementation is deliberately redesigned versus WhatsApp Web. WA
@@ -26,7 +30,6 @@ import com.github.auties00.cobalt.client.WhatsAppClientErrorHandler;
  * recovery policy.
  *
  * @see #isFatal()
- *
  * @see WhatsAppClientErrorHandler
  */
 public abstract sealed class WhatsAppException extends RuntimeException
@@ -70,15 +73,19 @@ public abstract sealed class WhatsAppException extends RuntimeException
     /**
      * Returns whether the failure invalidates the current WhatsApp session.
      *
-     * @apiNote
      * A fatal failure means the encrypted Noise channel can no longer be
-     * trusted to exchange messages correctly and the client should be torn
+     * trusted to exchange messages correctly and the client must be torn
      * down before any retry. A non-fatal failure is scoped to a single
      * operation (a single message, media transfer, or sync request) and
-     * the rest of the session can keep running. The configurable error
-     * handler consults this value when deciding between
-     * {@code DISCARD}/{@code DISCONNECT}/{@code RECONNECT}/{@code LOG_OUT}
-     * verdicts.
+     * the rest of the session can keep running.
+     *
+     * @apiNote
+     * The configured {@link WhatsAppClientErrorHandler} consults this value
+     * when choosing between
+     * {@link WhatsAppClientErrorHandler.Result#DISCARD},
+     * {@link WhatsAppClientErrorHandler.Result#DISCONNECT},
+     * {@link WhatsAppClientErrorHandler.Result#RECONNECT}, and
+     * {@link WhatsAppClientErrorHandler.Result#LOG_OUT}.
      *
      * @implSpec
      * Every concrete subtype declares a constant or per-instance answer.

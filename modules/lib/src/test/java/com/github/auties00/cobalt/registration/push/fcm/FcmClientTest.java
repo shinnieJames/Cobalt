@@ -23,34 +23,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Live integration suite for {@link FcmClient}.
+ * Live integration suite for {@link FcmClient}: drives real authentication and registration flows against
+ * Google FCM and WhatsApp, so the cases hit the network rather than a stub. A 45-second cool-down runs before
+ * every method except the first (guarded by the {@code FIRST_TEST} flag rather than JUnit ordering, so it holds
+ * under randomised method order) to stay under the C2DM anti-abuse threshold.
  */
 @Timeout(value = 15, unit = TimeUnit.MINUTES)
 class FcmClientTest {
-    /**
-     * Tracks whether the throttle guard has fired yet.
-     *
-     * @apiNote
-     * Flipped to {@code false} after the first
-     * {@link #throttleAgainstC2dmAntiAbuse()} call so the first test
-     * runs without the cool-down wait.
-     */
     private static final AtomicBoolean FIRST_TEST = new AtomicBoolean(true);
 
-    /**
-     * Verifies that a fresh push client can drive a complete WhatsApp
-     * registration to completion.
-     *
-     * @apiNote
-     * Retries up to five times with a fresh phone number per attempt
-     * to absorb transient WhatsApp-side rejections; fails the build
-     * only when every attempt is rejected or every attempt times out
-     * waiting for the silent verification push.
-     *
-     * @throws Throwable if the registration fails for a reason other
-     *                   than {@link WhatsAppRegistrationException} or
-     *                   a push-arrival timeout
-     */
     @Test
     public void deliversPushCodeViaRegistration() throws Throwable {
         var maxAttempts = 5;
@@ -118,16 +99,6 @@ class FcmClientTest {
                 lastFailure);
     }
 
-    /**
-     * Sleeps 45 seconds before every test except the first.
-     *
-     * @implNote
-     * This implementation uses an {@link AtomicBoolean} guard rather
-     * than relying on JUnit ordering so the throttle holds even when
-     * the test runner randomises method order.
-     *
-     * @throws InterruptedException if the sleep is interrupted
-     */
     @BeforeEach
     void throttleAgainstC2dmAntiAbuse() throws InterruptedException {
         if (FIRST_TEST.compareAndSet(true, false)) {
@@ -136,10 +107,6 @@ class FcmClientTest {
         TimeUnit.SECONDS.sleep(45);
     }
 
-    /**
-     * Verifies the supported-platforms set covers both Android
-     * variants.
-     */
     @Test
     void supportedPlatformsListsBothAndroidVariants() {
         try (var client = FcmClient.newSession()) {
@@ -149,10 +116,6 @@ class FcmClientTest {
         }
     }
 
-    /**
-     * Verifies {@link FcmClient#close()} is idempotent before
-     * authentication runs.
-     */
     @Test
     void closeIsIdempotentBeforeAuthenticate() {
         var client = FcmClient.newSession();
@@ -160,10 +123,6 @@ class FcmClientTest {
         assertDoesNotThrow(client::close);
     }
 
-    /**
-     * Verifies the read-only accessors throw before authentication
-     * has placed the client in {@code AUTHENTICATED}.
-     */
     @Test
     void accessorsRejectUnauthenticatedClient() {
         try (var client = FcmClient.newSession()) {
@@ -174,10 +133,6 @@ class FcmClientTest {
         }
     }
 
-    /**
-     * Verifies non-Android device profiles are rejected before any
-     * network I/O.
-     */
     @Test
     void rejectsNonAndroidDevice() {
         try (var client = FcmClient.newSession()) {
@@ -189,10 +144,6 @@ class FcmClientTest {
         }
     }
 
-    /**
-     * Verifies the personal Android variant authenticates and surfaces
-     * a non-blank FCM registration token.
-     */
     @Test
     void authenticatesPersonalAndProducesPushToken() {
         try (var client = FcmClient.newSession()) {
@@ -205,10 +156,6 @@ class FcmClientTest {
         }
     }
 
-    /**
-     * Verifies the business Android variant authenticates and surfaces
-     * a non-blank FCM registration token.
-     */
     @Test
     void authenticatesBusinessAndProducesPushToken() {
         try (var client = FcmClient.newSession()) {
@@ -218,11 +165,6 @@ class FcmClientTest {
         }
     }
 
-    /**
-     * Verifies a second
-     * {@link FcmClient#authenticate(WhatsAppDevice)} call on an
-     * already-authenticated client throws.
-     */
     @Test
     void rejectsDoubleAuthenticate() {
         try (var client = FcmClient.newSession()) {
@@ -232,20 +174,6 @@ class FcmClientTest {
         }
     }
 
-    /**
-     * Verifies a captured {@link FcmSession} reloads via
-     * {@link FcmClient#loadSession(FcmSession)} and yields the same
-     * push token.
-     *
-     * @implNote
-     * This implementation asserts pointer-equality on the FCM token
-     * (not just non-empty) because the token is server-issued and
-     * persisted in the session; a reload that produced a different
-     * token would mean the session round-trip silently dropped the
-     * cached value.
-     *
-     * @throws Exception if the FIS refresh call fails during reload
-     */
     @Test
     void sessionRoundTripsThroughLoadSession() throws Exception {
         FcmSession saved;
@@ -261,6 +189,8 @@ class FcmClientTest {
 
         try (var loaded = FcmClient.loadSession(saved)) {
             assertTrue(loaded.isAuthenticated());
+            // Exact-token equality, not just non-blank: the token is server-issued and cached in the
+            // session, so a differing token would mean the round-trip silently dropped the cached value.
             assertEquals(firstToken, loaded.getPushToken());
         }
     }

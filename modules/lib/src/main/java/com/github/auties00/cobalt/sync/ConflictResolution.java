@@ -11,14 +11,22 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * arrives at an index that the local device already has a pending mutation
  * for.
  *
- * @param state          the {@link ConflictResolutionState} verdict that
- *                       drives the {@code remoteMutationsToApply} and
- *                       {@code pendingSetMutationsToDrop} buckets in
- *                       {@code WAWebSyncdResolveConflict.resolveConflict}
- * @param mergedMutation a non-{@code null} mutation that supersedes both
- *                       sides when the handler combined two non-enclosing
- *                       message ranges, or {@code null} for the
- *                       enum-only verdicts
+ * <p>The {@link ConflictResolutionState} verdict drives the
+ * {@code remoteMutationsToApply} and {@code pendingSetMutationsToDrop}
+ * buckets in the resolver: it decides whether the remote mutation is
+ * applied while the local pending mutation is dropped, the remote mutation
+ * is skipped outright, or both sides are discarded in favour of a merged
+ * mutation. The {@link #mergedMutation()} payload is non-{@code null} only
+ * for the merge case produced by {@link #merged(DecryptedMutation.Trusted)};
+ * the enum-only verdicts produced by {@link #of(ConflictResolutionState)}
+ * leave it {@code null}.
+ *
+ * @param state          the verdict that selects between applying the
+ *                       remote mutation, skipping it, and replacing both
+ *                       sides with {@code mergedMutation}
+ * @param mergedMutation the mutation that supersedes both sides when the
+ *                       handler combined two non-enclosing message ranges,
+ *                       or {@code null} for the enum-only verdicts
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncActionStore")
 public record ConflictResolution(
@@ -28,13 +36,12 @@ public record ConflictResolution(
     /**
      * Wraps an enum-only verdict that needs no merged mutation.
      *
-     * @apiNote Returned by handlers that map straight onto WA Web's three
-     * verdict cases in {@code WAWebSyncdResolveConflict.resolveConflict}:
+     * <p>Returned by handlers whose verdict maps straight onto one of
      * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
-     * {@link ConflictResolutionState#SKIP_REMOTE}, and the no-merge form
-     * of {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. Use
-     * {@link #merged(DecryptedMutation.Trusted)} when the handler wants
-     * to substitute a third mutation in place of the two losing ones.
+     * {@link ConflictResolutionState#SKIP_REMOTE}, or the no-merge form of
+     * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. Use
+     * {@link #merged(DecryptedMutation.Trusted)} instead when the handler
+     * substitutes a third mutation in place of the two losing ones.
      *
      * @param state the verdict to record
      * @return a resolution carrying {@code state} and a {@code null}
@@ -50,20 +57,20 @@ public record ConflictResolution(
      * Wraps a verdict that replaces both sides with a third mutation
      * computed by the handler.
      *
-     * @apiNote Used by message-range handlers (archive, mark-as-read,
-     * delete-chat, ...) when neither the local pending mutation nor the
-     * incoming remote mutation fully encloses the other. The handler
-     * unions the two ranges into a single mutation, returns it here, and
-     * the caller drops both originals before applying {@code merged} to
-     * local state. The verdict is fixed at
+     * <p>Used by message-range handlers (archive, mark-as-read,
+     * delete-chat, and similar) when neither the local pending mutation nor
+     * the incoming remote mutation fully encloses the other. The handler
+     * unions the two ranges into a single mutation, returns it here, and the
+     * caller drops both originals before applying {@code merged} to local
+     * state. The verdict is fixed at
      * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} because the
      * remote mutation is dropped without being applied as-is.
      *
      * @param merged the merged mutation to apply and add to the pending
      *               queue
      * @return a resolution carrying
-     *         {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} and
-     *         the supplied {@code merged} payload
+     *         {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} and the
+     *         supplied {@code merged} payload
      * @see #of(ConflictResolutionState)
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncActionStore", exports = "doConflictResolution", adaptation = WhatsAppAdaptation.ADAPTED)

@@ -16,38 +16,31 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * USync {@code devices} protocol descriptor.
+ * Describes the USync {@code devices} protocol.
  *
- * @apiNote
- * Asks the relay for each peer's device list and the signed key-index
- * envelope; used by every device sync flow (see
- * {@code WAWebAdvSyncDeviceListApi.syncDeviceList} and
- * {@code WAWebContactSyncApi}). Pair each {@link UsyncUser} with the locally
- * cached device hash through
- * {@link UsyncUser#withDeviceHash(String)} so the relay can return an omit
- * response when the cache is still in sync.
+ * This descriptor asks the relay for each peer's device list and the signed
+ * key-index envelope. The descriptor is stateless; per-user state lives on
+ * each {@link UsyncUser}. Pair each user with the locally cached device hash
+ * through {@link UsyncUser#withDeviceHash(String)} so the relay can return an
+ * omit response when the cache is still in sync.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
 public final class UsyncDeviceProtocol implements UsyncProtocol {
     /**
-     * Wire literal for the protocol tag name.
+     * Holds the wire literal for the protocol tag name.
      */
     public static final String NAME = "devices";
 
     /**
-     * Wire-protocol version emitted on the {@code version} attribute of the
-     * {@code <devices>} query element.
+     * Holds the wire-protocol version emitted on the {@code version}
+     * attribute of the {@code <devices>} query element.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "USyncDeviceProtocol", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int PROTOCOL_VERSION = 2;
 
     /**
-     * Builds a default device-protocol descriptor.
-     *
-     * @apiNote
-     * The descriptor is stateless; per-user state lives on each
-     * {@link UsyncUser}.
+     * Creates a device-protocol descriptor.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "USyncDeviceProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -69,8 +62,7 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation always emits {@code version="2"} on the
-     * {@code <devices>} element, matching the {@code e=2} constant the JS
-     * module ships with.
+     * {@code <devices>} element, the value carried by {@link #PROTOCOL_VERSION}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
@@ -87,9 +79,8 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
      *
      * @implNote
      * This implementation skips the per-user element when none of
-     * {@code device_hash}, {@code ts}, or {@code expected_ts} is populated,
-     * matching the JS {@code null} return in {@code USyncDeviceProtocol.getUserElement}.
-     * The relay then assumes the local cache is empty and ships the full
+     * {@code device_hash}, {@code ts}, or {@code expected_ts} is populated;
+     * the relay then assumes the local cache is empty and ships the full
      * device list back.
      */
     @Override
@@ -112,14 +103,15 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
     /**
      * {@inheritDoc}
      *
+     * This override reads both the optional {@code <key-index-list>} (signed
+     * key-index envelope, with timestamp and optional {@code expected_ts})
+     * and the optional {@code <device-list>} (per-device id, key-index,
+     * hosted flag).
+     *
      * @implNote
-     * This implementation reads both the optional {@code <key-index-list>}
-     * (signed key-index envelope, with timestamp and optional
-     * {@code expected_ts}) and the optional {@code <device-list>}
-     * (per-device id, key-index, hosted flag), matching the JS
-     * {@code deviceParser}. The hosted-device flag is parsed unconditionally;
-     * the JS {@code WAWebBizCoexGatingUtils.bizHostedDevicesEnabled} gate
-     * happens server-side, so an unwanted {@code true} is impossible.
+     * This implementation parses the hosted-device flag unconditionally; the
+     * hosted-device gating happens server-side, so an unwanted {@code true}
+     * value never reaches this parser.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",

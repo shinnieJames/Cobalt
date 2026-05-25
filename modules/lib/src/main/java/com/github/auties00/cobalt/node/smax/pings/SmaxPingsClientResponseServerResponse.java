@@ -12,17 +12,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound {@code <iq type="result">} reply to a
- * {@link SmaxPingsClientRequest}.
+ * Models the inbound {@code <iq type="result">} reply to a {@link SmaxPingsClientRequest}.
  *
- * @apiNote
- * Surfaces the relay's keep-alive reply so the local stream-stall
- * detector can confirm that the most recent ping landed; the only
- * payload-bearing field is the server-stamped {@link #timestamp()}
- * which embedders use to estimate clock skew. WA Web's parser produces
- * only this one shape (success-only, no error variants), so the
- * response type is modelled as a single record-style projection rather
- * than a sealed family.
+ * <p>This projection surfaces the relay's keep-alive reply so the stream-stall detector can confirm
+ * that the most recent ping landed. The only payload-bearing field is the server-stamped
+ * {@link #timestamp()}, which embedders use to estimate clock skew. The reply has a single
+ * success-only shape with no error variants, so the response is modelled as one record-style
+ * projection rather than a sealed family.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInPingsClientResponseServerResponse")
 @WhatsAppWebModule(moduleName = "WASmaxInPingsEnums")
@@ -31,11 +27,9 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
      * The relay JID that produced the reply.
      *
      * @implNote
-     * This implementation accepts any JID that
-     * {@link #isDomainOrUserJid(Jid)} considers valid (server-only
-     * {@code s.whatsapp.net} / {@code g.us} / {@code call} or any
-     * standard user-server JID); the WA Web parser uses the same
-     * {@code DOMAINJID_USERJID} validator.
+     * This implementation accepts any JID that {@link #isDomainOrUserJid(Jid)} considers valid: a
+     * server-only {@code s.whatsapp.net}, {@code g.us}, or {@code call} JID, or any standard
+     * user-server JID.
      */
     private final Jid from;
 
@@ -43,33 +37,27 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
      * The literal {@code "result"} type tag.
      *
      * @implNote
-     * This implementation always stores the literal {@code "result"}
-     * after a successful parse; the field is preserved rather than
-     * elided so the projection can be debug-printed without losing
+     * This implementation always stores the literal {@code "result"} after a successful parse; the
+     * field is preserved rather than elided so the projection can be debug-printed without losing
      * the wire-format hint.
      */
     private final String type;
 
     /**
-     * The relay-stamped server timestamp, in seconds since the Unix
-     * epoch.
+     * The relay-stamped server timestamp, in seconds since the Unix epoch.
      */
     private final long timestamp;
 
     /**
      * Constructs a new server-response projection.
      *
-     * @apiNote
-     * Used by {@link #of(Node, Node)} after the envelope shape has
-     * been validated; embedders typically do not instantiate this
-     * directly.
+     * <p>Invoked by {@link #of(Node, Node)} once the envelope shape has been validated; embedders
+     * typically do not instantiate this directly.
      *
      * @param from the relay JID; never {@code null}
-     * @param type the literal {@code "result"} type tag; never
-     *             {@code null}
+     * @param type the literal {@code "result"} type tag; never {@code null}
      * @param timestamp the relay-stamped server timestamp, in seconds
-     * @throws NullPointerException if either {@code from} or
-     *                              {@code type} is {@code null}
+     * @throws NullPointerException if either {@code from} or {@code type} is {@code null}
      */
     public SmaxPingsClientResponseServerResponse(Jid from, String type, long timestamp) {
         this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -78,7 +66,7 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Returns the relay JID.
+     * Returns the relay JID that produced the reply.
      *
      * @return the relay JID; never {@code null}
      */
@@ -105,24 +93,19 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Parses a {@link SmaxPingsClientResponseServerResponse} from the
-     * given inbound stanza, cross-checked against the original
-     * outbound request.
+     * Parses a {@link SmaxPingsClientResponseServerResponse} from the given inbound stanza,
+     * cross-checked against the original outbound request.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when any of the WA Web parser's
-     * preconditions fail: the reply must be an {@code <iq>}, must
-     * carry a {@code from} JID that satisfies the
-     * {@code DOMAINJID_USERJID} predicate, must have
-     * {@code type="result"}, must echo the request's {@code id}, and
-     * must carry a non-negative integer {@code t}.
+     * <p>Returns {@link Optional#empty()} when any precondition fails: the reply must be an
+     * {@code <iq>}, must carry a {@code from} JID that satisfies {@link #isDomainOrUserJid(Jid)},
+     * must have {@code type="result"}, must echo the request's {@code id}, and must carry a
+     * non-negative integer {@code t} attribute.
      *
      * @param node the inbound IQ stanza; never {@code null}
-     * @param request the original outbound request used to cross-check
-     *                the echoed {@code id}; never {@code null}
-     * @return an {@link Optional} carrying the parsed projection, or
-     *         empty when the stanza did not satisfy the parser's
-     *         preconditions
+     * @param request the original outbound request used to cross-check the echoed {@code id}; never
+     *                {@code null}
+     * @return an {@link Optional} carrying the parsed projection, or empty when the stanza did not
+     *         satisfy the preconditions
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInPingsClientResponseServerResponse",
@@ -159,26 +142,19 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Returns whether the given JID matches WA Web's
-     * {@code DOMAINJID_USERJID} descriptor.
+     * Returns whether the given JID is accepted as the reply source.
      *
-     * @apiNote
-     * Accepts the JID when it is either a server-only JID for the
-     * bare WhatsApp ({@code s.whatsapp.net}), group ({@code g.us}),
-     * or call ({@code call}) domains, or any standard user-server JID
-     * ({@code s.whatsapp.net} / {@code c.us}).
+     * <p>Accepts the JID when it is either a server-only JID for the bare WhatsApp
+     * ({@code s.whatsapp.net}), group ({@code g.us}), or call ({@code call}) domains, or any
+     * standard user-server JID.
      *
      * @implNote
-     * This implementation inlines the disjunction of
-     * {@code WAJids.validateDomainJid} and
-     * {@code WAJids.validateUserJid} that WA Web's
-     * {@code WASmaxInPingsEnums.DOMAINJID_USERJID} validator object
-     * composes; the validator-list shape is collapsed into a single
-     * boolean check because the parser only needs the truth value.
+     * This implementation inlines the disjunction of a domain-JID check and a user-JID check that
+     * the WA Web validator object composes; the validator-list shape is collapsed into a single
+     * boolean because the parser only needs the truth value.
      *
      * @param jid the JID to validate; never {@code null}
-     * @return {@code true} when the JID satisfies the
-     *         {@code DOMAINJID_USERJID} predicate
+     * @return {@code true} when the JID is accepted as the reply source
      */
     @WhatsAppWebExport(moduleName = "WASmaxInPingsEnums",
             exports = "DOMAINJID_USERJID",
@@ -193,8 +169,7 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxPingsClientResponseServerResponse} with equal
+     * Returns whether the given object is a {@link SmaxPingsClientResponseServerResponse} with equal
      * {@code from}, {@code type}, and {@code timestamp}.
      *
      * @param obj the candidate; may be {@code null}
@@ -215,8 +190,7 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Returns a hash code derived from {@code from}, {@code type},
-     * and {@code timestamp}.
+     * Returns a hash code derived from {@code from}, {@code type}, and {@code timestamp}.
      *
      * @return the hash code
      */
@@ -226,8 +200,7 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Returns a debug-friendly textual representation of this
-     * projection.
+     * Returns a debug-friendly textual representation of this projection.
      *
      * @return the textual representation
      */

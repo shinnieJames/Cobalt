@@ -32,22 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link StatusPrivacyHandler}'s parity with
- * {@code WAWebStatusPrivacySettingSync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the per-mode dispatch (CONTACTS,
- * ALLOW_LIST, DENY_LIST, CLOSE_FRIENDS, CUSTOM_LIST), the
- * {@code WAWebWid.isUser} JID-filter applied to the allow/deny lists,
- * the malformed branches (missing value, missing mode), the
- * exactly-one-mutation enforcement of
- * {@code applyMutationBatch}, the {@code REMOVE} unsupported branch,
- * and the default conflict-resolution tiebreaker.
- *
- * @implNote
- * The fixture seeds a peer-A, peer-B, and group JID; allow/deny-list
- * tests pass all three so they can observe the group JID being dropped
- * by {@code isUser}.
+ * Verifies {@link StatusPrivacyHandler}: applying an incoming status-privacy
+ * mutation and asserting the persisted {@link PrivacySettingType#STATUS}
+ * entry, across the per-mode dispatch and the user-JID filter applied to
+ * the allow/deny lists. Allow/deny-list tests pass a peer-A, peer-B, and
+ * group JID so they can observe the group JID being dropped by the
+ * user-only filter.
  */
 @DisplayName("StatusPrivacyHandler")
 class StatusPrivacyHandlerTest {
@@ -59,35 +49,13 @@ class StatusPrivacyHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
-     * persisted {@link PrivacySettingType#STATUS} entry starts empty.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps a status-privacy mode plus an optional user-JID list into
-     * a trusted mutation.
-     *
-     * @apiNote
-     * Both {@code mode} and {@code userJids} may be {@code null} so the
-     * malformed-value branches can be exercised; the index is the
-     * canonical one-element {@code ["status_privacy"]} array.
-     *
-     * @param mode     the distribution mode, or {@code null} to omit
-     * @param userJids the allow/deny list, or {@code null} to omit
-     * @param op       the mutation operation
-     * @param ts       the mutation timestamp
-     * @return the trusted mutation
-     */
+    // A null mode or userJids omits that field to drive the malformed-value branches.
     private static DecryptedMutation.Trusted statusMutation(StatusPrivacyAction.StatusDistributionMode mode,
                                                             List<Jid> userJids,
                                                             SyncdOperation op,

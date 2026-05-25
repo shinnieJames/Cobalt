@@ -15,60 +15,46 @@ import java.util.Objects;
 /**
  * Builds outgoing notification-activity-setting sync mutations.
  *
- * @apiNote
- * Drives the per-device notification activity preference on the Settings
- * notifications surface; one call produces a single
- * {@link SyncPendingMutation} that is consumed on receiving devices by
+ * <p>Backs the per-device notification activity preference on the Settings notifications surface.
+ * A single call produces one {@link SyncPendingMutation} that is consumed on receiving devices by
  * {@link com.github.auties00.cobalt.sync.handler.NotificationActivitySettingHandler}.
  *
  * @implNote
- * This implementation has no direct WA Web counterpart: the
- * {@code notificationActivitySetting} action is declared only as a
- * protobuf shape in {@code WAWebProtobufSyncAction.pb} and has no
- * dedicated {@code WAWebNotificationActivitySettingSync} module in the
- * current bundle. The shape follows
- * {@code WAWebSyncdActionUtils.buildPendingMutation} as used by every
- * other sibling {@code AccountSyncdActionBase} subclass.
+ * This implementation has no dedicated WA Web counterpart module: the
+ * {@code notificationActivitySetting} action is declared only as a protobuf shape in
+ * {@code WAWebProtobufSyncAction.pb} with no {@code WAWebNotificationActivitySettingSync} module
+ * in the current bundle. The shape follows {@code WAWebSyncdActionUtils.buildPendingMutation} as
+ * used by every sibling {@code AccountSyncdActionBase} subclass.
  */
 public final class NotificationActivitySettingMutationFactory {
     /**
      * Constructs a notification-activity-setting mutation factory.
      *
-     * @apiNote
-     * Required by the dependency-injection container before the factory
-     * is wired into the public notification-activity setter. The factory
-     * keeps no state, so a single instance is sufficient per client.
+     * <p>The factory keeps no state, so a single instance is sufficient per client.
      */
     public NotificationActivitySettingMutationFactory() {
 
     }
 
     /**
-     * Builds a pending {@code notificationActivitySetting} mutation
-     * carrying the given notification activity preference.
+     * Builds a pending {@code notificationActivitySetting} mutation carrying the given
+     * notification activity preference.
      *
-     * @apiNote
-     * Invoked from the public notification-activity setter; the index
-     * carries only the action name because the preference is a singleton
-     * per account. Receiving devices store the
-     * {@link NotificationActivitySettingAction.NotificationActivitySetting}
-     * value verbatim in their local prefs.
+     * <p>Receiving devices store the
+     * {@link NotificationActivitySettingAction.NotificationActivitySetting} value verbatim in
+     * their local prefs. The index carries only the action name because the preference is a
+     * singleton per account.
      *
      * @implNote
-     * This implementation models the
-     * {@code SyncActionValue.notificationActivitySettingAction} protobuf
-     * shape as used by {@code WAWebSyncdActionUtils.buildPendingMutation};
-     * the mutation is routed through the {@code Regular} collection
-     * alongside the other account-scoped settings.
+     * This implementation models the {@code SyncActionValue.notificationActivitySettingAction}
+     * protobuf shape as used by {@code WAWebSyncdActionUtils.buildPendingMutation}; the mutation is
+     * routed through the {@code Regular} collection alongside the other account-scoped settings.
      *
-     * @param timestamp the mutation timestamp recorded on both the outer
-     *                  mutation and the inner {@code SyncActionValue}
-     * @param setting   the new
-     *                  {@link NotificationActivitySettingAction.NotificationActivitySetting}
-     * @return a pending mutation carrying the
-     *         {@code notificationActivitySetting} action
-     * @throws NullPointerException if {@code timestamp} or {@code setting}
-     *                              is {@code null}
+     * @param timestamp the mutation timestamp recorded on both the outer mutation and the inner
+     *                  {@code SyncActionValue}
+     * @param setting   the new {@link NotificationActivitySettingAction.NotificationActivitySetting}
+     * @return a pending mutation carrying the {@code notificationActivitySetting} action
+     * @throws NullPointerException if {@code timestamp} or {@code setting} is {@code null}
      */
     public SyncPendingMutation getNotificationActivityMutation(Instant timestamp, NotificationActivitySettingAction.NotificationActivitySetting setting) {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");

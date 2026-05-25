@@ -1,0 +1,45 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.ExportModeType;
+import com.github.auties00.cobalt.wam.type.ExportResultType;
+import com.github.auties00.cobalt.wam.type.MessageChatType;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WhatsAppWebModule(moduleName = "WAWebChatExportWamEvent")
+@WamEvent(id = 7734)
+public interface ChatExportEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.ENUM)
+    Optional<MessageChatType> chatType();
+
+    @WamProperty(index = 2, type = WamType.INTEGER)
+    OptionalInt exportDateRangeUsed();
+
+    @WamProperty(index = 3, type = WamType.INTEGER)
+    OptionalInt exportDurationMs();
+
+    @WamProperty(index = 4, type = WamType.STRING)
+    Optional<String> exportErrorReason();
+
+    @WamProperty(index = 5, type = WamType.INTEGER)
+    OptionalInt exportFileSizeBytes();
+
+    @WamProperty(index = 6, type = WamType.INTEGER)
+    OptionalInt exportMessageCount();
+
+    @WamProperty(index = 7, type = WamType.ENUM)
+    Optional<ExportModeType> exportMode();
+
+    @WamProperty(index = 8, type = WamType.ENUM)
+    Optional<ExportResultType> exportResult();
+
+    @WamProperty(index = 9, type = WamType.INTEGER)
+    OptionalInt mediaCount();
+}

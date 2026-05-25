@@ -12,37 +12,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants for
- * {@link SmaxPassiveModePassiveIQRequest}.
+ * Closes the family of inbound reply variants for {@link SmaxPassiveModePassiveIQRequest}.
  *
- * @apiNote
- * Only {@link Success} is documented by WA Web's
- * {@code WASmaxPassiveModePassiveIQRPC} dispatcher; the dispatcher throws
- * a {@code SmaxParsingFailure} for every other shape.
+ * <p>The passive-mode RPC documents a single valid reply shape, so {@link Success} is the only permitted variant; any
+ * other inbound shape is treated as a parsing failure rather than a modelled variant. Code that classifies an inbound
+ * stanza into this disjunction only needs to handle the success case.
  */
 public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.Response
         permits SmaxPassiveModePassiveIQResponse.Success {
 
     /**
-     * Tries the {@link Success} variant and returns it when it parses
-     * cleanly.
+     * Lifts an inbound stanza into the sealed disjunction by trying the {@link Success} variant.
      *
-     * @apiNote
-     * The single entry point used by Cobalt's SMAX dispatcher to lift an
-     * inbound stanza into the sealed disjunction. An empty result signals
-     * the relay did not produce a documented passive-mode
-     * acknowledgement.
+     * <p>This is the single entry point used by the SMAX dispatch path to classify an inbound stanza. An empty result
+     * signals that the relay did not produce a documented passive-mode acknowledgement, which the caller should surface
+     * to its error handler.
      *
      * @implNote
-     * This implementation delegates straight to
-     * {@link Success#of(Node, Node)} because the RPC has only one valid
-     * reply shape.
-     *
+     * This implementation delegates straight to {@link Success#of(Node, Node)} because the RPC has only one valid reply
+     * shape.
      * @param node    the inbound IQ stanza received from the relay
-     * @param request the original outbound stanza, used to validate
-     *                echoed identifiers
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} on no-match
+     * @param request the original outbound stanza, used to validate echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} on no-match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPassiveModePassiveIQRPC",
@@ -54,33 +45,26 @@ public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code Success} reply variant projecting the echoed
-     * {@code <iq type="result" from="s.whatsapp.net">} envelope.
+     * Projects the echoed {@code <iq type="result" from="s.whatsapp.net">} envelope of a successful passive-mode flip.
      *
-     * @apiNote
-     * Signals that the relay accepted the active-to-passive transition
-     * and will buffer live deliveries until the connection flips back to
-     * active mode.
+     * <p>Presence of this variant signals that the relay accepted the active-to-passive transition and will buffer live
+     * deliveries until the connection flips back to active mode.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPassiveModePassiveIQResponseSuccess")
     final class Success implements SmaxPassiveModePassiveIQResponse {
         /**
-         * The {@code from} JID echoed by the relay.
+         * Holds the {@code from} JID echoed by the relay.
          *
-         * @apiNote
-         * Always {@link JidServer#user()} ({@code s.whatsapp.net}); the
-         * WA Web parser asserts the literal via the
-         * {@code literalJid(attrDomainJid, "s.whatsapp.net")} check.
+         * <p>This is always {@link JidServer#user()} ({@code s.whatsapp.net}); {@link #of(Node, Node)} rejects any
+         * other server before constructing the variant.
          */
         private final Jid from;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a successful reply carrying the echoed server JID.
          *
-         * @apiNote
-         * Used by {@link #of(Node, Node)} after envelope validation;
-         * embedders typically obtain instances through the static factory
-         * rather than construct directly.
+         * <p>Instances are normally obtained through {@link #of(Node, Node)} after the envelope passes validation
+         * rather than constructed directly.
          *
          * @param from the echoed {@code from} JID
          * @throws NullPointerException if {@code from} is {@code null}
@@ -92,9 +76,8 @@ public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.R
         /**
          * Returns the {@code from} JID echoed by the relay.
          *
-         * @apiNote
-         * Useful for embedders that log or audit which server endpoint
-         * acknowledged the passive-mode flip.
+         * <p>The value identifies the server endpoint that acknowledged the passive-mode flip; for normal control flow
+         * the mere presence of a {@link Success} instance is enough.
          *
          * @return the {@link Jid}
          */
@@ -103,25 +86,18 @@ public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.R
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given inbound
-         * stanza.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the stanza is not a
-         * well-formed {@code <iq type="result">} echoing the request id
-         * and carrying both a non-empty {@code from=s.whatsapp.net} and a
-         * nested {@code <passive/>} marker.
+         * <p>Returns {@link Optional#empty()} when the stanza is not a well-formed {@code <iq type="result">} echoing
+         * the request id and carrying both a {@code from=s.whatsapp.net} attribute and a nested {@code <passive/>}
+         * marker. An empty result is a protocol-level rejection.
          *
          * @implNote
-         * This implementation walks the WA Web fixture in order: tag
-         * check, type check, id echo check, {@code <passive/>} presence
-         * check, {@code from} JID echo check. Any failure short-circuits
-         * to {@link Optional#empty()}.
-         *
+         * This implementation checks, in order: tag, type, id echo, {@code <passive/>} presence, and {@code from} JID
+         * echo. Any failed check short-circuits to {@link Optional#empty()}.
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} on no-match
          * @throws NullPointerException if either argument is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPassiveModePassiveIQResponseSuccess",
@@ -151,11 +127,12 @@ public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.R
         }
 
         /**
-         * {@inheritDoc}
+         * Indicates whether the given object is equal to this reply.
          *
-         * @implNote
-         * This implementation compares only the {@link #from} field
-         * because it is the sole carried attribute.
+         * <p>Equality is decided solely by the {@link #from} field, which is the only carried attribute.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@code Success} with an equal {@code from} JID
          */
         @Override
         public boolean equals(Object obj) {
@@ -170,11 +147,11 @@ public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.R
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code for this reply.
          *
-         * @implNote
-         * This implementation hashes only the {@link #from} field to
-         * stay consistent with {@link #equals(Object)}.
+         * <p>The hash derives solely from the {@link #from} field to stay consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -182,11 +159,11 @@ public sealed interface SmaxPassiveModePassiveIQResponse extends SmaxOperation.R
         }
 
         /**
-         * {@inheritDoc}
+         * Returns the string representation of this reply.
          *
-         * @implNote
-         * This implementation mirrors the record-like rendering used
-         * across the {@code Smax*} response family.
+         * <p>The rendering mirrors the record-like form used across the {@code Smax*} response family.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

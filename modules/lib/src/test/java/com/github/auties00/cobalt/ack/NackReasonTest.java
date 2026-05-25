@@ -10,31 +10,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the {@link NackReason} constant set against
- * {@code WAWebCreateNackFromStanza.NackReason}.
+ * Pins the {@link NackReason} constant set, a closed set of stable wire codes, against
+ * {@code WAWebCreateNackFromStanza.NackReason}: the tests assert the canonical values, reject
+ * accidental collisions, and assert that every code falls within the 4xx/5xx server-error range.
  *
- * @apiNote
- * {@link NackReason} is a closed set of stable wire codes; the tests pin
- * the canonical values, reject accidental collisions, and assert that
- * every code falls within the 4xx/5xx server-error range.
- *
- * @implNote
- * This implementation hard-codes the canonical literal values so drift
- * from the WA Web side is visible on the diff rather than buried in a
- * shared constant.
+ * <p>The canonical values are hard-coded as literals so drift from the WA Web side is visible on the
+ * diff rather than buried in a shared constant.
  */
 @DisplayName("NackReason")
 class NackReasonTest {
 
-    /**
-     * Asserts that every constant matches the canonical WA Web wire code.
-     */
     @Test
     @DisplayName("known nack codes match the WA Web canonical values")
     void canonicalCodes() {
-        // Hard-coded literals: drift from WA Web's canonical names should
-        // require a deliberate test update rather than slipping through a
-        // shared-constant refactor.
         assertEquals(421, NackReason.STALE_GROUP_ADDRESSING_MODE.code());
         assertEquals(475, NackReason.NEW_CHAT_MESSAGES_CAPPED.code());
         assertEquals(487, NackReason.PARSING_ERROR.code());
@@ -52,9 +40,6 @@ class NackReasonTest {
         assertEquals(552, NackReason.DB_OPERATION_FAILED.code());
     }
 
-    /**
-     * Asserts that every declared nack code is distinct.
-     */
     @Test
     @DisplayName("every declared nack reason is distinct (no value collision)")
     void distinctValues() {
@@ -66,10 +51,6 @@ class NackReasonTest {
                 "every NackReason constant must hold a unique code: " + codes);
     }
 
-    /**
-     * Asserts that every code falls within the HTTP-style 4xx/5xx
-     * server-error range.
-     */
     @Test
     @DisplayName("all codes fall within the HTTP-style 4xx/5xx server-error range")
     void codesAreInServerErrorRange() {

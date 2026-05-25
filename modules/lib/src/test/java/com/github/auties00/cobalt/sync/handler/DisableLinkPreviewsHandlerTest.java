@@ -27,21 +27,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link DisableLinkPreviewsHandler} adapter for
- * {@code WAWebDisableLinkPreviewsSync}.
+ * Covers the {@link DisableLinkPreviewsHandler} for the
+ * {@code setting_disableLinkPreviews} app-state sync action: metadata, the SET
+ * happy path, the malformed-value and malformed-index branches, the REMOVE
+ * rejection, timestamp-based conflict resolution and the batch path that folds
+ * the latest valid value before writing once.
  *
- * @apiNote
- * Verifies parity with WA Web for the
- * {@code setting_disableLinkPreviews} app-state sync action across
- * metadata, the SET happy path, the malformed-value branches, the
- * REMOVE rejection, the inherited timestamp-based conflict
- * resolution and the batch path that folds the latest valid value
- * before writing once.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so each test starts from a clean single-device state and the
+ * <p>Each test runs against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * built through {@link TestWhatsAppClient}, so the
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#disableLinkPreviews()}
  * read-back can be asserted directly.
  */

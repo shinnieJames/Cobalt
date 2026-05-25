@@ -28,26 +28,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Tests for {@link AiThreadRenameHandler}, Cobalt's adapter for
- * {@code WAWebAiThreadRenameSync}.
- *
- * <p>The handler renames an AI conversation thread in the flat
- * {@code aiThreadTitles} store, keyed by {@code "<botJid>|<threadId>"}.
- *
- * <p>Matrix:
- * <ul>
- *   <li>Metadata wire constants.</li>
- *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
- *   <li>Malformed index branches (short index, blank parts, non-bot JID).</li>
- *   <li>Malformed value branches (missing action sub-message, blank
- *       {@code newTitle}).</li>
- *   <li>Feature gating via {@link DeviceCapabilities.AiThread.SupportLevel}.</li>
- *   <li>ORPHAN when the local store has no matching title.</li>
- *   <li>Happy path: updates the title and returns {@code SUCCESS}.</li>
- *   <li>Default conflict resolution.</li>
- *   <li>Default batch dispatch (n/a override).</li>
- *   <li>{@code getAiThreadRenameMutation} builder.</li>
- * </ul>
+ * Covers {@link AiThreadRenameHandler}, which renames an AI conversation thread in the flat
+ * {@code aiThreadTitles} store, keyed by {@code "<botJid>|<threadId>"}. The thread feature is gated
+ * on {@link DeviceCapabilities.AiThread.SupportLevel}, so the harness starts with the capability
+ * unset and individual tests advertise the level they need.
  */
 @DisplayName("AiThreadRenameHandler")
 class AiThreadRenameHandlerTest {
@@ -61,33 +45,18 @@ class AiThreadRenameHandlerTest {
     private WhatsAppStore store;
     private TestWhatsAppClient client;
 
-    /**
-     * Builds a fresh harness with an empty store.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Enables AI-thread support on the store at the given level.
-     *
-     * @param level the support level to advertise
-     */
     private void primaryAiThreadSupport(DeviceCapabilities.AiThread.SupportLevel level) {
         var aiThread = new DeviceCapabilitiesAiThreadBuilder().supportLevel(level).build();
         var caps = new DeviceCapabilitiesBuilder().aiThread(aiThread).build();
         store.setPrimaryDeviceCapabilities(caps);
     }
 
-    /**
-     * Builds a trusted SET mutation carrying the given action and index.
-     *
-     * @param action the rename action payload
-     * @param index  the JSON-encoded index
-     * @return the trusted mutation
-     */
     private static DecryptedMutation.Trusted setMutation(AiThreadRenameAction action, String index) {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
         var value = new SyncActionValueBuilder()

@@ -23,13 +23,12 @@ import java.util.regex.Pattern;
 /**
  * Reconciles the local address-book contact roster with {@code contact} sync mutations.
  *
- * @apiNote
- * Drives the address-book surface (the Contacts list, the
- * new-message picker, the LID-PN learning index). When the user adds,
- * edits, renames, or deletes an address-book contact on another
- * device, the server replays the change here as a {@link ContactAction}.
- * Cobalt embedders observe the result through
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#findContactByJid(Jid)}.
+ * <p>This handler drives the address-book surface (the Contacts list, the
+ * new-message picker, the LID-PN learning index). When the user adds, edits,
+ * renames, or deletes an address-book contact on another device, the server
+ * replays the change here as a {@link ContactAction}, and the result becomes
+ * observable through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findContactByJid(com.github.auties00.cobalt.model.jid.JidProvider)}.
  *
  * @implNote
  * This implementation drops several WA Web batch-level side effects
@@ -51,53 +50,40 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     /**
      * The handler-scoped {@link Logger} used to record orphan-retry failures.
      *
-     * @apiNote
-     * Records the line equivalent to WA Web's
-     * {@code [syncd] contact: orphan status mutes check failed} when
-     * the orphan-retry pass throws.
+     * <p>Records a warning when the orphan-retry pass throws.
      */
     private static final Logger LOGGER = Logger.getLogger(ContactActionHandler.class.getName());
 
     /**
      * The {@link ABPropsService} consulted before writing the username field.
      *
-     * @apiNote
-     * Used to read the {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE}
-     * gate; when off the username field on a SET mutation is ignored
-     * and the username-contact filter on a REMOVE mutation is bypassed.
+     * <p>Reads the {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} gate;
+     * when off the username field on a SET mutation is ignored and the
+     * username-contact filter on a REMOVE mutation is bypassed.
      */
     private final ABPropsService abPropsService;
 
     /**
      * The {@link UserStatusMuteHandler} delegated to when retrying orphan user-status-mute mutations.
      *
-     * @apiNote
-     * Used to re-process any orphan {@code user_status_mute} mutations
-     * unblocked by the appearance of a fresh contact, mirroring WA
-     * Web's {@code checkOrphanUserStatusMutes} pass after the contact
-     * upsert.
+     * <p>Re-processes any orphan {@code user_status_mute} mutations unblocked by
+     * the appearance of a fresh contact, after the contact upsert.
      */
     private final UserStatusMuteHandler userStatusMuteHandler;
 
     /**
      * The compiled {@link Pattern} matching any single Unicode whitespace character.
      *
-     * @apiNote
-     * Used by {@link #deriveShortName(String)} to take the first
-     * whitespace-delimited token of a full name, mirroring WA Web's
-     * {@code WAWebContactShortName.getShortName} which splits on
-     * {@code /\s/}.
+     * <p>Splits a full name so {@link #deriveShortName(String)} can take its
+     * first whitespace-delimited token.
      */
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s");
 
     /**
      * Constructs the contact-action handler with its dependencies.
      *
-     * @apiNote
-     * Instantiated by the sync handler registry with the shared
-     * {@link ABPropsService} and the dependent
-     * {@link UserStatusMuteHandler}. Embedders do not normally
-     * construct this directly.
+     * <p>The sync handler registry instantiates this with the shared
+     * {@link ABPropsService} and the dependent {@link UserStatusMuteHandler}.
      *
      * @param abPropsService the {@link ABPropsService} consulted for the username gate
      * @param userStatusMuteHandler the {@link UserStatusMuteHandler} used to re-process orphan mutations
@@ -129,15 +115,12 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * For SET mutations, validates the JSON index
-     * {@code ["contact", contactJid]}, skips LID JIDs (WA Web
-     * explicitly rejects {@code isLid()} contacts here), upserts the
-     * {@link com.github.auties00.cobalt.model.contact.Contact} with
-     * its full name, derived short name, optional username, and LID
-     * mapping, and retries any pending orphan
-     * {@code user_status_mute} mutations for the same JID. For REMOVE
-     * mutations, skips LID and bot JIDs and clears the contact's
+     * <p>For SET mutations, validates the JSON index
+     * {@code ["contact", contactJid]}, skips LID JIDs, upserts the
+     * {@link com.github.auties00.cobalt.model.contact.Contact} with its full
+     * name, derived short name, optional username, and LID mapping, and retries
+     * any pending orphan {@code user_status_mute} mutations for the same JID.
+     * For REMOVE mutations, skips LID and bot JIDs and clears the contact's
      * address-book fields (name, short name, username).
      *
      * @implNote
@@ -232,12 +215,10 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     /**
      * Re-processes any orphan {@code user_status_mute} mutations whose target contact JID is the one just upserted.
      *
-     * @apiNote
-     * Called from the SET branch of
-     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
-     * once the contact upsert lands. Successfully reapplied orphans
-     * are deleted from the orphan store; failures are left in place
-     * for a future retry.
+     * <p>Invoked from the SET branch of
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)} once the
+     * contact upsert lands. Successfully reapplied orphans are deleted from the
+     * orphan store; failures are left in place for a future retry.
      *
      * @implNote
      * This implementation walks
@@ -285,14 +266,10 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     /**
      * Returns the first whitespace-delimited word of {@code fullName} when it contains a Unicode letter.
      *
-     * @apiNote
-     * Used as the fallback for
-     * {@link ContactAction#firstName()} when the wire payload omits
-     * the short name. Matches WA Web's
-     * {@code WAWebContactShortName.getShortName} except that an empty
-     * or letter-free first token returns the empty string instead of
-     * {@code null}; callers in this module coalesce the two
-     * uniformly.
+     * <p>Serves as the fallback for {@link ContactAction#firstName()} when the
+     * wire payload omits the short name. An empty or letter-free first token
+     * returns the empty string rather than {@code null}; callers in this module
+     * coalesce the two uniformly.
      *
      * @implNote
      * This implementation splits on the {@link #WHITESPACE_PATTERN}
@@ -325,10 +302,8 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     /**
      * Returns whether the given string contains at least one Unicode letter character.
      *
-     * @apiNote
-     * Used by {@link #deriveShortName(String)} to reject tokens that
-     * are pure punctuation, digits, or symbols, mirroring WA Web's
-     * {@code WAWebAlphaRegex} acceptance test.
+     * <p>Lets {@link #deriveShortName(String)} reject tokens that are pure
+     * punctuation, digits, or symbols.
      *
      * @implNote
      * This implementation streams the string's code points and tests

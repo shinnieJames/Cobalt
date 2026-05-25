@@ -16,22 +16,13 @@ import java.util.List;
  * Applies the {@code setting_disableLinkPreviews} app-state sync action that
  * toggles whether outgoing chat messages render link previews.
  *
- * @apiNote
- * Drives the privacy-settings "Disable link previews" switch on companion
- * devices: the primary fans out a single boolean across the
- * {@link SyncPatchType#REGULAR} collection. The mutation index has no
+ * <p>The action carries a single boolean fanned out across the
+ * {@link SyncPatchType#REGULAR} collection so every linked device shares the
+ * same "Disable link previews" privacy setting. The mutation index has no
  * variable parts and is always
  * {@snippet :
  *     ["setting_disableLinkPreviews"]
  * }
- *
- * @implNote
- * This implementation supplies a batch override that mirrors WA Web's
- * "fold the latest valid value, persist once" pattern from
- * {@code WAWebDisableLinkPreviewsSync.applyMutations}, while
- * {@link #applyMutation} persists each mutation eagerly so the
- * single-mutation entry point produced by the orchestrator default still
- * keeps the store in sync.
  */
 @WhatsAppWebModule(moduleName = "WAWebDisableLinkPreviewsSync")
 public final class DisableLinkPreviewsHandler implements WebAppStateActionHandler {
@@ -74,14 +65,19 @@ public final class DisableLinkPreviewsHandler implements WebAppStateActionHandle
     /**
      * {@inheritDoc}
      *
+     * <p>Walks the batch once classifying each mutation, tracks the last valid
+     * {@link PrivacySettingDisableLinkPreviewsAction#isPreviewsDisabled()} flag
+     * carried by a {@link SyncdOperation#SET}, and persists that single value
+     * via {@link com.github.auties00.cobalt.store.WhatsAppStore#setDisableLinkPreviews(boolean)}
+     * after the loop. Non-{@code SET} operations yield
+     * {@link MutationApplicationResult#unsupported()} and entries whose action
+     * payload is not a {@link PrivacySettingDisableLinkPreviewsAction} yield
+     * {@link MutationApplicationResult#malformed()}.
+     *
      * @implNote
-     * This implementation walks the batch once to classify each mutation,
-     * tracking the last valid {@code isPreviewsDisabled} flag from any
-     * {@link SyncdOperation#SET}, and persists that single value via
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setDisableLinkPreviews(boolean)}
-     * after the loop, mirroring WA Web's
-     * {@code setDisableLinkPreviewsToUserPrefs(r)} call site that runs
-     * once after the per-mutation closures complete.
+     * This implementation folds the latest valid value and persists once after
+     * the loop rather than writing on every {@link SyncdOperation#SET}, because
+     * the boolean is global and only its final value is observable.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDisableLinkPreviewsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -116,11 +112,15 @@ public final class DisableLinkPreviewsHandler implements WebAppStateActionHandle
     /**
      * {@inheritDoc}
      *
+     * <p>Rejects non-{@link SyncdOperation#SET} operations as
+     * {@link MutationApplicationResult#unsupported()} and action payloads that
+     * are not a {@link PrivacySettingDisableLinkPreviewsAction} as
+     * {@link MutationApplicationResult#malformed()}, then persists the value
+     * through {@link com.github.auties00.cobalt.store.WhatsAppStore#setDisableLinkPreviews(boolean)}.
+     *
      * @implNote
-     * This implementation persists the value eagerly via
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setDisableLinkPreviews(boolean)},
-     * skipping the "fold latest, persist once" optimisation reserved for
-     * {@link #applyMutationBatch(WhatsAppClient, List)}.
+     * This implementation persists the value eagerly rather than folding it,
+     * because a single mutation has no later value to supersede it.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDisableLinkPreviewsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

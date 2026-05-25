@@ -12,80 +12,59 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The addressing mode of a {@link SmaxMessagePublishNewsletterRequest}:
- * either a reply addressed by stanza-id and the targeted message's
- * server-id ({@link WithServerId}), or a brand-new post addressed by
- * stanza-id only ({@link WithClientIdOnly}).
+ * Closes the set of addressing modes a {@link SmaxMessagePublishNewsletterRequest} can carry.
  *
- * @apiNote
- * Pick {@link WithServerId} when publishing a question-response,
- * reaction, reaction-revoke, or poll-vote tied to a previously
- * delivered newsletter message; pick {@link WithClientIdOnly} when
- * publishing a brand-new newsletter message that may carry an
- * optional msg-meta-origin marker and an optional sender
- * content-type-media RCAT payload.
+ * <p>A publish is addressed in one of two ways. {@link WithServerId} references a previously
+ * delivered newsletter message by stanza id plus that message's server id; it is used for a
+ * question-response, reaction, reaction-revoke, or poll-vote tied to that message. {@link WithClientIdOnly}
+ * addresses a brand-new post by stanza id only, optionally carrying a msg-meta-origin marker and an
+ * optional sender content-type-media RCAT payload. In both arms the caller pre-builds the inner
+ * content as a {@link Node}, so this type does not model every newsletter publish payload shape.
  *
  * @implNote
- * This implementation models the WA Web
- * {@code clientNewsletterAndServerOrNewsletterIDMixinGroup}
- * disjunction as a sealed interface with two final implementations;
- * callers pre-build the inner content as a {@link Node} so this type
- * does not need to model every newsletter publish payload shape.
+ * This implementation models the WhatsApp Web
+ * {@code clientNewsletterAndServerOrNewsletterIDMixinGroup} disjunction as a sealed interface with two
+ * final implementations.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishClientNewsletterAndServerOrNewsletterIDMixinGroup")
 public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessagePublishNewsletterPayload.WithServerId, SmaxMessagePublishNewsletterPayload.WithClientIdOnly {
 
     /**
-     * The addressing variant for a publish that references a
-     * previously delivered newsletter message by its server-id.
+     * Represents the addressing variant for a publish that references a previously delivered
+     * newsletter message by its server id.
      *
-     * @apiNote
-     * Pick this variant for question-response, reaction,
-     * reaction-revoke, and poll-vote publishes. The
-     * {@link #innerContent()} field carries the pre-built variant
-     * payload shape.
+     * <p>This variant is used for question-response, reaction, reaction-revoke, and poll-vote
+     * publishes; {@link #innerContent()} carries the pre-built variant payload shape.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterClientAndServerIDMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterQuestionResponsePublishOrReactionOrReactionRevokeOrPollVoteMixinGroup")
     final class WithServerId implements SmaxMessagePublishNewsletterPayload {
         /**
-         * The locally-generated publish stanza id.
+         * Holds the locally-generated publish stanza id.
          */
         private final String stanzaId;
 
         /**
-         * The targeted message's server-id within the newsletter.
+         * Holds the targeted message's server id within the newsletter.
          */
         private final long messageServerId;
 
         /**
-         * The pre-built inner content payload.
-         *
-         * @apiNote
-         * One of the four
-         * {@code WASmaxOutMessagePublishNewsletter*} variants
-         * (question-response-publish, reaction, reaction-revoke,
-         * poll-vote); the caller selects the variant by constructing
-         * the appropriate node tree before passing it in.
+         * Holds the pre-built inner content payload, one of the four
+         * {@code WASmaxOutMessagePublishNewsletter*} variants (question-response-publish, reaction,
+         * reaction-revoke, poll-vote); the caller selects the variant by constructing the appropriate
+         * node tree before passing it in.
          */
         private final Node innerContent;
 
         /**
-         * Constructs a server-id-addressed payload.
+         * Constructs a server-id-addressed payload targeting a specific previously delivered newsletter
+         * message.
          *
-         * @apiNote
-         * Use this when assembling a
-         * {@link SmaxMessagePublishNewsletterRequest} that targets a
-         * specific previously delivered newsletter message.
-         *
-         * @param stanzaId        the publish stanza id; never
-         *                        {@code null}
-         * @param messageServerId the targeted message's server-id
-         * @param innerContent    the variant-shaped inner payload;
-         *                        never {@code null}
-         * @throws NullPointerException if {@code stanzaId} or
-         *                              {@code innerContent} is
-         *                              {@code null}
+         * @param stanzaId        the publish stanza id; never {@code null}
+         * @param messageServerId the targeted message's server id
+         * @param innerContent    the variant-shaped inner payload; never {@code null}
+         * @throws NullPointerException if {@code stanzaId} or {@code innerContent} is {@code null}
          */
         public WithServerId(String stanzaId, long messageServerId, Node innerContent) {
             this.stanzaId = Objects.requireNonNull(stanzaId, "stanzaId cannot be null");
@@ -103,21 +82,17 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         }
 
         /**
-         * Returns the targeted message's server-id.
+         * Returns the targeted message's server id.
          *
-         * @return the server-id
+         * @return the server id
          */
         public long messageServerId() {
             return messageServerId;
         }
 
         /**
-         * Returns the pre-built inner content node.
-         *
-         * @apiNote
-         * Read by
-         * {@link SmaxMessagePublishNewsletterRequest#toNode()} when
-         * fanning out the publish.
+         * Returns the pre-built inner content node read by
+         * {@link SmaxMessagePublishNewsletterRequest#toNode()} when fanning out the publish.
          *
          * @return the node; never {@code null}
          */
@@ -126,11 +101,10 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         }
 
         /**
-         * Compares this payload to another for value equality.
+         * Compares this payload to another object for value equality across every field.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a
-         *         {@link WithServerId} with identical fields
+         * @return {@code true} when {@code obj} is a {@link WithServerId} with identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -159,9 +133,7 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         /**
          * Returns a debug-friendly representation of this payload.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of any stable contract.
          *
          * @return the string form
          */
@@ -174,13 +146,12 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
     }
 
     /**
-     * The addressing variant for a brand-new newsletter post.
+     * Represents the addressing variant for a brand-new newsletter post that does not reference a
+     * prior message.
      *
-     * @apiNote
-     * Pick this variant for posting a new newsletter message that
-     * does not reference a prior message; the optional fields cover
-     * the origin marker (CTWA, ad, forward, etc.) and the media RCAT
-     * payload when the post carries non-text content.
+     * <p>This variant is used for posting a new text, media, poll-creation, edit, revoke, or question
+     * message. The optional fields cover the origin marker (CTWA, ad, forward, and similar) and the
+     * media RCAT payload carried when the post holds non-text content.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterClientIDMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterClientIdContent")
@@ -188,52 +159,37 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
     @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishSenderContentTypeMediaRCATMixin")
     final class WithClientIdOnly implements SmaxMessagePublishNewsletterPayload {
         /**
-         * The locally-generated publish stanza id.
+         * Holds the locally-generated publish stanza id.
          */
         private final String stanzaId;
 
         /**
-         * The optional pre-built msg-meta-origin marker child;
-         * {@code null} when the publish is not an origin-tagged
-         * broadcast.
+         * Holds the optional pre-built msg-meta-origin marker child; {@code null} when the publish is
+         * not an origin-tagged broadcast.
          */
         private final Node msgMetaOrigin;
 
         /**
-         * The optional pre-built sender content-type-media RCAT
-         * child carrying the {@code <plaintext mediatype="url"/>}
-         * plus {@code <rcat>...</rcat>} pair; {@code null} when the
-         * publish does not carry a media payload.
+         * Holds the optional pre-built sender content-type-media RCAT child carrying the
+         * {@code <plaintext mediatype="url"/>} plus {@code <rcat>...</rcat>} pair; {@code null} when
+         * the publish does not carry a media payload.
          */
         private final Node senderContentTypeMediaRcat;
 
         /**
-         * The pre-built inner client-id content payload.
+         * Holds the pre-built inner client-id content payload.
          */
         private final Node clientIdContent;
 
         /**
-         * Constructs a brand-new-post payload.
+         * Constructs a brand-new-post payload for a text, media, poll-creation, edit, revoke, or
+         * question message.
          *
-         * @apiNote
-         * Use this when assembling a
-         * {@link SmaxMessagePublishNewsletterRequest} for a new post
-         * (text, media, poll-creation, edit, revoke, question).
-         *
-         * @param stanzaId                   the publish stanza id;
-         *                                   never {@code null}
-         * @param msgMetaOrigin              the optional origin
-         *                                   marker child; may be
-         *                                   {@code null}
-         * @param senderContentTypeMediaRcat the optional media RCAT
-         *                                   child; may be
-         *                                   {@code null}
-         * @param clientIdContent            the inner client-id
-         *                                   content node; never
-         *                                   {@code null}
-         * @throws NullPointerException if {@code stanzaId} or
-         *                              {@code clientIdContent} is
-         *                              {@code null}
+         * @param stanzaId                   the publish stanza id; never {@code null}
+         * @param msgMetaOrigin              the optional origin marker child; may be {@code null}
+         * @param senderContentTypeMediaRcat the optional media RCAT child; may be {@code null}
+         * @param clientIdContent            the inner client-id content node; never {@code null}
+         * @throws NullPointerException if {@code stanzaId} or {@code clientIdContent} is {@code null}
          */
         public WithClientIdOnly(String stanzaId,
                                 Node msgMetaOrigin,
@@ -255,31 +211,23 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         }
 
         /**
-         * Returns the optional msg-meta-origin child.
+         * Returns the optional msg-meta-origin child read by
+         * {@link SmaxMessagePublishNewsletterRequest#toNode()} when folding the marker into the message
+         * body.
          *
-         * @apiNote
-         * Read by
-         * {@link SmaxMessagePublishNewsletterRequest#toNode()} when
-         * folding the marker into the message body.
-         *
-         * @return an {@link Optional} carrying the node, or
-         *         {@link Optional#empty()} when omitted
+         * @return an {@link Optional} carrying the node, or {@link Optional#empty()} when omitted
          */
         public Optional<Node> msgMetaOrigin() {
             return Optional.ofNullable(msgMetaOrigin);
         }
 
         /**
-         * Returns the optional sender content-type-media RCAT child.
+         * Returns the optional sender content-type-media RCAT child read by
+         * {@link SmaxMessagePublishNewsletterRequest#toNode()} when folding the media payload into the
+         * message body.
          *
-         * @apiNote
-         * Read by
-         * {@link SmaxMessagePublishNewsletterRequest#toNode()} when
-         * folding the media payload into the message body.
-         *
-         * @return an {@link Optional} carrying the node, or
-         *         {@link Optional#empty()} when no media payload is
-         *         being sent
+         * @return an {@link Optional} carrying the node, or {@link Optional#empty()} when no media
+         *         payload is being sent
          */
         public Optional<Node> senderContentTypeMediaRcat() {
             return Optional.ofNullable(senderContentTypeMediaRcat);
@@ -295,11 +243,10 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         }
 
         /**
-         * Compares this payload to another for value equality.
+         * Compares this payload to another object for value equality across every field.
          *
          * @param obj the object to compare against
-         * @return {@code true} when {@code obj} is a
-         *         {@link WithClientIdOnly} with identical fields
+         * @return {@code true} when {@code obj} is a {@link WithClientIdOnly} with identical fields
          */
         @Override
         public boolean equals(Object obj) {
@@ -329,9 +276,7 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         /**
          * Returns a debug-friendly representation of this payload.
          *
-         * @apiNote
-         * Intended for logging; the format is not part of the public
-         * contract.
+         * <p>The format is intended for logging and is not part of any stable contract.
          *
          * @return the string form
          */

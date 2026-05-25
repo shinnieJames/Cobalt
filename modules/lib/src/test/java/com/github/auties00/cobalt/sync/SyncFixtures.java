@@ -29,41 +29,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Loads sync-package fixtures captured from a live WhatsApp Web
- * session and exposes them to JUnit tests.
- *
- * <p>The class understands four kinds of artefact, all rooted at
- * {@link #FIXTURE_ROOT}:
- * <ul>
- *   <li>JSONL stanza captures written by the MCP tool
- *       {@code web_live_stanza_dump_to_file}; reconstructed back into
- *       Cobalt {@link Node} instances through
- *       {@link #loadEvents(String)} and
- *       {@link #buildNodeFromEvent(JSONObject)}.</li>
- *   <li>{@code .expected.json} oracle outputs written by
- *       {@code web_live_debug_eval_to_file}; exposed as raw
- *       {@link JSONObject} so individual tests can pick the fields
- *       they care about.</li>
- *   <li>{@code .synckey.bin} binary fixtures carrying the 32-byte
- *       sync-key material that pairs with a given encrypted-mutation
- *       oracle, loaded byte-for-byte through
- *       {@link #loadSyncKey(String)}.</li>
- *   <li>Per-syncType history-sync triplets under
- *       {@code history/<slug>/} carrying the inflated chunk bytes,
- *       the parsed value oracle, and the introducing notification.</li>
- * </ul>
- *
- * @apiNote Cobalt-internal helper for the sync test suite; not part of
- * the public API. The class deliberately mirrors
- * {@code com.github.auties00.cobalt.device.DeviceFixtures} because
- * the JSON-tree-walking decoder is generic across packages and only
- * the {@link #FIXTURE_ROOT} differs.
- *
- * @implNote This implementation pre-walks the JSON tree manually
- * instead of using the protobuf-JSON binding; the captured trees
- * carry WA Web's internal JID wrappers ({@code {"$1": {...}}}) and a
- * binary leaf shape ({@code {"kind": "binary", "base64": "..."}})
- * that the protobuf binding does not understand.
+ * Test helper that loads sync-package fixtures captured from a live WhatsApp Web session and exposes
+ * them to the JUnit suites in this package. All artefacts are rooted at {@link #FIXTURE_ROOT}:
+ * JSONL stanza captures (reconstructed into Cobalt {@link Node} instances), {@code .expected.json}
+ * oracle outputs, {@code .synckey.bin} binary sync-key material, and per-syncType history-sync
+ * triplets under {@code history/<slug>/}. The captured trees carry WA Web's internal JID wrappers
+ * ({@code {"$1": {...}}}) and a binary leaf shape ({@code {"kind": "binary", "base64": "..."}}), so
+ * the tree is walked manually here rather than through the protobuf-JSON binding, which does not
+ * understand those shapes.
  */
 public final class SyncFixtures {
     /**
@@ -85,10 +58,9 @@ public final class SyncFixtures {
      * Returns every captured stanza event in the named JSONL fixture,
      * preserving capture order.
      *
-     * @apiNote Consumed by tests that walk a full session capture
-     * (server hello, IQ requests, IQ responses) rather than picking
-     * a single event. The {@code event} subobject inside each line
-     * is what the MCP stanza logger emits as the canonical record.
+     * <p>Each line carries an {@code event} subobject, the canonical
+     * record emitted by the stanza logger; that subobject is what is
+     * returned.
      *
      * @param topic the fixture topic (for example
      *              {@code "exchange/regular-low/upload-archive"}),
@@ -126,11 +98,8 @@ public final class SyncFixtures {
      * Returns the first event in the named fixture matching a tag
      * and an attribute filter.
      *
-     * @apiNote Consumed by tests that need to assert against a
-     * specific stanza inside a busy capture (for example the
-     * {@code <iq result>} that closes a known request); the
-     * attribute filter narrows on key/value pairs that uniquely
-     * identify the event.
+     * <p>The attribute filter narrows on key/value pairs that uniquely
+     * identify the wanted stanza inside a busy capture.
      *
      * @param topic the fixture topic
      * @param tag   the required stanza tag, or {@code null} to match
@@ -165,13 +134,10 @@ public final class SyncFixtures {
      * Reconstructs a Cobalt {@link Node} from the {@code node}
      * subtree of a captured event.
      *
-     * @apiNote Consumed by tests that want to feed a captured stanza
-     * back through Cobalt's parsing path. Walks the recursive
-     * plain-JSON shape emitted by the MCP stanza logger:
-     * {@code tag}, {@code attrs}, and {@code content}, with binary
-     * leaves wrapped as
-     * {@code {"kind": "binary", "base64": "..."}} and nested
-     * children as arrays of the same shape.
+     * <p>Walks the recursive plain-JSON shape emitted by the stanza
+     * logger ({@code tag}, {@code attrs}, {@code content}), with binary
+     * leaves wrapped as {@code {"kind": "binary", "base64": "..."}} and
+     * nested children as arrays of the same shape.
      *
      * @param event the event object from
      *              {@link #loadEvents(String)}
@@ -190,11 +156,7 @@ public final class SyncFixtures {
 
     /**
      * Recursively reconstructs a {@link Node} from a captured
-     * plain-JSON tree.
-     *
-     * @apiNote Consumed by tests that already hold a tree subobject
-     * from a sibling helper and want to skip the
-     * {@code event["node"]} unwrap step.
+     * plain-JSON tree, skipping the {@code event["node"]} unwrap step.
      *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed node
@@ -209,10 +171,10 @@ public final class SyncFixtures {
      * Returns the expected-output JSON document paired with the
      * named fixture topic.
      *
-     * @apiNote Loaded from {@code <topic>.expected.json} alongside
-     * the stanza capture; the wrapper shape depends on the capture
-     * tool ({@code web_live_debug_eval_to_file} returns the eval
-     * outcome wrapper, plain capture tools return the raw oracle).
+     * <p>Loaded from {@code <topic>.expected.json} alongside the stanza
+     * capture; the wrapper shape depends on the capture tool (an eval
+     * capture returns the eval-outcome wrapper, a plain capture returns
+     * the raw oracle).
      *
      * @param topic the fixture topic
      * @return the parsed expected document
@@ -231,16 +193,15 @@ public final class SyncFixtures {
 
     /**
      * Returns the inner result document for an eval-style oracle
-     * fixture, unwrapping the
-     * {@code result.value} stringification done by the live runtime.
+     * fixture, unwrapping the {@code result.value} stringification done
+     * by the live runtime.
      *
-     * @apiNote {@code web_live_debug_eval_to_file} captures wrap the
-     * evaluation outcome as
+     * <p>Eval captures wrap the outcome as
      * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}
-     * because the live runtime stringifies the result before
-     * returning it through CDP, avoiding structured-clone hazards.
-     * This helper undoes that stringification so tests can assert
-     * against the inner document directly.
+     * because the live runtime stringifies the result before returning
+     * it through CDP, avoiding structured-clone hazards; this helper
+     * undoes that stringification so tests assert against the inner
+     * document directly.
      *
      * @param topic the fixture topic
      * @return the parsed inner result document
@@ -264,15 +225,13 @@ public final class SyncFixtures {
 
     /**
      * Decodes a base64-encoded byte field out of an oracle document
-     * by walking a dotted field path.
+     * by walking a dotted field path (for example
+     * {@code "patch.snapshotMac"} or {@code "indexKey"}).
      *
-     * @apiNote Live oracle expressions cannot transport raw
+     * <p>Live oracle expressions cannot transport raw
      * {@code Uint8Array} payloads through CDP, so byte fields are
-     * wrapped as {@code {"base64": "..."}} objects on the WA Web
-     * side. This helper walks a dotted path
-     * (for example {@code "patch.snapshotMac"} or
-     * {@code "indexKey"}) and decodes the payload back into a
-     * {@code byte[]}.
+     * wrapped as {@code {"base64": "..."}} objects on the WA Web side
+     * and decoded back into a {@code byte[]} here.
      *
      * @param oracle    the oracle JSON document (from
      *                  {@link #loadOracle(String)} or an inner
@@ -314,11 +273,9 @@ public final class SyncFixtures {
      * Returns the raw sync-key bytes captured alongside the named
      * fixture.
      *
-     * @apiNote Consumed by encrypted-mutation tests that need to
-     * drive {@code MutationKeys.ofSyncKey(...)} with the same key
-     * material the captured payload was encrypted under. The key is
-     * stored as a binary sibling to the JSONL/expected.json files so
-     * it never gets stringified through JSON.
+     * <p>The key is the material the captured payload was encrypted
+     * under, stored as a binary sibling to the JSONL and expected.json
+     * files so it is never stringified through JSON.
      *
      * @param topic the fixture topic
      * @return the raw sync-key bytes (32 bytes for a valid
@@ -338,10 +295,7 @@ public final class SyncFixtures {
 
     /**
      * Returns whether a JSONL stanza fixture exists for the given
-     * topic.
-     *
-     * @apiNote Used as a precondition by tests that drive against a
-     * captured stanza; oracle-only fixtures should be probed through
+     * topic. Oracle-only fixtures are probed through
      * {@link #findExpected(String)} instead.
      *
      * @param topic the fixture topic
@@ -356,9 +310,6 @@ public final class SyncFixtures {
      * Returns whether an expected-output document exists for the
      * given topic.
      *
-     * @apiNote Used as a precondition by tests that assert against
-     * the oracle without touching the stanza capture.
-     *
      * @param topic the fixture topic
      * @return {@code true} when {@code <topic>.expected.json} is on
      *         the classpath
@@ -369,11 +320,8 @@ public final class SyncFixtures {
 
     /**
      * Returns the expected-output document for the given topic, or
-     * {@link Optional#empty()} when none is on the classpath.
-     *
-     * @apiNote Used by tests that have an expected document for some
-     * variants but not others and want to skip cleanly when the
-     * fixture is absent.
+     * {@link Optional#empty()} when none is on the classpath, allowing
+     * callers to skip cleanly when the fixture is absent.
      *
      * @param topic the fixture topic
      * @return the parsed document wrapped in {@link Optional}, or
@@ -395,19 +343,14 @@ public final class SyncFixtures {
      * Returns whether the per-syncType history-sync fixture triplet
      * exists for the given chunk-type slug.
      *
-     * @apiNote Used as a precondition by
-     * {@link WebHistorySyncServiceLiveOracleTest} per-syncType
-     * blocks. History-sync fixtures live under
+     * <p>History-sync fixtures live under
      * {@code fixtures/sync/history/<slug>/} as a triplet
      * ({@code notification.json}, {@code chunk.b64},
-     * {@code expected.json}) rather than the flat {@code .jsonl}
-     * layout of stanza fixtures, so they cannot use
-     * {@link #isAvailable(String)}.
-     *
-     * @implNote This implementation only probes the
-     * {@code chunk.b64} file because the three siblings are always
-     * written together by
-     * {@code src/test/resources/fixtures/sync/split-history.mjs}.
+     * {@code expected.json}) rather than the flat {@code .jsonl} layout
+     * of stanza fixtures, so they cannot use
+     * {@link #isAvailable(String)}. Only the {@code chunk.b64} file is
+     * probed because the three siblings are always written together by
+     * the {@code split-history.mjs} splitter script.
      *
      * @param typeSlug the chunk-type slug (for example
      *                 {@code "initial-bootstrap"} or
@@ -425,13 +368,9 @@ public final class SyncFixtures {
      * Returns the inflated {@code HistorySync} protobuf bytes
      * captured for the named chunk-type slug.
      *
-     * @apiNote The bytes are the plaintext payload that
-     * {@code WAWebHandleHistorySyncChunk.handleHistorySyncChunk}
-     * feeds into
-     * {@code decodeProtobuf(WAWebProtobufsHistorySync.pb.HistorySyncSpec, ...)}
-     * after the encrypted CDN blob has been decrypted and
-     * gzip-inflated, or after the inline bootstrap payload has been
-     * inflated. They round-trip to the value carried by the sibling
+     * <p>The bytes are the plaintext history-sync payload (the CDN blob
+     * after decrypt-and-inflate, or the inline bootstrap payload after
+     * inflate); they round-trip to the value carried by the sibling
      * {@code expected.json} document.
      *
      * @param typeSlug the chunk-type slug
@@ -454,13 +393,9 @@ public final class SyncFixtures {
      * Returns the {@code HistorySync} oracle JSON for the named
      * chunk-type slug.
      *
-     * @apiNote This is the parsed protobuf value that
-     * {@code WAWebHandleHistorySyncChunk.handleHistorySyncChunk}
-     * obtains from
-     * {@code decodeProtobuf(HistorySyncSpec, inflatedBytes)},
-     * captured verbatim through the in-page {@code __hs_capture}
-     * hook installed by
-     * {@code src/test/resources/fixtures/sync/split-history.mjs}.
+     * <p>This is the parsed protobuf value WA Web decodes from the
+     * inflated bytes, captured verbatim through an in-page hook
+     * installed by the {@code split-history.mjs} splitter script.
      *
      * @param typeSlug the chunk-type slug
      * @return the oracle document
@@ -482,13 +417,12 @@ public final class SyncFixtures {
      * (in its pre-decode protobuf-JSON form) paired with the named
      * chunk-type slug.
      *
-     * @apiNote The notification carries the {@code syncType},
+     * <p>The notification carries the {@code syncType},
      * {@code chunkOrder}, optional
-     * {@code initialHistBootstrapInlinePayload} (gzip-compressed
-     * inline chunk), and the {@code directPath} / {@code mediaKey}
-     * download options. The outer wrapper additionally exposes
-     * {@code msgKey} and {@code progress} pulled out of the WA Web
-     * dispatcher context.
+     * {@code initialHistBootstrapInlinePayload} (gzip-compressed inline
+     * chunk), and the {@code directPath} / {@code mediaKey} download
+     * options. The outer wrapper additionally exposes {@code msgKey} and
+     * {@code progress} pulled out of the WA Web dispatcher context.
      *
      * @param typeSlug the chunk-type slug
      * @return the notification document
@@ -509,25 +443,20 @@ public final class SyncFixtures {
      * Builds an in-memory temporary store seeded with a self-PN, a
      * self-LID, and one app-state sync key.
      *
-     * @apiNote Encrypted-mutation tests need a store that already
-     * knows the sync key the captured payload was encrypted under;
-     * otherwise the decryption path takes the missing-key branch.
-     * This helper wraps {@link DeviceFixtures#temporaryStore(Jid, Jid)}
-     * and inserts a single {@link AppStateSyncKey} carrying the
-     * supplied id and key material.
-     *
-     * @implNote The {@link AppStateSyncKeyData} timestamp is set to
-     * {@link Instant#now()} because the decryption path does not
-     * inspect it; the test fixture only needs the key id and the
-     * 32-byte key bytes to round-trip.
+     * <p>Encrypted-mutation tests need a store that already knows the
+     * sync key the captured payload was encrypted under, otherwise the
+     * decryption path takes the missing-key branch. This helper wraps
+     * {@link DeviceFixtures#temporaryStore(Jid, Jid)} and inserts a
+     * single {@link AppStateSyncKey} carrying the supplied id and key
+     * material. The {@link AppStateSyncKeyData} timestamp is set to
+     * {@link Instant#now()} because the decryption path does not inspect
+     * it; only the key id and the 32-byte key bytes need to round-trip.
      *
      * @param selfPn      the local user's PN-form bare JID
      * @param selfLid     the local user's LID-form bare JID, or
      *                    {@code null} for a pre-LID-migration store
      * @param syncKeyId   the sync key's raw id bytes (typically a
-     *                    SHA-256 prefix; WA Web's
-     *                    {@code WAWebSyncdMutationsCryptoUtils} uses
-     *                    the raw id verbatim)
+     *                    SHA-256 prefix, used verbatim)
      * @param syncKeyData the 32-byte symmetric key material
      * @return the configured temporary store with the key planted
      */
@@ -551,12 +480,9 @@ public final class SyncFixtures {
     }
 
     /**
-     * Opens the named classpath resource.
-     *
-     * @apiNote Internal helper used by every loader. Surfaces a
-     * dedicated {@link IOException} when the resource is missing so
-     * the wrapping {@link UncheckedIOException} carries a clear
-     * cause.
+     * Opens the named classpath resource, surfacing a dedicated
+     * {@link IOException} when it is missing so the wrapping
+     * {@link UncheckedIOException} carries a clear cause.
      *
      * @param resourcePath the resource path under
      *                     {@code src/test/resources/}
@@ -576,15 +502,12 @@ public final class SyncFixtures {
      * Cobalt {@link NodeBuilder#attribute(String, String)} setter
      * expects.
      *
-     * @apiNote Internal helper used by {@link #buildNode(JSONObject)}.
-     * The MCP stanza logger captures WA Web's internal Jid wrappers
-     * as
+     * <p>The stanza logger captures WA Web's internal Jid wrappers as
      * {@code {"$1": {"type": <int>, "user": <string|null>, "server": <string>}}};
      * Cobalt's {@link Node} carries those same JIDs as bare strings of
      * the form {@code user@server} (or just {@code @server} when
-     * {@code user} is {@code null}, mirroring the WA Web
-     * {@code S_WHATSAPP_NET}-style server JIDs). Any other shape is
-     * delegated to {@link String#valueOf(Object)}.
+     * {@code user} is {@code null}). Any other shape is delegated to
+     * {@link String#valueOf(Object)}.
      *
      * @param value the raw captured attribute value
      * @return the string-form value
@@ -602,10 +525,6 @@ public final class SyncFixtures {
     /**
      * Decodes a binary leaf object into raw bytes.
      *
-     * @apiNote Internal helper used by
-     * {@link #buildNode(JSONObject)} and
-     * {@link #applyContent(NodeBuilder, Object)}.
-     *
      * @param binary the {@code {kind: "binary", base64: "..."}}
      *               object
      * @return the decoded bytes
@@ -621,10 +540,7 @@ public final class SyncFixtures {
     }
 
     /**
-     * Builds a {@link Node} from a plain-JSON tree.
-     *
-     * @apiNote Internal recursive helper invoked by every
-     * {@code buildNodeFrom*} entry point.
+     * Builds a {@link Node} from a plain-JSON tree, recursively.
      *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed node
@@ -656,11 +572,9 @@ public final class SyncFixtures {
     /**
      * Applies a {@code content} value onto the supplied builder.
      *
-     * @apiNote Internal helper used by
-     * {@link #buildNode(JSONObject)}. Handles the four shapes the
-     * MCP stanza logger emits for the {@code content} field: a
-     * binary leaf object, a child array (with optional inline binary
-     * sibling), a raw string, or {@code null}.
+     * <p>Handles the four shapes the stanza logger emits for the
+     * {@code content} field: a binary leaf object, a child array (with
+     * optional inline binary sibling), a raw string, or {@code null}.
      *
      * @param builder the target {@link NodeBuilder}
      * @param content the JSON-shaped content value, possibly

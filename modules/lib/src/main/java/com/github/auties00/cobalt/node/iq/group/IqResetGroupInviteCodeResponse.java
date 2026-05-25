@@ -11,47 +11,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound reply variants the relay produces in
- * response to an {@link IqResetGroupInviteCodeRequest}.
+ * Models the sealed family of inbound reply variants the relay produces in response to an {@link IqResetGroupInviteCodeRequest}.
  *
- * @apiNote
- * After dispatching the rotate request, pattern-match the returned
- * variant: {@link Success} carries the freshly-issued invite code,
- * {@link ClientError} surfaces caller-side rejections (typically
- * {@code 403} when the caller is not a group admin or {@code 404}
- * when the group no longer exists), and {@link ServerError} surfaces
- * transient {@code 5xx} relay failures that may be retried.
+ * <p>After dispatching the rotate request, callers pattern-match the returned variant.
+ * {@link Success} carries the freshly-issued invite code, {@link ClientError} surfaces caller-side
+ * rejections (typically {@code 403} when the caller is not a group admin or {@code 404} when the
+ * group no longer exists), and {@link ServerError} surfaces transient {@code 5xx} relay failures
+ * that may be retried.
  *
  * @implNote
- * This implementation collapses WA Web's
- * {@code WAWebGroupInviteJob.resetGroupInviteCode} promise-rejection
- * surface into a sealed sum: the JS path either resolves with the
- * parser's {@code {code}} object or rejects with a
- * {@code ServerStatusCodeError}; Cobalt routes both into one typed
- * sealed family so callers can match against a closed set.
+ * This implementation routes both the resolved success object and the rejected error envelope into
+ * one typed sealed family so callers can match against a closed set.
  */
 @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
 public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Response
         permits IqResetGroupInviteCodeResponse.Success, IqResetGroupInviteCodeResponse.ClientError, IqResetGroupInviteCodeResponse.ServerError {
 
     /**
-     * Tries each {@link IqResetGroupInviteCodeResponse} variant in
-     * priority order and returns the first that parses cleanly.
+     * Tries each {@link IqResetGroupInviteCodeResponse} variant in priority order and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Use this when dispatching the request through the typed
-     * {@link IqOperation} pipeline; the dispatcher hands the inbound
-     * {@link Node} together with the original outbound request so that
-     * each variant can correlate echoed identifiers before claiming a
-     * match. Returns {@link Optional#empty()} when none of the
-     * documented shapes match, which the caller should treat as an
-     * unknown server reply and surface up.
+     * <p>The dispatcher hands the inbound {@link Node} together with the original outbound request
+     * so that each variant can correlate echoed identifiers before claiming a match. Returns
+     * {@link Optional#empty()} when none of the documented shapes match, which the caller should
+     * treat as an unknown server reply and surface up.
      *
      * @implNote
-     * This implementation tries {@link Success} first, then
-     * {@link ClientError}, then {@link ServerError}; the order matches
-     * WA Web's parser fall-through where the success path is asserted
-     * before any error envelope is inspected.
+     * This implementation tries {@link Success} first, then {@link ClientError}, then
+     * {@link ServerError}, asserting the success path before any error envelope is inspected.
      *
      * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza used to validate echoed identifiers; never {@code null}
@@ -75,31 +61,26 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code Success} reply variant.
+     * Models the success reply variant carrying the freshly-rotated invite code.
      *
-     * @apiNote
-     * Carries the freshly-rotated invite code echoed by the relay
-     * inside {@code <invite code="..."/>}; callers should overwrite
-     * any cached {@code chat.whatsapp.com/<code>} URL with this new
-     * value before surfacing the result to the user.
+     * <p>Carries the freshly-rotated invite code echoed by the relay inside
+     * {@code <invite code="..."/>}; callers should overwrite any cached
+     * {@code chat.whatsapp.com/<code>} URL with this new value before surfacing the result to the
+     * user.
      *
      * @implNote
-     * This implementation projects WA Web's
-     * {@code queryGroupInviteCodeParser} return shape
-     * ({@code {code: <invite-code-string>}}) into a single
-     * {@link #code()} accessor; the parser reads the {@code code}
-     * attribute on the {@code <invite>} child of the result envelope.
+     * This implementation reads the {@code code} attribute on the {@code <invite>} child of the
+     * result envelope into the single {@link #code()} accessor.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class Success implements IqResetGroupInviteCodeResponse {
         /**
-         * The freshly-rotated invite code.
+         * Holds the freshly-rotated invite code.
          */
         private final String code;
 
         /**
-         * Constructs a {@link Success} reply carrying the given
-         * invite code.
+         * Constructs a success reply carrying the given invite code.
          *
          * @param code the new invite code; never {@code null}
          * @throws NullPointerException if {@code code} is {@code null}
@@ -118,25 +99,17 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqResetGroupInviteCodeResponse#of(Node, Node)}; this
-         * factory is exposed so callers can short-circuit when they
-         * already know the wire shape is a success.
+         * <p>Callers normally reach this through
+         * {@link IqResetGroupInviteCodeResponse#of(Node, Node)}; this factory is exposed so callers
+         * can short-circuit when they already know the wire shape is a success.
          *
          * @implNote
-         * This implementation first runs
-         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} to
-         * confirm the envelope is an IQ {@code result} matching the
-         * request id, then mirrors WA Web's
-         * {@code queryGroupInviteCodeParser}: reads the {@code <invite>}
-         * child and extracts its {@code code} attribute. Missing
-         * either yields {@link Optional#empty()}, matching the
-         * fall-through behaviour the caller expects when the stanza
-         * is actually an error envelope.
+         * This implementation first runs {@link SmaxIqResultResponseMixin#validate(Node, Node)} to
+         * confirm the envelope is an IQ {@code result} matching the request id, then reads the
+         * {@code <invite>} child and extracts its {@code code} attribute; missing either yields
+         * {@link Optional#empty()} so the caller can fall through to an error envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -160,6 +133,14 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
             return Optional.of(new Success(code));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #code()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -172,11 +153,21 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
             return Objects.equals(this.code, that.code);
         }
 
+        /**
+         * Returns a hash code derived from the invite code.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(code);
         }
 
+        /**
+         * Returns a debug string describing the invite code.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqResetGroupInviteCodeResponse.Success[code=" + code + ']';
@@ -184,37 +175,31 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * Models the client-error reply variant for envelope-level caller-side rejections.
      *
-     * @apiNote
-     * Surfaces caller-side rejections of the rotate request:
-     * typically {@code 403} when the caller is not an admin of the
-     * target group, {@code 404} when the group does not exist, or
-     * {@code 400} on a malformed stanza. Retrying the same request
-     * is pointless; the caller must surface the failure to the user.
+     * <p>Surfaces caller-side rejections of the rotate request: typically {@code 403} when the
+     * caller is not an admin of the target group, {@code 404} when the group does not exist, or
+     * {@code 400} on a malformed stanza. Retrying the same request is pointless; the caller must
+     * surface the failure to the user.
      *
      * @implNote
-     * This implementation corresponds to the {@code 4xx} branch of
-     * WA Web's {@code ServerStatusCodeError} promise rejection inside
-     * {@code resetGroupInviteCode}; the {@code <error>} envelope's
-     * {@code code} and {@code text} attributes feed
-     * {@link #errorCode()} and {@link #errorText()}.
+     * This implementation reads the {@code <error>} envelope's {@code code} and {@code text}
+     * attributes into {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class ClientError implements IqResetGroupInviteCodeResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text when the relay supplied one,
-         * otherwise {@code null}.
+         * Holds the human-readable error text when the relay supplied one, otherwise {@code null}.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ClientError} reply.
+         * Constructs a client-error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -243,23 +228,17 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqResetGroupInviteCodeResponse#of(Node, Node)}; this
-         * factory is exposed so callers can short-circuit when they
-         * already know the wire shape is a client error.
+         * <p>Callers normally reach this through
+         * {@link IqResetGroupInviteCodeResponse#of(Node, Node)}; this factory is exposed so callers
+         * can short-circuit when they already know the wire shape is a client error.
          *
          * @implNote
          * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * which validates the IQ envelope's {@code type="error"}
-         * attribute and the {@code <error>} child's {@code code} in
-         * the {@code 4xx} range before extracting code/text. WA Web
-         * raises {@code ServerStatusCodeError} from the same wire
-         * shape; Cobalt yields a typed variant instead.
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which validates the IQ
+         * envelope's {@code type="error"} attribute and the {@code <error>} child's {@code code} in
+         * the {@code 4xx} range before extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -275,6 +254,15 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #errorCode()} and the same
+         * {@link #errorText()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -288,11 +276,21 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string describing the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqResetGroupInviteCodeResponse.ClientError[errorCode=" + errorCode
@@ -301,34 +299,29 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * Models the server-error reply variant for transient relay failures.
      *
-     * @apiNote
-     * Surfaces transient {@code 5xx} relay failures while rotating
-     * the invite code; the request may be retried after a backoff.
+     * <p>Surfaces transient {@code 5xx} relay failures while rotating the invite code; the request
+     * may be retried after a backoff.
      *
      * @implNote
-     * This implementation corresponds to the {@code 5xx} branch of
-     * WA Web's {@code ServerStatusCodeError} promise rejection inside
-     * {@code resetGroupInviteCode}; the {@code <error>} envelope's
-     * {@code code} and {@code text} attributes feed
-     * {@link #errorCode()} and {@link #errorText()}.
+     * This implementation reads the {@code <error>} envelope's {@code code} and {@code text}
+     * attributes into {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupInviteJob")
     final class ServerError implements IqResetGroupInviteCodeResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text when the relay supplied one,
-         * otherwise {@code null}.
+         * Holds the human-readable error text when the relay supplied one, otherwise {@code null}.
          */
         private final String errorText;
 
         /**
-         * Constructs a {@link ServerError} reply.
+         * Constructs a server-error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -357,20 +350,16 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The caller normally goes through
-         * {@link IqResetGroupInviteCodeResponse#of(Node, Node)}; this
-         * factory is exposed so callers can short-circuit when they
-         * already know the wire shape is a server error.
+         * <p>Callers normally reach this through
+         * {@link IqResetGroupInviteCodeResponse#of(Node, Node)}; this factory is exposed so callers
+         * can short-circuit when they already know the wire shape is a server error.
          *
          * @implNote
          * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which validates the IQ envelope's {@code type="error"}
-         * attribute and the {@code <error>} child's {@code code} in
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which validates the IQ
+         * envelope's {@code type="error"} attribute and the {@code <error>} child's {@code code} in
          * the {@code 5xx} range before extracting code/text.
          *
          * @param node    the inbound IQ stanza
@@ -387,6 +376,15 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this reply with another object for equality.
+         *
+         * <p>Two replies are equal when they carry the same {@link #errorCode()} and the same
+         * {@link #errorText()}.
+         *
+         * @param obj the object to compare with; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal reply, {@code false} otherwise
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -400,11 +398,21 @@ public sealed interface IqResetGroupInviteCodeResponse extends IqOperation.Respo
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the error code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string describing the error code and text.
+         *
+         * @return the string representation
+         */
         @Override
         public String toString() {
             return "IqResetGroupInviteCodeResponse.ServerError[errorCode=" + errorCode

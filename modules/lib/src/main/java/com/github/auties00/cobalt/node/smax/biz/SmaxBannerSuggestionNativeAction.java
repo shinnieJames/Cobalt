@@ -8,48 +8,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A single {@code <native_action/>} entry under the CTWA banner-suggestion
- * {@link SmaxBannerSuggestionNativeActionsMixin native-actions mixin},
- * describing one platform's deep-link target.
- *
- * @apiNote
- * Each entry is keyed by a {@link #platform()} string (one of
- * {@code "web"}, {@code "ios"}, {@code "android"}); WA Web's
- * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion} picks the
- * {@code "web"} entry and uses {@link #localLink()} as the banner CTA's
- * navigation target. {@link #minAppVersion()} gates rendering when the
- * client app is too old for the deep link.
+ * Models a single {@code <native_action/>} entry under the CTWA
+ * banner-suggestion {@link SmaxBannerSuggestionNativeActionsMixin native-actions
+ * mixin}, describing one platform's deep-link target.
+ * <p>
+ * Each entry is keyed by a {@link #platform()} string (one of {@code "web"},
+ * {@code "ios"}, {@code "android"}); the consumer picks the entry matching its
+ * runtime and uses {@link #localLink()} as the banner call-to-action's
+ * navigation target. {@link #minAppVersion()} gates rendering when the client
+ * app is too old for the deep link.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionNativeActionsMixinMixin")
 public final class SmaxBannerSuggestionNativeAction {
     /**
-     * The mandatory {@code platform} attribute (for example {@code "web"},
-     * {@code "ios"}, {@code "android"}).
+     * Holds the mandatory {@code platform} attribute, for example
+     * {@code "web"}, {@code "ios"}, or {@code "android"}.
      */
     private final String platform;
 
     /**
-     * The mandatory {@code min_app_version} attribute.
+     * Holds the mandatory {@code min_app_version} attribute.
      */
     private final String minAppVersion;
 
     /**
-     * The mandatory {@code local_link} attribute (deep-link URL).
+     * Holds the mandatory {@code local_link} attribute, the deep-link URL.
      */
     private final String localLink;
 
     /**
-     * The optional {@code universal_link} attribute.
+     * Holds the optional {@code universal_link} attribute.
      */
     private final String universalLink;
 
     /**
      * Constructs an entry from already-validated wire values.
-     *
-     * @apiNote
-     * Cobalt callers normally obtain an entry by parsing a node via
-     * {@link #of(Node)}; this constructor is exposed for tests and for
-     * hand-built fixtures.
+     * <p>
+     * Callers normally obtain an entry by parsing a node via {@link #of(Node)};
+     * this constructor is exposed for tests and for hand-built fixtures.
      *
      * @param platform      the platform identifier; never {@code null}
      * @param minAppVersion the minimum client version; never {@code null}
@@ -69,10 +65,8 @@ public final class SmaxBannerSuggestionNativeAction {
 
     /**
      * Returns the platform identifier.
-     *
-     * @apiNote
-     * Used by consumers to filter for the entry matching their runtime
-     * (WA Web filters for {@code "web"}).
+     * <p>
+     * Used by consumers to filter for the entry matching their runtime.
      *
      * @return the platform identifier; never {@code null}
      */
@@ -82,12 +76,10 @@ public final class SmaxBannerSuggestionNativeAction {
 
     /**
      * Returns the minimum client version.
-     *
-     * @apiNote
-     * WA Web compares this against its sanitised client version via
-     * {@code WAWebUpdaterVersion.Version} and skips rendering when the
-     * client is too old; the value uses the same dotted-component
-     * format as the sanitised version string.
+     * <p>
+     * Consumers compare this against the sanitised client version and skip
+     * rendering when the client is too old; the value uses the same
+     * dotted-component format as the sanitised version string.
      *
      * @return the version string; never {@code null}
      */
@@ -97,12 +89,10 @@ public final class SmaxBannerSuggestionNativeAction {
 
     /**
      * Returns the deep-link URL.
-     *
-     * @apiNote
-     * Used as the navigation target when the entry matches the client
-     * platform; WA Web routes it through
-     * {@code WAWebApiParse.parseAPICmd} to support both API-style deep
-     * links ({@code "MANAGE_ADS"}, etc.) and bare HTTPS URLs.
+     * <p>
+     * Used as the navigation target when the entry matches the client platform;
+     * the value supports both API-style deep links (such as {@code "MANAGE_ADS"})
+     * and bare HTTPS URLs.
      *
      * @return the local link; never {@code null}
      */
@@ -112,14 +102,12 @@ public final class SmaxBannerSuggestionNativeAction {
 
     /**
      * Returns the optional universal-link URL.
-     *
-     * @apiNote
+     * <p>
      * Cross-platform deep link kept as a fallback alongside
-     * {@link #localLink()}; not consumed by the WA Web banner pipeline
-     * today.
+     * {@link #localLink()}; not consumed by the Web banner pipeline today.
      *
-     * @return an {@link Optional} carrying the universal link, or empty
-     *         when the relay omitted the attribute
+     * @return an {@link Optional} carrying the universal link, or empty when the
+     *         relay omitted the attribute
      */
     public Optional<String> universalLink() {
         return Optional.ofNullable(universalLink);
@@ -127,11 +115,10 @@ public final class SmaxBannerSuggestionNativeAction {
 
     /**
      * Parses the entry from a {@code <native_action/>} node.
-     *
-     * @apiNote
-     * Returns empty when the node tag is wrong or any of the three
-     * mandatory attributes is missing. The optional
-     * {@code universal_link} attribute may legally be absent.
+     * <p>
+     * Returns empty when the node tag is wrong or any of the three mandatory
+     * attributes is missing. The optional {@code universal_link} attribute may
+     * legally be absent.
      *
      * @param node the candidate {@code <native_action/>} node; never {@code null}
      * @return an {@link Optional} carrying the parsed entry, or empty when
@@ -163,8 +150,8 @@ public final class SmaxBannerSuggestionNativeAction {
     }
 
     /**
-     * Compares this entry to {@code obj} for structural equality on all
-     * four slots.
+     * Compares this entry to {@code obj} for structural equality on all four
+     * slots.
      *
      * @param obj the candidate; may be {@code null}
      * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionNativeAction}

@@ -16,24 +16,24 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="get" xmlns="w:g2" to="g.us">} stanza that fetches metadata for several groups in
- * one round-trip.
+ * Outbound {@code <iq type="get" xmlns="w:g2" to="g.us">} stanza that fetches metadata for several groups in one
+ * round-trip.
  *
- * @apiNote Drives {@code WAWebGroupQueryJob.queryGroupsById_DO_NOT_USE_DIRECTLY}, the bulk-fetch path used to
- * hydrate community/sub-group panels and search results. The relay accepts up to 10000 entries per request;
- * callers should pre-batch larger working sets.
+ * This request backs the bulk-fetch path used to hydrate community and sub-group panels and search results. The
+ * relay accepts up to 10000 entries per request; callers should pre-batch larger working sets.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBatchGetGroupInfoRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetServerMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQGetRequestMixin")
 public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.Request {
     /**
-     * The list of group {@link Jid}s to fetch metadata for.
+     * Holds the group {@link Jid}s to fetch metadata for.
      */
     private final List<Jid> groupJids;
 
     /**
-     * The optional caller-supplied correlation token surfaced as the {@code <query context="...">} attribute.
+     * Holds the optional caller-supplied correlation token surfaced as the {@code <query context="...">}
+     * attribute.
      */
     private final String queryContext;
 
@@ -51,9 +51,8 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
     /**
      * Constructs a request with the given correlation token.
      *
-     * @apiNote The correlation token round-trips back on the relay's reply and lets the caller correlate the
-     * response with the upstream UI request that triggered it; {@code WAWebGroupQueryJob} threads its
-     * {@code requesterUiOriginId} through this slot.
+     * The correlation token round-trips back on the relay's reply and lets the caller correlate the response with
+     * the upstream UI request that triggered it. The supplied list is defensively copied.
      *
      * @param groupJids    the group {@link Jid}s to fetch
      * @param queryContext the optional correlation token; may be {@code null}
@@ -90,7 +89,7 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope is
+     * The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="g.us" type="get">
      *         <query context="<queryContext>">
@@ -100,6 +99,7 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
      *         </query>
      *     </iq>
      * }
+     * The {@code context} attribute is only emitted when {@link #queryContext()} is present.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the per-group {@code <query/>} payload
      */

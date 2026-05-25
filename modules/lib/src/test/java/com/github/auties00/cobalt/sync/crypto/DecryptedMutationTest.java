@@ -22,70 +22,27 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the decryption-side failure matrix of {@link DecryptedMutation}.
- *
- * @apiNote
- * Covers {@link DecryptedMutation.Untrusted#of}, which adapts
- * {@code WAWebSyncdDecryptMutations.syncdDecryptMutation} and is driven from
- * the per-mutation loops in {@code WAWebSyncdDecryptMutationsWrapper}. The
- * matrix pins down the right {@link WhatsAppWebAppStateSyncException}
- * subtype for each documented failure mode:
- * <ul>
- *   <li>{@link WhatsAppWebAppStateSyncException.ValueMacMismatch} when the
- *       trailing value MAC does not validate.</li>
- *   <li>{@link WhatsAppWebAppStateSyncException.IndexMacMismatch} when the
- *       wire index MAC does not match the protobuf-decoded index.</li>
- *   <li>{@link WhatsAppWebAppStateSyncException.DecryptionFailed} when the
- *       AES-CBC output is not a valid {@code SyncActionData} protobuf.</li>
- *   <li>{@link IllegalArgumentException} for inputs shorter than
- *       {@code IV_LENGTH + MAC_LENGTH}.</li>
- * </ul>
- *
- * @implNote
- * Round-trip happy paths live in {@code EncryptedMutationTest}; this class
- * exercises the failure surface and the {@code Untrusted}/{@code Trusted}
- * record contracts in isolation. The {@link #freshEncryptedArchive(MutationKeys)}
- * helper produces a fresh wire blob per test so tampering does not pollute
- * the next case.
+ * Exercises the decryption-side failure matrix of {@link DecryptedMutation}:
+ * the value-MAC and index-MAC failure modes, the input-shape guards, the
+ * {@code Untrusted}/{@code Trusted} record contracts, and a WA Web oracle that
+ * decrypts a captured patch to its captured contents. Round-trip happy paths
+ * live in {@code EncryptedMutationTest}. The {@code freshEncryptedArchive}
+ * helper produces a fresh wire blob per test so tampering does not pollute the
+ * next case.
  */
 @DisplayName("DecryptedMutation")
 class DecryptedMutationTest {
-    /**
-     * The 32-byte sync key all tests in this class derive their
-     * {@link MutationKeys} from.
-     */
+    // matches the "pattern" expectations baked into the crypto fixtures
     private static final byte[] SYNC_KEY = filled(32, 0x42);
 
-    /**
-     * The sync key id all tests in this class pin to the AAD prefix.
-     */
     private static final byte[] KEY_ID = new byte[]{0x10, 0x20, 0x30, 0x40};
 
-    /**
-     * Builds a byte array filled with a single byte value.
-     *
-     * @param length the array length
-     * @param value  the fill value, truncated to a byte
-     * @return a freshly allocated array
-     */
     private static byte[] filled(int length, int value) {
         var out = new byte[length];
         for (var i = 0; i < length; i++) out[i] = (byte) value;
         return out;
     }
 
-    /**
-     * Encrypts a fresh archive mutation under the given keys for tampering.
-     *
-     * @apiNote
-     * Helper for the failure-mode tests, which clone and mutate either the
-     * returned {@code encryptedValue} or {@code indexMac} before calling
-     * back into {@link DecryptedMutation.Untrusted#of}.
-     *
-     * @param keys the keys to encrypt under
-     * @return a freshly encrypted archive mutation
-     * @throws GeneralSecurityException if the encryption primitives fail
-     */
     private static EncryptedMutation freshEncryptedArchive(MutationKeys keys) throws GeneralSecurityException {
         var action = new ArchiveChatActionBuilder().archived(true).build();
         var value = new SyncActionValueBuilder()
@@ -307,11 +264,6 @@ class DecryptedMutationTest {
             assertInstanceOf(DecryptedMutation.class, trusted);
         }
 
-        /**
-         * Builds a {@link SyncActionValue} carrying only a timestamp.
-         *
-         * @return a fresh empty value
-         */
         private SyncActionValue emptyValue() {
             return new SyncActionValueBuilder().timestamp(Instant.now()).build();
         }

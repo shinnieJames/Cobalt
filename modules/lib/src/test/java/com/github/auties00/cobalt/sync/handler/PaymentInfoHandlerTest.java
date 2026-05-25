@@ -27,28 +27,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Exercises {@link PaymentInfoHandler} against the
- * {@code WAWebPaymentInfoSync.applyMutations} per-mutation flow.
- *
- * @apiNote
- * Verifies the SMB platform gate
- * ({@link ClientPlatformType#IOS_BUSINESS} /
- * {@link ClientPlatformType#ANDROID_BUSINESS}), the
- * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED}
- * gate, the
- * {@link SyncdOperation#SET}
- * happy path that persists the CPI string via
- * {@link WhatsAppStore#setPaymentInstructionCpi(String)}, and the
- * malformed-value classification when {@link PaymentInfoAction#cpi()}
- * is missing. Non-{@code SET} operations and gate failures all
- * surface as
- * {@link SyncActionState#UNSUPPORTED}.
- *
- * @implNote
- * This implementation builds mutations directly via the local
- * helper because no public outgoing-mutation factory exists for this
- * action; the handler does not parse {@code indexParts} so the
- * malformed-index dimension has no surface here.
+ * Covers {@link PaymentInfoHandler}: the SMB platform gate, the
+ * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED} AB-prop gate, the
+ * {@link SyncdOperation#SET} path that persists the CPI string via
+ * {@link WhatsAppStore#setPaymentInstructionCpi(String)}, the malformed-value
+ * classification when {@link PaymentInfoAction#cpi()} is missing, and the
+ * {@link SyncActionState#UNSUPPORTED} classification for non-{@code SET} operations and
+ * gate failures. Each test builds its own mutation and opts into the platform and AB prop
+ * explicitly so the gating dimension under test is declarative.
  */
 @DisplayName("PaymentInfoHandler")
 class PaymentInfoHandlerTest {
@@ -60,21 +46,6 @@ class PaymentInfoHandlerTest {
     private TestABPropsService props;
     private PaymentInfoHandler handler;
 
-    /**
-     * Builds a fresh harness and a fresh AB-props service before each
-     * test.
-     *
-     * @apiNote
-     * Each test path opts into the SMB platform via
-     * {@link #smbPlatform()} and the AB prop via {@link #enableSync()}
-     * explicitly so the gating dimension under test is declarative.
-     *
-     * @implNote
-     * This implementation creates a clean
-     * {@link WhatsAppStore} per test
-     * via {@code DeviceFixtures.temporaryStore} so no state leaks
-     * between tests.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -85,65 +56,15 @@ class PaymentInfoHandlerTest {
         handler = new PaymentInfoHandler(props);
     }
 
-    /**
-     * Sets the local store's platform to
-     * {@link ClientPlatformType#IOS_BUSINESS}.
-     *
-     * @apiNote
-     * Internal helper used by every test that needs to clear the SMB
-     * platform gate without picking a specific business variant; the
-     * {@code IOS_BUSINESS} choice is interchangeable with
-     * {@link ClientPlatformType#ANDROID_BUSINESS}.
-     *
-     * @implNote
-     * This implementation mutates the device record on the shared
-     * fixture store rather than rebuilding the test client, because
-     * the platform read happens at every {@code applyMutation} call.
-     */
     private void smbPlatform() {
         store.device().setPlatform(ClientPlatformType.IOS_BUSINESS);
     }
 
-    /**
-     * Enables the
-     * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED}
-     * AB prop on the test fixture.
-     *
-     * @apiNote
-     * Internal helper used by every test that needs to clear the
-     * AB-prop gate. Combined with {@link #smbPlatform()} to land on
-     * the happy path.
-     *
-     * @implNote
-     * This implementation mutates the
-     * {@link TestABPropsService}
-     * instance owned by the test client; no test isolation is broken
-     * because the harness is rebuilt per test.
-     */
     private void enableSync() {
         props.set(ABProp.ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED, true);
     }
 
-    /**
-     * Builds a trusted
-     * {@link SyncdOperation#SET}
-     * mutation carrying the given action under the singleton
-     * {@code ["payment_info"]} index.
-     *
-     * @apiNote
-     * Internal helper consumed by every test in this class; not used
-     * outside it. Setting {@code action} to {@code null} omits the
-     * {@code paymentInfoAction} field on the value so the
-     * malformed-value branch can be exercised.
-     *
-     * @implNote
-     * This implementation pins the timestamp to a fixed second so
-     * tests that compare timestamps (none today) stay deterministic.
-     *
-     * @param action the payment-info action payload; may be
-     *               {@code null} to omit the sub-message
-     * @return the trusted mutation
-     */
+    // Passing action == null omits the paymentInfoAction sub-message so the malformed-value branch can be exercised.
     private static DecryptedMutation.Trusted setMutation(PaymentInfoAction action) {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
         var builder = new SyncActionValueBuilder().timestamp(ts);

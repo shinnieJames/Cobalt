@@ -39,8 +39,8 @@ import java.io.IOException;
 import java.util.*;
 
 /**
- * Top-level dispatcher that routes every inbound WhatsApp stanza to the
- * {@link Handler} registered for its tag.
+ * Routes every inbound WhatsApp stanza to the {@link Handler} registered
+ * for its tag.
  *
  * <p>The WhatsApp wire protocol multiplexes many logically distinct
  * stanza types on the same noise-encrypted WebSocket: {@code <iq>},
@@ -50,22 +50,17 @@ import java.util.*;
  * {@code <failure>}, {@code <stream:error>}, {@code <error>},
  * {@code <status>}, {@code <xmlstreamend>}. This class owns one
  * dedicated {@link Handler} per stanza tag, exposes a single
- * {@link #handle(Node)} entry point used by the noise transport layer,
+ * {@link #handle(Node)} entry point fed by the noise transport layer,
  * and fans every stanza out onto a fresh virtual thread so that a slow
  * or blocking handler cannot back up the socket reader.
  *
- * <p>Each registered {@link Handler} also exposes {@link Handler#reset()}
- * which is invoked through {@link #reset()} on socket teardown so that
- * per-connection state (for example, the one-shot bootstrap guard inside
- * {@link SuccessStreamHandler}) is cleared before the next connection
- * starts.
- *
- * @apiNote
- * Cobalt embedders never construct this class directly; the lifecycle
- * client wires one instance per logical session and threads it into the
- * noise transport layer. The dispatcher is the Java counterpart of WA
- * Web's {@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza}
- * switch statement.
+ * <p>The lifecycle client wires one instance per logical session and
+ * threads it into the noise transport layer; embedders never construct
+ * or invoke it directly. Each registered {@link Handler} also exposes
+ * {@link Handler#reset()}, which {@link #reset()} invokes on socket
+ * teardown so that per-connection state (for example, the one-shot
+ * bootstrap guard inside {@link SuccessStreamHandler}) is cleared before
+ * the next connection starts.
  *
  * @implNote
  * This implementation flattens WA Web's three-layer dispatcher
@@ -76,11 +71,11 @@ import java.util.*;
  * {@code WAWebCommsHandleWorkerCompatibleStanza} indirections) into a
  * single tag-keyed map. WA Web's pre-handshake stanza routing (the
  * stanza queue before login completes) has no Cobalt analogue because
- * the noise handshake completes synchronously on a virtual thread
- * before this dispatcher is even reachable. Unrecognised stanza tags
- * are silently dropped rather than nacked with the
- * {@code UnrecognizedStanza} reason because Cobalt does not implement
- * the {@code WAWebCreateNackFromStanza} ack/nack protocol.
+ * the noise handshake completes synchronously on a virtual thread before
+ * this dispatcher is even reachable. Unrecognised stanza tags are
+ * silently dropped rather than nacked with the {@code UnrecognizedStanza}
+ * reason because Cobalt does not implement the
+ * {@code WAWebCreateNackFromStanza} ack/nack protocol.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsRouter")
 @WhatsAppWebModule(moduleName = "WAWebSocketModel")
@@ -96,26 +91,22 @@ public final class SocketStream {
     private static final System.Logger LOGGER = System.getLogger(SocketStream.class.getName());
 
     /**
-     * The immutable map from stanza tag (for example {@code "message"})
-     * to the {@link Handler} registered for that tag.
+     * Holds the map from stanza tag (for example {@code "message"}) to
+     * the {@link Handler} registered for that tag.
      *
-     * @apiNote
-     * Populated once in the constructor and never mutated afterwards;
-     * the map is wrapped in {@link Collections#unmodifiableMap(Map)} to
-     * make accidental mutation a runtime error.
+     * <p>The map is populated once in the constructor and never mutated
+     * afterwards; it is wrapped in
+     * {@link Collections#unmodifiableMap(Map)} so that any accidental
+     * mutation is a runtime error.
      */
     private final Map<String, Handler> handlers;
 
     /**
-     * Constructs a new dispatcher and wires one {@link Handler} per
-     * supported stanza tag, injecting the shared services each handler
-     * depends on.
+     * Constructs a dispatcher and wires one {@link Handler} per supported
+     * stanza tag, injecting the shared services each handler depends on.
      *
-     * @apiNote
-     * Cobalt embedders never call this constructor directly; the
-     * lifecycle client instantiates one dispatcher per session. The
-     * {@link OfflineNotificationsReporter} is created locally and shared
-     * between the {@code server_sync} producer
+     * <p>A single {@link OfflineNotificationsReporter} is created locally
+     * and shared between the {@code server_sync} producer
      * ({@link NotificationStreamHandler}) and the offline-bulletin
      * consumer ({@link InfoBulletinStreamHandler}) to mirror WA Web's
      * module-scoped {@code offlineNotificationsCount} map.
@@ -130,40 +121,48 @@ public final class SocketStream {
      *                                         {@code <call>} and
      *                                         {@code <terminate>} call
      *                                         signalling handlers
-     * @param webVerificationHandler           the verification handler
+     * @param webVerificationHandler           the
+     *                                         {@link WhatsAppClientVerificationHandler.Web}
      *                                         used during companion
      *                                         pairing prompts
-     * @param lidMigrationService              the service managing
-     *                                         LID-based one-on-one chat
-     *                                         migration
-     * @param inactiveGroupLidMigrationService the service migrating
-     *                                         inactive groups to LID
-     *                                         addressing
-     * @param messageService                   the service decrypting and
-     *                                         storing inbound messages
-     * @param abPropsService                   the service exposing A/B
-     *                                         feature flags synced from
-     *                                         the server
-     * @param deviceService                    the service performing
-     *                                         companion/linked device
-     *                                         management
-     * @param wamService                       the service collecting
-     *                                         WhatsApp analytics events
-     * @param snapshotRecoveryService          the service handling
-     *                                         app-state snapshot
+     * @param lidMigrationService              the {@link LidMigrationService}
+     *                                         managing LID-based
+     *                                         one-on-one chat migration
+     * @param inactiveGroupLidMigrationService the
+     *                                         {@link InactiveGroupLidMigrationService}
+     *                                         migrating inactive groups to
+     *                                         LID addressing
+     * @param messageService                   the {@link MessageService}
+     *                                         decrypting and storing
+     *                                         inbound messages
+     * @param abPropsService                   the {@link ABPropsService}
+     *                                         exposing A/B feature flags
+     *                                         synced from the server
+     * @param deviceService                    the {@link DeviceService}
+     *                                         performing companion/linked
+     *                                         device management
+     * @param wamService                       the {@link WamService}
+     *                                         collecting WhatsApp
+     *                                         analytics events
+     * @param snapshotRecoveryService          the {@link SnapshotRecoveryService}
+     *                                         handling app-state snapshot
      *                                         recovery
-     * @param webAppStateService               the service managing web
-     *                                         app-state sync patches
-     * @param companionPairingService          the companion-pairing
-     *                                         service consulted by the
-     *                                         IQ pair-device flow
-     * @param ackSender                        the {@link AckSender}
-     *                                         service that ships every
-     *                                         outbound {@code <ack>}
-     *                                         stanza emitted by the
-     *                                         message, receipt, call
-     *                                         and notification
+     * @param webAppStateService               the {@link WebAppStateService}
+     *                                         managing web app-state sync
+     *                                         patches
+     * @param companionPairingService          the {@link CompanionPairingService}
+     *                                         consulted by the IQ
+     *                                         pair-device flow
+     * @param ackSender                        the {@link AckSender} that
+     *                                         ships every outbound
+     *                                         {@code <ack>} stanza emitted
+     *                                         by the message, receipt,
+     *                                         call and notification
      *                                         handlers
+     * @param mediaConnectionService           the {@link MediaConnectionService}
+     *                                         supplying the media-endpoint
+     *                                         connection consumed by the
+     *                                         message and success handlers
      */
     public SocketStream(WhatsAppClient whatsapp, CallService callService, WhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, AckSender ackSender, MediaConnectionService mediaConnectionService) {
         var offlineNotificationsReporter = new OfflineNotificationsReporter(whatsapp, wamService);
@@ -175,7 +174,6 @@ public final class SocketStream {
                 snapshotRecoveryService,
                 webAppStateService,
                 lidMigrationService,
-                abPropsService,
                 wamService,
                 ackSender,
                 mediaConnectionService
@@ -216,21 +214,19 @@ public final class SocketStream {
 
     /**
      * Registers the given {@link Handler} under the given stanza tag,
-     * failing fast if another handler is already registered for that
-     * tag.
+     * failing fast if another handler is already registered for that tag.
      *
-     * @apiNote
-     * Only called from the constructor while {@code result} is still a
-     * private working map. Catches accidental double registration at
-     * construction time rather than letting one of two handlers
-     * silently win.
+     * <p>This method is called only from the constructor while
+     * {@code result} is still a private working map. It catches accidental
+     * double registration at construction time rather than letting one of
+     * two handlers silently win.
      *
      * @param result      the working map being populated inside the
      *                    constructor
      * @param description the stanza tag (for example {@code "message"})
      * @param handler     the {@link Handler} to register for {@code description}
-     * @throws IllegalStateException if a handler is already registered
-     *                               for {@code description}
+     * @throws IllegalStateException if a handler is already registered for
+     *                               {@code description}
      */
     private void addHandler(Map<String, Handler> result, String description, Handler handler) {
         var previousHandler = result.putIfAbsent(description, handler);
@@ -245,20 +241,19 @@ public final class SocketStream {
      * Dispatches the given stanza to the {@link Handler} registered for
      * its tag on a fresh virtual thread.
      *
-     * @apiNote
-     * Cobalt embedders never invoke this method directly; the noise
-     * transport layer feeds every decrypted stanza here. Stanzas whose
-     * tag has no registered handler are silently dropped rather than
-     * nacked, departing from WA Web's
-     * {@code WAWebCreateNackFromStanza.NackReason.UnrecognizedStanza}
-     * which Cobalt does not implement.
+     * <p>The noise transport layer feeds every decrypted stanza here.
+     * Stanzas whose tag has no registered handler are silently dropped
+     * rather than nacked.
      *
      * @implNote
-     * This implementation starts a fresh virtual thread for every
-     * stanza so a slow handler cannot stall the socket reader. The WA
-     * Web counterpart runs handlers on the JS event loop and relies on
-     * each handler awaiting its own promises; on virtual threads the
-     * equivalent is a plain blocking call wrapped in a started thread.
+     * This implementation starts a fresh virtual thread for every stanza
+     * so a slow handler cannot stall the socket reader. The WA Web
+     * counterpart runs handlers on the JS event loop and relies on each
+     * handler awaiting its own promises; on virtual threads the equivalent
+     * is a plain blocking call wrapped in a started thread. Unrecognised
+     * tags are dropped rather than nacked because Cobalt does not
+     * implement the {@code WAWebCreateNackFromStanza.NackReason.UnrecognizedStanza}
+     * path.
      *
      * @param node the inbound stanza
      */
@@ -280,21 +275,18 @@ public final class SocketStream {
 
     /**
      * Invokes {@link Handler#reset()} on every registered handler so
-     * per-connection state is cleared before the next connection
-     * starts.
+     * per-connection state is cleared before the next connection starts.
      *
-     * @apiNote
-     * Called by the socket layer immediately after the underlying
+     * <p>The socket layer calls this immediately after the underlying
      * connection is torn down. The reset is required so that one-shot
      * bootstrap guards (notably the {@link SuccessStreamHandler} latch)
-     * fire again on the next {@code <success>} stanza of a
-     * reconnecting session.
+     * fire again on the next {@code <success>} stanza of a reconnecting
+     * session.
      *
      * @implNote
      * This implementation iterates a {@link LinkedHashSet} view of the
-     * registered handlers so a handler registered under more than one
-     * tag (none today, but the design supports it) is reset exactly
-     * once.
+     * registered handlers so a handler registered under more than one tag
+     * (none today, but the design supports it) is reset exactly once.
      */
     public void reset() {
         for (var handler : new LinkedHashSet<>(handlers.values())) {
@@ -303,16 +295,14 @@ public final class SocketStream {
     }
 
     /**
-     * Invokes the given {@link Handler} on the given stanza, catching
-     * any {@link Throwable} so handler failures do not bubble up to the
+     * Invokes the given {@link Handler} on the given stanza, catching any
+     * {@link Throwable} so handler failures do not bubble up to the
      * fan-out virtual thread's uncaught exception path.
      *
-     * @apiNote
-     * Invoked from {@link #handle(Node)} as the body of every per-stanza
-     * virtual thread. Failures are logged at {@code WARNING} with the
-     * handler simple name and the stanza tag for diagnostics, mirroring
-     * WA Web's per-arm {@code try/catch} blocks that log the failure but
-     * keep the socket up.
+     * <p>This method forms the body of every per-stanza virtual thread
+     * started by {@link #handle(Node)}. A failure is logged at
+     * {@code WARNING} with the handler simple name and the stanza tag for
+     * diagnostics, after which the socket stays up.
      *
      * @param handler the {@link Handler} to invoke
      * @param node    the stanza to pass to {@code handler}
@@ -330,16 +320,13 @@ public final class SocketStream {
     }
 
     /**
-     * Contract implemented by every per-tag stanza handler registered on
-     * a {@link SocketStream}.
+     * Defines the contract implemented by every per-tag stanza handler
+     * registered on a {@link SocketStream}.
      *
-     * @apiNote
-     * Handlers are dispatched one stanza at a time from
+     * <p>Handlers are dispatched one stanza at a time from
      * {@link SocketStream#handle(Node)} on a fresh virtual thread per
-     * stanza, mirroring the per-arm dispatch in WA Web's
-     * {@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza} switch.
-     * Any {@link IOException} thrown out of {@link #handle(Node)} or any
-     * other {@link Throwable} is caught and logged by
+     * stanza. Any {@link IOException} thrown out of {@link #handle(Node)},
+     * or any other {@link Throwable}, is caught and logged by
      * {@link SocketStream#runHandler(Handler, Node)}.
      */
     public interface Handler {

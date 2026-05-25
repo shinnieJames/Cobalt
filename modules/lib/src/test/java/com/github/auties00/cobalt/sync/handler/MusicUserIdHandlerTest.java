@@ -28,26 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link MusicUserIdHandler} against the protobuf-only
- * {@code "music_user_id"} action shape.
+ * Covers {@link MusicUserIdHandler} for the protobuf-only {@code "music_user_id"} action: the
+ * handler accepts only {@link SyncdOperation#SET} with at least one of
+ * {@link MusicUserIdAction#musicUserId()} or {@link MusicUserIdAction#musicUserIdMap()} populated,
+ * persists the action via {@link WhatsAppStore#setMusicUserIdState}, and rejects a wrong-typed
+ * value or an empty payload as {@link SyncActionState#MALFORMED}.
  *
- * @apiNote
- * Verifies the Cobalt forward-looking implementation: WA Web ships
- * the protobuf in {@code WAWebProtobufSyncAction.pb} but no
- * {@code WAWebMusicUserIdSync} handler module exists. The Cobalt
- * handler accepts only
- * {@link SyncdOperation#SET}
- * with at least one of {@link MusicUserIdAction#musicUserId()} or
- * {@link MusicUserIdAction#musicUserIdMap()} populated, persists the
- * action via {@link WhatsAppStore#setMusicUserIdState}, and rejects
- * a wrong-typed value or an empty payload as
- * {@link SyncActionState#MALFORMED}.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link MusicUserIdHandler#applyMutation} with hand-built
- * {@link DecryptedMutation.Trusted} mutations because no public
- * outgoing-mutation factory exists for this action.
+ * <p>No public outgoing-mutation factory exists for this action, so each test drives the handler
+ * directly through {@link MusicUserIdHandler#applyMutation} with hand-built
+ * {@link DecryptedMutation.Trusted} mutations.
  */
 @DisplayName("MusicUserIdHandler")
 class MusicUserIdHandlerTest {

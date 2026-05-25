@@ -19,7 +19,8 @@ import java.security.MessageDigest;
 import java.util.Objects;
 
 /**
- * Common base for the WhatsApp media encryption and decryption stream pipelines.
+ * Common base for the WhatsApp media encryption and decryption stream
+ * pipelines.
  *
  * <p>This type holds the cryptographic primitives shared by
  * {@link MediaUploadInputStream} (encrypt-then-HMAC) and
@@ -27,12 +28,9 @@ import java.util.Objects;
  * derivation, AES-CBC cipher creation with PKCS5 padding, HMAC-SHA256
  * initialisation, and SHA-256 hashing. Subclasses drive a streaming state
  * machine; this base contributes only the per-operation factory methods and
- * the raw input wiring.
- *
- * @apiNote
- * Cobalt embedders never construct this type directly; the concrete subclasses
- * are reached through {@link MediaConnectionService#upload(com.github.auties00.cobalt.model.media.MediaProvider, InputStream)}
- * and {@link MediaConnectionService#download(com.github.auties00.cobalt.model.media.MediaProvider, com.github.auties00.cobalt.props.ABPropsService)}.
+ * the raw input wiring. The concrete subclasses are reached through
+ * {@link MediaConnectionService#upload(com.github.auties00.cobalt.model.media.MediaProvider, MediaPayload)}
+ * and {@link MediaConnectionService#download(com.github.auties00.cobalt.model.media.MediaProvider)}.
  */
 @WhatsAppWebModule(moduleName = "WAMediaCrypto")
 abstract class MediaInputStream extends InputStream {
@@ -40,16 +38,14 @@ abstract class MediaInputStream extends InputStream {
      * The streaming buffer size in bytes used for chunked reads and cipher
      * operations.
      *
-     * @apiNote
-     * Picked to be a multiple of the AES block size so that streaming
+     * <p>Chosen as a multiple of the AES block size so that streaming
      * {@link Cipher#update(byte[], int, int, byte[], int)} calls produce
      * output that fits in the staging buffer without partial-block carry.
      *
      * @implNote
-     * This implementation uses 8192 bytes; the constant is also chosen to
-     * match WA Web's 64 KiB chunk size divided into eight {@code update}
-     * passes, which keeps the encrypt/decrypt loop interactive on virtual
-     * threads.
+     * This implementation uses 8192 bytes, which is also WA Web's 64 KiB
+     * chunk size divided into eight {@code update} passes; the size keeps
+     * the encrypt/decrypt loop interactive on virtual threads.
      */
     static final int BUFFER_LENGTH = 8192;
 
@@ -57,8 +53,7 @@ abstract class MediaInputStream extends InputStream {
      * The number of trailing HMAC bytes appended to the ciphertext on the
      * wire.
      *
-     * @apiNote
-     * WhatsApp computes a full 32-byte HMAC-SHA256 over
+     * <p>WhatsApp computes a full 32-byte HMAC-SHA256 over
      * {@code IV || ciphertext} but publishes only the first 10 bytes. The
      * truncated tag preserves integrity while reducing the on-wire overhead
      * on media that is often transferred over constrained mobile links.
@@ -70,8 +65,7 @@ abstract class MediaInputStream extends InputStream {
     /**
      * The total size in bytes of the HKDF-expanded media key material.
      *
-     * @apiNote
-     * The expanded buffer is partitioned as:
+     * <p>The expanded buffer is partitioned as:
      * <ul>
      *   <li>bytes {@code 0..15}: AES-CBC initialisation vector</li>
      *   <li>bytes {@code 16..47}: AES-CBC cipher key</li>
@@ -101,8 +95,7 @@ abstract class MediaInputStream extends InputStream {
     /**
      * The AES-CBC block size in bytes.
      *
-     * @apiNote
-     * Used to size the ciphertext staging buffer so that
+     * <p>Used to size the ciphertext staging buffer so that
      * {@link Cipher#doFinal(byte[], int)} can emit the trailing PKCS5
      * padding block without reallocation.
      */
@@ -113,8 +106,7 @@ abstract class MediaInputStream extends InputStream {
     /**
      * The underlying raw input stream providing the source bytes.
      *
-     * @apiNote
-     * Carries plaintext to be encrypted in the upload pipeline and the
+     * <p>Carries plaintext to be encrypted in the upload pipeline and the
      * ciphertext-plus-HMAC payload delivered by the CDN in the download
      * pipeline.
      */
@@ -123,9 +115,8 @@ abstract class MediaInputStream extends InputStream {
     /**
      * Constructs a new media input stream wrapping the given raw stream.
      *
-     * @apiNote
-     * Subclass-only constructor invoked from {@link MediaUploadInputStream}
-     * and {@link MediaDownloadInputStream}.
+     * <p>Invoked from the subclass constructors of
+     * {@link MediaUploadInputStream} and {@link MediaDownloadInputStream}.
      *
      * @param rawInputStream the underlying input stream
      * @throws NullPointerException if {@code rawInputStream} is {@code null}
@@ -138,19 +129,17 @@ abstract class MediaInputStream extends InputStream {
      * Derives the expanded key material for a media payload from the raw
      * 32-byte media key and the media-type specific info string.
      *
-     * @apiNote
-     * Callers slice the returned {@value #EXPANDED_SIZE}-byte array into
+     * <p>Callers slice the returned {@value #EXPANDED_SIZE}-byte array into
      * the IV, cipher key, HMAC key, and reference key by indexing into the
      * partition layout documented on {@link #EXPANDED_SIZE}. Typical
      * {@code mediaKeyName} values are {@code "WhatsApp Image Keys"},
-     * {@code "WhatsApp Video Keys"}, {@code "WhatsApp Audio Keys"},
+     * {@code "WhatsApp Video Keys"}, {@code "WhatsApp Audio Keys"}, and
      * {@code "WhatsApp Document Keys"}.
      *
      * @implNote
      * This implementation performs HKDF-SHA256 extract-then-expand with no
      * explicit salt (defaulting to 32 zero bytes per RFC 5869) and the
-     * UTF-8 encoding of the key name as the info parameter, matching
-     * {@code WACryptoHkdf.extractAndExpand} in WA Web.
+     * UTF-8 encoding of the key name as the info parameter.
      *
      * @param mediaKey     the 32-byte raw media key
      * @param mediaKeyName the HKDF info string identifying the media type
@@ -175,8 +164,7 @@ abstract class MediaInputStream extends InputStream {
      * Creates a fresh SHA-256 {@link MessageDigest} for plaintext or
      * ciphertext hashing.
      *
-     * @apiNote
-     * Used by both pipelines to compute the {@code fileSha256} and
+     * <p>Used by both pipelines to compute the {@code fileSha256} and
      * {@code fileEncSha256} fields recorded on the outgoing media message
      * protobuf, and on download to verify the recipient-side plaintext and
      * ciphertext digests against the values advertised by the sender.
@@ -198,8 +186,7 @@ abstract class MediaInputStream extends InputStream {
     /**
      * Creates and initialises a new AES-CBC cipher with PKCS5 padding.
      *
-     * @apiNote
-     * Drives both the encrypt branch of the upload pipeline and the
+     * <p>Drives both the encrypt branch of the upload pipeline and the
      * decrypt branch of the download pipeline; the {@code mode} flag
      * decides which.
      *
@@ -208,7 +195,8 @@ abstract class MediaInputStream extends InputStream {
      * @param key  the AES secret key
      * @param iv   the initialisation vector
      * @return the initialised cipher
-     * @throws WhatsAppMediaException if cipher creation or initialisation fails
+     * @throws WhatsAppMediaException if cipher creation or initialisation
+     *         fails
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto",
             exports = {"encryptAndHmac", "hmacAndDecrypt"},
@@ -227,9 +215,8 @@ abstract class MediaInputStream extends InputStream {
      * Creates and initialises a new HMAC-SHA256 instance bound to the
      * supplied HMAC key.
      *
-     * @apiNote
-     * The returned MAC is primed by the subclasses with the AES IV before
-     * any ciphertext is fed in, so the final tag covers
+     * <p>The returned MAC is primed by the subclasses with the AES IV
+     * before any ciphertext is fed in, so the final tag covers
      * {@code IV || ciphertext} as required by the WhatsApp wire format.
      *
      * @param key the HMAC-SHA256 secret key
@@ -253,9 +240,9 @@ abstract class MediaInputStream extends InputStream {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation closes only the underlying {@link #rawInputStream};
-     * subclasses release additional resources (HTTP client, zlib inflater)
-     * by extending this method.
+     * This implementation closes only the underlying
+     * {@link #rawInputStream}; subclasses release additional resources
+     * (HTTP client, zlib inflater) by extending this method.
      */
     @Override
     public void close() throws IOException {

@@ -16,33 +16,25 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that favourite or unfavourite a sticker.
  *
- * @apiNote
- * Drives the sticker-tray "add to favourites" affordance: the resulting
- * mutation flips the sticker's {@code isFavorite} flag on every linked
- * device, which the receive-side handler reconciles by adding or removing
- * the sticker from {@code WAWebFavoriteStickerCollection}. The factory is
- * the outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.FavoriteStickerHandler}.
+ * Drives the sticker-tray "add to favourites" affordance: the resulting mutation flips the sticker's
+ * {@code isFavorite} flag on every linked device. This factory is the outgoing-mutation counterpart
+ * of {@link com.github.auties00.cobalt.sync.handler.FavoriteStickerHandler}, which reconciles the
+ * flag on receiving devices.
  *
  * @implNote
- * This implementation only sets the {@code isFavorite} flag on the
- * {@link StickerAction}. WA Web's
- * {@code WAWebStickersFavoriteSyncAction.generateFavoriteSyncMutation}
- * additionally serializes the full media descriptor
- * ({@code fileEncSha256}, {@code mediaKey}, {@code mimetype},
- * dimensions, {@code directPath}, {@code deviceIdHint}); Cobalt omits
- * those because the receive-side path falls back to the existing sticker
- * record on the primary device when the mutation round-trips, and the
- * downstream {@code addOrUpdateStickers} call still has the descriptor
- * locally available.
+ * This implementation only sets the {@code isFavorite} flag on the {@link StickerAction}. WA Web's
+ * {@code generateFavoriteSyncMutation} additionally serializes the full media descriptor
+ * ({@code fileEncSha256}, {@code mediaKey}, {@code mimetype}, dimensions, {@code directPath},
+ * {@code deviceIdHint}); Cobalt omits those because the receive-side path falls back to the existing
+ * sticker record on the primary device when the mutation round-trips, and the downstream
+ * {@code addOrUpdateStickers} call still has the descriptor locally available.
  */
 public final class FavoriteStickerMutationFactory {
     /**
      * Creates an instance with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * The factory is stateless, so a single instance may be shared across the lifetime of the
+     * client.
      */
     public FavoriteStickerMutationFactory() {
 
@@ -51,19 +43,17 @@ public final class FavoriteStickerMutationFactory {
     /**
      * Returns a SET mutation that favourites or unfavourites the sticker with the given file hash.
      *
-     * @apiNote
      * The mutation index follows
      * {@snippet :
      *     ["favoriteSticker", stickerHash]
      * }
-     * where {@code stickerHash} is the sticker's {@code filehash}; the
-     * {@link StickerAction} sub-message carries only the {@code isFavorite}
-     * flag.
+     * where {@code stickerHash} is the sticker's {@code filehash}; the {@link StickerAction}
+     * sub-message carries only the {@code isFavorite} flag.
      *
      * @implNote
-     * This implementation captures the timestamp via {@link Instant#now()};
-     * WA Web's {@code generateFavoriteSyncMutation} accepts the timestamp
-     * as a parameter (caller passes {@code WATimeUtils.unixTime()}).
+     * This implementation captures the timestamp via {@link Instant#now()}; WA Web's
+     * {@code generateFavoriteSyncMutation} accepts the timestamp as a parameter (caller passes
+     * {@code WATimeUtils.unixTime()}).
      *
      * @param stickerHash the sticker's file hash (Base64 string) used as the mutation index
      * @param favorite    {@code true} to favourite the sticker, {@code false} to unfavourite it

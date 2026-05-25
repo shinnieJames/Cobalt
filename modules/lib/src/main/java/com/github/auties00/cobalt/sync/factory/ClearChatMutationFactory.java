@@ -18,31 +18,25 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that clear the messages of a chat without deleting the chat itself.
  *
- * @apiNote
- * Drives the chat-clear UI affordance: when the user clears a conversation
- * the resulting {@link SyncPendingMutation} is pushed via
- * {@link com.github.auties00.cobalt.sync.WebAppStateService} so linked
- * devices apply the same range-bounded delete against
- * {@code WAWebDBQueryAndRemoveMessageHistory.queryAndRemoveMessagesInMessageRange}.
- * The factory is the outgoing-mutation counterpart of
+ * <p>When the user clears a conversation, the resulting
+ * {@link SyncPendingMutation} is pushed via
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches} so
+ * linked devices apply the same range-bounded delete. This factory builds the
+ * outgoing mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.ClearChatHandler}.
  *
  * @implNote
  * This implementation accepts a caller-supplied {@link SyncActionMessageRange}
- * because Cobalt does not run the
- * {@code WAWebMessageRangeUtils.constructForwardMovingMessageRange}
- * pipeline, which is tied to the browser-side active-message-range IndexedDB
- * tables. It also drops WA Web's
- * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} telemetry commit; the
- * caller layer is responsible for emitting WAM events.
+ * because Cobalt does not run WA Web's forward-moving message-range pipeline,
+ * which is tied to the browser-side active-message-range IndexedDB tables. It
+ * also drops WA Web's WAM telemetry commit; the caller layer is responsible for
+ * emitting WAM events.
  */
 public final class ClearChatMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public ClearChatMutationFactory() {
 
@@ -51,25 +45,21 @@ public final class ClearChatMutationFactory {
     /**
      * Returns a SET mutation that clears the messages of the given chat over the supplied range.
      *
-     * @apiNote
-     * The mutation index follows
+     * <p>The mutation index follows
      * {@snippet :
      *     ["clearChat", chatJid.toString(), deleteStarred ? "1" : "0", deleteMedia ? "1" : "0"]
      * }
      * and the {@link ClearChatAction} sub-message carries the
-     * {@link SyncActionMessageRange} that bounds the delete. Passing
-     * {@code messageRange == null} emits a clear with no range, which the
-     * receive-side handler treats as "clear whatever was visible at
-     * mutation time".
+     * {@link SyncActionMessageRange} that bounds the delete. Passing a
+     * {@code null} {@code messageRange} emits a clear with no range, which the
+     * receive-side handler treats as clearing whatever was visible at mutation
+     * time.
      *
      * @implNote
-     * This implementation does not coalesce against existing pending
-     * mutations the way WA Web's
-     * {@code WAWebClearChatSync.getClearChatMutation} does via
-     * {@code WAWebSyncdDb.getPendingMutationsRowsByIndex}; Cobalt's app-state
-     * pipeline merges at a higher layer. The {@code deleteMedia} flag is
-     * written verbatim as the fourth index segment to keep wire parity with
-     * WA Web's {@code $ClearChatSync$p_3} index builder.
+     * This implementation does not coalesce against existing pending mutations
+     * the way WA Web does; Cobalt's app-state pipeline merges at a higher layer.
+     * The {@code deleteMedia} flag is written verbatim as the fourth index
+     * segment to keep wire parity with WA Web's index builder.
      *
      * @param timestamp     the mutation timestamp
      * @param chatJid       the chat {@link Jid} whose messages are being cleared

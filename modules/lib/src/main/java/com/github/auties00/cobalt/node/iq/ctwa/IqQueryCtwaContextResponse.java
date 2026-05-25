@@ -13,33 +13,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in response to an
+ * Models the inbound reply variants the relay produces in response to an
  * {@link IqQueryCtwaContextRequest}.
  *
- * @apiNote
- * WA Web's {@code ctwaContext} parser throws a generic {@code "invalid response"} error when
- * it encounters any failure path; Cobalt instead routes failures to {@link ClientError} and
- * {@link ServerError} so the chat composer can decide whether to fall back to a degraded
- * preview (transient) or hide the ad context entirely (permanent).
+ * <p>This sealed family splits the reply into a {@link Success} carrying the resolved CTWA
+ * context, a {@link ClientError} for permanent rejections, and a {@link ServerError} for
+ * transient failures, so the chat composer can decide whether to render the ad context, hide
+ * the CTWA banner entirely (permanent), or fall back to a degraded preview and retry
+ * (transient).
+ *
+ * @implNote
+ * WA Web's {@code ctwaContext} parser throws a generic {@code "invalid response"} error on any
+ * failure path; this implementation instead routes failures to {@link ClientError} and
+ * {@link ServerError} so callers can distinguish permanent from transient outcomes.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryCtwaContextJob")
 public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         permits IqQueryCtwaContextResponse.Success, IqQueryCtwaContextResponse.ClientError, IqQueryCtwaContextResponse.ServerError {
 
     /**
-     * Tries each {@link IqQueryCtwaContextResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Tries each {@link IqQueryCtwaContextResponse} variant in priority order and returns the
+     * first that parses cleanly.
      *
-     * @apiNote
-     * The priority order ({@link Success}, {@link ClientError}, {@link ServerError}) mirrors
-     * WA Web's {@code ctwaContext} parser: a {@code type="result"} envelope with a
-     * {@code <context>} child wins, otherwise the {@code <error code/>} branch is split by
-     * code range.
+     * <p>The priority order is {@link Success}, then {@link ClientError}, then
+     * {@link ServerError}: a {@code type="result"} envelope carrying a {@code <context>} child
+     * wins, otherwise the {@code <error code/>} branch is split by code range.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound stanza
-     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
-     *         when no documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when
+     *         no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryCtwaContextJob",
@@ -59,112 +62,116 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
     }
 
     /**
-     * Reply variant carrying the projected {@code <context>} grandchild for a successful
-     * CTWA-context lookup.
+     * Carries the projected {@code <context>} grandchild for a successful CTWA-context lookup.
      *
-     * @apiNote
-     * The mandatory fields ({@code sourceUrl}, {@code sourceId}, {@code sourceType}) always
-     * populate; the optional fields populate when the ad creative included them, and the
-     * WAMO automated-greeting-message fields ({@code greetingMessageBody},
+     * <p>The mandatory fields ({@code sourceUrl}, {@code sourceId}, {@code sourceType}) always
+     * populate. The optional fields populate when the ad creative included them, and the WAMO
+     * automated-greeting-message fields ({@code greetingMessageBody},
      * {@code automatedGreetingMessageShown}, {@code ctaPayload}, {@code originalImageUrl})
-     * populate only when {@code WAWebCtwaAGMUtils.isWamoAGMIntegrationEnabled(sourceApp)} is
-     * true on the relay side.
+     * populate only when the relay reports the WAMO-AGM integration as enabled for the source
+     * app.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryCtwaContextJob")
     final class Success implements IqQueryCtwaContextResponse {
         /**
-         * Mandatory {@code <source>}/{@code <url>} content carrying the ad's landing URL.
+         * Holds the mandatory {@code <source>}/{@code <url>} content carrying the ad's landing
+         * URL.
          */
         private final String sourceUrl;
 
         /**
-         * Mandatory {@code <source>}/{@code <id>} content carrying the ad creative id.
+         * Holds the mandatory {@code <source>}/{@code <id>} content carrying the ad creative
+         * id.
          */
         private final String sourceId;
 
         /**
-         * Mandatory {@code <source>}/{@code <type>} content tagging the ad source surface.
+         * Holds the mandatory {@code <source>}/{@code <type>} content tagging the ad source
+         * surface.
          */
         private final String sourceType;
 
         /**
-         * Optional {@code <headline>} content rendered as the chat preview title.
+         * Holds the optional {@code <headline>} content rendered as the chat preview title.
          */
         private final String title;
 
         /**
-         * Optional {@code <body>} content rendered as the chat preview description.
+         * Holds the optional {@code <body>} content rendered as the chat preview description.
          */
         private final String description;
 
         /**
-         * Optional {@code <thumbnail>}/{@code <url>} content for an externally-hosted
-         * thumbnail.
+         * Holds the optional {@code <thumbnail>}/{@code <url>} content for an
+         * externally-hosted thumbnail.
          */
         private final String thumbnailUrl;
 
         /**
-         * Optional inline {@code <thumbnail>}/{@code <bytes>} content; WA Web base64-encodes
-         * these for the JS bridge, Cobalt surfaces the raw bytes.
+         * Holds the optional inline {@code <thumbnail>}/{@code <bytes>} content.
+         *
+         * @implNote
+         * WA Web base64-encodes these bytes for the JS bridge; this implementation surfaces
+         * the raw decoded bytes instead.
          */
         private final byte[] thumbnailBytes;
 
         /**
-         * Optional {@code <video>}/{@code <url>} content when the ad creative is a video.
+         * Holds the optional {@code <video>}/{@code <url>} content when the ad creative is a
+         * video.
          */
         private final String mediaUrl;
 
         /**
-         * Media classifier derived from the response shape, mirroring WA Web's
-         * {@code ContextInfo$ExternalAdReplyInfo$MediaType} mapping.
+         * Holds the media classifier derived from the response shape.
          *
-         * @apiNote
-         * {@link BusinessCtwaMediaType#VIDEO} when the response carried a {@code <video>}
-         * grandchild, {@link BusinessCtwaMediaType#IMAGE} when it carried only a thumbnail,
-         * and {@code null} when the response had no thumbnail at all.
+         * <p>This is {@link BusinessCtwaMediaType#VIDEO} when the response carried a
+         * {@code <video>} grandchild, {@link BusinessCtwaMediaType#IMAGE} when it carried only
+         * a thumbnail, and {@code null} when the response had no thumbnail at all.
          */
         private final BusinessCtwaMediaType mediaType;
 
         /**
-         * Optional {@code <sourceApp>} content tagging the host platform of the ad
-         * (typically {@code "instagram"} or {@code "facebook"}); also gates the WAMO-AGM
-         * fields server-side.
+         * Holds the optional {@code <sourceApp>} content tagging the host platform of the ad.
+         *
+         * <p>The value is typically {@code "instagram"} or {@code "facebook"} and also gates
+         * the WAMO-AGM fields server-side.
          */
         private final String sourceApp;
 
         /**
-         * Optional WAMO-AGM {@code <greetingMessageBody>} content carrying the prefilled
-         * greeting the relay wants the composer to render.
+         * Holds the optional WAMO-AGM {@code <greetingMessageBody>} content carrying the
+         * prefilled greeting the relay wants the composer to render.
          */
         private final String greetingMessageBody;
 
         /**
-         * Optional WAMO-AGM {@code <automatedGreetingMessageShown>} flag.
+         * Holds the optional WAMO-AGM {@code <automatedGreetingMessageShown>} flag.
          *
-         * @apiNote
-         * Relay encodes it as the literal string {@code "true"} or {@code "false"} which
-         * this class parses into a tri-state {@link Boolean} ({@code null} when absent).
+         * <p>The relay encodes it as the literal string {@code "true"} or {@code "false"},
+         * which {@link #of(Node, Node)} parses into a tri-state {@link Boolean}
+         * ({@code null} when the field is absent).
          */
         private final Boolean automatedGreetingMessageShown;
 
         /**
-         * Optional WAMO-AGM {@code <ctaPayload>} content carrying the call-to-action payload
-         * the composer should attach to the first outbound message.
+         * Holds the optional WAMO-AGM {@code <ctaPayload>} content carrying the
+         * call-to-action payload the composer should attach to the first outbound message.
          */
         private final String ctaPayload;
 
         /**
-         * Optional WAMO-AGM {@code <originalImageUrl>} content carrying the un-cropped
-         * source image URL.
+         * Holds the optional WAMO-AGM {@code <originalImageUrl>} content carrying the
+         * un-cropped source image URL.
          */
         private final String originalImageUrl;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a successful reply from the parsed {@code <context>} fields.
          *
-         * @apiNote
-         * Defensively clones {@code thumbnailBytes}; the other byte-free fields are
-         * primitives or immutable strings and are stored directly.
+         * @implNote
+         * This implementation defensively clones {@code thumbnailBytes}; the remaining fields
+         * are immutable strings, enums, or boxed primitives and are stored directly.
          *
          * @param sourceUrl                     the source URL
          * @param sourceId                      the source id
@@ -178,8 +185,7 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
          * @param mediaType                     the media classifier, or {@code null} when no
          *                                      thumbnail was shipped
          * @param sourceApp                     the optional source app, or {@code null}
-         * @param greetingMessageBody           the optional WAMO-AGM greeting, or
-         *                                      {@code null}
+         * @param greetingMessageBody           the optional WAMO-AGM greeting, or {@code null}
          * @param automatedGreetingMessageShown the optional WAMO-AGM shown flag, or
          *                                      {@code null}
          * @param ctaPayload                    the optional WAMO-AGM CTA payload, or
@@ -267,12 +273,10 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         /**
          * Returns the optional inline thumbnail bytes.
          *
-         * @apiNote
-         * Returns a defensive copy; callers may mutate the array without affecting subsequent
-         * reads.
+         * <p>Returns a defensive copy; callers may mutate the array without affecting
+         * subsequent reads.
          *
-         * @return an {@link Optional} carrying a clone of the bytes, or
-         *         {@link Optional#empty()}
+         * @return an {@link Optional} carrying a clone of the bytes, or {@link Optional#empty()}
          */
         public Optional<byte[]> thumbnailBytes() {
             return Optional.ofNullable(thumbnailBytes).map(byte[]::clone);
@@ -290,8 +294,8 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         /**
          * Returns the optional media classifier.
          *
-         * @return an {@link Optional} carrying the type, or {@link Optional#empty()} when
-         *         no thumbnail was shipped
+         * @return an {@link Optional} carrying the type, or {@link Optional#empty()} when no
+         *         thumbnail was shipped
          */
         public Optional<BusinessCtwaMediaType> mediaType() {
             return Optional.ofNullable(mediaType);
@@ -345,24 +349,23 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * The parse only succeeds when the envelope echoes the {@code request} id, carries a
-         * {@code <context>} child with a {@code <source>} grandchild, and that
-         * {@code <source>} grandchild populates {@code <url>}, {@code <id>}, and
-         * {@code <type>}; anything else returns {@link Optional#empty()} so the caller can
-         * fall through to the error variants.
+         * <p>The parse only succeeds when {@link SmaxIqResultResponseMixin#validate(Node, Node)}
+         * confirms the envelope echoes the {@code request} id, the envelope carries a
+         * {@code <context>} child with a {@code <source>} grandchild, and that {@code <source>}
+         * grandchild populates {@code <url>}, {@code <id>}, and {@code <type>}; anything else
+         * returns {@link Optional#empty()} so the caller can fall through to the error variants.
          *
          * @implNote
          * This implementation deviates from WA Web's parser, which throws
-         * {@code "invalid response"} as soon as it sees a {@code <context>} child carrying
-         * an {@code <error>} grandchild. Cobalt does not throw on that shape; it instead
-         * lets {@link ClientError#of(Node, Node)} pick the envelope up via the standard
+         * {@code "invalid response"} as soon as it sees a {@code <context>} child carrying an
+         * {@code <error>} grandchild. Cobalt does not throw on that shape; it instead lets
+         * {@link ClientError#of(Node, Node)} pick the envelope up via the standard
          * {@code <error/>} child mechanism.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryCtwaContextJob",
                 exports = "ctwaContext",
@@ -445,7 +448,15 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across every field.
+         *
+         * @implNote
+         * This implementation compares {@code thumbnailBytes} with
+         * {@link Arrays#equals(byte[], byte[])} rather than {@link Objects#equals(Object, Object)}
+         * so the array is compared by content.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success} whose every field is equal
          */
         @Override
         public boolean equals(Object obj) {
@@ -473,7 +484,14 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from every field.
+         *
+         * @implNote
+         * This implementation folds {@code thumbnailBytes} in via
+         * {@link Arrays#hashCode(byte[])} so the contribution is content-based, consistent with
+         * {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -484,7 +502,13 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string listing every field.
+         *
+         * @implNote
+         * This implementation renders {@code thumbnailBytes} as a length ({@code -1} when
+         * absent) rather than dumping the raw array.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -507,28 +531,28 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
     }
 
     /**
-     * Reply variant signalling that the relay rejected the CTWA-context lookup.
+     * Signals that the relay permanently rejected the CTWA-context lookup.
      *
-     * @apiNote
-     * Maps both to the {@code 4xx} branch of WA Web's reply pipeline and to the inline
-     * {@code <error/>} child WA Web's {@code ctwaContext} parser flags as
+     * <p>This variant covers both the {@code 4xx} branch of WA Web's reply pipeline and the
+     * inline {@code <error/>} child that WA Web's {@code ctwaContext} parser flags as
      * {@code "invalid response"}; in either case the ad context cannot be rendered and the
      * composer should hide the CTWA banner.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryCtwaContextJob")
     final class ClientError implements IqQueryCtwaContextResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text from the {@code <error text/>}
+         * attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
+         * Constructs a client-error reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional text, or {@code null} when omitted
@@ -560,17 +584,15 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ClientError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
+         * <p>Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope echoing the {@code request} id and carrying an {@code <error/>} child whose
          * {@code code} attribute falls in the {@code 4xx} range, per the parsing contract of
          * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryCtwaContextJob",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -583,7 +605,11 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link ClientError} with equal
+         *         {@code errorCode} and {@code errorText}
          */
         @Override
         public boolean equals(Object obj) {
@@ -599,7 +625,9 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -607,7 +635,9 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string listing both fields.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {
@@ -617,26 +647,26 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
     }
 
     /**
-     * Reply variant signalling a transient server-side failure on a CTWA-context lookup.
+     * Signals a transient server-side failure on a CTWA-context lookup.
      *
-     * @apiNote
-     * Maps to the {@code 5xx} branch of WA Web's reply pipeline; callers may retry the same
-     * lookup after a backoff or fall back to a degraded composer state.
+     * <p>This variant maps to the {@code 5xx} branch of WA Web's reply pipeline; callers may
+     * retry the same lookup after a backoff or fall back to a degraded composer state.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryCtwaContextJob")
     final class ServerError implements IqQueryCtwaContextResponse {
         /**
-         * Numeric server-side error code from the {@code <error code/>} attribute.
+         * Holds the numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * Optional human-readable error text from the {@code <error text/>} attribute.
+         * Holds the optional human-readable error text from the {@code <error text/>}
+         * attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a server-error reply from the parsed error code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional text, or {@code null} when omitted
@@ -668,17 +698,15 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ServerError} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
-         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
-         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing
-         * contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         * <p>Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope echoing the {@code request} id and carrying an {@code <error/>} child whose
+         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing contract
+         * of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         {@link Optional#empty()} when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+         *         when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryCtwaContextJob",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -691,7 +719,11 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this reply to another object for value equality across both fields.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link ServerError} with equal
+         *         {@code errorCode} and {@code errorText}
          */
         @Override
         public boolean equals(Object obj) {
@@ -707,7 +739,9 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from both fields.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -715,7 +749,9 @@ public sealed interface IqQueryCtwaContextResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string listing both fields.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

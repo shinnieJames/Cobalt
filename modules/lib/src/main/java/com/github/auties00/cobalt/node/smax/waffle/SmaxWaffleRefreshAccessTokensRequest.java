@@ -14,57 +14,39 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="waffle" smax_id="46" type="get"/>}
- * Waffle refresh-access-tokens request.
- *
- * @apiNote
- * Powers {@code WAWebAccountLinkingAPI.refreshAccessToken}, which
- * rotates the linked Facebook account's OAuth-style access tokens
- * before they expire (the Account-Linking surface depends on those
- * tokens for Channels, Crossposting, and the Communities entry-point).
- * The embedder encrypts the rotation payload locally via
- * {@code WAWebAccountLinkingCryptoUtils.wrapPayloadWithRSAAESEncryption}
- * before constructing the request; the reply is parsed by
- * {@link SmaxWaffleRefreshAccessTokensResponse} and returns fresh
- * encryption metadata that the embedder decrypts back into the rotated
- * tokens.
+ * Models the outbound Waffle refresh-access-tokens request.
+ * <p>
+ * This request rotates the linked Facebook account's access tokens before they expire; those tokens back
+ * the account-linking surface (Channels, Crossposting, and the Communities entry-point). The rotation
+ * payload is carried encrypted inside {@link SmaxWaffleRsaEncryptionMetadata}. The reply is parsed by
+ * {@link SmaxWaffleRefreshAccessTokensResponse} and returns fresh encryption metadata that decrypts back
+ * into the rotated tokens.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleRefreshAccessTokensRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
 public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation.Request {
     /**
-     * The RSA encryption metadata subtree.
+     * Holds the RSA encryption metadata subtree carrying the encrypted rotation payload.
      */
     private final SmaxWaffleRsaEncryptionMetadata encryptionMetadata;
 
     /**
-     * The client wall-clock at request time.
+     * Holds the client wall-clock value stamped at request time.
      */
     private final long timestamp;
 
     /**
-     * The linked Facebook account id as opaque bytes.
+     * Holds the linked Facebook account id as opaque bytes.
      */
     private final byte[] fbid;
 
     /**
-     * Constructs a refresh-access-tokens request.
+     * Constructs a refresh-access-tokens request from the metadata, timestamp, and account id.
      *
-     * @apiNote
-     * The encrypted payload sealed inside
-     * {@link SmaxWaffleRsaEncryptionMetadata} carries the rotation
-     * context expected by the Waffle backend; the embedder produces
-     * that payload through the WA Web equivalent of
-     * {@code wrapPayloadWithRSAAESEncryption} against the linked
-     * account's encryption key.
-     *
-     * @param encryptionMetadata the RSA encryption metadata; never
-     *                           {@code null}
+     * @param encryptionMetadata the RSA encryption metadata; never {@code null}
      * @param timestamp          the request timestamp
-     * @param fbid               the linked Facebook account id; never
-     *                           {@code null}
-     * @throws NullPointerException if {@code encryptionMetadata} or
-     *                              {@code fbid} is {@code null}
+     * @param fbid               the linked Facebook account id; never {@code null}
+     * @throws NullPointerException if {@code encryptionMetadata} or {@code fbid} is {@code null}
      */
     public SmaxWaffleRefreshAccessTokensRequest(SmaxWaffleRsaEncryptionMetadata encryptionMetadata, long timestamp, byte[] fbid) {
         this.encryptionMetadata = Objects.requireNonNull(encryptionMetadata, "encryptionMetadata cannot be null");
@@ -75,8 +57,7 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation
     /**
      * Returns the RSA encryption metadata.
      *
-     * @return the metadata as supplied at construction time; never
-     *         {@code null}
+     * @return the metadata as supplied at construction time; never {@code null}
      */
     public SmaxWaffleRsaEncryptionMetadata encryptionMetadata() {
         return encryptionMetadata;
@@ -94,8 +75,7 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation
     /**
      * Returns the linked Facebook account id.
      *
-     * @return the id bytes as supplied at construction time; never
-     *         {@code null}
+     * @return the id bytes as supplied at construction time; never {@code null}
      */
     public byte[] fbid() {
         return fbid;
@@ -103,17 +83,12 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     * <p>
+     * The result is an {@code <iq xmlns="waffle" smax_id="46" type="get" to="s.whatsapp.net">} envelope
+     * carrying the encryption-metadata, timestamp, and fbid children. The dispatch path stamps a fresh
+     * {@code id} attribute on every outbound stanza so the reply parser can match it back to this request.
      *
-     * @apiNote
-     * Produces
-     * {@code <iq xmlns="waffle" smax_id="46" type="get" to="s.whatsapp.net">
-     * <encryption_metadata.../> <timestamp.../> <fbid.../></iq>}; the
-     * dispatch path stamps a fresh {@code id} attribute on every
-     * outbound stanza so the reply parser can match it back to this
-     * request.
-     *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         encrypted refresh payload; never {@code null}
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the encrypted refresh payload; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleRefreshAccessTokensRequest",
@@ -138,13 +113,12 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation
     }
 
     /**
-     * Returns whether the given object is a
-     * {@link SmaxWaffleRefreshAccessTokensRequest} with equal payload
-     * fields.
+     * Returns whether the given object is a {@link SmaxWaffleRefreshAccessTokensRequest} with equal payload fields.
+     * <p>
+     * The fbid array is compared element-wise.
      *
      * @param obj the candidate; may be {@code null}
-     * @return {@code true} when metadata, timestamp, and fbid all
-     *         match
+     * @return {@code true} when metadata, timestamp, and fbid all match
      */
     @Override
     public boolean equals(Object obj) {
@@ -163,8 +137,7 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation
     /**
      * Returns a hash code derived from the three payload fields.
      *
-     * @return a content-based hash consistent with
-     *         {@link #equals(Object)}
+     * @return a content-based hash consistent with {@link #equals(Object)}
      */
     @Override
     public int hashCode() {
@@ -174,8 +147,9 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxOperation
     }
 
     /**
-     * Returns a debug rendering that summarises the fbid as a length
-     * rather than as raw bytes.
+     * Returns a debug rendering of this request.
+     * <p>
+     * The fbid array is summarised as a length rather than as raw bytes.
      *
      * @return a human-readable summary; never {@code null}
      */

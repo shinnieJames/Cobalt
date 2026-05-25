@@ -13,36 +13,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The closed family of inbound reply variants to a
+ * Closes the family of inbound reply variants to a
  * {@link SmaxInAppCommsEventRequest}.
  *
- * @apiNote
- * Permits {@link Success} (the relay accepted the report) and
- * {@link Error} (the relay rejected or dropped the report); the WA Web
- * call sites in {@code WAWebJob*QuickPromotion} log the {@code Error}
- * variant but never retry, so embedders should treat both variants as
- * terminal.
+ * <p>The hierarchy permits {@link Success} (the relay accepted the report) and
+ * {@link Error} (the relay rejected or dropped it). Both variants are terminal:
+ * the WA Web {@code WAWebJob*QuickPromotion} call sites log an {@link Error} but
+ * never retry.
  */
 public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Response
         permits SmaxInAppCommsEventResponse.Success, SmaxInAppCommsEventResponse.Error {
 
     /**
-     * Tries each {@link SmaxInAppCommsEventResponse} variant in
-     * priority order and returns the first that parses cleanly.
+     * Tries each {@link SmaxInAppCommsEventResponse} variant in priority order
+     * and returns the first that parses cleanly.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code WASmaxInAppCommsEventRPC.sendEventRPC}
-     * dispatcher: {@link Success} is tried first; on miss the
-     * {@link Error} variant absorbs both the {@code 408} client-range
-     * timeout and the {@code 500}/{@code 503} server-range rejections.
+     * <p>The {@link Success} variant is tried first; on a miss the
+     * {@link Error} variant absorbs both the {@code 408} client-range timeout
+     * and the {@code 500}/{@code 503} server-range rejections. Returns an empty
+     * {@link Optional} when no documented variant matches the stanza shape.
      *
-     * @param node the inbound IQ stanza received from the relay;
-     *             never {@code null}
-     * @param request the original outbound stanza used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when no documented variant matched the stanza
-     *         shape
+     * @param node the inbound IQ stanza received from the relay; never
+     *             {@code null}
+     * @param request the original outbound stanza, used to validate echoed
+     *                identifiers; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty when no
+     *         documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInAppCommsEventRPC",
@@ -58,43 +54,37 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The {@code Success} reply variant; the relay accepted the event
-     * report.
+     * Models the successful reply variant in which the relay accepted the
+     * event report.
      *
-     * @apiNote
-     * Carries no payload beyond the {@code <iq type="result">}
-     * envelope echo; the {@code <event>} body the request supplied is
-     * not echoed back.
+     * <p>The variant carries no payload beyond the {@code <iq type="result">}
+     * envelope echo; the {@code <event>} body the request supplied is not
+     * echoed back.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInInAppCommsEventResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInInAppCommsIQResultResponseMixin")
     final class Success implements SmaxInAppCommsEventResponse {
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply.
          *
-         * @apiNote
-         * Used by {@link #of(Node, Node)} after the envelope shape has
-         * been validated; embedders typically do not instantiate this
-         * directly.
+         * <p>Instances are produced by {@link #of(Node, Node)} once the
+         * envelope shape has been validated.
          */
         public Success() {
         }
 
         /**
-         * Parses a {@link Success} variant from the given inbound
-         * stanza.
+         * Parses a {@link Success} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the stanza is not an
-         * {@code <iq type="result">} that echoes the original
-         * request's {@code id} and {@code to}.
+         * <p>Returns {@link Optional#empty()} when the stanza is not an
+         * {@code <iq type="result">} that echoes the original request's
+         * {@code id} and {@code to}.
          *
          * @implNote
          * This implementation delegates the envelope shape check to
-         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}; the
-         * mixin folds the {@code id}/{@code from}/{@code type} echo
-         * predicates into a single call so each per-RPC parser can
-         * stay one line.
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}, which folds
+         * the {@code id}/{@code from}/{@code type} echo predicates into a
+         * single call.
          *
          * @param node the inbound IQ stanza
          * @param request the original outbound request
@@ -125,8 +115,8 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns a constant hash code; the {@link Success} variant
-         * carries no fields.
+         * Returns a constant hash code; the {@link Success} variant carries no
+         * fields.
          *
          * @return the hash code
          */
@@ -136,8 +126,7 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns a debug-friendly textual representation of this
-         * variant.
+         * Returns a debug-friendly textual representation of this variant.
          *
          * @return the textual representation
          */
@@ -148,34 +137,32 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The {@code Error} reply variant; the relay rejected or dropped
+     * Models the error reply variant in which the relay rejected or dropped
      * the event report.
      *
-     * @apiNote
-     * The InAppComms domain documents three reply codes:
-     * {@code 408 request-timeout} (the relay's client-range timeout
-     * envelope), {@code 500 internal-server-error}, and
-     * {@code 503 service-unavailable} (both server-range envelopes).
-     * Cobalt collapses all three into the single
-     * {@code (errorCode, errorText)} pair; embedders that need
-     * code-specific retry policy switch on {@link #errorCode()}.
+     * <p>The InAppComms domain documents three reply codes:
+     * {@code 408 request-timeout} (the client-range timeout envelope),
+     * {@code 500 internal-server-error}, and {@code 503 service-unavailable}
+     * (both server-range envelopes). All three collapse into a single
+     * {@code (errorCode, errorText)} pair; consumers that need code-specific
+     * handling switch on {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInInAppCommsEventResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInInAppCommsEventErrorTypes")
     final class Error implements SmaxInAppCommsEventResponse {
         /**
-         * The numeric error code echoed by the relay.
+         * Holds the numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text supplied by the relay, when
-         * present.
+         * Holds the human-readable error text supplied by the relay, or
+         * {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new error reply.
+         * Constructs an error reply.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -187,7 +174,7 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -198,31 +185,26 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Parses an {@link Error} variant from the given inbound
-         * stanza.
+         * Parses an {@link Error} variant from the given inbound stanza.
          *
-         * @apiNote
-         * Tries the server-range error envelope first; on miss
-         * accepts a client-range envelope only when its code is
-         * {@code 408} so unrelated {@code 4xx} replies are not
-         * silently absorbed.
+         * <p>The server-range error envelope is tried first; on a miss a
+         * client-range envelope is accepted only when its code is {@code 408},
+         * so unrelated {@code 4xx} replies are not silently absorbed.
          *
          * @implNote
          * This implementation reuses
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * and
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * rather than duplicating the envelope-shape predicate; the
-         * priority ordering matches WA Web's combined "Error"
-         * disjunction in {@code WASmaxInInAppCommsEventResponseError}.
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} and
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} rather
+         * than duplicating the envelope-shape predicate; the priority ordering
+         * matches WA Web's combined error disjunction.
          *
          * @param node the inbound IQ stanza
          * @param request the original outbound request
@@ -244,8 +226,8 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns whether the given object is an {@link Error} with
-         * an equal code and text.
+         * Returns whether the given object is an {@link Error} with an equal
+         * code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -273,8 +255,7 @@ public sealed interface SmaxInAppCommsEventResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns a debug-friendly textual representation of this
-         * variant.
+         * Returns a debug-friendly textual representation of this variant.
          *
          * @return the textual representation
          */

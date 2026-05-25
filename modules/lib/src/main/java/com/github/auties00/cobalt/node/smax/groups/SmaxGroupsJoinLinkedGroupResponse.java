@@ -15,13 +15,10 @@ import java.util.Optional;
 /**
  * The sealed reply family for a {@link SmaxGroupsJoinLinkedGroupRequest}.
  *
- * @apiNote The four variants mirror the WA Web RPC dispatcher's
- * {@code GroupJoinRequestSuccess}/{@code Success}/{@code ClientError}/{@code ServerError} cases:
- * {@link GroupJoinRequestSuccess} means the relay accepted the join but the sub-group's membership-approval mode
- * rerouted the caller into the pending-approval queue, {@link Success} means the caller has joined the sub-group
- * directly, and the two error variants surface the relay's reason codes. The {@code WAWebGroupJoinSubgroupJob.joinSubgroup}
- * caller in WA Web throws {@code UnexpectedJoinSubgroupResponse} when the actual variant disagrees with the expected
- * approval-mode flag.
+ * <p>The four variants split the relay's response into distinct cases: {@link GroupJoinRequestSuccess} means the
+ * relay accepted the join but the sub-group's membership-approval mode rerouted the caller into the
+ * pending-approval queue, {@link Success} means the caller has joined the sub-group directly, and
+ * {@link ClientError}/{@link ServerError} surface the relay's reason codes.
  */
 public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.Response
         permits SmaxGroupsJoinLinkedGroupResponse.GroupJoinRequestSuccess, SmaxGroupsJoinLinkedGroupResponse.Success,
@@ -31,9 +28,9 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
      * Dispatches the inbound IQ across each {@link SmaxGroupsJoinLinkedGroupResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsJoinLinkedGroupRPC}:
-     * {@link GroupJoinRequestSuccess} is tried before {@link Success} because both share the same envelope shape;
-     * the {@code <membership_approval_request/>} child is the only discriminator.
+     * <p>{@link GroupJoinRequestSuccess} is tried before {@link Success} because both share the same envelope
+     * shape; the {@code <membership_approval_request/>} child is the only discriminator. {@link ClientError} and
+     * {@link ServerError} are tried last.
      *
      * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the four documented
      * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
@@ -68,16 +65,15 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
      * The reply variant emitted when the relay accepted the join but the sub-group's membership-approval mode
      * rerouted the caller into the pending-approval queue.
      *
-     * @apiNote Surfaces as the {@code JoinLinkedGroupResponseGroupJoinRequestSuccess} case in
-     * {@code WAWebGroupJoinSubgroupJob}: the caller is not yet a participant but the relay has recorded the request,
-     * and a sub-group admin must approve it via {@link SmaxGroupsMembershipRequestsActionRequest}.
+     * <p>The caller is not yet a participant but the relay has recorded the request, and a sub-group admin must
+     * approve it via {@link SmaxGroupsMembershipRequestsActionRequest}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsJoinLinkedGroupResponseGroupJoinRequestSuccess")
     final class GroupJoinRequestSuccess implements SmaxGroupsJoinLinkedGroupResponse {
         /**
          * Constructs a marker {@link GroupJoinRequestSuccess}.
          *
-         * @apiNote The instance carries no payload; the discriminator is solely the presence of the
+         * <p>The instance carries no payload; the discriminator is solely the presence of the
          * {@code <membership_approval_request/>} child on the IQ.
          */
         public GroupJoinRequestSuccess() {
@@ -86,7 +82,7 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link GroupJoinRequestSuccess} variant from {@code node}.
          *
-         * @apiNote Matches when the IQ is a valid {@code type="result"} echo of the request and carries a
+         * <p>Matches when the IQ is a valid {@code type="result"} echo of the request and carries a
          * {@code <membership_approval_request/>} child.
          *
          * @param node    the inbound IQ stanza
@@ -148,15 +144,15 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
      * The reply variant emitted when the relay admitted the caller into the sub-group directly without going through
      * membership approval.
      *
-     * @apiNote Surfaces as the {@code JoinLinkedGroupResponseSuccess} case in {@code WAWebGroupJoinSubgroupJob};
-     * the local chat row materialises immediately and the community sub-group preview UI flips to the joined state.
+     * <p>The local chat row materialises immediately and the community sub-group preview UI flips to the joined
+     * state.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsJoinLinkedGroupResponseSuccess")
     final class Success implements SmaxGroupsJoinLinkedGroupResponse {
         /**
          * Constructs a marker {@link Success}.
          *
-         * @apiNote The instance carries no payload; the discriminator is the absence of the
+         * <p>The instance carries no payload; the discriminator is the absence of the
          * {@code <membership_approval_request/>} child.
          */
         public Success() {
@@ -165,7 +161,7 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link Success} variant from {@code node}.
          *
-         * @apiNote Matches when the IQ is a valid {@code type="result"} echo of the request; the
+         * <p>Matches when the IQ is a valid {@code type="result"} echo of the request; the
          * {@link GroupJoinRequestSuccess} branch is tried first to claim envelopes carrying the
          * {@code <membership_approval_request/>} marker.
          *
@@ -222,8 +218,8 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
      * The reply variant emitted when the relay rejected the join as malformed, unauthorised, or referencing a
      * non-existent or unjoinable sub-group.
      *
-     * @apiNote Surfaces as the {@code JoinLinkedGroupResponseClientError} case in {@code WAWebGroupJoinSubgroupJob},
-     * which logs the {@link #errorCode()} as the HTTP-style status passed back to the community sub-group preview UI.
+     * <p>WA Web logs the {@link #errorCode()} as the HTTP-style status passed back to the community sub-group
+     * preview UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsJoinLinkedGroupResponseClientError")
     final class ClientError implements SmaxGroupsJoinLinkedGroupResponse {
@@ -269,8 +265,8 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link ClientError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -330,9 +326,8 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
     /**
      * The reply variant emitted on transient relay-side failure.
      *
-     * @apiNote Surfaces as the {@code JoinLinkedGroupResponseServerError} case in {@code WAWebGroupJoinSubgroupJob},
-     * where it is logged at the same severity as {@link ClientError} but typically signals retry-eligible relay
-     * outages rather than caller error.
+     * <p>Logged at the same severity as {@link ClientError} but typically signals retry-eligible relay outages
+     * rather than caller error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsJoinLinkedGroupResponseServerError")
     final class ServerError implements SmaxGroupsJoinLinkedGroupResponse {
@@ -378,8 +373,8 @@ public sealed interface SmaxGroupsJoinLinkedGroupResponse extends SmaxOperation.
         /**
          * Tries to parse a {@link ServerError} variant from {@code node}.
          *
-         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
-         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
+         * <p>Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the shared
+         * {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

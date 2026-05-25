@@ -15,13 +15,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Reconciles the business-account device-agent roster with sync mutations from the server.
  *
- * @apiNote
- * Cobalt embedders that present a Business Manager view of agents (other
- * devices acting on behalf of the business account) read the result of
- * this handler through {@link com.github.auties00.cobalt.store.WhatsAppStore#findAgentState(String)}.
- * SET mutations upsert an agent entry by id; REMOVE mutations drop an
- * entry by id. The handler is registered automatically by the sync engine
- * and is not invoked directly by user code.
+ * <p>A device agent is another device acting on behalf of the business
+ * account. {@link SyncdOperation#SET} mutations upsert an agent entry by id;
+ * {@link SyncdOperation#REMOVE} mutations drop an entry by id. The reconciled
+ * roster is read back through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findAgentState(String)}.
  *
  * @implNote
  * This implementation omits two side effects that WA Web performs after
@@ -44,9 +42,7 @@ public final class AgentActionHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton agent action handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      *
      * @implNote
      * This implementation has nothing to initialize; the
@@ -79,12 +75,12 @@ public final class AgentActionHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Drives the per-mutation upsert or remove of a single agent entry
-     * from a {@code deviceAgent} sync collection patch. The mutation
-     * index is a JSON array {@code ["deviceAgent", agentId]}; the value
-     * payload carries an {@link AgentAction} for {@code SET} and is
-     * unused for {@code REMOVE}.
+     * <p>Reads the agent id from the JSON index {@code ["deviceAgent", agentId]}.
+     * A {@link SyncdOperation#REMOVE} drops the entry keyed by that id; a
+     * {@link SyncdOperation#SET} upserts the {@link AgentAction} value into the
+     * store. Any other operation yields
+     * {@link MutationApplicationResult#unsupported()}, and an empty or absent
+     * agent id yields {@link SyncdIndexUtils#malformedActionIndex(String, String)}.
      *
      * @implNote
      * This implementation merges the agent into the store regardless of

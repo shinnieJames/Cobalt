@@ -14,59 +14,45 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing app-state mutations that toggle the Meta AI Private
- * Processing preference.
+ * Builds outgoing app-state mutations that toggle the Meta AI Private Processing preference.
  *
- * @apiNote
- * Drives the Private Processing privacy switch exposed under chat
- * settings: when enabled, sensitive on-device AI computations may run
- * for the linked account. Mutations produced here are persisted into
- * the user's prefs through the standard
- * {@code WAWebSettingsBridgeApi} consumer pipeline so every linked
- * device converges on the same preference.
+ * <p>Backs the Private Processing privacy switch exposed under chat settings: when enabled,
+ * sensitive on-device AI computations may run for the linked account. Mutations produced here are
+ * persisted into the user's prefs through the standard settings-bridge consumer pipeline so every
+ * linked device converges on the same preference.
  *
  * @implNote
  * This implementation always emits an explicit
- * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#ENABLED}
- * or
- * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#DISABLED}
- * value; the {@code UNDEFINED} sentinel that the protobuf schema
- * exposes is reserved for the "user has not yet expressed a preference"
- * case and is never produced by a client gesture.
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#ENABLED} or
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#DISABLED} value; the
+ * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#UNDEFINED} sentinel that the
+ * protobuf schema exposes is reserved for the "user has not yet expressed a preference" case and
+ * is never produced by a client gesture.
  */
 public final class PrivateProcessingSettingMutationFactory {
     /**
      * Constructs a private-processing mutation factory.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across
-     * the lifetime of the client.
+     * <p>The factory is stateless; a single instance may be shared across the lifetime of the
+     * client.
      */
     public PrivateProcessingSettingMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation for the Private Processing
-     * preference.
+     * Builds a pending SET mutation for the Private Processing preference.
      *
-     * @apiNote
-     * Invoked from the public AI-private-processing setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient}; the
-     * index carries only the action name because the preference is a
-     * singleton per account.
+     * <p>The index carries only the action name because the preference is a singleton per account.
      *
      * @implNote
      * This implementation maps the input boolean to the
-     * {@link PrivateProcessingSettingAction.PrivateProcessingStatus}
-     * enum so the wire matches WA Web's protobuf schema (field 74 in
-     * {@code WAWebProtobufSyncAction.pb}, {@code REGULAR_HIGH}
-     * priority).
+     * {@link PrivateProcessingSettingAction.PrivateProcessingStatus} enum so the wire matches WA
+     * Web's protobuf schema (field 74 in {@code WAWebProtobufSyncAction.pb},
+     * {@code REGULAR_HIGH} priority).
      *
-     * @param enabled {@code true} to enable Private Processing,
-     *                {@code false} to disable it
-     * @return the pending mutation ready to be queued for outbound
-     *         app-state sync
+     * @param enabled {@code true} to enable Private Processing, {@code false} to disable it
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebSettingsBridgeApi", exports = "private_processing_setting", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getPrivateProcessingMutation(boolean enabled) {

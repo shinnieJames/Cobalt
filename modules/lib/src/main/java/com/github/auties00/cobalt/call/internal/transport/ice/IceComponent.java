@@ -1,35 +1,39 @@
 package com.github.auties00.cobalt.call.internal.transport.ice;
 
 /**
- * The two RTP components an ICE agent gathers candidates for, per
- * RFC 8445 §3 — RTP itself and the optional RTCP demuxed alongside.
+ * Enumerates the two RTP components an ICE agent gathers candidates for, per RFC 8445 section 3.
  *
- * <p>WhatsApp uses {@code rtcp-mux} (RFC 5761), so a single
- * {@link #RTP} component carries both RTP and RTCP. The
- * {@link #RTCP} component is included so the model can express
- * legacy / non-muxed peers if needed.
+ * <p>A media stream is split into independently checked components: RTP itself and the optional
+ * RTCP control channel demultiplexed alongside it. WhatsApp uses {@code rtcp-mux} (RFC 5761), so
+ * the single {@link #RTP} component carries both RTP and RTCP on one transport address; the
+ * {@link #RTCP} component is modeled only so the agent can express a legacy non-muxed peer.
+ *
+ * <p>The component id is the {@code component_id} term of the candidate-priority formula evaluated
+ * by {@link IceCandidate#priority()}.
  */
 public enum IceComponent {
     /**
-     * The RTP / RTP+RTCP-muxed component — component-id {@code 1}.
+     * The RTP component, which under {@code rtcp-mux} also carries demultiplexed RTCP.
+     *
+     * <p>Component id {@code 1}, the only component used on the WhatsApp muxed path.
      */
     RTP(1),
     /**
-     * The (legacy) demultiplexed RTCP component — component-id
-     * {@code 2}.
+     * The legacy demultiplexed RTCP component.
+     *
+     * <p>Component id {@code 2}, modeled for non-muxed peers but unused on the WhatsApp path.
      */
     RTCP(2);
 
     /**
-     * Wire component id, used in candidate-priority computation per
-     * RFC 8445 §5.1.2.1.
+     * The wire component id used in candidate-priority computation per RFC 8445 section 5.1.2.1.
      */
     private final int componentId;
 
     /**
-     * Constructs a component with the given wire id.
+     * Constructs a component with the given wire component id.
      *
-     * @param componentId the wire component id (1 or 2)
+     * @param componentId the wire component id, {@code 1} for RTP or {@code 2} for RTCP
      */
     IceComponent(int componentId) {
         this.componentId = componentId;
@@ -38,7 +42,10 @@ public enum IceComponent {
     /**
      * Returns the wire component id.
      *
-     * @return {@code 1} for RTP, {@code 2} for RTCP
+     * <p>The returned value is the {@code component_id} term subtracted from {@code 256} in the
+     * RFC 8445 section 5.1.2.1 priority formula evaluated by {@link IceCandidate#priority()}.
+     *
+     * @return {@code 1} for {@link #RTP}, {@code 2} for {@link #RTCP}
      */
     public int componentId() {
         return componentId;

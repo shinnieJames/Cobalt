@@ -10,35 +10,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed inbound reply hierarchy for the
- * {@code WASmaxSmbMeteredMessagesCampaignCampaignStateChangedNotificationRPC}
- * SMAX receive RPC.
- *
- * @apiNote
- * Carries the single {@link Notification} permit because the RPC is
- * {@code Receive}-shape (server-pushed only). The hierarchy mirrors the
- * WA Web pipeline in which
- * {@code WAWebHandleBusinessNotification} routes
- * {@code <notification type="business">} stanzas bearing an
- * {@code <mm_campaign/>} child into
- * {@code WAWebBizBroadcastMarketingCampaignNotificationEmitter.marketingCampaignNotificationEmitter},
- * which fans the integrity-check outcome of an SMB metered-messages
- * marketing campaign out to interested downstream listeners.
+ * Models the inbound replies to the SMB metered-messages campaign-state-changed receive RPC.
+ * <p>
+ * Carries the single {@link Notification} permit because the RPC is {@code Receive}-shape
+ * (server-pushed only). A {@code <notification type="business">} stanza bearing an
+ * {@code <mm_campaign/>} child reports the integrity-check outcome of an SMB metered-messages
+ * marketing campaign, which is fanned out to interested downstream listeners.
  */
 public sealed interface SmaxCampaignStateChangedNotificationResponse extends SmaxOperation.Response
         permits SmaxCampaignStateChangedNotificationResponse.Notification {
 
     /**
      * Parses an inbound campaign-state-changed notification.
-     *
-     * @apiNote
-     * Equivalent to {@link Notification#of(Node)}; the factory exists at
-     * the sealed-interface level so callers can reach it without naming
-     * the permitted concrete type. Returns empty when the stanza shape
-     * does not match.
+     * <p>
+     * Equivalent to {@link Notification#of(Node)}; this factory exists at the sealed-interface level
+     * so callers can reach it without naming the permitted concrete type. Returns empty when the
+     * stanza shape does not match.
      *
      * @param node the inbound notification stanza received from the relay; never {@code null}
-     * @return an {@link Optional} carrying the parsed notification, or empty when the stanza does not match
+     * @return an {@link Optional} carrying the parsed notification, or empty when the stanza does
+     *         not match
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxSmbMeteredMessagesCampaignCampaignStateChangedNotificationRPC",
@@ -50,60 +41,50 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
     }
 
     /**
-     * The server-pushed {@code Notification} variant carrying the
-     * campaign identifiers, the new status, and the standard envelope
-     * echoes.
-     *
-     * @apiNote
-     * WA Web only re-emits the parsed notification to downstream
-     * listeners when all three of {@link #adId()}, {@link #adGroupId()},
-     * and {@link #adCreativeId()} are present; partial notifications are
-     * silently dropped. The {@link #status()} literal selects between
-     * {@code "ok"} (the campaign has cleared integrity review) and
-     * {@code "integrityNotCleared"} (held back).
+     * The server-pushed variant carrying the campaign identifiers, the new status, and the standard
+     * envelope echoes.
+     * <p>
+     * The parsed notification is only re-emitted to downstream listeners when all three of
+     * {@link #adId()}, {@link #adGroupId()}, and {@link #adCreativeId()} are present; partial
+     * notifications are silently dropped. The {@link #status()} literal selects between {@code "ok"}
+     * (the campaign has cleared integrity review) and {@code "integrityNotCleared"} (held back).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagesCampaignCampaignStateChangedNotificationRequest")
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagesCampaignServerNotificationMixin")
     final class Notification implements SmaxCampaignStateChangedNotificationResponse {
         /**
-         * The optional {@code to} attribute (the local user JID); absent
-         * when the relay broadcasts to every linked device simultaneously.
+         * The optional {@code to} attribute (the local user JID); absent when the relay broadcasts
+         * to every linked device simultaneously.
          */
         private final Jid to;
 
         /**
-         * The optional {@code ad_id} attribute on the {@code <mm_campaign>}
-         * child (Facebook ads-platform advertisement identifier).
+         * The optional {@code ad_id} attribute on the {@code <mm_campaign>} child (Facebook
+         * ads-platform advertisement identifier).
          */
         private final String adId;
 
         /**
-         * The optional {@code ad_group_id} attribute (parent
-         * advertisement-group identifier).
+         * The optional {@code ad_group_id} attribute (parent advertisement-group identifier).
          */
         private final String adGroupId;
 
         /**
-         * The optional {@code ad_creative_id} attribute
-         * (advertisement-creative identifier).
+         * The optional {@code ad_creative_id} attribute (advertisement-creative identifier).
          */
         private final String adCreativeId;
 
         /**
-         * The {@code status} attribute on the {@code <mm_campaign>} child,
-         * one of the literals {@code "ok"} (cleared) or
-         * {@code "integrityNotCleared"} (held back).
+         * The {@code status} attribute on the {@code <mm_campaign>} child, one of the literals
+         * {@code "ok"} (cleared) or {@code "integrityNotCleared"} (held back).
          */
         private final String status;
 
         /**
-         * Constructs a notification from already-validated envelope and
-         * payload values.
-         *
-         * @apiNote
-         * Cobalt callers normally obtain a notification by parsing a
-         * stanza via {@link #of(Node)}; this constructor is exposed for
-         * tests and for hand-built fixtures.
+         * Constructs a notification from already-validated envelope and payload values.
+         * <p>
+         * Callers normally obtain a notification by parsing a stanza via {@link #of(Node)}; this
+         * constructor is exposed for tests and for hand-built fixtures.
          *
          * @param to           the optional target user JID; may be {@code null}
          * @param adId         the optional advertisement ID; may be {@code null}
@@ -123,10 +104,8 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
 
         /**
          * Returns the optional target user JID.
-         *
-         * @apiNote
-         * Empty when the relay broadcasts the notification to every
-         * linked device of the account.
+         * <p>
+         * Empty when the relay broadcasts the notification to every linked device of the account.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -136,11 +115,9 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
 
         /**
          * Returns the optional advertisement ID.
-         *
-         * @apiNote
-         * Identifies the Facebook ads-platform advertisement whose
-         * marketing-message campaign just transitioned state. WA Web
-         * skips re-emission when this value is absent.
+         * <p>
+         * Identifies the Facebook ads-platform advertisement whose marketing-message campaign just
+         * transitioned state. Re-emission is skipped when this value is absent.
          *
          * @return an {@link Optional} carrying the ID
          */
@@ -150,10 +127,8 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
 
         /**
          * Returns the optional advertisement-group ID.
-         *
-         * @apiNote
-         * Identifies the parent ad group. WA Web skips re-emission when
-         * this value is absent.
+         * <p>
+         * Identifies the parent ad group. Re-emission is skipped when this value is absent.
          *
          * @return an {@link Optional} carrying the ID
          */
@@ -163,10 +138,9 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
 
         /**
          * Returns the optional advertisement-creative ID.
-         *
-         * @apiNote
-         * Identifies the advertisement creative bound to the campaign.
-         * WA Web skips re-emission when this value is absent.
+         * <p>
+         * Identifies the advertisement creative bound to the campaign. Re-emission is skipped when
+         * this value is absent.
          *
          * @return an {@link Optional} carrying the ID
          */
@@ -176,11 +150,9 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
 
         /**
          * Returns the campaign status literal.
-         *
-         * @apiNote
-         * One of {@code "ok"} (integrity review cleared) or
-         * {@code "integrityNotCleared"} (held back); forwarded verbatim
-         * to downstream listeners.
+         * <p>
+         * One of {@code "ok"} (integrity review cleared) or {@code "integrityNotCleared"} (held
+         * back); forwarded verbatim to downstream listeners.
          *
          * @return the status; never {@code null}
          */
@@ -189,24 +161,18 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
         }
 
         /**
-         * Parses a notification from a {@code <notification type="business">}
-         * stanza bearing an {@code <mm_campaign/>} child.
+         * Parses a notification from a {@code <notification type="business">} stanza bearing an
+         * {@code <mm_campaign/>} child.
+         * <p>
+         * Returns empty when the stanza tag is wrong, when the {@code from} attribute is not the
+         * literal {@code s.whatsapp.net} server JID, when the {@code type} attribute is not the
+         * literal {@code "business"}, when the {@code <mm_campaign/>} child is missing, or when its
+         * {@code status} attribute is absent. The three optional ad identifiers may legally be
+         * absent; consumers filter them out before re-emission.
          *
-         * @apiNote
-         * Returns empty when the stanza tag is wrong, when the
-         * {@code from} attribute is not the literal {@code s.whatsapp.net}
-         * server JID, when the {@code type} attribute is not the literal
-         * {@code "business"}, when the {@code <mm_campaign/>} child is
-         * missing, or when its {@code status} attribute is absent. The
-         * three optional ad identifiers may legally be absent; consumers
-         * filter them out before re-emission.
-         *
-         * @implNote
-         * This implementation matches the WA Web parser ordering: the
-         * literal {@code from} server-JID and {@code type="business"}
-         * checks fire before the {@code <mm_campaign/>} child lookup,
-         * and the mandatory {@code status} attribute is validated before
-         * the three optional ad identifiers are sampled.
+         * @implNote This implementation checks the literal {@code from} server-JID and
+         * {@code type="business"} before the {@code <mm_campaign/>} child lookup, and validates the
+         * mandatory {@code status} attribute before sampling the three optional ad identifiers.
          *
          * @param node the candidate {@code <notification/>} stanza; never {@code null}
          * @return an {@link Optional} carrying the parsed notification, or empty when parsing fails
@@ -243,13 +209,11 @@ public sealed interface SmaxCampaignStateChangedNotificationResponse extends Sma
         }
 
         /**
-         * Compares this notification to {@code obj} for structural
-         * equality on all five slots.
+         * Compares this notification to {@code obj} for structural equality on all five slots.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when {@code obj} is a {@link Notification}
-         *         with matching {@link #to()}, {@link #adId()},
-         *         {@link #adGroupId()}, {@link #adCreativeId()}, and
+         * @return {@code true} when {@code obj} is a {@link Notification} with matching
+         *         {@link #to()}, {@link #adId()}, {@link #adGroupId()}, {@link #adCreativeId()}, and
          *         {@link #status()}
          */
         @Override

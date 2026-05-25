@@ -6,15 +6,18 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
  * Thrown when the periodic Advanced Device Verification (ADV) maintenance
  * job fails.
  *
+ * The maintenance job runs once per day to walk every device list cached
+ * locally, evict companions whose stored timestamp has crossed the
+ * key-index-list expiration window, trigger a device refresh for
+ * companions about to expire, and clear the Signal sessions of evicted
+ * devices. This exception is raised when that job cannot complete because
+ * the local store is unreachable, a required configuration property is
+ * missing, or a triggered resync fails.
+ *
  * @apiNote
- * WA Web's {@code WAWebAdvDeviceInfoCheckJob} runs once per day to walk
- * every device list cached locally, evict companions whose stored
- * timestamp has crossed {@code num_days_key_index_list_expiration},
- * trigger a USync refresh for companions about to expire, and clear the
- * Signal sessions of evicted devices. This exception is raised when that
- * job cannot complete because the local store is unreachable, an AB prop
- * is missing, or a triggered resync fails. The configurable error handler
- * decides whether to log the failure, retry early, or escalate.
+ * The failure is confined to background bookkeeping; message sending and
+ * receiving continue, and the next scheduled run can recover. A caught
+ * instance can be logged or used to trigger an early retry.
  *
  * @implNote
  * This implementation is non-fatal: the next scheduled run can recover

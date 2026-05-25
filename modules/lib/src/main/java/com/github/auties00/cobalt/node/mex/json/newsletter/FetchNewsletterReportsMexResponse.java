@@ -22,29 +22,21 @@ import java.util.Optional;
  * Parses the MEX response of the fetch-newsletter-reports query built by
  * {@link FetchNewsletterReportsMexRequest}.
  *
- * @apiNote
- * Surfaces one {@link ChannelsReports} per report row in the relay's
- * {@code data.xwa2_channels_reports.channels_reports} array; each row carries
- * the report id, status, creation and last-update timestamps, the channel
- * name and Jid, a polymorphic {@link ChannelsReports.ReportedContentData}
- * payload identifying the offending message, and an optional
- * {@link ChannelsReports.Appeal} block when the offender has appealed.
- * Mirrors the shape WA Web's {@code WAWebNewsletterReportParseUtils} consumes
- * before forwarding entries to the moderation UI.
+ * <p>Surfaces one {@link ChannelsReports} per report row in the relay's
+ * {@code data.xwa2_channels_reports.channels_reports} array; each row carries the report id, status,
+ * creation and last-update timestamps, the channel name and Jid, a polymorphic
+ * {@link ChannelsReports.ReportedContentData} payload identifying the offending message, and an
+ * optional {@link ChannelsReports.Appeal} block when the offender has appealed.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterReportsJob")
 public final class FetchNewsletterReportsMexResponse implements MexOperation.Response.Json {
     /**
-     * The parsed list of channel reports; ordered as returned by the relay.
+     * Holds the parsed list of channel reports, ordered as returned by the relay.
      */
     private final List<ChannelsReports> channelsReports;
 
     /**
      * Constructs a response wrapping the parsed list of channel reports.
-     *
-     * @apiNote
-     * Reserved for the static parser; external callers obtain instances via
-     * {@link #of(Node)}.
      *
      * @param channelsReports the parsed list of reports
      */
@@ -55,15 +47,12 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
     /**
      * Parses the MEX response carried by the given IQ result node.
      *
-     * @apiNote
-     * Drains the {@code <result>} child's byte content into the JSON parser;
-     * the returned {@link Optional} is empty when the result child is
-     * missing or when the JSON envelope omits the expected
-     * {@code data.xwa2_channels_reports} root.
+     * <p>Drains the {@code <result>} child's byte content into the JSON parser; the returned
+     * {@link Optional} is empty when the result child is missing or when the JSON envelope omits the
+     * expected {@code data.xwa2_channels_reports} root.
      *
      * @param node the IQ result node received from the relay
-     * @return the parsed response, or empty when the node does not carry a
-     *         well-formed result payload
+     * @return the parsed response, or empty when the node does not carry a well-formed result payload
      */
     public static Optional<FetchNewsletterReportsMexResponse> of(Node node) {
         return node.getChild("result")
@@ -74,81 +63,67 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
     /**
      * Returns the parsed list of channel reports.
      *
-     * @apiNote
-     * The list is ordered as returned by the relay and may be empty when no
-     * reports are outstanding against newsletters the local user
-     * administers.
+     * <p>The list is ordered as returned by the relay and may be empty when no reports are
+     * outstanding against newsletters the local user administers.
      *
-     * @return the parsed list, empty when the {@code channels_reports} array
-     *         was missing or empty
+     * @return the parsed list, empty when the {@code channels_reports} array was missing or empty
      */
     public List<ChannelsReports> channelsReports() {
         return channelsReports;
     }
 
     /**
-     * A single entry of the {@code channels_reports} array returned by the
-     * relay.
+     * Wraps a single entry of the {@code channels_reports} array returned by the relay.
      *
-     * @apiNote
-     * Carries the metadata WA Web's moderation UI renders for one outstanding
-     * report: the report id, current {@code status}, creation and
-     * last-update timestamps, the channel display name and Jid, the
-     * {@link ReportedContentData} payload identifying the offending content,
-     * and an optional {@link Appeal} block when the offender has filed an
-     * appeal.
+     * <p>Carries the metadata WA Web's moderation UI renders for one outstanding report: the report
+     * id, current {@code status}, creation and last-update timestamps, the channel display name and
+     * Jid, the {@link ReportedContentData} payload identifying the offending content, and an optional
+     * {@link Appeal} block when the offender has filed an appeal.
      */
     public static final class ChannelsReports {
         /**
-         * The relay-issued report identifier echoed under {@code report_id}.
+         * Holds the relay-issued report identifier echoed under {@code report_id}.
          */
         private final String reportId;
 
         /**
-         * The current moderation status echoed under {@code status}.
+         * Holds the current moderation status echoed under {@code status}.
          */
         private final String status;
 
         /**
-         * The report-creation timestamp in epoch seconds, echoed under
-         * {@code creation_time}.
+         * Holds the report-creation timestamp in epoch seconds, echoed under {@code creation_time}.
          */
         private final Long creationTime;
 
         /**
-         * The last-update timestamp in epoch seconds, echoed under
-         * {@code last_update_time}.
+         * Holds the last-update timestamp in epoch seconds, echoed under {@code last_update_time}.
          */
         private final Long lastUpdateTime;
 
         /**
-         * The display name of the reported channel, echoed under
-         * {@code channel_name}.
+         * Holds the display name of the reported channel, echoed under {@code channel_name}.
          */
         private final String channelName;
 
         /**
-         * The Jid of the reported channel, echoed under {@code channel_jid}.
+         * Holds the Jid of the reported channel, echoed under {@code channel_jid}.
          */
         private final String channelJid;
 
         /**
-         * The polymorphic payload identifying the reported content, echoed
-         * under {@code reported_content_data}.
+         * Holds the polymorphic payload identifying the reported content, echoed under
+         * {@code reported_content_data}.
          */
         private final ReportedContentData reportedContentData;
 
         /**
-         * The optional appeal record echoed under {@code appeal}.
+         * Holds the optional appeal record echoed under {@code appeal}.
          */
         private final Appeal appeal;
 
         /**
          * Constructs a single channel-report entry.
-         *
-         * @apiNote
-         * Reserved for {@link #of(JSONObject)}; external callers do not
-         * instantiate report entries directly.
          *
          * @param reportId            the relay-issued report identifier
          * @param status              the current moderation status
@@ -173,9 +148,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the relay-issued report identifier.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code report_id}.
-         *
          * @return the {@code report_id} value, or empty when omitted
          */
         public Optional<String> reportId() {
@@ -185,10 +157,8 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the current moderation status of the report.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code status}; otherwise
-         * carries the relay-defined status code (for example
-         * {@code "PENDING"}, {@code "ACTIONED"}).
+         * <p>Carries the relay-defined status code (for example {@code "PENDING"},
+         * {@code "ACTIONED"}) when present.
          *
          * @return the {@code status} value, or empty when omitted
          */
@@ -199,13 +169,10 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the moment the report was filed.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code creation_time}; the
-         * underlying value is the wire-level epoch-second integer remapped
-         * to an {@link Instant}.
+         * <p>The underlying value is the wire-level epoch-second integer remapped to an
+         * {@link Instant}.
          *
-         * @return the {@code creation_time} as an {@link Instant}, or empty
-         *         when omitted
+         * @return the {@code creation_time} as an {@link Instant}, or empty when omitted
          */
         public Optional<Instant> creationTime() {
             return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
@@ -214,13 +181,10 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the moment the report was last updated.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code last_update_time};
-         * the underlying value is the wire-level epoch-second integer
-         * remapped to an {@link Instant}.
+         * <p>The underlying value is the wire-level epoch-second integer remapped to an
+         * {@link Instant}.
          *
-         * @return the {@code last_update_time} as an {@link Instant}, or
-         *         empty when omitted
+         * @return the {@code last_update_time} as an {@link Instant}, or empty when omitted
          */
         public Optional<Instant> lastUpdateTime() {
             return Optional.ofNullable(lastUpdateTime).map(Instant::ofEpochSecond);
@@ -228,9 +192,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
 
         /**
          * Returns the display name of the reported channel.
-         *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code channel_name}.
          *
          * @return the {@code channel_name} value, or empty when omitted
          */
@@ -241,9 +202,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the Jid of the reported channel.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code channel_jid}.
-         *
          * @return the {@code channel_jid} value, or empty when omitted
          */
         public Optional<String> channelJid() {
@@ -253,11 +211,7 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the polymorphic payload identifying the reported content.
          *
-         * @apiNote
-         * Empty when the GraphQL envelope omits {@code reported_content_data}.
-         *
-         * @return the parsed {@link ReportedContentData}, or empty when
-         *         omitted
+         * @return the parsed {@link ReportedContentData}, or empty when omitted
          */
         public Optional<ReportedContentData> reportedContentData() {
             return Optional.ofNullable(reportedContentData);
@@ -266,10 +220,8 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         /**
          * Returns the appeal record attached to the report.
          *
-         * @apiNote
-         * Empty when no appeal has been filed (or the GraphQL envelope omits
-         * {@code appeal}); otherwise carries the appellant's reason and
-         * state.
+         * <p>Empty when no appeal has been filed (or the GraphQL envelope omits {@code appeal});
+         * otherwise carries the appellant's reason and state.
          *
          * @return the parsed {@link Appeal}, or empty when omitted
          */
@@ -278,54 +230,49 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         }
 
         /**
-         * The polymorphic {@code reported_content_data} payload embedded in
-         * each report entry.
+         * Wraps the polymorphic {@code reported_content_data} payload embedded in each report entry.
          *
-         * @apiNote
-         * The relay returns one of three GraphQL inline-fragment shapes
-         * keyed by the {@code __typename} discriminator:
+         * <p>The relay returns one of three GraphQL inline-fragment shapes keyed by the
+         * {@code __typename} discriminator:
          * <ul>
          *   <li>{@code XWA2ChannelServerMsgData} carries {@code server_msg_id}.</li>
          *   <li>{@code XWA2ChannelStatusData} carries {@code server_id}.</li>
-         *   <li>{@code XWA2ChannelQuestionResponseData} carries
-         *       {@code server_response_id}, {@code notify_name} and a
-         *       nested {@code question_data} fragment of type
+         *   <li>{@code XWA2ChannelQuestionResponseData} carries {@code server_response_id},
+         *       {@code notify_name} and a nested {@code question_data} fragment of type
          *       {@code XWA2ChannelServerMsgData}.</li>
          * </ul>
          */
         public static final class ReportedContentData {
             /**
-             * The GraphQL {@code __typename} discriminator selecting which
-             * inline-fragment fields are populated.
+             * Holds the GraphQL {@code __typename} discriminator selecting which inline-fragment
+             * fields are populated.
              */
             private final String typename;
 
             /**
-             * The {@code server_msg_id} populated on
-             * {@code XWA2ChannelServerMsgData} fragments.
+             * Holds the {@code server_msg_id} populated on {@code XWA2ChannelServerMsgData} fragments.
              */
             private final String serverMsgId;
 
             /**
-             * The {@code server_id} populated on
-             * {@code XWA2ChannelStatusData} fragments.
+             * Holds the {@code server_id} populated on {@code XWA2ChannelStatusData} fragments.
              */
             private final String serverId;
 
             /**
-             * The {@code server_response_id} populated on
+             * Holds the {@code server_response_id} populated on
              * {@code XWA2ChannelQuestionResponseData} fragments.
              */
             private final String serverResponseId;
 
             /**
-             * The {@code notify_name} populated on
-             * {@code XWA2ChannelQuestionResponseData} fragments.
+             * Holds the {@code notify_name} populated on {@code XWA2ChannelQuestionResponseData}
+             * fragments.
              */
             private final String notifyName;
 
             /**
-             * The nested {@code question_data} fragment populated on
+             * Holds the nested {@code question_data} fragment populated on
              * {@code XWA2ChannelQuestionResponseData}.
              */
             private final QuestionData questionData;
@@ -333,9 +280,7 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Constructs a parsed {@code reported_content_data} value.
              *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}; only the fields
-             * matching the active {@code __typename} fragment are populated.
+             * <p>Only the fields matching the active {@code __typename} fragment are populated.
              *
              * @param typename         the {@code __typename} discriminator
              * @param serverMsgId      the {@code server_msg_id} value
@@ -356,9 +301,7 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Returns the {@code __typename} discriminator.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code __typename};
-             * otherwise selects which inline-fragment getters carry data.
+             * <p>Selects which inline-fragment getters carry data.
              *
              * @return the {@code __typename} value, or empty when omitted
              */
@@ -367,15 +310,12 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             }
 
             /**
-             * Returns the message identifier of the reported channel
-             * message.
+             * Returns the message identifier of the reported channel message.
              *
-             * @apiNote
-             * Populated only when {@link #typename()} resolves to
-             * {@code XWA2ChannelServerMsgData}.
+             * <p>Populated only when {@link #typename()} resolves to {@code XWA2ChannelServerMsgData}.
              *
-             * @return the {@code server_msg_id} value, or empty when not
-             *         applicable to the active fragment
+             * @return the {@code server_msg_id} value, or empty when not applicable to the active
+             *         fragment
              */
             public Optional<String> serverMsgId() {
                 return Optional.ofNullable(serverMsgId);
@@ -384,27 +324,22 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Returns the status identifier of the reported channel status.
              *
-             * @apiNote
-             * Populated only when {@link #typename()} resolves to
-             * {@code XWA2ChannelStatusData}.
+             * <p>Populated only when {@link #typename()} resolves to {@code XWA2ChannelStatusData}.
              *
-             * @return the {@code server_id} value, or empty when not
-             *         applicable to the active fragment
+             * @return the {@code server_id} value, or empty when not applicable to the active fragment
              */
             public Optional<String> serverId() {
                 return Optional.ofNullable(serverId);
             }
 
             /**
-             * Returns the response identifier of the reported question
-             * response.
+             * Returns the response identifier of the reported question response.
              *
-             * @apiNote
-             * Populated only when {@link #typename()} resolves to
+             * <p>Populated only when {@link #typename()} resolves to
              * {@code XWA2ChannelQuestionResponseData}.
              *
-             * @return the {@code server_response_id} value, or empty when
-             *         not applicable to the active fragment
+             * @return the {@code server_response_id} value, or empty when not applicable to the active
+             *         fragment
              */
             public Optional<String> serverResponseId() {
                 return Optional.ofNullable(serverResponseId);
@@ -413,46 +348,35 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Returns the notify-name of the question respondent.
              *
-             * @apiNote
-             * Populated only when {@link #typename()} resolves to
+             * <p>Populated only when {@link #typename()} resolves to
              * {@code XWA2ChannelQuestionResponseData}.
              *
-             * @return the {@code notify_name} value, or empty when not
-             *         applicable to the active fragment
+             * @return the {@code notify_name} value, or empty when not applicable to the active
+             *         fragment
              */
             public Optional<String> notifyName() {
                 return Optional.ofNullable(notifyName);
             }
 
             /**
-             * Returns the nested question-message fragment carried by
-             * question-response reports.
+             * Returns the nested question-message fragment carried by question-response reports.
              *
-             * @apiNote
-             * Populated only when {@link #typename()} resolves to
-             * {@code XWA2ChannelQuestionResponseData}; identifies the
-             * underlying question whose response was reported.
+             * <p>Populated only when {@link #typename()} resolves to
+             * {@code XWA2ChannelQuestionResponseData}; identifies the underlying question whose
+             * response was reported.
              *
-             * @return the parsed {@link QuestionData}, or empty when not
-             *         applicable to the active fragment
+             * @return the parsed {@link QuestionData}, or empty when not applicable to the active
+             *         fragment
              */
             public Optional<QuestionData> questionData() {
                 return Optional.ofNullable(questionData);
             }
 
             /**
-             * Parses a {@code reported_content_data} fragment from the
-             * given JSON object.
-             *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null} so
-             * an absent fragment cleanly back-propagates to the outer
-             * {@code reported_content_data()} getter.
+             * Parses a {@code reported_content_data} fragment from the given JSON object.
              *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<ReportedContentData> of(JSONObject obj) {
                 if (obj == null) {
@@ -469,31 +393,24 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             }
 
             /**
-             * The {@code question_data} nested fragment carried by
+             * Wraps the {@code question_data} nested fragment carried by
              * {@code XWA2ChannelQuestionResponseData} reports.
              *
-             * @apiNote
-             * Identifies the underlying question message that produced the
-             * reported response.
+             * <p>Identifies the underlying question message that produced the reported response.
              */
             public static final class QuestionData {
                 /**
-                 * The GraphQL {@code __typename} discriminator on the
-                 * question fragment.
+                 * Holds the GraphQL {@code __typename} discriminator on the question fragment.
                  */
                 private final String typename;
 
                 /**
-                 * The {@code server_msg_id} of the underlying question
-                 * message.
+                 * Holds the {@code server_msg_id} of the underlying question message.
                  */
                 private final String serverMsgId;
 
                 /**
                  * Constructs a parsed {@code question_data} value.
-                 *
-                 * @apiNote
-                 * Reserved for {@link #of(JSONObject)}.
                  *
                  * @param typename    the {@code __typename} discriminator
                  * @param serverMsgId the question message identifier
@@ -504,45 +421,28 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
                 }
 
                 /**
-                 * Returns the {@code __typename} discriminator on the
-                 * question fragment.
+                 * Returns the {@code __typename} discriminator on the question fragment.
                  *
-                 * @apiNote
-                 * Empty when the GraphQL envelope omits {@code __typename}.
-                 *
-                 * @return the {@code __typename} value, or empty when
-                 *         omitted
+                 * @return the {@code __typename} value, or empty when omitted
                  */
                 public Optional<String> typename() {
                     return Optional.ofNullable(typename);
                 }
 
                 /**
-                 * Returns the message identifier of the underlying question
-                 * message.
+                 * Returns the message identifier of the underlying question message.
                  *
-                 * @apiNote
-                 * Empty when the GraphQL envelope omits {@code server_msg_id}.
-                 *
-                 * @return the {@code server_msg_id} value, or empty when
-                 *         omitted
+                 * @return the {@code server_msg_id} value, or empty when omitted
                  */
                 public Optional<String> serverMsgId() {
                     return Optional.ofNullable(serverMsgId);
                 }
 
                 /**
-                 * Parses a {@code question_data} fragment from the given
-                 * JSON object.
-                 *
-                 * @apiNote
-                 * Reserved for the parent parser; returns
-                 * {@link Optional#empty()} when {@code obj} is
-                 * {@code null}.
+                 * Parses a {@code question_data} fragment from the given JSON object.
                  *
                  * @param obj the JSON object to parse
-                 * @return the parsed value, or empty when {@code obj} is
-                 *         {@code null}
+                 * @return the parsed value, or empty when {@code obj} is {@code null}
                  */
                 static Optional<QuestionData> of(JSONObject obj) {
                     if (obj == null) {
@@ -557,46 +457,39 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         }
 
         /**
-         * The {@code appeal} record attached to reports the offender has
-         * appealed.
+         * Wraps the {@code appeal} record attached to reports the offender has appealed.
          *
-         * @apiNote
-         * Carries the appellant's stated reason, the appeal state, and the
-         * cross-reference identifiers linking the appeal back to its report.
+         * <p>Carries the appellant's stated reason, the appeal state, and the cross-reference
+         * identifiers linking the appeal back to its report.
          */
         public static final class Appeal {
             /**
-             * The appeal state (for example {@code "PENDING"},
-             * {@code "RESOLVED"}).
+             * Holds the appeal state (for example {@code "PENDING"}, {@code "RESOLVED"}).
              */
             private final String state;
 
             /**
-             * The free-text reason the offender supplied when filing the
-             * appeal.
+             * Holds the free-text reason the offender supplied when filing the appeal.
              */
             private final String appealReason;
 
             /**
-             * The appeal-creation timestamp in epoch seconds.
+             * Holds the appeal-creation timestamp in epoch seconds.
              */
             private final Long creationTime;
 
             /**
-             * The cross-reference to the appealed report's identifier.
+             * Holds the cross-reference to the appealed report's identifier.
              */
             private final String reportId;
 
             /**
-             * The relay-issued identifier of the appeal record itself.
+             * Holds the relay-issued identifier of the appeal record itself.
              */
             private final String appealId;
 
             /**
              * Constructs a parsed {@code appeal} value.
-             *
-             * @apiNote
-             * Reserved for {@link #of(JSONObject)}.
              *
              * @param state        the appeal state
              * @param appealReason the appellant's stated reason
@@ -615,9 +508,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Returns the appeal state.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code state}.
-             *
              * @return the {@code state} value, or empty when omitted
              */
             public Optional<String> state() {
@@ -626,9 +516,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
 
             /**
              * Returns the appellant's stated reason.
-             *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code appeal_reason}.
              *
              * @return the {@code appeal_reason} value, or empty when omitted
              */
@@ -639,13 +526,10 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Returns the moment the appeal was filed.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code creation_time};
-             * the underlying value is the wire-level epoch-second integer
-             * remapped to an {@link Instant}.
+             * <p>The underlying value is the wire-level epoch-second integer remapped to an
+             * {@link Instant}.
              *
-             * @return the {@code creation_time} as an {@link Instant}, or
-             *         empty when omitted
+             * @return the {@code creation_time} as an {@link Instant}, or empty when omitted
              */
             public Optional<Instant> creationTime() {
                 return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
@@ -653,9 +537,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
 
             /**
              * Returns the cross-reference to the appealed report.
-             *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code report_id}.
              *
              * @return the {@code report_id} value, or empty when omitted
              */
@@ -666,9 +547,6 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Returns the relay-issued appeal identifier.
              *
-             * @apiNote
-             * Empty when the GraphQL envelope omits {@code appeal_id}.
-             *
              * @return the {@code appeal_id} value, or empty when omitted
              */
             public Optional<String> appealId() {
@@ -678,15 +556,8 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Parses an {@code appeal} record from the given JSON object.
              *
-             * @apiNote
-             * Reserved for the parent parser; returns
-             * {@link Optional#empty()} when {@code obj} is {@code null} so
-             * an absent appeal cleanly back-propagates to the outer
-             * {@code appeal()} getter.
-             *
              * @param obj the JSON object to parse
-             * @return the parsed value, or empty when {@code obj} is
-             *         {@code null}
+             * @return the parsed value, or empty when {@code obj} is {@code null}
              */
             static Optional<Appeal> of(JSONObject obj) {
                 if (obj == null) {
@@ -704,14 +575,8 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
             /**
              * Parses every {@code appeal} record in the given JSON array.
              *
-             * @apiNote
-             * Reserved for callers that handle batched appeal arrays;
-             * returns {@link List#of()} when {@code arr} is {@code null} so
-             * an absent array surfaces as an empty list.
-             *
              * @param arr the JSON array to parse
-             * @return the list of parsed values, empty when {@code arr} is
-             *         {@code null}
+             * @return the list of parsed values, empty when {@code arr} is {@code null}
              */
             static List<Appeal> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -727,17 +592,10 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         }
 
         /**
-         * Parses a single {@code channels_reports} entry from the given JSON
-         * object.
-         *
-         * @apiNote
-         * Reserved for {@link #ofArray(JSONArray)}; returns
-         * {@link Optional#empty()} when {@code obj} is {@code null} so an
-         * absent element does not allocate a sentinel entry.
+         * Parses a single {@code channels_reports} entry from the given JSON object.
          *
          * @param obj the JSON object to parse
-         * @return the parsed value, or empty when {@code obj} is
-         *         {@code null}
+         * @return the parsed value, or empty when {@code obj} is {@code null}
          */
         static Optional<ChannelsReports> of(JSONObject obj) {
             if (obj == null) {
@@ -756,18 +614,14 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
         }
 
         /**
-         * Parses every {@code channels_reports} entry in the given JSON
-         * array.
+         * Parses every {@code channels_reports} entry in the given JSON array.
          *
-         * @apiNote
-         * Materialises the {@code data.xwa2_channels_reports.channels_reports}
-         * array into a fresh {@link List}; returns {@link List#of()} when
-         * {@code arr} is {@code null} so an absent or empty server response
-         * surfaces as an empty list.
+         * <p>Materialises the {@code data.xwa2_channels_reports.channels_reports} array into a fresh
+         * {@link List}; returns {@link List#of()} when {@code arr} is {@code null} so an absent or
+         * empty server response surfaces as an empty list.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed values, empty when {@code arr} is
-         *         {@code null}
+         * @return the list of parsed values, empty when {@code arr} is {@code null}
          */
         static List<ChannelsReports> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -783,21 +637,14 @@ public final class FetchNewsletterReportsMexResponse implements MexOperation.Res
     }
 
     /**
-     * Parses the response from the raw UTF-8 JSON payload of the
-     * {@code <result>} child.
+     * Parses the response from the raw UTF-8 JSON payload of the {@code <result>} child.
      *
-     * @apiNote
-     * Reserved for the public {@link #of(Node)} overload; callers should not
-     * hold raw JSON bytes.
-     *
-     * @implNote
-     * This implementation guards every nested object lookup so a malformed
-     * envelope produces {@link Optional#empty()} rather than a parser
-     * exception, mirroring the defensive null-checks in WA Web's caller.
+     * @implNote This implementation guards every nested object lookup so a malformed envelope
+     * produces {@link Optional#empty()} rather than a parser exception.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return the parsed response, or empty when the envelope lacks the
-     *         expected {@code data.xwa2_channels_reports} root
+     * @return the parsed response, or empty when the envelope lacks the expected
+     *         {@code data.xwa2_channels_reports} root
      */
     private static Optional<FetchNewsletterReportsMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

@@ -14,14 +14,10 @@ import java.util.Optional;
  * The outbound stanza that asks the relay to email an account
  * recovery code to the active CTWA biz user.
  *
- * @apiNote
- * Used by the CTWA recovery flow in
- * {@code WAWebRequestAdAccountRecoveryCode.requestAdAccountRecoveryCode},
- * which is triggered when
- * {@link SmaxRequestSilentNonceResponse.RecoveryRequired} forces the
- * user to confirm account ownership before a silent nonce can be
- * issued. The request carries no payload; the optional {@code from}
- * attribute is the only knob and is normally left {@code null}.
+ * <p>The CTWA recovery flow issues this request when
+ * {@link SmaxRequestSilentNonceResponse.RecoveryRequired} forces the user to confirm account
+ * ownership before a silent nonce can be issued. The request carries no payload; the optional
+ * {@code from} attribute is the only knob and is normally left {@code null}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountSendAccountRecoveryNonceRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountHackBaseIQGetRequestMixin")
@@ -36,10 +32,8 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
     /**
      * Constructs a request with no {@code from} echo.
      *
-     * @apiNote
-     * The default form expected by
-     * {@code requestAdAccountRecoveryCode}, which calls
-     * {@code sendSendAccountRecoveryNonceRPC({})} with no arguments.
+     * <p>This is the default form for the standard recovery-code request, which carries no
+     * arguments.
      */
     public SmaxSendAccountRecoveryNonceRequest() {
         this(null);
@@ -49,10 +43,8 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
      * Constructs a request optionally echoing the supplied user JID
      * onto the {@code from} attribute.
      *
-     * @apiNote
-     * Reserved for multi-device callers that need the outbound IQ
-     * to look like it originated from a specific linked user JID;
-     * standard CTWA callers pass {@code null}.
+     * <p>Reserved for multi-device callers that need the outbound IQ to look like it originated
+     * from a specific linked user JID; standard CTWA callers pass {@code null}.
      *
      * @param fromUserJid the optional user JID; may be {@code null}
      */
@@ -63,10 +55,8 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
     /**
      * Returns the optional {@code from} echo.
      *
-     * @apiNote
-     * Returns {@link Optional#empty()} when the request was built
-     * without a {@code from} echo (the standard
-     * {@code requestAdAccountRecoveryCode} case).
+     * <p>Returns {@link Optional#empty()} when the request was built without a {@code from} echo
+     * (the standard recovery-code request case).
      *
      * @return an {@link Optional} carrying the user JID
      */
@@ -77,10 +67,10 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Stamps {@code xmlns="fb:thrift_iq"}, {@code type="get"},
-     * {@code to="s.whatsapp.net"} and the optional {@code from}
-     * echo. The IQ {@code id} is assigned by the dispatcher.
+     * @implNote
+     * This implementation stamps {@code xmlns="fb:thrift_iq"}, {@code type="get"},
+     * {@code to="s.whatsapp.net"} and the optional {@code from} echo. The IQ {@code id} is assigned
+     * by the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizCtwaAdAccountSendAccountRecoveryNonceRequest",
@@ -101,6 +91,9 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
         return builder;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -113,11 +106,17 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
         return Objects.equals(this.fromUserJid, that.fromUserJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(fromUserJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxSendAccountRecoveryNonceRequest[fromUserJid=" + fromUserJid + ']';

@@ -13,27 +13,18 @@ import java.util.Optional;
  * The inbound family of relay notifications carrying a freshly-pushed
  * CTWA biz access-token nonce.
  *
- * @apiNote
- * Used by the CTWA biz-business-notification dispatcher in
- * {@code WAWebHandleBusinessNotification}, which routes
- * {@code <notification type="business"/>} stanzas with a
- * {@code <wa_ad_account_nonce/>} child into
- * {@code WAWebCTWABizAccessTokenNonceManager.setNonceFromPushNotification},
- * unblocking the in-flight {@link SmaxRequestSilentNonceResponse.Success}
- * promise. The family carries a single permit because
- * {@code Receive}-shape SMAX RPCs have no outbound counterpart.
+ * <p>A {@code <notification type="business"/>} stanza with a {@code <wa_ad_account_nonce/>} child
+ * delivers the nonce that unblocks an in-flight {@link SmaxRequestSilentNonceResponse.Success}
+ * outcome. The family carries a single permit because receive-shape SMAX RPCs have no outbound
+ * counterpart.
  */
 public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Response permits SmaxNonceNotificationResponse.Notification {
 
     /**
      * Tries to parse the supplied stanza as a {@link Notification}.
      *
-     * @apiNote
-     * Called by the biz-notification dispatcher after detecting the
-     * {@code <wa_ad_account_nonce/>} child. Returns
-     * {@link Optional#empty()} when the stanza does not match the
-     * documented shape so the dispatcher can fall through to other
-     * branches.
+     * <p>Returns {@link Optional#empty()} when the stanza does not match the documented shape so
+     * the dispatcher can fall through to other branches.
      *
      * @param node the inbound notification stanza; never
      *             {@code null}
@@ -52,11 +43,8 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
     /**
      * The single permitted relay-pushed nonce notification.
      *
-     * @apiNote
-     * Carries the freshly-issued nonce plus the standard envelope
-     * echoes; the consumer extracts {@link #nonce()} and forwards
-     * it through {@code WAWebCTWABizAccessTokenNonceManager.castToNonce}
-     * to {@code setNonceFromPushNotification}.
+     * <p>Carries the freshly-issued nonce plus the standard envelope echoes; the consumer extracts
+     * {@link #nonce()} and forwards it to the access-token nonce manager.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountNonceNotificationRequest")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountServerNotificationMixin")
@@ -77,9 +65,7 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         /**
          * Constructs a new notification.
          *
-         * @apiNote
-         * Called by {@link #of(Node)} after validating the stanza
-         * envelope.
+         * <p>Called by {@link #of(Node)} after validating the stanza envelope.
          *
          * @param to    the optional target user JID; may be
          *              {@code null}
@@ -95,10 +81,8 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         /**
          * Returns the optional target user JID.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the relay
-         * broadcasts the nonce to all linked devices without a
-         * specific {@code to} target.
+         * <p>Returns {@link Optional#empty()} when the relay broadcasts the nonce to all linked
+         * devices without a specific {@code to} target.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -109,10 +93,8 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         /**
          * Returns the pushed nonce token.
          *
-         * @apiNote
-         * Forwarded by the caller to
-         * {@code WAWebCTWABizAccessTokenNonceManager.setNonceFromPushNotification},
-         * which resolves the in-flight nonce-fetch promise.
+         * <p>Forwarded by the caller to the access-token nonce manager, which resolves the
+         * in-flight nonce-fetch outcome.
          *
          * @return the nonce; never {@code null}
          */
@@ -123,11 +105,9 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         /**
          * Tries to parse a notification from the supplied stanza.
          *
-         * @apiNote
-         * Accepts only stanzas tagged
-         * {@code <notification type="business" from="s.whatsapp.net">}
-         * carrying a {@code <wa_ad_account_nonce>} child with
-         * non-empty content; everything else returns
+         * <p>Accepts only stanzas tagged
+         * {@code <notification type="business" from="s.whatsapp.net">} carrying a
+         * {@code <wa_ad_account_nonce>} child with non-empty content; everything else returns
          * {@link Optional#empty()}.
          *
          * @param node the inbound notification stanza
@@ -167,6 +147,9 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
             return Optional.of(new Notification(to, nonce));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -180,11 +163,17 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
                     && Objects.equals(this.nonce, that.nonce);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(to, nonce);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxNonceNotificationResponse.Notification[to=" + to

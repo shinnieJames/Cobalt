@@ -11,15 +11,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants the relay produces in response
- * to an {@link IqVerifyPostcodeRequest}.
+ * Models the inbound reply the relay produces in response to an {@link IqVerifyPostcodeRequest}.
  *
- * @apiNote
- * Pattern-match the returned variant to drive the cart-postcode entry
- * surface: {@link Success} carries the verdict and the optional
- * encrypted location-name echo, {@link ClientError} surfaces a rejected
- * request and {@link ServerError} surfaces a transient internal
- * failure.
+ * <p>The sealed family is pattern-matched to drive the cart-postcode entry surface: {@link Success}
+ * carries the verdict and the optional encrypted location-name echo, {@link ClientError} surfaces a
+ * rejected request and {@link ServerError} surfaces a transient internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebVerifyPostcodeJob")
 public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
@@ -28,15 +24,13 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
     /**
      * Tries each variant in priority order until one matches.
      *
-     * @apiNote
-     * Use this entry point on every IQ stanza tagged with a
-     * {@code <result_code/>} payload; the order is {@link Success},
-     * then {@link ClientError}, then {@link ServerError}.
+     * <p>The order is {@link Success}, then {@link ClientError}, then {@link ServerError}; call this
+     * on every IQ stanza tagged with a {@code <result_code/>} payload.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when no documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when no documented variant
+     *         matched
      * @throws NullPointerException if either argument is {@code null}
      */
     static Optional<? extends IqVerifyPostcodeResponse> of(Node node, Node request) {
@@ -54,70 +48,49 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} variant carrying the verdict and the optional
-     * encrypted location-name echo.
+     * Models the {@code Success} variant, which carries the verdict and the optional encrypted
+     * location-name echo.
      *
-     * @apiNote
-     * Use {@link #resultCode()} to drive the cart-postcode UI:
-     * {@link ResultCode#SUCCESS} unlocks the catalog grid for the
-     * resolved address, {@link ResultCode#INVALID_POSTCODE} prompts
-     * the buyer to retry the entry and
-     * {@link ResultCode#UNSERVICEABLE_LOCATION} blocks checkout with a
-     * "not delivered to your area" message.
+     * <p>Dispatch on {@link #resultCode()} to drive the cart-postcode UI:
+     * {@link ResultCode#SUCCESS} unlocks the catalog grid for the resolved address,
+     * {@link ResultCode#INVALID_POSTCODE} prompts the buyer to retry the entry and
+     * {@link ResultCode#UNSERVICEABLE_LOCATION} blocks checkout with a "not delivered to your area"
+     * message.
      */
     final class Success implements IqVerifyPostcodeResponse {
         /**
-         * Closed set of verdicts the relay's reference parser
-         * documents inside the {@code <result_code/>} child.
+         * Enumerates the verdicts the relay's reference parser documents inside the
+         * {@code <result_code/>} child.
          *
-         * @apiNote
-         * Use this enum to dispatch on the verdict; the relay throws a
-         * 500-status error for any value outside this set, so any
-         * received string outside this enum is treated as an
-         * unparseable success.
+         * <p>The relay throws a 500-status error for any value outside this set, so any received
+         * string outside this enum is treated as an unparseable success.
          */
         public enum ResultCode {
             /**
-             * The postcode was successfully decrypted and resolves to
-             * a serviceable address.
-             *
-             * @apiNote
-             * Unlock the catalog grid for the resolved location.
+             * Marks that the postcode was successfully decrypted and resolves to a serviceable
+             * address, so the catalog grid is unlocked for the resolved location.
              */
             SUCCESS("success"),
 
             /**
-             * The postcode could not be decrypted or did not pass
-             * validation.
-             *
-             * @apiNote
-             * Prompt the buyer to retry the entry with a different
-             * postcode.
+             * Marks that the postcode could not be decrypted or did not pass validation, so the
+             * buyer is prompted to retry the entry with a different postcode.
              */
             INVALID_POSTCODE("invalid_postcode"),
 
             /**
-             * The postcode resolved to an address outside the
-             * merchant's serviceable area.
-             *
-             * @apiNote
-             * Block checkout with a "not delivered to your area"
-             * message.
+             * Marks that the postcode resolved to an address outside the merchant's serviceable area,
+             * so checkout is blocked with a "not delivered to your area" message.
              */
             UNSERVICEABLE_LOCATION("unserviceable_location");
 
             /**
-             * The wire string carried by the
-             * {@code <result_code/>} element.
+             * Holds the canonical string the relay echoes in the {@code <result_code/>} element.
              */
             private final String wireValue;
 
             /**
              * Constructs a constant from its wire string.
-             *
-             * @apiNote
-             * Package-private enum constructor; the wire string is
-             * the canonical string the relay echoes.
              *
              * @param wireValue the wire string; never {@code null}
              */
@@ -128,10 +101,8 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
             /**
              * Returns the wire string for this constant.
              *
-             * @apiNote
-             * Use this getter when round-tripping the enum back to
-             * the wire (e.g. for logging or fixture capture); the
-             * relay never accepts the enum name itself.
+             * <p>The relay never accepts the enum name itself, so the wire string is used when
+             * round-tripping the enum back to the wire (e.g. for logging or fixture capture).
              *
              * @return the wire string; never {@code null}
              */
@@ -142,15 +113,12 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
             /**
              * Looks up the constant for the given wire string.
              *
-             * @apiNote
-             * Use this entry point from the response parser; an empty
-             * optional means the relay returned an unknown verdict
-             * and the caller should treat the success as
-             * unparseable.
+             * <p>An empty optional means the relay returned an unknown verdict and the caller should
+             * treat the success as unparseable.
              *
              * @param wireValue the wire string; may be {@code null}
-             * @return an {@link Optional} carrying the matching
-             *         constant, or empty when the value is unknown
+             * @return an {@link Optional} carrying the matching constant, or empty when the value is
+             *         unknown
              */
             public static Optional<ResultCode> of(String wireValue) {
                 if (wireValue == null) {
@@ -166,28 +134,23 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * The verdict returned by the relay.
+         * Holds the verdict returned by the relay.
          */
         private final ResultCode resultCode;
 
         /**
-         * The opaque encrypted location-name echo returned for
-         * {@link ResultCode#SUCCESS} only; absent for the other
-         * verdicts.
+         * Holds the opaque encrypted location-name echo returned for {@link ResultCode#SUCCESS} only;
+         * absent for the other verdicts.
          */
         private final String encryptedLocationName;
 
         /**
-         * Constructs a successful reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}.
+         * Constructs a success reply from the verdict and the optional encrypted echo; called from
+         * {@link #of(Node, Node)}.
          *
          * @param resultCode            the verdict; never {@code null}
-         * @param encryptedLocationName the optional encrypted echo;
-         *                              may be {@code null}
-         * @throws NullPointerException if {@code resultCode} is
-         *                              {@code null}
+         * @param encryptedLocationName the optional encrypted echo; may be {@code null}
+         * @throws NullPointerException if {@code resultCode} is {@code null}
          */
         public Success(ResultCode resultCode, String encryptedLocationName) {
             this.resultCode = Objects.requireNonNull(resultCode, "resultCode cannot be null");
@@ -195,11 +158,7 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the verdict.
-         *
-         * @apiNote
-         * Use this getter to dispatch on the verdict; see
-         * {@link ResultCode} for the documented values.
+         * Returns the verdict; see {@link ResultCode} for the documented values.
          *
          * @return the verdict; never {@code null}
          */
@@ -210,13 +169,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         /**
          * Returns the optional encrypted location-name echo.
          *
-         * @apiNote
-         * Use this getter to feed the encrypted echo into the
-         * {@code WAWebDirectConnectionCypher.cypherStringToString}
-         * decryption flow and display the resolved location-name
-         * label in the cart UI; an empty optional means the verdict
-         * is not {@link ResultCode#SUCCESS} or the relay omitted the
-         * echo.
+         * <p>The echo is fed back into the buyer-side direct-connection decryption flow to display
+         * the resolved location-name label in the cart UI. An empty optional means the verdict is not
+         * {@link ResultCode#SUCCESS} or the relay omitted the echo.
          *
          * @return an {@link Optional} carrying the echo
          */
@@ -225,25 +180,21 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method validates
-         * the {@code <iq type="result">} envelope, decodes the
-         * {@code <result_code/>} body and reads the optional
-         * {@code <encrypted_location_name/>} echo.
+         * <p>The method validates the {@code <iq type="result">} envelope, decodes the
+         * {@code <result_code/>} body and reads the optional {@code <encrypted_location_name/>} echo;
+         * called from {@link #of(Node, Node)}.
          *
          * @implNote
-         * This implementation returns an empty optional when the
-         * {@code <result_code/>} body is unknown; WA Web's reference
-         * parser throws a 500-status error in that case, which Cobalt
+         * This implementation returns an empty optional when the {@code <result_code/>} body is
+         * unknown; WA Web's reference parser throws a 500-status error in that case, which Cobalt
          * defers to the caller's error handler.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema or the {@code result_code} is unknown
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the success schema or the {@code result_code} is unknown
          */
         @WhatsAppWebExport(moduleName = "WAWebVerifyPostcodeJob",
                 exports = "VerifyPostcode", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -267,7 +218,10 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the verdict and encrypted echo.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal success
          */
         @Override
         public boolean equals(Object obj) {
@@ -283,7 +237,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -291,7 +247,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the verdict and encrypted echo.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -301,36 +259,28 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} variant emitted when the relay rejects
-     * the request as malformed or referencing an unknown merchant.
+     * Models the {@code ClientError} variant, emitted when the relay rejects the request as
+     * malformed or referencing an unknown merchant.
      *
-     * @apiNote
-     * Use this variant to surface a user-facing 4xx-class error to
-     * the cart-postcode entry surface.
+     * <p>Surface it as a user-facing 4xx-class error on the cart-postcode entry surface.
      */
     final class ClientError implements IqVerifyPostcodeResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a client-error reply from the relay's {@code <error/>} envelope; called from
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -338,12 +288,7 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to dispatch on the relay-side error code
-         * when surfacing a localised message to the cart-postcode
-         * entry surface.
+         * Returns the numeric error code, used to dispatch on the relay-side rejection reason.
          *
          * @return the error code
          */
@@ -354,9 +299,8 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging; the text is server-localised
-         * and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots, so it is suitable for
+         * logging only.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -365,18 +309,15 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>The method delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} to
+         * extract the (code, text) envelope; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the client-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -387,7 +328,10 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal client error
          */
         @Override
         public boolean equals(Object obj) {
@@ -402,7 +346,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -410,7 +356,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the error code and text.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {
@@ -420,37 +368,29 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} variant emitted when the relay returns a
-     * transient internal-failure status while processing the request.
+     * Models the {@code ServerError} variant, emitted when the relay returns a transient
+     * internal-failure status while processing the request.
      *
-     * @apiNote
-     * Use this variant to drive a backoff-and-retry path in the
-     * cart-postcode entry surface; the relay returns this shape when
-     * the catalog backend is temporarily unavailable.
+     * <p>The relay returns this shape when the catalog backend is temporarily unavailable; use it to
+     * drive a backoff-and-retry path on the cart-postcode entry surface.
      */
     final class ServerError implements IqVerifyPostcodeResponse {
         /**
-         * The numeric error code echoed by the {@code <error/>} child.
+         * Holds the numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text echoed by the
-         * {@code <error/>} child.
+         * Holds the optional human-readable error text echoed by the {@code <error/>} child.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
-         *
-         * @apiNote
-         * Use this constructor only from {@link #of(Node, Node)}; the
-         * (code, text) pair comes from the relay's {@code <error/>}
-         * envelope.
+         * Constructs a server-error reply from the relay's {@code <error/>} envelope; called from
+         * {@link #of(Node, Node)}.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -458,11 +398,7 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
-         *
-         * @apiNote
-         * Use this getter to log the relay-side error code; a 5xx-class
-         * value is the canonical retry trigger.
+         * Returns the numeric error code; a 5xx-class value is the canonical retry trigger.
          *
          * @return the error code
          */
@@ -473,9 +409,8 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
-         * @apiNote
-         * Use this getter for logging only; the text is server-localised
-         * and not stable across snapshots.
+         * <p>The text is server-localised and not stable across snapshots, so it is suitable for
+         * logging only.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -484,18 +419,15 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from the stanza.
          *
-         * @apiNote
-         * Call this from {@link #of(Node, Node)}; the method delegates
-         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
-         * to extract the (code, text) envelope.
+         * <p>The method delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to
+         * extract the (code, text) envelope; called from {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the server-error
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not
+         *         match the server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -506,7 +438,10 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this variant with another for value equality on the code and text.
+         *
+         * @param obj the object to compare against; may be {@code null}
+         * @return {@code true} when {@code obj} is an equal server error
          */
         @Override
         public boolean equals(Object obj) {
@@ -521,7 +456,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -529,7 +466,9 @@ public sealed interface IqVerifyPostcodeResponse extends IqOperation.Response
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a diagnostic string naming the error code and text.
+         *
+         * @return the string form
          */
         @Override
         public String toString() {

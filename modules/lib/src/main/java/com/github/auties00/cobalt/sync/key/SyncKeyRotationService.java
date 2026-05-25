@@ -39,28 +39,20 @@ import java.util.logging.Logger;
 
 /**
  * Manages the lifecycle of the active app state sync key: detects expiry, detects companion
- * device removal, generates fresh keys with a monotonically increasing epoch, and shares
- * them with every peer device.
+ * device removal, mints fresh keys with a monotonically increasing epoch, and shares them with
+ * every peer device.
  *
  * <p>Two entry points dominate. {@link #getActiveKey(boolean)} resolves the current key for
- * outgoing patches and rotates inline when a rotation trigger fires;
+ * outgoing patches and rotates inline when a rotation trigger fires.
  * {@link #handleKeyShare(int, List)} consumes inbound {@code AppStateSyncKeyShare}
- * protocol messages from companion devices and reconciles them against the local key store
- * and the missing-key tracker. A periodic 27-day background check
+ * {@link ProtocolMessage} payloads from companion devices and reconciles them against the local
+ * key store and the missing-key tracker. A periodic 27-day background check
  * ({@link #startPeriodicRotationJob()}) ensures rotation also happens during long
  * mutation-free windows.
  *
- * @apiNote
- * Cobalt embedders that build their own outgoing mutation pipeline call
- * {@link #getActiveKey(boolean)} to obtain the key to encrypt with;
- * {@link #handleKeyShare(int, List)} is invoked by the inbound message stream handler when
- * an {@code APP_STATE_SYNC_KEY_SHARE} {@code ProtocolMessage} is received from a peer.
- *
- * @implNote
- * This implementation serialises the rotation flow through {@link #rotationLock} to mirror
- * WA Web's promise-queue (the {@code m.enqueue} idiom) without paying the overhead of an
- * actual queue under Loom; the synchronized block keeps the read-then-rotate-then-store
- * sequence atomic in the face of concurrent encrypt callers.
+ * @implNote This implementation serialises the rotation flow through {@link #rotationLock} to
+ * keep the read-then-rotate-then-store sequence atomic in the face of concurrent encrypt
+ * callers, without paying the overhead of an actual queue under the virtual-thread model.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdKeyManagement")
 @WhatsAppWebModule(moduleName = "WAWebSyncdRotateKey")
@@ -71,85 +63,79 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebTasksDefinitions")
 public final class SyncKeyRotationService {
     /**
-     * Diagnostic logger for the sync key rotation flow.
+     * Holds the diagnostic logger for the sync key rotation flow.
      */
     private static final Logger LOGGER = Logger.getLogger(SyncKeyRotationService.class.getName());
 
     /**
-     * The lower bound on {@code syncd_key_max_use_days} after AB-prop clamping.
+     * Holds the lower bound applied to {@code syncd_key_max_use_days} after AB-prop clamping.
      */
     private static final int MIN_KEY_MAX_USE_DAYS = 1;
 
     /**
-     * The upper bound on {@code syncd_key_max_use_days} after AB-prop clamping.
+     * Holds the upper bound applied to {@code syncd_key_max_use_days} after AB-prop clamping.
      */
     private static final int MAX_KEY_MAX_USE_DAYS = 90;
 
     /**
-     * The interval between periodic rotation checks driven by
-     * {@link #startPeriodicRotationJob()}, matching WA Web's
-     * {@code WAWebTasksDefinitions} {@code RotateKeyTask} schedule.
+     * Holds the interval between periodic rotation checks driven by
+     * {@link #startPeriodicRotationJob()}.
+     *
+     * @implNote This implementation uses 27 days to match the WA Web rotation-task schedule.
      */
     private static final Duration PERIODIC_ROTATION_INTERVAL = Duration.ofDays(27);
 
     /**
-     * The {@link SecureRandom} instance used to seed the 32-byte key data of every newly
-     * rotated key.
+     * Holds the source of randomness used to seed the 32-byte key data of every newly rotated
+     * key.
      */
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
-     * The lock used to serialise the inner read-then-rotate-then-store sequence in
+     * Holds the monitor that serialises the read-then-rotate-then-store sequence in
      * {@link #getActiveKey(boolean)}.
      *
-     * @implNote
-     * This implementation uses a dedicated object monitor rather than synchronising on
-     * {@code this} so callers cannot inadvertently deadlock by also holding the service
-     * monitor.
+     * @implNote This implementation uses a dedicated object monitor rather than synchronising on
+     * {@code this} so callers cannot inadvertently deadlock by also holding the service monitor.
      */
     private final Object rotationLock = new Object();
 
     /**
-     * The injected {@link WhatsAppClient} used to read and update the sync key store and to
-     * dispatch the {@code AppStateSyncKeyShare} peer messages.
+     * Holds the injected client used to read and update the sync key store and to dispatch the
+     * {@code AppStateSyncKeyShare} peer messages.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The owning {@link WebAppStateService} used to schedule missing-key follow-ups when a
-     * negative key share resolves a tracker entry.
+     * Holds the owning service used to schedule missing-key follow-ups when a negative key
+     * share resolves a tracker entry.
      */
     private final WebAppStateService webAppStateService;
 
     /**
-     * The {@link ABPropsService} used to read {@code syncd_key_max_use_days} and the
-     * {@code wa_web_enable_syncd_key_persistence_only_after_server_ack} gate.
+     * Holds the AB prop source used to read {@code syncd_key_max_use_days} and the
+     * persist-after-server-ack gate.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * The {@link WamService} used to commit
-     * {@code MdAppStateKeyRotationEvent} and bootstrap-progress events.
+     * Holds the WAM service used to commit rotation and bootstrap-progress events.
      */
     private final WamService wamService;
 
     /**
-     * The handle of the periodic 27-day rotation check, or {@code null} until
+     * Holds the handle of the periodic 27-day rotation check, or {@code null} until
      * {@link #startPeriodicRotationJob()} is called.
      */
     private volatile CompletableFuture<?> periodicRotationJob;
 
     /**
-     * Constructs a new {@code SyncKeyRotationService}.
+     * Constructs a new rotation service bound to the supplied dependencies.
      *
-     * @apiNote
-     * Invoked once per {@link WebAppStateService} instance during the syncd subsystem
-     * bootstrap.
-     *
-     * @param whatsapp the {@link WhatsAppClient} that owns the store and the peer-message channel
-     * @param webAppStateService the owning {@link WebAppStateService}
-     * @param abPropsService the {@link ABPropsService} used to read rotation thresholds
-     * @param wamService the {@link WamService} used to commit rotation events
+     * @param whatsapp the client that owns the store and the peer-message channel
+     * @param webAppStateService the owning service
+     * @param abPropsService the AB prop source used to read rotation thresholds
+     * @param wamService the WAM service used to commit rotation events
      */
     public SyncKeyRotationService(WhatsAppClient whatsapp, WebAppStateService webAppStateService, ABPropsService abPropsService, WamService wamService) {
         this.whatsapp = whatsapp;
@@ -162,20 +148,15 @@ public final class SyncKeyRotationService {
      * Reconciles an incoming {@code AppStateSyncKeyShare} protocol message against the local
      * sync key store and missing-key tracker.
      *
-     * @apiNote
-     * Invoked by the message stream handler when an
-     * {@link ProtocolMessage.Type#APP_STATE_SYNC_KEY_SHARE} message is received. Each shared
-     * key is either a positive response (carrying {@code keyData}) that is added to the
-     * store and clears any matching missing-key tracker, or a negative response (no
-     * {@code keyData}) that records the sender as having answered without the key. After
-     * reconciliation any blocked syncd collections are unblocked and resynced.
-     *
-     * @implNote
-     * This implementation, after recording the new keys, calls
-     * {@link WebAppStateService#scheduleAllDevicesRespondedCheck()} when a tracker entry now
-     * has a no-key answer from every asked device, mirroring WA Web's
-     * {@code _checkMissingKeyOnAllClients}. The blocked-collection unblock at the end
-     * mirrors WA Web's {@code WAWebSyncd.syncBlockedCollections}.
+     * <p>Invoked by the message stream handler when an
+     * {@link ProtocolMessage.Type#APP_STATE_SYNC_KEY_SHARE} message is received. Each shared key
+     * is either a positive response carrying key data, which is added to the store and clears
+     * any matching missing-key tracker entry, or a negative response without key data, which
+     * records the sender as having answered without the key. When a tracker entry then has a
+     * no-key answer from every asked device the all-devices-responded grace check is scheduled
+     * via {@link WebAppStateService#scheduleAllDevicesRespondedCheck()}. When any tracker entry
+     * is resolved the wait-for-key timeout is rescheduled. After reconciliation any blocked
+     * syncd collections are unblocked and resynced.
      *
      * @param senderDeviceId the device id of the peer that sent the share
      * @param keys the keys carried by the share message
@@ -266,20 +247,15 @@ public final class SyncKeyRotationService {
      * Emits the {@link BootstrapAppStateDataStageCode#MISSING_KEYS_RECEIVED} bootstrap-stage
      * event from the validation half of the inbound key-share path.
      *
-     * @apiNote
-     * The Cobalt message stream handler validates an inbound
-     * {@code AppStateSyncKeyShare} on its own thread before delegating storage to
-     * {@link #handleKeyShare(int, List)}; this method is exposed so the validator can fire
-     * the bootstrap beacon at the WA Web call position
-     * ({@code handleAppStateSyncKeyShare}'s first statement) regardless of whether any
-     * shared key survives validation.
+     * <p>The message stream handler validates an inbound {@code AppStateSyncKeyShare} on its own
+     * thread before delegating storage to {@link #handleKeyShare(int, List)}. This method is
+     * exposed so the validator can fire the bootstrap beacon at the correct call position
+     * regardless of whether any shared key survives validation.
      *
-     * @implNote
-     * This implementation is a thin shim onto
-     * {@link #logCriticalBootstrapStageIfNecessary(BootstrapAppStateDataStageCode)} and
-     * exists only because the validator and the storage path live in different Cobalt
-     * classes; WA Web fuses both in a single function body so the event call is inline
-     * there.
+     * @implNote This implementation is a thin shim onto
+     * {@link #logCriticalBootstrapStageIfNecessary(BootstrapAppStateDataStageCode)} that exists
+     * only because the validator and the storage path live in different Cobalt classes; WA Web
+     * fuses both into one function body.
      */
     @WhatsAppWebExport(moduleName = "WAWebKeyManagementHandleKeyShareApi", exports = "handleAppStateSyncKeyShare", adaptation = WhatsAppAdaptation.ADAPTED)
     public void logMissingKeysReceived() {
@@ -287,17 +263,15 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Emits a {@code MdBootstrapAppStateCriticalDataProcessingEvent} for the supplied
-     * bootstrap stage when the critical data sync is still in progress.
+     * Emits a critical-data processing event for the supplied bootstrap stage when the critical
+     * data sync is still in progress.
      *
-     * @apiNote
-     * Drives the WAM-side critical-data progress beacon used to populate the
-     * "preparing your data" sub-states on first load.
+     * <p>Drives the WAM-side critical-data progress beacon that populates the
+     * preparing-your-data sub-states on first load. The method is a no-op once the
+     * {@link SyncPatchType#CRITICAL_BLOCK} collection has been bootstrapped.
      *
-     * @implNote
-     * This implementation approximates WA Web's
-     * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess} state machine by reading
-     * the {@code bootstrapped} flag for {@link SyncPatchType#CRITICAL_BLOCK}, mirroring
+     * @implNote This implementation approximates WA Web's critical-data sync state machine by
+     * reading the {@code bootstrapped} flag for {@link SyncPatchType#CRITICAL_BLOCK}, mirroring
      * {@link WebAppStateService}.
      *
      * @param stage the bootstrap stage reached
@@ -316,16 +290,14 @@ public final class SyncKeyRotationService {
     /**
      * Re-syncs every collection currently in {@link SyncCollectionState#BLOCKED}.
      *
-     * @apiNote
-     * Called at the end of {@link #handleKeyShare(int, List)} so collections that paused
-     * patching while waiting for missing key material can resume immediately when the
-     * material arrives.
+     * <p>Called at the end of {@link #handleKeyShare(int, List)} so collections that paused
+     * patching while waiting for missing key material can resume immediately once the material
+     * arrives. Each blocked collection is marked dirty and a single batched pull is issued for
+     * the whole set.
      *
-     * @implNote
-     * This implementation transitions every blocked collection to
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#markWebAppStateDirty} and then
-     * fires a single {@link WhatsAppClient#pullWebAppState} batched pull, mirroring WA
-     * Web's {@code moveCollectionsToDirty(t)} followed by the {@code Z()} sync trigger.
+     * @implNote This implementation transitions every blocked collection through
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#markWebAppStateDirty(SyncPatchType)}
+     * and then fires one {@link WhatsAppClient#pullWebAppState(SyncPatchType...)} batched pull.
      */
     private void syncBlockedCollections() {
         var blockedCollections = new ArrayList<SyncPatchType>();
@@ -343,15 +315,12 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Ensures the active sync key is fit for use; rotates inline when the
-     * {@code triggerRotation} flag is set and either the key has expired or a companion
-     * device has been removed.
+     * Ensures the active sync key is fit for use, rotating inline when {@code triggerRotation}
+     * is set and the active key is stale.
      *
-     * @apiNote
-     * Convenience wrapper used by code paths that only need the side effect of rotation
-     * without consuming the resulting key reference (for example the periodic 27-day
-     * background check). Equivalent to discarding the return value of
-     * {@link #getActiveKey(boolean)}.
+     * <p>Convenience wrapper for code paths that need only the side effect of rotation without
+     * consuming the resulting key reference, such as the periodic 27-day background check.
+     * Equivalent to discarding the return value of {@link #getActiveKey(boolean)}.
      *
      * @param triggerRotation whether to rotate when the active key is stale
      */
@@ -360,21 +329,17 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Returns the active sync key; rotates inline when {@code triggerRotation} is
-     * {@code true} and the current newest key is either expired or carries a stale device
-     * fingerprint.
+     * Returns the active sync key, rotating inline when {@code triggerRotation} is {@code true}
+     * and the newest key is either expired or carries a stale device fingerprint.
      *
-     * @apiNote
-     * Called by {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder}
-     * before encrypting outgoing patches and by the periodic background check in
-     * {@link #startPeriodicRotationJob()}. {@code triggerRotation=false} is the read-only
-     * mode used for diagnostics or by tests that wish to assert against the existing key
-     * without inducing rotation.
+     * <p>Called by {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder} before
+     * encrypting outgoing patches and by the periodic background check in
+     * {@link #startPeriodicRotationJob()}. A {@code triggerRotation} of {@code false} is the
+     * read-only mode that returns the existing key without inducing rotation.
      *
-     * @implNote
-     * This implementation serialises the read-rotate-store sequence under
-     * {@link #rotationLock} so two concurrent encrypt callers cannot race into rotating
-     * twice in a row.
+     * @implNote This implementation serialises the read-rotate-store sequence under
+     * {@link #rotationLock} so two concurrent encrypt callers cannot race into rotating twice in
+     * a row.
      *
      * @param triggerRotation whether to rotate when the active key is stale
      * @return the active {@link AppStateSyncKey}
@@ -392,16 +357,16 @@ public final class SyncKeyRotationService {
     /**
      * Performs the read-rotate-store sequence inside {@link #rotationLock}.
      *
-     * @apiNote
-     * Always called with {@link #rotationLock} held; never invoke directly.
+     * <p>Must be called only with {@link #rotationLock} held. Returns the newest key unchanged
+     * when rotation is not requested or not needed; otherwise mints a fresh key, persists and
+     * shares it in the order dictated by the persist-after-server-ack gate, commits the
+     * appropriate rotation-reason WAM event, and returns the new key. Throws when no key exists
+     * at all.
      *
-     * @implNote
-     * This implementation returns the freshly rotated key directly rather than recursing
-     * into {@code getActiveKeyInternal} as WA Web does (the recursive call is guaranteed to
-     * resolve to the same {@code rotatedKey} now that storage is committed and neither the
-     * expired nor the device-removed flag fires for the brand-new key); avoiding the
-     * recursion keeps the lock-held window short and removes one layer of stack frames per
-     * encrypt call.
+     * @implNote This implementation returns the freshly rotated key directly rather than
+     * recursing: the recursive resolution would return the same key now that storage is
+     * committed and neither rotation trigger fires for a brand-new key, so avoiding it keeps the
+     * lock-held window short and removes one stack frame per encrypt call.
      *
      * @param triggerRotation whether to rotate when the active key is stale
      * @return the active {@link AppStateSyncKey}
@@ -457,15 +422,13 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Returns the newest sync key pair from the store using
-     * {@link SyncKeyUtils#findNewestKey} ordering.
+     * Returns the newest sync key pair from the store.
      *
-     * @apiNote
-     * Cobalt's outgoing mutation builder calls this directly to look up the encryption key
-     * before invoking {@link #getActiveKey(boolean)} for rotation; the read-only contract
-     * makes it cheap to use as a check.
+     * <p>Reads the store's available keys and selects the newest under
+     * {@link SyncKeyUtils#findNewestKey(java.util.Collection)} ordering. The read-only contract
+     * makes it cheap to use as a precondition check before invoking {@link #getActiveKey(boolean)}.
      *
-     * @return the newest {@link AppStateSyncKey} or {@code null} when no keys exist
+     * @return the newest {@link AppStateSyncKey}, or {@code null} when no keys exist
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdKeyManagement",
             exports = "getNewestKeyPair",
@@ -475,21 +438,18 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Returns whether the supplied key has aged past the configured
-     * {@code syncd_key_max_use_days} threshold.
+     * Returns whether the supplied key has aged past the configured maximum use threshold.
      *
-     * @apiNote
-     * The threshold is read from the AB prop and clamped between
-     * {@link #MIN_KEY_MAX_USE_DAYS} and {@link #MAX_KEY_MAX_USE_DAYS} so a misconfigured
-     * AB-prop value cannot disable rotation entirely or trigger it on every call.
+     * <p>The threshold is read from {@code syncd_key_max_use_days} and clamped between
+     * {@link #MIN_KEY_MAX_USE_DAYS} and {@link #MAX_KEY_MAX_USE_DAYS} so a misconfigured AB-prop
+     * value can neither disable rotation entirely nor trigger it on every call. A key carrying
+     * no timestamp is treated as not expired.
      *
-     * @implNote
-     * This implementation returns {@code false} when the key carries no timestamp; WA Web
-     * relies on the same shape because the {@code keyData.timestamp} field is optional in
-     * the protobuf.
+     * @implNote This implementation returns {@code false} when the key carries no timestamp
+     * because that protobuf field is optional.
      *
      * @param key the key to inspect
-     * @return {@code true} when the key is past its max-use age
+     * @return {@code true} when the key is past its maximum-use age
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdRotateKey",
             exports = "hasKeyExpired",
@@ -511,18 +471,17 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Returns whether a companion device has been removed since {@code key} was created, by
-     * comparing the key's recorded device fingerprint against the live device list.
+     * Returns whether a companion device has been removed since the supplied key was created.
      *
-     * @apiNote
-     * Removal is one of the two rotation triggers (the other being expiry); the goal is to
-     * cut a removed device's access to future mutations encrypted with the new key.
+     * <p>Compares the key's recorded device fingerprint against the live device list; a removal
+     * is one of the two rotation triggers, alongside expiry, and exists to cut a removed
+     * device's access to future mutations. A key without a fingerprint, or a {@code null} live
+     * fingerprint, yields {@code false}. A raw-id mismatch counts as a removal; otherwise only a
+     * true device-index set mismatch counts.
      *
-     * @implNote
-     * This implementation expands the key's stored {@code deviceIndexes} from
-     * {@code currentIndex+1} up to the live {@code currentIndex} so devices added
-     * legitimately since the key was minted do not register as removals; only a true set
-     * mismatch counts.
+     * @implNote This implementation expands the key's stored device indexes from
+     * {@code currentIndex + 1} up to the live current index so devices added legitimately since
+     * the key was minted do not register as removals.
      *
      * @param key the key whose fingerprint to compare
      * @param currentFingerprint the current device fingerprint, possibly {@code null}
@@ -560,15 +519,12 @@ public final class SyncKeyRotationService {
     /**
      * Computes the current device fingerprint snapshot used by the rotation triggers.
      *
-     * @apiNote
-     * Returns {@code null} when either the own JID is unavailable or the device list has
-     * not been synced; both rotation triggers degrade to a no-op in that state rather than
-     * forcing a rotation against an unknown peer set.
+     * <p>Returns {@code null} when either the own JID is unavailable or the device list has not
+     * been synced; both rotation triggers then degrade to a no-op rather than forcing a rotation
+     * against an unknown peer set.
      *
-     * @implNote
-     * This implementation parses the device list's {@code rawId} as an integer because
-     * Cobalt's device-list model holds it as a string; WA Web carries the integer directly
-     * out of {@code WAWebApiDeviceList}.
+     * @implNote This implementation parses the device list's raw id as an integer because
+     * Cobalt's device-list model holds it as a string; an unparseable value yields {@code -1}.
      *
      * @return the current {@link DeviceFingerprint} snapshot, or {@code null} when unavailable
      */
@@ -609,22 +565,20 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Generates a new sync key with an incremented epoch, fresh random key data, and the
-     * supplied device fingerprint.
+     * Mints a new sync key with an incremented epoch, fresh random key data, and the supplied
+     * device fingerprint.
      *
-     * @apiNote
-     * Returns {@code null} when any of the inputs needed to derive the new key id are
-     * absent (previous key id, own JID, current fingerprint), which translates upstream
-     * into "no rotation this round".
+     * <p>Returns {@code null} when any input needed to derive the new key id is absent (the
+     * previous key id, the own JID, or the current fingerprint), which translates upstream into
+     * no rotation this round. The new key id encodes the own device id and the next epoch, and
+     * the new key data is a fresh 32-byte random payload.
      *
-     * @implNote
-     * This implementation builds the 6-byte key id via
-     * {@link SyncKeyUtils#buildKeyId(int, int)} (2-byte device id, 4-byte epoch) and uses a
-     * {@link SecureRandom}-seeded 32-byte payload, matching WA Web's
-     * {@code WAWebSyncdRotateKey.p}'s {@code getRandomValues(new Uint8Array(32))}.
+     * @implNote This implementation builds the 6-byte key id via
+     * {@link SyncKeyUtils#buildKeyId(int, int)} from a 2-byte device id and a 4-byte epoch, and
+     * seeds the 32-byte payload from {@link SecureRandom}.
      *
      * @param currentFingerprint the device fingerprint to attach to the new key
-     * @param previousKey the key being rotated out; its epoch is the seed for the new epoch
+     * @param previousKey the key being rotated out; its epoch seeds the new epoch
      * @return the newly minted {@link AppStateSyncKey}, or {@code null} when rotation is impossible
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdRotateKey",
@@ -680,12 +634,11 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Sends the rotated key to every companion device under the {@code key_rotation} reason.
+     * Sends the rotated key to every companion device under the key-rotation reason.
      *
-     * @apiNote
-     * Called by {@link #getActiveKeyInternal(boolean)} after a rotation has been decided;
-     * the share lets every peer encrypt outgoing mutations with the new key id and decrypt
-     * incoming ones from the rotating device.
+     * <p>Called by {@link #getActiveKeyInternal(boolean)} after a rotation has been decided; the
+     * share lets every peer encrypt outgoing mutations with the new key id and decrypt incoming
+     * ones from the rotating device.
      *
      * @param key the newly minted key to share
      */
@@ -700,10 +653,9 @@ public final class SyncKeyRotationService {
     /**
      * Sends a missing-key share back to a peer that previously requested it.
      *
-     * @apiNote
-     * Called by the inbound {@code AppStateSyncKeyRequest} handler when this client has the
-     * requested keys; the response carries any keys that were not found as
-     * {@code orphanKeyIds} so the requester can mark them missing locally and stop asking.
+     * <p>Called by the inbound {@code AppStateSyncKeyRequest} handler when this client holds the
+     * requested keys. The response carries any keys that were not found locally as orphan key
+     * ids so the requester can mark them missing and stop asking.
      *
      * @param keys the keys this client holds for the peer's request
      * @param orphanKeyIds the requested key ids that were not found locally
@@ -714,21 +666,18 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Builds an {@code AppStateSyncKeyShare} {@code ProtocolMessage} and dispatches it to
-     * every target device.
+     * Builds an {@code AppStateSyncKeyShare} {@link ProtocolMessage} and dispatches it to every
+     * target device.
      *
-     * @apiNote
-     * Shared backend for both {@link #shareKeyWithCompanionDevices(AppStateSyncKey)}
-     * (rotation broadcast) and {@link #sendMissingKeyShare(List, List, Jid)} (missing-key
-     * response). The {@code reason} string is for logging only and is not encoded on the
-     * wire.
+     * <p>Shared backend for both {@link #shareKeyWithCompanionDevices(AppStateSyncKey)} (the
+     * rotation broadcast) and {@link #sendMissingKeyShare(List, List, Jid)} (the missing-key
+     * response). Orphan key ids are appended as data-less key entries so the requester can mark
+     * them missing. The {@code reason} string is used in diagnostic logs only and is not encoded
+     * on the wire. An empty target list, or an unavailable own JID, short-circuits the dispatch.
      *
-     * @implNote
-     * This implementation iterates the per-device sends sequentially and swallows
-     * individual failures with a warning log; WA Web uses
-     * {@code Promise.all(_.map(e => encryptAndSendKeyMsg({msg: e})))} which propagates the
-     * first rejection. Cobalt's sequential, log-and-continue choice keeps a single
-     * misbehaving peer from poisoning the rest of the broadcast.
+     * @implNote This implementation iterates the per-device sends sequentially and swallows
+     * individual failures with a warning log, so a single misbehaving peer cannot poison the
+     * rest of the broadcast.
      *
      * @param keys the keys to share
      * @param orphanKeyIds the key ids without data, sent so the requester can mark them missing
@@ -804,10 +753,11 @@ public final class SyncKeyRotationService {
     /**
      * Returns every companion device {@link Jid} this client may share or request keys with.
      *
-     * @apiNote
-     * Returns a singleton primary device on lookup failure so a degraded device-list state
-     * still permits a rotation share to land somewhere; an empty list short-circuits the
-     * dispatch path with a {@link Logger#fine} note.
+     * <p>The result is the registered own-device list with the current device filtered out. An
+     * unavailable own JID or a missing device list yields an empty list, which short-circuits
+     * the dispatch path. A device-list lookup failure falls back to a singleton primary device
+     * (device id {@code 0}) so a degraded device-list state still permits a rotation share to
+     * land somewhere.
      *
      * @return the companion device {@link Jid}s, or a singleton primary device on lookup failure
      */
@@ -838,11 +788,9 @@ public final class SyncKeyRotationService {
     /**
      * Starts the periodic 27-day background rotation check.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code RotateKeyTask} so a session that has not pushed any
-     * mutations for weeks (and therefore has not invoked
-     * {@link #getActiveKey(boolean)} on the encrypt path) still rotates expired keys on
-     * schedule. Cancels any previously-running job before scheduling a new one so the
+     * <p>Ensures a session that has not pushed any mutations for weeks, and therefore has not
+     * invoked {@link #getActiveKey(boolean)} on the encrypt path, still rotates expired keys on
+     * schedule. Any previously running job is cancelled before scheduling a new one so the
      * service is idempotent across reconnects.
      */
     public void startPeriodicRotationJob() {
@@ -854,10 +802,12 @@ public final class SyncKeyRotationService {
      * Re-arms the periodic rotation check after each tick, regardless of whether the rotation
      * itself succeeded.
      *
-     * @implNote
-     * This implementation uses the {@link SchedulerUtils#scheduleDelayed} primitive so the
-     * shared Cobalt scheduler executor is reused; the {@code finally} block re-arms the next
-     * tick so a single rotation failure does not halt the periodic loop.
+     * <p>Schedules one rotation tick after {@link #PERIODIC_ROTATION_INTERVAL}, runs the
+     * rotation, and re-arms the next tick unconditionally.
+     *
+     * @implNote This implementation reuses the shared Cobalt scheduler executor via
+     * {@link SchedulerUtils#scheduleDelayed(Duration, Runnable)} and re-arms the next tick in a
+     * {@code finally} block so a single rotation failure does not halt the periodic loop.
      */
     private void scheduleNextPeriodicRotation() {
         periodicRotationJob = SchedulerUtils.scheduleDelayed(
@@ -877,8 +827,7 @@ public final class SyncKeyRotationService {
     /**
      * Cancels the periodic 27-day rotation check, if any.
      *
-     * @apiNote
-     * Called by {@link WebAppStateService} on disconnect; the partner of
+     * <p>Called by {@link WebAppStateService} on disconnect; the partner of
      * {@link #startPeriodicRotationJob()}.
      */
     public void stopPeriodicRotationJob() {
@@ -890,14 +839,13 @@ public final class SyncKeyRotationService {
     }
 
     /**
-     * Snapshot of the current device fingerprint used by both rotation triggers.
+     * Carries a snapshot of the current device fingerprint used by both rotation triggers.
      *
-     * @apiNote
-     * Internal carrier type; not part of the public API. Holds only what
-     * {@link #hasADeviceBeenRemoved(AppStateSyncKey, DeviceFingerprint)} needs to compare
-     * against the per-key stored fingerprint.
+     * <p>Holds only the fields
+     * {@link #hasADeviceBeenRemoved(AppStateSyncKey, DeviceFingerprint)} needs to compare against
+     * the per-key stored fingerprint.
      *
-     * @param currentIndex the live device-list current index counter
+     * @param currentIndex the live device-list current-index counter
      * @param deviceIndexes the live set of active device key indexes
      * @param rawId the live device-list raw id, or {@code -1} when unparseable
      */

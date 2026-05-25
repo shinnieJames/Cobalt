@@ -22,23 +22,12 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Exercises {@link VoipRelayAllCallsHandler}'s parity with
- * {@code WAWebVoipRelayAllCallsSettingSync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the happy {@code SET} branch that
- * persists the boolean to
- * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)},
- * the malformed branch for missing action, the
- * {@link SyncdOperation#REMOVE} unsupported branch, the outgoing
- * builder shape from
- * {@link VoipRelayAllCallsMutationFactory}, and the default
- * conflict-resolution tiebreaker.
- *
- * @implNote
- * The fixture builds a temporary store with the local identity only;
- * tests that exercise the apply path observe the
- * {@code relayAllCalls} flag transition from the default unset state.
+ * Covers {@link VoipRelayAllCallsHandler}: the wire-constant trio, the happy {@code SET} branch
+ * that persists the boolean to {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)},
+ * the malformed action branch, the {@link SyncdOperation#REMOVE} unsupported branch, the outgoing
+ * builder shape from {@link VoipRelayAllCallsMutationFactory}, and the default conflict-resolution
+ * tiebreaker. Each test runs against a fresh temporary store carrying only the local identity, so
+ * the {@code relayAllCalls} flag starts at its default value.
  */
 @DisplayName("VoipRelayAllCallsHandler")
 class VoipRelayAllCallsHandlerTest {
@@ -47,30 +36,12 @@ class VoipRelayAllCallsHandlerTest {
 
     private WhatsAppClient client;
 
-    /**
-     * Builds the per-test harness.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
-     * {@code relayAllCalls} flag starts at its default value.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Wraps the given enabled flag and operation into a trusted
-     * mutation under the canonical {@code ["setting_relayAllCalls"]}
-     * index.
-     *
-     * @param enabled the new relay-all-calls flag
-     * @param op      the mutation operation
-     * @param ts      the mutation timestamp
-     * @return the trusted mutation
-     */
     private static DecryptedMutation.Trusted mutation(boolean enabled, SyncdOperation op, Instant ts) {
         var action = new PrivacySettingRelayAllCallsBuilder().isEnabled(enabled).build();
         var value = new SyncActionValueBuilder()

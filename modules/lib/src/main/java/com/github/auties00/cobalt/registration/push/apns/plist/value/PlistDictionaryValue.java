@@ -7,28 +7,23 @@ import java.util.Optional;
 import java.util.SequencedMap;
 
 /**
- * Plist {@code <dict>} node holding ordered string-keyed entries, the
- * binary plist {@code 0xD0..0xDF} marker family.
+ * Holds a plist {@code <dict>} node of ordered string-keyed entries, the binary plist
+ * {@code 0xD0..0xDF} marker family.
  *
- * @apiNote
- * Used wherever an APNS plist payload nests a keyed structure (the
- * connect handshake, the FairPlay descriptor, every notification
- * envelope); iteration order matches the source order so signature
- * recomputation over a re-encoded tree stays bit-identical with the
- * captured wire bytes.
+ * <p>An instance represents a keyed structure carried by an APNS plist payload, such as the connect
+ * handshake, the FairPlay descriptor, or a notification envelope. Iteration order matches the
+ * source order so that re-encoding the decoded tree reproduces the captured bytes and any signature
+ * recomputed over it stays bit-identical.
  *
- * @implNote
- * This implementation backs the entries with a {@link SequencedMap}
- * (typically a {@link LinkedHashMap} produced by the parser) and
- * exposes an unmodifiable view via {@link #entries()}, avoiding the
- * per-construction defensive copy that would otherwise inflate parsing
- * of large dictionaries.
- *
+ * @implNote This implementation backs the entries with a {@link SequencedMap} (typically a
+ *           {@link LinkedHashMap} produced by the parser) and exposes an unmodifiable view via
+ *           {@link #entries()}, avoiding the per-construction defensive copy that would otherwise
+ *           inflate parsing of large dictionaries.
  * @param entries the ordered entries
  */
 public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) implements PlistValue {
     /**
-     * Canonical constructor that rejects a {@code null} backing map.
+     * Constructs a dictionary node, rejecting a {@code null} backing map.
      *
      * @param entries the ordered entries
      * @throws NullPointerException if {@code entries} is {@code null}
@@ -40,10 +35,9 @@ public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) imp
     /**
      * Returns an unmodifiable view of the backing map.
      *
-     * @apiNote
-     * Iteration order matches the order the parser observed in the
-     * source bytes; mutating the underlying map is not supported and
-     * is not exposed through this view.
+     * <p>The returned map is a read-only window onto the stored entries; iteration order matches
+     * the order the parser observed in the source bytes. Mutating the underlying map is neither
+     * supported nor exposed through this view.
      *
      * @return an unmodifiable sequenced map of the entries
      */
@@ -55,21 +49,19 @@ public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) imp
     /**
      * Returns the value stored under {@code key}, if any.
      *
-     * @apiNote
-     * Convenience over {@link SequencedMap#get(Object)} that hides the
-     * {@code null}-vs-absent distinction behind {@link Optional}.
+     * <p>The {@code null}-versus-absent distinction of {@link SequencedMap#get(Object)} is hidden
+     * behind {@link Optional}: a present mapping yields a populated optional, an absent key yields
+     * an empty one.
      *
      * @param key the lookup key
-     * @return an {@link Optional} containing the value, or empty when
-     *         absent
+     * @return an {@link Optional} containing the value, or empty when the key is absent
      */
     public Optional<PlistValue> get(String key) {
         return Optional.ofNullable(entries.get(key));
     }
 
     /**
-     * Returns a new {@link Builder} for assembling dictionaries
-     * incrementally.
+     * Returns a new {@link Builder} for assembling a dictionary incrementally.
      *
      * @return a fresh builder
      */
@@ -78,44 +70,37 @@ public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) imp
     }
 
     /**
-     * Mutable builder that produces an immutable
-     * {@link PlistDictionaryValue}.
+     * Assembles an immutable {@link PlistDictionaryValue} one entry at a time.
      *
-     * @apiNote
-     * Used by call sites that synthesise an APNS request payload one
-     * field at a time; each {@code put} returns {@code this} so calls
-     * chain naturally.
+     * <p>Call sites use this builder to synthesise an APNS request payload field by field. Each
+     * {@code put} overload returns {@code this} so calls chain, and {@link #build()} produces the
+     * resulting dictionary.
      *
-     * @implNote
-     * This implementation backs the in-progress entries with a
-     * {@link LinkedHashMap} so insertion order survives into the
-     * resulting dictionary; {@link #build()} snapshots the map so
-     * later mutations of the builder do not bleed into the returned
-     * value.
+     * @implNote This implementation backs the in-progress entries with a {@link LinkedHashMap} so
+     *           insertion order survives into the resulting dictionary; {@link #build()} snapshots
+     *           the map so later mutations of the builder do not bleed into a dictionary already
+     *           returned.
      */
     public static final class Builder {
         /**
-         * Insertion-ordered backing map populated by every {@code put}
-         * overload until {@link #build()} is called.
+         * Holds the insertion-ordered entries accumulated by the {@code put} overloads until
+         * {@link #build()} snapshots them.
          */
         private final LinkedHashMap<String, PlistValue> map = new LinkedHashMap<>();
 
         /**
-         * Hidden constructor.
+         * Constructs an empty builder.
          *
-         * @apiNote
-         * Instances are obtained from
-         * {@link PlistDictionaryValue#builder()}; the constructor is
-         * private so the only entry point is the factory method.
+         * <p>Private so the only entry point is {@link PlistDictionaryValue#builder()}.
          */
         private Builder() {
         }
 
         /**
-         * Stores a {@link PlistValue} under {@code key}.
+         * Stores {@code value} under {@code key}.
          *
-         * @param key   the key
-         * @param value the value
+         * @param key   the entry key
+         * @param value the entry value
          * @return this builder
          * @throws NullPointerException if either argument is {@code null}
          */
@@ -125,11 +110,10 @@ public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) imp
         }
 
         /**
-         * Wraps {@code value} in a {@link PlistStringValue} and stores
-         * it under {@code key}.
+         * Wraps {@code value} in a {@link PlistStringValue} and stores it under {@code key}.
          *
-         * @param key   the key
-         * @param value the string
+         * @param key   the entry key
+         * @param value the string value
          * @return this builder
          * @throws NullPointerException if either argument is {@code null}
          */
@@ -138,59 +122,52 @@ public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) imp
         }
 
         /**
-         * Wraps {@code value} in a {@link PlistDataValue} and stores
-         * it under {@code key}.
+         * Wraps {@code value} in a {@link PlistDataValue} and stores it under {@code key}.
          *
-         * @apiNote
-         * The bytes are retained by reference for zero-copy
-         * serialization; the caller must not mutate {@code value}
-         * after the call.
+         * <p>The bytes are retained by reference for zero-copy serialization, so the caller must
+         * not mutate {@code value} after this call returns.
          *
-         * @param key   the key
-         * @param value the bytes
+         * @param key   the entry key
+         * @param value the byte payload
          * @return this builder
+         * @throws NullPointerException if either argument is {@code null}
          */
         public Builder put(String key, byte[] value) {
             return put(key, new PlistDataValue(value));
         }
 
         /**
-         * Wraps {@code value} in a {@link PlistBooleanValue} and
-         * stores it under {@code key}.
+         * Wraps {@code value} in a {@link PlistBooleanValue} and stores it under {@code key}.
          *
-         * @param key   the key
-         * @param value the boolean
+         * @param key   the entry key
+         * @param value the boolean value
          * @return this builder
+         * @throws NullPointerException if {@code key} is {@code null}
          */
         public Builder put(String key, boolean value) {
             return put(key, new PlistBooleanValue(value));
         }
 
         /**
-         * Wraps {@code value} in a {@link PlistIntegerValue} and
-         * stores it under {@code key}.
+         * Wraps {@code value} in a {@link PlistIntegerValue} and stores it under {@code key}.
          *
-         * @param key   the key
-         * @param value the integer
+         * @param key   the entry key
+         * @param value the integer value
          * @return this builder
+         * @throws NullPointerException if {@code key} is {@code null}
          */
         public Builder put(String key, long value) {
             return put(key, new PlistIntegerValue(value));
         }
 
         /**
-         * Snapshots the accumulated entries into an immutable
-         * {@link PlistDictionaryValue}.
+         * Snapshots the accumulated entries into an immutable {@link PlistDictionaryValue}.
          *
-         * @apiNote
-         * Safe to call multiple times; each call returns a new
-         * dictionary built from the current builder state.
+         * <p>Safe to call more than once; each call returns a new dictionary built from the current
+         * builder state.
          *
-         * @implNote
-         * This implementation copies the in-progress
-         * {@link LinkedHashMap} so subsequent {@code put} calls on the
-         * builder do not affect dictionaries already returned.
-         *
+         * @implNote This implementation copies the in-progress {@link LinkedHashMap} so subsequent
+         *           {@code put} calls on the builder do not affect a dictionary already returned.
          * @return the resulting dictionary
          */
         public PlistDictionaryValue build() {

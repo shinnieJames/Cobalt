@@ -9,14 +9,13 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
  * parsing from the {@code from} JID, the optional {@code participant}
  * attribute, and the logged-in user's identity.
  *
- * @apiNote
- * This is the single discriminator the receive pipeline branches on for
- * every per-message decision: which {@code DeviceSentMessage} unwrapping
- * rule to apply, what receipt type to emit, whether to process incoming
- * sender-key distribution payloads, whether the broadcast contact list is
- * meaningful, and what placeholder shape to surface to the UI when
- * decryption fails. Set by {@link MessageReceiveStanzaParser} and exposed
- * via {@link MessageReceiveStanza#messageType()}.
+ * <p>This is the single discriminator the receive pipeline branches on for
+ * every per-message decision: which device-sent-message unwrapping rule to
+ * apply, what receipt type to emit, whether to process incoming sender-key
+ * distribution payloads, whether the broadcast contact list is meaningful, and
+ * what placeholder shape to surface to the UI when decryption fails. Set by
+ * {@link MessageReceiveStanzaParser} and exposed via
+ * {@link MessageReceiveStanza#messageType()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgTypes.flow")
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgCommon")
@@ -25,8 +24,7 @@ public enum MessageType {
      * A 1:1 chat message between two user, LID, or bot JIDs that is not a
      * peer-protocol message.
      *
-     * @apiNote
-     * The receive pipeline's default path: decrypt the per-device envelope,
+     * <p>The receive pipeline's default path: decrypt the per-device envelope,
      * decode the inner protobuf, persist as a chat message.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
@@ -38,9 +36,8 @@ public enum MessageType {
      * pointing at the group JID and the {@code participant} attribute
      * identifying the sender's device inside that group.
      *
-     * @apiNote
-     * Drives the sender-key decryption path for the group; the participant
-     * JID also feeds the LID-vs-PN addressing decision that selects the
+     * <p>Drives the sender-key decryption path for the group; the participant
+     * JID also feeds the LID-versus-PN addressing decision that selects the
      * Signal protocol address.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
@@ -48,65 +45,56 @@ public enum MessageType {
     GROUP,
 
     /**
-     * A broadcast-list message that this device's own primary device sent;
-     * the {@code <participants>} child carries the per-recipient broadcast
-     * contact list that the local device mirrors.
+     * A broadcast-list message that this device's own primary device sent; the
+     * {@code <participants>} child carries the per-recipient broadcast contact
+     * list that the local device mirrors.
      *
-     * @apiNote
-     * Distinguished from {@link #OTHER_BROADCAST} by the
-     * {@code isMeAccount(participant)} check inside the parser; selects the
-     * code path that persists the broadcast contact list locally so the
-     * companion device can render the recipients exactly as the primary
-     * sender did.
+     * <p>Distinguished from {@link #OTHER_BROADCAST} by an is-me-account check
+     * on the participant inside the parser; selects the code path that persists
+     * the broadcast contact list locally so the companion device can render the
+     * recipients exactly as the primary sender did.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
             adaptation = WhatsAppAdaptation.DIRECT)
     PEER_BROADCAST,
 
     /**
-     * A broadcast-list message addressed to the local user from another
-     * user's broadcast list.
+     * A broadcast-list message addressed to the local user from another user's
+     * broadcast list.
      *
-     * @apiNote
-     * The receive pipeline treats this as an inbound 1:1 message wrapped in
-     * a broadcast envelope; the {@code eph_setting} attribute on the
-     * stanza is the per-recipient ephemeral setting.
+     * <p>The receive pipeline treats this as an inbound 1:1 message wrapped in a
+     * broadcast envelope; the {@code eph_setting} attribute on the stanza is the
+     * per-recipient ephemeral setting.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
             adaptation = WhatsAppAdaptation.DIRECT)
     OTHER_BROADCAST,
 
     /**
-     * A status-broadcast message originated by the local user's primary
-     * device and encrypted directly (every {@code <enc>} child is
-     * non-{@code skmsg}).
+     * A status-broadcast message originated by the local user's primary device
+     * and encrypted directly (every {@code <enc>} child is non-{@code skmsg}).
      *
-     * @apiNote
-     * Status posts from another of the local user's devices land here so the
-     * current device can mirror the post locally; the
-     * {@code directPeerStatusBclParticipants} list (mapped onto
-     * {@link MessageReceiveStanza#bclParticipants()}) tells the UI who the
-     * post was sent to.
+     * <p>Status posts from another of the local user's devices land here so the
+     * current device can mirror the post locally; the broadcast contact list
+     * (mapped onto {@link MessageReceiveStanza#bclParticipants()}) tells the UI
+     * who the post was sent to.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
             adaptation = WhatsAppAdaptation.DIRECT)
     DIRECT_PEER_STATUS,
 
     /**
-     * A status-broadcast message from another user, or a self-originated
-     * status whose payload is not directly encrypted (carries an
-     * {@code skmsg}).
+     * A status-broadcast message from another user, or a self-originated status
+     * whose payload is not directly encrypted (carries an {@code skmsg}).
      *
-     * @apiNote
-     * Decrypted via the sender's status-broadcast sender key and surfaced
+     * <p>Decrypted via the sender's status-broadcast sender key and surfaced
      * into the status feed.
      *
      * @implNote
-     * This implementation collapses WA Web's
-     * {@code MESSAGE_TYPE.OTHER_STATUS} variants ({@code isDirect=true} and
-     * {@code isDirect=false}) into one enum value because Cobalt's
-     * downstream paths do not branch on the boolean directly; callers that
-     * need it can read {@link MessageReceiveStanza#isDirect()}.
+     * This implementation collapses the upstream direct and non-direct
+     * other-status variants into one enum value because Cobalt's downstream
+     * paths do not branch on the boolean directly; callers that need it can
+     * read {@link MessageReceiveStanza#isDirect()}.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -117,15 +105,14 @@ public enum MessageType {
      * user's own devices, carrying control payloads such as app-state syncs,
      * history transfer, or device-list rotations.
      *
-     * @apiNote
-     * The receive pipeline routes this away from the chat database and into
+     * <p>The receive pipeline routes this away from the chat database and into
      * the peer-protocol handler; the message never surfaces to the UI.
      *
      * @implNote
-     * This implementation fuses WA Web's two-axis check
-     * ({@code MESSAGE_TYPE.CHAT} combined with {@code MSG_CATEGORY.peer})
-     * into a single enum value; the parser does the fusion so the downstream
-     * pipeline can dispatch on one enum.
+     * This implementation fuses the upstream two-axis check (a chat message
+     * combined with the peer message category) into a single enum value; the
+     * parser does the fusion so the downstream pipeline can dispatch on one
+     * enum.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
             adaptation = WhatsAppAdaptation.ADAPTED)

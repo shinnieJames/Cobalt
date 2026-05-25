@@ -21,79 +21,79 @@ import static com.github.auties00.cobalt.socket.websocket.WebSocketFrameConstant
  * client-to-server masking.
  *
  * <p>The stream supports two modes, selected automatically based on
- * whether the caller invokes {@link #beginFrame(int)} before
- * writing:
+ * whether the caller invokes {@link #beginFrame(int)} before writing:
  *
  * <ul>
  *   <li><strong>Streaming mode</strong>: the caller declares the
  *       payload size up front via {@link #beginFrame(int)}, and the
- *       frame header is emitted immediately. Subsequent
- *       {@code write} calls are masked <strong>in place</strong> in
- *       the caller's array and forwarded straight to the underlying
- *       stream; no intermediate buffer. The frame ends implicitly
- *       once {@code payloadSize} bytes have been written.</li>
- *   <li><strong>One-shot mode</strong>: when {@code beginFrame} is
- *       not called, each individual
- *       {@link #write(byte[], int, int)} or {@link #write(int)} call
- *       is treated as one complete frame; the stream picks a fresh
- *       mask key, builds the header, masks the payload in place, and
- *       writes header plus payload as a single frame. Used for
- *       control frames (PONG, CLOSE) issued from the paired
- *       {@link WebSocketFrameInputStream}.</li>
+ *       frame header is emitted immediately. Subsequent {@code write}
+ *       calls are masked <strong>in place</strong> in the caller's
+ *       array and forwarded straight to the underlying stream; no
+ *       intermediate buffer. The frame ends implicitly once
+ *       {@code payloadSize} bytes have been written.</li>
+ *   <li><strong>One-shot mode</strong>: when {@code beginFrame} is not
+ *       called, each individual {@link #write(byte[], int, int)} or
+ *       {@link #write(int)} call is treated as one complete frame; the
+ *       stream picks a fresh mask key, builds the header, masks the
+ *       payload in place, and writes header plus payload as a single
+ *       frame. Used for control frames (PONG, CLOSE) issued from the
+ *       paired {@link WebSocketFrameInputStream}.</li>
  * </ul>
  *
- * <p>In both modes the mask is applied <strong>in place</strong> on
- * the caller's array using the JDK Vector API for bulk throughput
- * with an int-wise scalar fallback for short tails. The mutation
- * contract is intentional and load-bearing for zero-copy: the
- * caller's buffer must not be reused or read after the call returns.
+ * <p>In both modes the mask is applied <strong>in place</strong> on the
+ * caller's array using the JDK Vector API for bulk throughput with an
+ * int-wise scalar fallback for short tails. The mutation contract is
+ * intentional and load-bearing for zero-copy: the caller's buffer must
+ * not be reused or read after the call returns.
  *
  * <p>All public state-mutating methods are serialized on {@code this}
  * so the input thread's auto-PONG (which goes through
- * {@link #writeControlFrame(byte, byte[], int)}) cannot race the
- * writer thread's streaming-mode frame.
+ * {@link #writeControlFrame(byte, byte[], int)}) cannot race the writer
+ * thread's streaming-mode frame.
  *
- * @implNote
- * This implementation reuses the mask SIMD strategy from the
- * pre-refactor {@code WebSocketFrameEncoder}: scalar alignment
- * lead-in, {@link ByteVector#lanewise(VectorOperators.Binary, byte)}
- * bulk, {@link VarHandle} int tail, byte tail. Below
- * {@link #VECTORIZE_THRESHOLD} the SIMD path is skipped so small
- * frames pay no vector-setup cost.
+ * @implNote This implementation masks with a three-tier strategy: a
+ * scalar alignment lead-in, a
+ * {@link ByteVector#lanewise(VectorOperators.Binary, byte)} bulk loop,
+ * an {@link VarHandle} int tail and a final byte tail. Below
+ * {@link #VECTORIZE_THRESHOLD} the SIMD path is skipped so small frames
+ * pay no vector-setup cost.
  */
 public final class WebSocketFrameOutputStream extends FilterOutputStream {
 
     /**
-     * The preferred hardware vector species used for SIMD bulk
+     * Holds the preferred hardware vector species used for SIMD bulk
      * masking.
      */
     private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVector.SPECIES_PREFERRED;
 
     /**
-     * The preferred hardware integer vector species used for
+     * Holds the preferred hardware integer vector species used for
      * building the mask broadcast.
      */
     private static final VectorSpecies<Integer> INT_SPECIES = IntVector.SPECIES_PREFERRED;
 
     /**
-     * The number of bytes processed per SIMD iteration.
+     * Holds the number of bytes processed per SIMD iteration.
      */
     private static final int VECTOR_LENGTH = BYTE_SPECIES.length();
 
     /**
-     * The minimum number of mask-aligned bytes required before the
-     * SIMD path is entered.
+     * Holds the minimum number of mask-aligned bytes required before
+     * the SIMD path is entered.
      *
-     * @apiNote
-     * Below this threshold the int-wise and byte-wise paths handle
+     * <p>Below this threshold the int-wise and byte-wise paths handle
      * the entire payload, avoiding vector-setup overhead on small
      * frames.
+     *
+     * @implNote This implementation requires two full vectors' worth of
+     * bytes so the per-call cost of building the broadcast mask is
+     * amortised over at least two iterations.
      */
     private static final int VECTORIZE_THRESHOLD = VECTOR_LENGTH * 2;
 
     /**
-     * The {@link VarHandle} that reads and writes {@code int} values
-     * from a {@code byte[]} in big-endian order, matching the
+     * Holds the {@link VarHandle} that reads and writes {@code int}
+     * values from a {@code byte[]} in big-endian order, matching the
      * mask-byte layout produced by
      * {@link WebSocketFrameConstants#maskByte(int, int)}.
      */
@@ -101,68 +101,64 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
             MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
 
     /**
-     * The maximum frame header size: two base bytes plus eight
+     * Holds the maximum frame header size: two base bytes plus eight
      * extended-length bytes plus four mask bytes.
      */
     private static final int MAX_HEADER_SIZE = 14;
 
     /**
-     * The reusable scratch buffer for the frame header; private to
-     * this instance and only touched under the {@code synchronized}
+     * Holds the reusable scratch buffer for the frame header; private
+     * to this instance and only touched under the {@code synchronized}
      * block around the actual write.
      */
     private final byte[] header = new byte[MAX_HEADER_SIZE];
 
     /**
-     * The number of payload bytes still expected for the
+     * Holds the number of payload bytes still expected for the
      * streaming-mode frame currently in flight, or {@code 0} when no
      * streaming-mode frame is open (the stream is in one-shot mode).
      */
     private int streamingRemaining;
 
     /**
-     * The mask key for the currently-open streaming-mode frame;
+     * Holds the mask key for the currently-open streaming-mode frame;
      * reset on every {@link #beginFrame(int)} call.
      */
     private int streamingMaskKey;
 
     /**
-     * The mask-cycle offset for the currently-open streaming-mode
+     * Holds the mask-cycle offset for the currently-open streaming-mode
      * frame; advanced as payload bytes are masked across multiple
      * {@code write} calls inside the same frame.
      */
     private int streamingMaskOffset;
 
     /**
-     * The reusable scratch buffer for a control frame deferred while
-     * a streaming-mode frame is in flight; lazily allocated on first
-     * use and sized at the RFC 6455 control-payload maximum so it
+     * Holds the reusable scratch buffer for a control frame deferred
+     * while a streaming-mode frame is in flight; lazily allocated on
+     * first use and sized at the RFC 6455 control-payload maximum so it
      * never needs to grow.
      */
     private byte[] pendingControlPayload;
 
     /**
-     * The opcode of the deferred control frame
+     * Holds the opcode of the deferred control frame
      * ({@link WebSocketFrameConstants#OPCODE_PONG} or
-     * {@link WebSocketFrameConstants#OPCODE_CLOSE}), or {@code 0}
-     * when no control frame is pending.
+     * {@link WebSocketFrameConstants#OPCODE_CLOSE}), or {@code 0} when
+     * no control frame is pending.
      */
     private byte pendingControlOpcode;
 
     /**
-     * The number of valid bytes in {@link #pendingControlPayload}.
+     * Holds the number of valid bytes in {@link #pendingControlPayload}.
      */
     private int pendingControlLength;
 
     /**
      * Wraps an output stream that the caller has already opened.
      *
-     * @apiNote
-     * Constructed by
-     * {@link com.github.auties00.cobalt.socket.WhatsAppSocketClient}
-     * directly above the TLS-encrypted byte stream; the WebSocket
-     * frame layer sits between WhatsApp's datagram stream and the
-     * TLS socket.
+     * <p>The frame layer sits directly above the TLS-encrypted byte
+     * stream, between WhatsApp's datagram stream and the TLS socket.
      *
      * @param out the underlying output stream
      * @throws NullPointerException if {@code out} is {@code null}
@@ -175,28 +171,25 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
      * Begins one WebSocket binary frame whose payload will be the next
      * {@code payloadSize} bytes written to this stream.
      *
-     * @apiNote
-     * Call this exactly once before the payload's first {@code write}
-     * of each frame, then write exactly {@code payloadSize} bytes,
-     * then call {@link #flush()} to push the bytes downstream. The
-     * companion datagram stream (
-     * {@link com.github.auties00.cobalt.socket.datagram.WhatsAppDatagramOutputStream})
-     * calls this directly when its downstream is this class so the
-     * frame header is emitted before the first byte of ciphertext.
+     * <p>The caller invokes this exactly once before the payload's
+     * first {@code write} of each frame, then writes exactly
+     * {@code payloadSize} bytes, then calls {@link #flush()} to push the
+     * bytes downstream. The companion datagram stream
+     * ({@link com.github.auties00.cobalt.socket.datagram.WhatsAppDatagramOutputStream})
+     * calls this directly when its downstream is this class so the frame
+     * header is emitted before the first byte of ciphertext.
      *
-     * @implNote
-     * This implementation generates a fresh mask key, builds the
-     * frame header and forwards it to the underlying stream
+     * @implNote This implementation generates a fresh mask key, builds
+     * the frame header and forwards it to the underlying stream
      * immediately, then transitions to streaming mode. Subsequent
      * {@link #write(byte[], int, int)} and {@link #write(int)} calls
-     * mask {@code payloadSize} bytes in place and forward them
-     * straight through; the frame ends implicitly once
-     * {@code payloadSize} bytes have been written.
+     * mask {@code payloadSize} bytes in place and forward them straight
+     * through; the frame ends implicitly once {@code payloadSize} bytes
+     * have been written.
      *
      * @param payloadSize the exact number of body bytes the caller is
      *                    about to write; must be non-negative
-     * @throws IOException              if writing the frame header
-     *                                  fails
+     * @throws IOException              if writing the frame header fails
      * @throws IllegalArgumentException if {@code payloadSize} is
      *                                  negative
      * @throws IllegalStateException    if a streaming-mode frame is
@@ -221,13 +214,12 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation masks the byte using the current frame's
-     * key and offset and forwards it directly in streaming mode (the
-     * streaming frame is one byte closer to completion); in one-shot
-     * mode the byte becomes a one-byte binary frame on its own. The
-     * streaming-mode branch then drains any deferred control frame
-     * if the current frame just ended.
+     * @implNote In streaming mode this implementation masks the byte
+     * using the current frame's key and offset and forwards it directly
+     * (the streaming frame is one byte closer to completion), then
+     * drains any deferred control frame if the current frame just
+     * ended; in one-shot mode the byte becomes a one-byte binary frame
+     * on its own.
      */
     @Override
     public synchronized void write(int b) throws IOException {
@@ -247,16 +239,17 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * In streaming mode this implementation masks the bytes in place
-     * against the current frame's key and offset, then forwards them
-     * (the streaming frame's remaining-byte counter is decremented;
-     * writing more bytes than declared by {@link #beginFrame(int)}
-     * is rejected). In one-shot mode the call produces a complete
-     * one-frame write (fresh mask key, header, payload) used for
-     * control frames such as PONG and CLOSE. The {@code src} array
-     * is masked in place before forwarding; the caller must not
-     * reuse the supplied range after the call returns.
+     * <p>The {@code src} array is masked in place before forwarding, so
+     * the caller must not reuse the supplied range after the call
+     * returns.
+     *
+     * @implNote In streaming mode this implementation masks the bytes in
+     * place against the current frame's key and offset, then forwards
+     * them (the streaming frame's remaining-byte counter is decremented;
+     * writing more bytes than declared by {@link #beginFrame(int)} is
+     * rejected). In one-shot mode the call produces a complete one-frame
+     * write (fresh mask key, header, payload) used for control frames
+     * such as PONG and CLOSE.
      */
     @Override
     public synchronized void write(byte[] src, int off, int len) throws IOException {
@@ -283,28 +276,27 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
      * Writes a control frame (ping, pong, or close) carrying the
      * supplied payload bytes.
      *
-     * @apiNote
-     * Used by {@link WebSocketFrameInputStream} when it auto-responds
-     * to a peer-initiated PING with a matching PONG, or sends a
-     * CLOSE on shutdown. The payload is masked in place inside
-     * {@code payload}; the input stream's small control-frame
-     * scratch buffer is the only caller and the mutation is safe.
-     * When a streaming-mode binary frame is in flight the control
-     * frame is deferred until the frame completes so the wire stream
-     * is not corrupted.
+     * <p>This is called by {@link WebSocketFrameInputStream} when it
+     * auto-responds to a peer-initiated PING with a matching PONG, or
+     * sends a CLOSE on shutdown. The payload is masked in place inside
+     * {@code payload}; the input stream's small control-frame scratch
+     * buffer is the only caller and the mutation is safe. When a
+     * streaming-mode binary frame is in flight the control frame is
+     * deferred until the frame completes so the wire stream is not
+     * corrupted.
      *
      * @param opcode  the control opcode
      *                ({@link WebSocketFrameConstants#OPCODE_PING},
      *                {@link WebSocketFrameConstants#OPCODE_PONG} or
      *                {@link WebSocketFrameConstants#OPCODE_CLOSE})
      * @param payload the control payload bytes
-     * @param length  the number of valid bytes in {@code payload},
-     *                at most
+     * @param length  the number of valid bytes in {@code payload}, at
+     *                most
      *                {@value WebSocketFrameConstants#CONTROL_PAYLOAD_MAX_LENGTH}
      * @throws IOException              if writing fails
-     * @throws IllegalArgumentException if {@code length} is negative
-     *                                  or exceeds the control
-     *                                  payload maximum
+     * @throws IllegalArgumentException if {@code length} is negative or
+     *                                  exceeds the control payload
+     *                                  maximum
      */
     public synchronized void writeControlFrame(byte opcode, byte[] payload, int length) throws IOException {
         if (length < 0 || length > CONTROL_PAYLOAD_MAX_LENGTH) {
@@ -325,11 +317,10 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Emits any control frame that was deferred during a
-     * streaming-mode write.
+     * Emits any control frame that was deferred during a streaming-mode
+     * write.
      *
-     * @apiNote
-     * Called by the streaming-mode write paths once
+     * <p>The streaming-mode write paths call this once
      * {@link #streamingRemaining} reaches zero, under the same
      * {@code synchronized} block that mutated the streaming counter.
      *
@@ -349,11 +340,9 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation forwards the flush to the underlying
-     * stream under the same monitor as
-     * {@link #write(byte[], int, int)} and
-     * {@link #writeControlFrame(byte, byte[], int)} so the input
+     * @implNote This implementation forwards the flush to the underlying
+     * stream under the same monitor as {@link #write(byte[], int, int)}
+     * and {@link #writeControlFrame(byte, byte[], int)} so the input
      * thread's auto-PONG cannot race with the writer thread's flush.
      */
     @Override
@@ -362,10 +351,9 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Builds the frame header, masks the payload in place, and
-     * writes the header and payload to the underlying stream under a
-     * single synchronized block so concurrent senders are
-     * serialized.
+     * Builds the frame header, masks the payload in place, and writes
+     * the header and payload to the underlying stream under a single
+     * synchronized block so concurrent senders are serialized.
      *
      * @param opcode the frame opcode
      * @param src    the payload byte array (mutated in place)
@@ -387,13 +375,12 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Builds the frame header into {@link #header} and returns its
-     * total length in bytes.
+     * Builds the frame header into {@link #header} and returns its total
+     * length in bytes.
      *
-     * @apiNote
-     * Encodes the FIN bit, the opcode, the masked payload length
-     * (with optional 16-bit or 64-bit extension) and the four-byte
-     * mask key, per RFC 6455 section 5.2.
+     * <p>The header encodes the FIN bit, the opcode, the masked payload
+     * length (with optional 16-bit or 64-bit extension) and the
+     * four-byte mask key, per RFC 6455 section 5.2.
      *
      * @param opcode        the frame opcode
      * @param payloadLength the payload length in bytes
@@ -413,9 +400,8 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
             pos = 4;
         } else {
             header[1] = (byte) (0x80 | EXTENDED_64_PAYLOAD_MARKER);
-            // Big-endian 8-byte length; the high four bytes are
-            // always zero because payloadLength is an int but they
-            // are written for protocol conformance.
+            // The high four bytes are always zero because payloadLength
+            // is an int; they are written for protocol conformance.
             header[2] = 0;
             header[3] = 0;
             header[4] = 0;
@@ -434,10 +420,12 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Applies the WebSocket XOR mask to a region of a {@code byte[]}
-     * using a three-tier strategy: scalar lead-in to align the mask
-     * offset to a four-byte boundary, SIMD bulk XOR via
-     * {@link ByteVector}, int-wise tail via {@link VarHandle} and a
+     * Applies the WebSocket XOR mask to a region of a {@code byte[]} in
+     * place.
+     *
+     * <p>The work is split into a scalar lead-in that aligns the mask
+     * offset to a four-byte boundary, a SIMD bulk XOR via
+     * {@link ByteVector}, an int-wise tail via {@link VarHandle} and a
      * final byte-wise sub-int tail.
      *
      * @param array      the byte array to mask in place
@@ -445,8 +433,8 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
      * @param length     the number of bytes to mask
      * @param maskKey    the four-byte masking key
      * @param maskOffset the starting position in the four-byte mask
-     *                   cycle (always {@code 0} for the encoder
-     *                   since each frame uses a fresh key)
+     *                   cycle (always {@code 0} for the encoder since
+     *                   each frame uses a fresh key)
      */
     private static void applyMaskToArray(byte[] array, int offset, int length, int maskKey, int maskOffset) {
         var i = 0;
@@ -488,12 +476,11 @@ public final class WebSocketFrameOutputStream extends FilterOutputStream {
      * Builds a SIMD vector containing the four-byte mask pattern
      * repeated to fill every lane.
      *
-     * @implNote
-     * RFC 6455 masks use {@code maskKey[0]} as the highest-order
-     * byte (big-endian memory layout).
-     * {@link IntVector#reinterpretAsBytes()} always uses the
-     * platform's native byte order, so on little-endian hosts the
-     * int is reversed before broadcasting so the reinterpreted bytes
+     * @implNote RFC 6455 masks use {@code maskKey[0]} as the
+     * highest-order byte (big-endian memory layout).
+     * {@link IntVector#reinterpretAsBytes()} always uses the platform's
+     * native byte order, so on little-endian hosts this implementation
+     * reverses the int before broadcasting so the reinterpreted bytes
      * end up in the RFC 6455 order.
      *
      * @param maskKey the four-byte masking key

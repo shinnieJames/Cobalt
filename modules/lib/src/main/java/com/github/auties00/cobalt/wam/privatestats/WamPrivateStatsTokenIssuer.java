@@ -13,65 +13,52 @@ import java.security.SecureRandom;
 import java.util.Objects;
 
 /**
- * Issues a fresh {@link WamPrivateStatsToken} per call by performing
- * one {@code <sign_credential>} IQ round-trip against
- * {@code s.whatsapp.net}.
+ * Issues a fresh {@link WamPrivateStatsToken} per call by performing one {@code sign_credential} IQ round-trip
+ * against {@code s.whatsapp.net}.
  *
  * <p>This collapses three WA Web concerns into a single class:
  *
  * <ul>
- *   <li>{@link WhatsAppWebModule WAACSTokenUtils} {@code .getBlindedToken},
- *       which generates the random token, the random blinding factor,
- *       and computes {@code blindedToken = blind(token, blindingFactor)};</li>
- *   <li>{@link WhatsAppWebModule WAWebIssuePrivateStatsToken}
- *       {@code .getToken}, which orchestrates the IQ exchange behind a
- *       semaphore and a WAM-event emitter; in WA Web this further
- *       delegates to {@code WAWebRedeemACSToken.redeemACSToken} for
- *       caching, retry, and project-aware token reuse;</li>
- *   <li>{@link WhatsAppWebModule WAACSTokenUtils} {@code .getSharedSecret},
- *       which derives {@code SHA-512(token || unblindedSignedToken)}
- *       as the upload authentication key.</li>
+ *   <li>the {@code getBlindedToken} export, which generates the random token, the random blinding factor, and
+ *       computes {@code blindedToken = blind(token, blindingFactor)};</li>
+ *   <li>the {@code getToken} export, which orchestrates the IQ exchange behind a semaphore and a WAM-event
+ *       emitter, and further delegates to {@code WAWebRedeemACSToken.redeemACSToken} for caching, retry, and
+ *       project-aware token reuse;</li>
+ *   <li>the {@code getSharedSecret} export, which derives {@code SHA-512(token || unblindedSignedToken)} as the
+ *       upload authentication key.</li>
  * </ul>
  *
- * @apiNote
- * Use one issuer per {@link WhatsAppClient}; each
- * {@link #issue()} call performs a fresh round-trip and returns a
- * single-use token. The token must not be reused across uploads;
- * VOPRF unlinkability rests on each scalar being used at most once.
+ * <p>One issuer is used per {@link WhatsAppClient}; each {@link #issue()} call performs a fresh round-trip and
+ * returns a single-use token. The token must not be reused across uploads; VOPRF unlinkability rests on each
+ * scalar being used at most once.
  *
  * @implNote
- * This implementation diverges from WA Web in three ways. (1) It does
- * not cache tokens; WA Web batches a project-keyed pool of tokens via
- * {@code WAWebCRUDOperationsACSTokens}, redeeming them lazily.
- * (2) It uses the older {@code version="1"} request shape without the
- * {@code <project_name>} child; WA Web's
- * {@link WhatsAppWebModule WASmaxOutPrivatestatsSignCredentialRequest}
- * currently emits {@code version="2"} with a {@code <project_name>}
- * element. (3) The {@code <dleq_proof>} block carried in the response
- * is not verified; a fully trust-minimised implementation would
- * Chaum-Pedersen-check that the server used the same secret key for
- * {@code signedCredential = sk * blindedToken} and for
- * {@code acsPublicKey = sk * B}.
+ * This implementation diverges from WA Web in three ways. (1) It does not cache tokens; WA Web batches a
+ * project-keyed pool of tokens via {@code WAWebCRUDOperationsACSTokens}, redeeming them lazily. (2) It uses the
+ * older {@code version="1"} request shape without the {@code project_name} child; the current
+ * {@code WASmaxOutPrivatestatsSignCredentialRequest} module emits {@code version="2"} with a
+ * {@code project_name} element. (3) The {@code dleq_proof} block carried in the response is not verified; a
+ * fully trust-minimised implementation would Chaum-Pedersen-check that the server used the same secret key for
+ * {@code signedCredential = sk * blindedToken} and for {@code acsPublicKey = sk * B}.
  */
 @WhatsAppWebModule(moduleName = "WAWebIssuePrivateStatsToken")
 @WhatsAppWebModule(moduleName = "WAACSTokenUtils")
 public final class WamPrivateStatsTokenIssuer {
     /**
-     * The XMPP namespace under which the private-stats issuance IQ
-     * is routed.
+     * The XMPP namespace under which the private-stats issuance IQ is routed.
      *
-     * @apiNote
-     * Matches the {@code xmlns="privatestats"} attribute emitted by
-     * {@link WhatsAppWebModule WASmaxOutPrivatestatsSignCredentialRequest}.
+     * @implNote
+     * This implementation matches the {@code xmlns="privatestats"} attribute emitted by the
+     * {@code WASmaxOutPrivatestatsSignCredentialRequest} module.
      */
     private static final String XMLNS = "privatestats";
 
     /**
      * The server JID accepting the {@code sign_credential} IQ.
      *
-     * @apiNote
-     * Matches the {@code WAWap.S_WHATSAPP_NET} target used by
-     * {@link WhatsAppWebModule WASmaxOutPrivatestatsSignCredentialRequest}.
+     * @implNote
+     * This implementation matches the {@code WAWap.S_WHATSAPP_NET} target used by the
+     * {@code WASmaxOutPrivatestatsSignCredentialRequest} module.
      */
     private static final String SERVER = "s.whatsapp.net";
 
@@ -81,26 +68,17 @@ public final class WamPrivateStatsTokenIssuer {
     private final WhatsAppClient client;
 
     /**
-     * The cryptographic random source used to generate the token
-     * nonce and the blinding factor.
+     * The cryptographic random source used to generate the token nonce and the blinding factor.
      *
-     * @implNote
-     * This implementation accepts the random source via the
-     * package-private constructor so behavioural tests can pin
-     * issuance to the captured live-bundle vectors.
+     * <p>Supplied via the package-private constructor so behavioural tests can pin issuance to the captured
+     * live-bundle vectors.
      */
     private final SecureRandom random;
 
     /**
-     * Constructs a new issuer bound to the given client and a
-     * default-provider {@link SecureRandom}.
+     * Constructs a new issuer bound to the given client and a default-provider {@link SecureRandom}.
      *
-     * @apiNote
-     * Public entry point used by {@code WhatsAppClient} when wiring
-     * the private-stats subsystem.
-     *
-     * @param client the {@link WhatsAppClient} used to dispatch the
-     *               IQ
+     * @param client the {@link WhatsAppClient} used to dispatch the IQ
      * @throws NullPointerException if {@code client} is {@code null}
      */
     public WamPrivateStatsTokenIssuer(WhatsAppClient client) {
@@ -108,18 +86,13 @@ public final class WamPrivateStatsTokenIssuer {
     }
 
     /**
-     * Constructs a new issuer bound to the given client and an
-     * explicit {@link SecureRandom} source.
+     * Constructs a new issuer bound to the given client and an explicit {@link SecureRandom} source.
      *
-     * @apiNote
-     * Package-private; intended for behavioural tests that script the
-     * random source so the produced blinded credential and unblinded
-     * token can be checked against captured live-bundle KAT vectors.
+     * <p>Intended for behavioural tests that script the random source so the produced blinded credential and
+     * unblinded token can be checked against captured live-bundle known-answer vectors.
      *
-     * @param client the {@link WhatsAppClient} used to dispatch the
-     *               IQ
-     * @param random the random source for the token and the blinding
-     *               factor
+     * @param client the {@link WhatsAppClient} used to dispatch the IQ
+     * @param random the random source for the token and the blinding factor
      * @throws NullPointerException if either argument is {@code null}
      */
     WamPrivateStatsTokenIssuer(WhatsAppClient client, SecureRandom random) {
@@ -128,14 +101,11 @@ public final class WamPrivateStatsTokenIssuer {
     }
 
     /**
-     * Performs one {@code <sign_credential>} round-trip and returns
-     * the resulting {@link WamPrivateStatsToken}.
+     * Performs one {@code sign_credential} round-trip and returns the resulting {@link WamPrivateStatsToken}.
      *
-     * @apiNote
-     * Returns a single-use token; the caller is responsible for
-     * pairing it with exactly one {@link WamPrivateStatsUploader#upload(byte[])}
-     * invocation. Reusing the same token across uploads breaks the
-     * VOPRF unlinkability that motivates the protocol. The IQ shape is:
+     * <p>Returns a single-use token; the caller is responsible for pairing it with exactly one
+     * {@link WamPrivateStatsUploader#upload(byte[])} invocation. Reusing the same token across uploads breaks
+     * the VOPRF unlinkability that motivates the protocol. The IQ shape is:
      * {@snippet :
      *     <iq xmlns="privatestats" type="get" to="s.whatsapp.net">
      *       <sign_credential version="1">
@@ -145,26 +115,22 @@ public final class WamPrivateStatsTokenIssuer {
      * }
      *
      * @implNote
-     * This implementation inlines the three WA Web responsibilities
-     * ({@code WAACSTokenUtils.getBlindedToken},
-     * {@code WAWebIssuePrivateStatsToken.getToken},
-     * {@code WAACSTokenUtils.getSharedSecret}) into one call:
+     * This implementation inlines the three WA Web responsibilities ({@code getBlindedToken}, {@code getToken},
+     * {@code getSharedSecret}) into one call:
      * <ul>
      *   <li>draws two 32-byte sequences from {@link #random},</li>
-     *   <li>blinds via {@link WamPrivateStatsTokenBlinder#blind},</li>
-     *   <li>dispatches the IQ via {@link WhatsAppClient#sendNode},</li>
-     *   <li>parses {@code signed_credential} and {@code acs_public_key}
-     *       under the {@code sign_credential} reply,</li>
-     *   <li>unblinds via {@link WamPrivateStatsTokenBlinder#unblind},</li>
+     *   <li>blinds via {@link WamPrivateStatsTokenBlinder#blind(byte[], byte[])},</li>
+     *   <li>dispatches the IQ via {@link WhatsAppClient#sendNode(NodeBuilder)},</li>
+     *   <li>parses {@code signed_credential} and {@code acs_public_key} under the {@code sign_credential}
+     *       reply,</li>
+     *   <li>unblinds via {@link WamPrivateStatsTokenBlinder#unblind(byte[], byte[], byte[])},</li>
      *   <li>computes {@code SHA-512(token || unblindedSignedToken)}.</li>
      * </ul>
      *
      * @return the freshly issued token
-     * @throws WhatsAppPrivateStatsTokenIssuerException if the server
-     *         returns a non-result IQ, if the response is missing
-     *         either the signed credential or the ACS public key, if
-     *         either has the wrong byte length, or if the unblinding
-     *         fails to decode the signed credential
+     * @throws WhatsAppPrivateStatsTokenIssuerException if the server returns a non-result IQ, if the response is
+     *         missing either the signed credential or the ACS public key, if either has the wrong byte length,
+     *         or if the unblinding fails to decode the signed credential
      * @see WamPrivateStatsTokenBlinder#blind(byte[], byte[])
      * @see WamPrivateStatsTokenBlinder#unblind(byte[], byte[], byte[])
      */

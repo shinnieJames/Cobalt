@@ -21,58 +21,51 @@ import java.util.Objects;
 import com.github.auties00.cobalt.call.CallEndReason;
 
 /**
- * Handles incoming VoIP call stanzas received from the WhatsApp server.
+ * Handles inbound VoIP call stanzas received from the WhatsApp server.
  *
- * <p>This handler processes call signaling stanzas (tag {@code "call"}) that
- * arrive on the socket stream. It parses the stanza into its constituent
- * fields (peer {@link Jid}, call creator, call identifier, timestamp, etc.),
- * persists any LID-to-phone-number mappings and caller push names carried
- * by the stanza, updates the local call model in the
- * {@link com.github.auties00.cobalt.store.WhatsAppStore}, and sends the
- * appropriate receipt or acknowledgement stanza back to the server.
- *
- * <p>The handler supports the following payload tags: {@code offer},
- * {@code accept}, {@code reject}, {@code enc_rekey}, {@code terminate},
- * and a generic default path for any other payload tag (including
- * {@code offer_notice}, {@code transport}, and other signaling messages).
- * Each payload type triggers the receipt or acknowledgement behavior
- * matching the WhatsApp Web protocol flow.
+ * <p>This handler processes call signaling stanzas (tag {@code "call"}) arriving on the socket stream.
+ * It parses each stanza into its constituent fields (peer {@link Jid}, call creator, call identifier,
+ * timestamp, and similar), persists the LID-to-phone-number mappings and caller push names the stanza
+ * carries, updates the local call model in the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore}, and sends the receipt or acknowledgement the
+ * payload type requires back to the server. The supported payload tags are {@code offer},
+ * {@code accept}, {@code reject}, {@code preaccept}, {@code enc_rekey}, {@code terminate},
+ * {@code mute_v2}, {@code video_state}, {@code peer_state}, {@code group_update}, {@code offer_notice},
+ * and a set of media-plane tags that are acknowledged and otherwise ignored; any other tag falls
+ * through to a plain acknowledgement.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleVoipCall")
 @WhatsAppWebModule(moduleName = "WAWebVoipLidUtils")
 public final class CallReceiver implements SocketStream.Handler {
     /**
-     * Logger for parse errors and signaling traces.
+     * Logs parse errors and signaling traces for malformed or ignored stanzas.
      */
     private static final System.Logger LOGGER = System.getLogger(CallReceiver.class.getName());
 
     /**
-     * The WhatsApp client used for sending stanzas and accessing the store.
+     * Holds the WhatsApp client used to send stanzas and access the store.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The call engine — used to dispatch peer-side accept/reject/
-     * terminate transitions to the right {@link ActiveCall}.
+     * Holds the call engine that dispatches peer-side accept, reject, and terminate transitions to the
+     * matching {@link ActiveCall}.
      */
     private final CallService engine;
 
     /**
-     * The {@link AckSender} used to ship the
-     * {@code <ack class="call" type="...">} stanza that echoes the
-     * parsed VoIP payload tag back to the server.
+     * Holds the {@link AckSender} used to emit the {@code <ack class="call" type="...">} stanza that
+     * echoes the parsed VoIP payload tag back to the server.
      */
     private final AckSender ackSender;
 
     /**
-     * Constructs a new {@code CallReceiver}.
+     * Constructs a call receiver bound to its client, call engine, and acknowledgement sender.
      *
-     * @param whatsapp  the WhatsApp client used for sending stanzas and store access
-     * @param engine    the call engine the receiver routes peer-side
-     *                  events to
-     * @param ackSender the {@link AckSender}
-     *                  used to emit the outbound
-     *                  {@code <ack class="call">} stanza
+     * @param whatsapp  the WhatsApp client used to send stanzas and access the store
+     * @param engine    the call engine the receiver routes peer-side events to
+     * @param ackSender the {@link AckSender} used to emit the outbound {@code <ack class="call">}
+     *                  stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -83,9 +76,11 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Handles a raw call stanza received from the socket stream by delegating to {@link #handleCall(Node)}.
+     * {@inheritDoc}
      *
-     * @param node the incoming call stanza node
+     * <p>Delegates the inbound call stanza to {@link #handleCall(Node)} for parsing and dispatch.
+     *
+     * @param node the inbound call stanza node
      */
     @Override
     public void handle(Node node) {
@@ -93,11 +88,11 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Parses the incoming call stanza and dispatches it to the appropriate
-     * receipt, ack, or no-op path based on the payload tag.
+     * Parses the inbound call stanza and dispatches it to the receipt, acknowledgement, or no-op path
+     * its payload tag requires.
      *
      * <p>The call stanza has the structure:
-     * <pre>{@code
+     * {@snippet lang="xml" :
      * <call from="..." id="..." [offline] [t="..."] [sender_lid="..."]>
      *   <offer|accept|reject|enc_rekey|terminate|... call-id="..." call-creator="..."
      *          [group-jid="..."] [caller_pn="..."] [notify="..."]>
@@ -107,34 +102,51 @@ public final class CallReceiver implements SocketStream.Handler {
      *     </group_info>]
      *   </...>
      * </call>
-     * }</pre>
+     * }
      *
-     * <p>If the stanza carries a {@code sender_lid} attribute, the mapping
-     * between the sender's LID and the {@code from} phone number is persisted
-     * via
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#registerLidMapping(Jid, Jid)}.
+     * <p>The stanza is ignored when the {@code from} attribute or the payload child is missing, and
+     * also when the payload lacks a {@code call-id} or {@code call-creator} attribute. When the stanza
+     * carries a {@code sender_lid} attribute, the mapping between the sender LID and the {@code from}
+     * phone number is persisted via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#registerLidMapping(Jid, Jid)}. The payload
+     * attributes and the optional {@code group_info} participants are persisted through
+     * {@link #persistAttributesAndLidMappingsForCall(Jid, Jid, String, Node, boolean)}: the caller push
+     * name is written to the contact, the caller LID-to-phone mapping is registered when applicable,
+     * and each {@code group_info} participant receives the same treatment.
      *
-     * <p>The payload attributes and optional {@code group_info} participants
-     * are persisted through {@link #persistAttributesAndLidMappingsForCall}:
-     * the caller's push name is written to the contact, the caller's
-     * LID-to-phone mapping is registered when applicable, and the same
-     * treatment is applied to each participant in {@code group_info}.
-     *
-     * <p>Dispatch by payload tag:
+     * <p>Dispatch by payload tag is:
      * <ul>
-     *   <li>{@code offer}: build the {@link IncomingCall}, send a receipt,
-     *       register the call, notify listeners.</li>
-     *   <li>{@code accept}: send a receipt — peer accepted; engine takes
-     *       over media negotiation when wired.</li>
-     *   <li>{@code reject}: send a receipt, drop the call from the store,
-     *       fire {@code onCallEnded}.</li>
-     *   <li>{@code enc_rekey}: send a receipt (group call key re-exchange).</li>
-     *   <li>{@code terminate}: drop the call from the store, send an ack,
-     *       fire {@code onCallEnded}.</li>
-     *   <li>default: send an ack.</li>
+     *   <li>{@code offer}: build the {@link IncomingCall}, send a receipt, register the call, and
+     *       notify listeners.</li>
+     *   <li>{@code accept}: send a receipt and route the peer acceptance to the engine.</li>
+     *   <li>{@code reject}: send a receipt, route the peer rejection to the engine, drop the call from
+     *       the store, and notify listeners that the call ended.</li>
+     *   <li>{@code preaccept}: send an acknowledgement and notify listeners of the pre-accept.</li>
+     *   <li>{@code enc_rekey}: send a receipt for the group-call key re-exchange.</li>
+     *   <li>{@code terminate}: route the peer termination to the engine, drop the call from the store,
+     *       send an acknowledgement, and notify listeners that the call ended.</li>
+     *   <li>{@code mute_v2}: send an acknowledgement and notify listeners of the microphone-mute
+     *       change, reading {@code mute-state} as {@code "1"} muted and {@code "0"} unmuted.</li>
+     *   <li>{@code video_state}: send an acknowledgement and notify listeners of the video on/off
+     *       change.</li>
+     *   <li>{@code peer_state}: send an acknowledgement and notify listeners of the peer-state
+     *       update.</li>
+     *   <li>{@code group_update}: send an acknowledgement and notify listeners that participants were
+     *       added or removed.</li>
+     *   <li>{@code offer_notice}: send an acknowledgement and notify listeners of the missed-call
+     *       offer notice.</li>
+     *   <li>any media-plane or unrecognized tag: send an acknowledgement.</li>
      * </ul>
      *
-     * @param node the incoming call stanza node
+     * @implNote This implementation acknowledges and otherwise drops the pure media-plane signals
+     * ({@code transport}, {@code relaylatency}, {@code relayelection}, {@code video_state_ack},
+     * {@code accept_ack}, {@code accept_receipt}, {@code offer_receipt}, {@code offer_ack},
+     * {@code offer_nack}, {@code interruption}, {@code notify}, {@code flow_control},
+     * {@code web_client}, {@code group_info}) because Cobalt implements no WebRTC media plane and can
+     * observe them only at the parse layer. The {@code enc_rekey} retry-receipt branch is likewise
+     * omitted because there is no media runtime to request a rekey retry.
+     *
+     * @param node the inbound call stanza node
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -183,7 +195,6 @@ public final class CallReceiver implements SocketStream.Handler {
                 notifyPreaccept(callId, from);
             }
             case "enc_rekey" -> {
-                // WA Web's retry-receipt branch is omitted because Cobalt has no VoIP media runtime that can request a rekey retry.
                 sendCallReceipt(node, from, callId, callCreator, "enc_rekey");
             }
             case "terminate" -> {
@@ -194,10 +205,9 @@ public final class CallReceiver implements SocketStream.Handler {
                 notifyEnded(callId, from, reason);
             }
             case "mute_v2" -> {
-                // Wire shape verified against captured fixtures: the attribute
-                // is `mute-state` with values "1" (muted) and "0" (unmuted).
-                // The legacy "mute" tag with state="muted"|"unmuted" is no
-                // longer emitted by current WA Web snapshots.
+                // Wire shape verified against captured fixtures: the attribute is `mute-state` with
+                // values "1" (muted) and "0" (unmuted); the legacy `mute` tag with
+                // state="muted"|"unmuted" is no longer emitted by current WA Web snapshots.
                 sendCallAck(node, payload.description());
                 var muteState = payload.getAttributeAsString("mute-state", null);
                 notifyMute(callId, from, "1".equals(muteState));
@@ -232,9 +242,6 @@ public final class CallReceiver implements SocketStream.Handler {
                     notifyOfferNotice(missed);
                 }
             }
-            // Pure media-plane signals: ack and drop. Cobalt does not implement WebRTC,
-            // so transport / relay election / video-state ack / flow-control are observable
-            // only at the parse layer.
             case "transport", "relaylatency", "relayelection", "video_state_ack", "accept_ack",
                  "accept_receipt", "offer_receipt", "offer_ack", "offer_nack", "interruption",
                  "notify", "flow_control", "web_client", "group_info" ->
@@ -244,19 +251,19 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Handles an incoming call offer stanza.
+     * Handles an inbound call offer payload.
      *
-     * <p>Sends a receipt back to the server, builds the {@link IncomingCall}
-     * handle, registers it in the store, and notifies listeners — but only
-     * for inbound offers (the local user is not the call creator).
+     * <p>Sends a receipt back to the server, then, only for genuinely inbound offers where the local
+     * user is not the call creator, builds the {@link IncomingCall} handle, registers it in the store,
+     * sends a ringing stanza, and notifies listeners. Offers whose creator is the local user, and
+     * offers whose metadata is insufficient to build a call, are not surfaced to listeners.
      *
      * @param node        the call stanza node
      * @param payload     the {@code offer} child node
      * @param from        the {@link Jid} of the call sender
      * @param callId      the unique call identifier
      * @param callCreator the {@link Jid} of the call initiator
-     * @param groupJid    the group {@link Jid} for group calls, or
-     *                    {@code null} for one-to-one calls
+     * @param groupJid    the group {@link Jid} for group calls, or {@code null} for one-to-one calls
      * @param offline     whether the stanza was received while offline
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
@@ -280,19 +287,22 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Constructs an {@link IncomingCall} from a parsed call stanza, or
-     * returns {@code null} when the chat JID cannot be resolved. The
-     * handler dispatch goes through the owning client's
-     * {@link CallService}.
+     * Constructs an {@link IncomingCall} from a parsed call stanza.
      *
-     * @param node        the call stanza node (used for timestamp resolution)
+     * <p>Resolves the chat JID from {@code groupJid} for group calls or from the canonical user JID of
+     * the creator otherwise, returning {@code null} when no chat JID can be resolved. The offer
+     * payload's relay transport metadata is parsed through
+     * {@link OfferTransportSpec#parse(Node)} so the transport that takes over on accept receives the
+     * relay tokens it needs; a missing or unparseable transport spec yields a call with no transport
+     * spec rather than a failure.
+     *
+     * @param node        the call stanza node, used for timestamp resolution
      * @param callId      the unique call identifier
      * @param payload     the payload child node
      * @param callCreator the {@link Jid} of the call initiator
      * @param groupJid    the group JID for group calls, or {@code null}
      * @param offline     whether the stanza was received while offline
-     * @return the {@link IncomingCall}, or {@code null} if metadata is
-     *         insufficient
+     * @return the {@link IncomingCall}, or {@code null} when the chat JID cannot be resolved
      */
     private IncomingCall buildIncomingCall(Node node, String callId, Node payload,
                                            Jid callCreator, Jid groupJid, boolean offline) {
@@ -300,9 +310,6 @@ public final class CallReceiver implements SocketStream.Handler {
         if (chatJid == null) {
             return null;
         }
-        // Parse <relay> / <rte> from the offer payload so the
-        // ActiveCallTransport that takes over on accept gets the relay
-        // tokens it needs to drive the handshake (Phase 3).
         var transportSpec = OfferTransportSpec
                 .parse(payload)
                 .orElse(null);
@@ -320,11 +327,10 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the timestamp from the call stanza's {@code t} attribute.
+     * Resolves the call timestamp from the stanza's {@code t} attribute.
      *
-     * <p>Falls back to {@link Instant#EPOCH} if the attribute is not present,
-     * matching the WhatsApp Web parser which defaults missing {@code t} to
-     * {@code castToUnixTime(0)}.
+     * <p>Returns {@link Instant#EPOCH} when the attribute is absent, matching the WhatsApp Web parser,
+     * which defaults a missing {@code t} to the Unix epoch.
      *
      * @param node the call stanza node
      * @return the resolved timestamp, never {@code null}
@@ -335,27 +341,20 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Persists the call payload's caller attributes and any LID-to-phone
-     * mappings carried by the stanza.
+     * Persists the call payload's caller attributes and any LID-to-phone mappings the stanza carries.
      *
-     * <p>This implements {@code WAWebVoipLidUtils.persistAttributesAndLidMappingsForCall}:
-     * it forwards the caller attributes ({@code call_creator},
-     * {@code caller_pn}, {@code caller_push_name}) to
-     * {@link #attemptPersistLidMappingAndUserAttributes}, and then iterates
-     * every participant in the optional {@code group_info} child (each
-     * carries its own {@code jid} / {@code user_pn} / {@code username})
-     * and forwards them as well.
+     * <p>Forwards the caller attributes ({@code call-creator}, {@code caller_pn}, and the push name
+     * from {@code notify}) to
+     * {@link #attemptPersistLidMappingAndUserAttributes(Jid, Jid, String)}, then iterates every
+     * participant in the optional {@code group_info} child, forwarding each participant's {@code jid}
+     * and {@code user_pn} the same way. Participants carry no push name, so {@code null} is forwarded
+     * for theirs.
      *
-     * @param callCreator    the caller's {@link Jid} from {@code call-creator}
-     * @param callerPn       the caller's phone number {@link Jid} from
-     *                       {@code caller_pn}, or {@code null}
-     * @param callerPushName the caller push name from {@code notify}, or
-     *                       {@code null}
-     * @param payload        the call payload node which may contain a
-     *                       {@code group_info} child
+     * @param callCreator    the caller {@link Jid} from {@code call-creator}
+     * @param callerPn       the caller phone-number {@link Jid} from {@code caller_pn}, or {@code null}
+     * @param callerPushName the caller push name from {@code notify}, or {@code null}
+     * @param payload        the call payload node, which may contain a {@code group_info} child
      * @param offline        whether the call was received while offline
-     *                       (WA Web uses this to decide the
-     *                       {@code flushImmediately} flag as {@code !offline})
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipLidUtils", exports = "persistAttributesAndLidMappingsForCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -372,40 +371,28 @@ public final class CallReceiver implements SocketStream.Handler {
                 continue;
             }
             var participantPn = participant.getAttributeAsJid("user_pn", null);
-            // WA Web does not forward a pushName for participants from group_info.
             attemptPersistLidMappingAndUserAttributes(participantJid, participantPn, null);
         }
     }
 
     /**
-     * Persists a single LID-to-phone-number mapping and updates the
-     * associated contact's push name.
+     * Persists a single LID-to-phone-number mapping and updates the associated contact's push name.
      *
-     * <p>This implements {@code WAWebVoipLidUtils.attemptPersistLidMappingAndUserAttributes}:
-     * <ul>
-     *   <li>If {@code pushName} is non-{@code null} and non-blank, the
-     *       contact's chosen name is updated via
-     *       {@code WAWebHandlePushnameUpdate.updatePushname}. In Cobalt this
-     *       maps to updating
-     *       {@link com.github.auties00.cobalt.model.contact.Contact#setChosenName(String)}.</li>
-     *   <li>If {@code jid} is a LID and {@code phoneNumber} is non-{@code null},
-     *       the LID-to-phone-number mapping is registered in the store via
-     *       {@link com.github.auties00.cobalt.store.WhatsAppStore#registerLidMapping(Jid, Jid)}
-     *       (which is WA Web's
-     *       {@code WAWebDBCreateLidPnMappings.createLidPnMappings}).</li>
-     * </ul>
+     * <p>When {@code pushName} is non-{@code null} and non-blank, the contact's chosen name is updated
+     * through {@link #updatePushname(Jid, String)}. When {@code jid} resolves to a LID user and
+     * {@code phoneNumber} is non-{@code null}, the LID-to-phone-number mapping is registered in the
+     * store via {@link com.github.auties00.cobalt.store.WhatsAppStore#registerLidMapping(Jid, Jid)}. A
+     * {@code null} {@code jid} is a no-op.
      *
-     * <p>The username/country-code flow and the
-     * {@code usernameCallingPhoneNumberPrivacyEnabled} skip path from WA Web
-     * are intentionally omitted: Cobalt does not implement the username
-     * system nor the privacy-enforcement fast path, and no calling surface
-     * reads those fields.
+     * @implNote This implementation omits the WhatsApp Web username and country-code flow and the
+     * privacy-enforcement fast path that can skip writing the mapping, because Cobalt implements no
+     * username runtime and no calling surface reads those fields; the mapping is always written when
+     * the JID is a LID and a phone number is present.
      *
-     * @param jid         the candidate JID (LID or otherwise); mappings are
-     *                    only registered when this is a LID
-     * @param phoneNumber the phone number {@link Jid}, or {@code null}
-     * @param pushName    the push name from the stanza's {@code notify}
-     *                    attribute, or {@code null}
+     * @param jid         the candidate JID, which may be a LID; a mapping is registered only when this
+     *                    resolves to a LID user
+     * @param phoneNumber the phone-number {@link Jid}, or {@code null}
+     * @param pushName    the push name from the stanza's {@code notify} attribute, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipLidUtils", exports = "attemptPersistLidMappingAndUserAttributes",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -423,19 +410,17 @@ public final class CallReceiver implements SocketStream.Handler {
         if (!userJid.hasLidServer() || phoneNumber == null) {
             return;
         }
-        // The WA Web username + usernameCallingPhoneNumberPrivacyEnabled short-circuit is omitted because Cobalt has no username runtime and always writes the mapping.
         whatsapp.store().registerLidMapping(phoneNumber.toUserJid(), userJid);
     }
 
     /**
      * Updates the push (chosen) name of a contact in the local store.
      *
-     * <p>If the contact does not exist, a new contact record is created and
-     * then assigned the push name. Empty or blank push names are ignored.
+     * <p>Creates a new contact record when none exists for {@code contactJid}, then assigns the push
+     * name. The caller is expected to have already validated that {@code pushName} is non-blank.
      *
      * @param contactJid the non-{@code null} JID of the contact to update
-     * @param pushName   the push name to store; must already be validated as
-     *                   non-blank by the caller
+     * @param pushName   the push name to store, already validated as non-blank by the caller
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePushnameUpdate", exports = "updatePushname",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -447,20 +432,19 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Sends a receipt stanza for a call signaling message.
+     * Sends a receipt stanza acknowledging a call signaling message.
      *
-     * <p>The receipt wraps a child element whose tag matches the signaling
-     * type (e.g. {@code offer}, {@code accept}, {@code reject},
-     * {@code enc_rekey}) and carries the {@code call-id} and
-     * {@code call-creator} attributes. The {@code from} attribute of the
-     * receipt is set to either the local LID user or the local phone-number
-     * user, depending on whether the remote peer uses a LID-based address.
+     * <p>The receipt wraps a child whose tag matches the signaling type ({@code offer}, {@code accept},
+     * {@code reject}, or {@code enc_rekey}) and carries the {@code call-id} and {@code call-creator}
+     * attributes. Its {@code from} attribute is resolved by {@link #resolveReceiptFrom(Jid)} to the
+     * local LID user or the local phone-number user depending on the peer address. The receipt is not
+     * sent when the local {@code from} JID or the inbound stanza identifier cannot be resolved.
      *
      * @param node        the original call stanza node
      * @param to          the {@link Jid} to send the receipt to
      * @param callId      the unique call identifier
      * @param callCreator the {@link Jid} of the call initiator
-     * @param childTag    the receipt child tag (e.g. {@code "offer"})
+     * @param childTag    the receipt child tag, for example {@code "offer"}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -489,13 +473,12 @@ public final class CallReceiver implements SocketStream.Handler {
     /**
      * Sends an acknowledgement stanza for a call signaling message.
      *
-     * <p>Used for payload tags that do not require a full receipt (e.g.
-     * {@code terminate} and unrecognised tags). The ack carries
-     * {@code class="call"} and a {@code type} attribute matching the payload
-     * tag.
+     * <p>Used for payload tags that do not warrant a full receipt, such as {@code terminate} and
+     * unrecognized tags. The acknowledgement carries {@code class="call"} and a {@code type} attribute
+     * matching the payload tag.
      *
      * @param node the original call stanza node
-     * @param type the payload tag to echo as the ack type
+     * @param type the payload tag to echo as the acknowledgement type
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -504,18 +487,17 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the {@code from} {@link Jid} to use on outgoing receipt
-     * stanzas.
+     * Resolves the {@code from} {@link Jid} to use on outgoing receipt stanzas.
      *
-     * <p>If the remote peer's JID uses the LID server, the local LID user
-     * JID is returned; otherwise, the local phone-number user JID is used.
-     * This matches the WhatsApp Web rule where the receipt's {@code from}
-     * alternates between {@code getMeDeviceLidOrThrow()} (for LID peers) and
-     * {@code getMePnUserOrThrow_DO_NOT_USE()} (for phone peers).
+     * <p>Returns the local LID user JID when the remote peer uses the LID server, and the local
+     * phone-number user JID otherwise. Returns {@code null} when the local JID is not available.
+     *
+     * @implNote This implementation returns the stored LID with its device suffix preserved for LID
+     * peers, falling back to the phone-number user JID only when no LID has ever been stored.
      *
      * @param remote the remote peer {@link Jid}
-     * @return the local {@link Jid} to use as the {@code from} attribute, or
-     *         {@code null} if the local JID is not available
+     * @return the local {@link Jid} to use as the {@code from} attribute, or {@code null} when the
+     *         local JID is unavailable
      */
     private Jid resolveReceiptFrom(Jid remote) {
         var self = whatsapp.store().jid().orElse(null);
@@ -524,7 +506,6 @@ public final class CallReceiver implements SocketStream.Handler {
         }
 
         if (remote.hasLidServer()) {
-            // store.lid() preserves the device suffix on outgoing LID receipts; the PN fallback only kicks in when setLid was never called.
             return whatsapp.store().lid().orElse(self.toUserJid());
         }
 
@@ -534,14 +515,12 @@ public final class CallReceiver implements SocketStream.Handler {
     /**
      * Resolves the canonical user JID for a given JID.
      *
-     * <p>If the JID uses the LID server, the corresponding phone-number JID
-     * is looked up via the store's LID-to-phone mapping; when no mapping is
-     * available, the LID user JID is returned unchanged. Otherwise the user
-     * JID is returned directly (with the device suffix stripped).
+     * <p>When the JID uses the LID server, the corresponding phone-number JID is looked up through the
+     * store's LID-to-phone mapping, falling back to the LID user JID when no mapping exists. Otherwise
+     * the device-stripped user JID is returned directly.
      *
      * @param jid the {@link Jid} to resolve
-     * @return the canonical user JID, or {@code null} if {@code jid} is
-     *         {@code null}
+     * @return the canonical user JID, or {@code null} when {@code jid} is {@code null}
      */
     private Jid canonicalUserJid(Jid jid) {
         if (jid == null) {
@@ -557,11 +536,10 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners of an incoming call.
+     * Notifies every registered listener of an inbound call.
      *
-     * <p>Each listener's {@code onCall} method is invoked on a new virtual
-     * thread so that listener execution does not block the socket stream
-     * handler thread.
+     * <p>Each listener is invoked on its own virtual thread so listener execution does not block the
+     * socket stream handler thread.
      *
      * @param call the {@link IncomingCall} to notify listeners about
      */
@@ -572,13 +550,14 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners that the call has terminated.
-     * The wire {@code reason} attribute is parsed into a typed
-     * {@link CallEndReason}; unknown literals surface as
-     * {@link CallEndReason#UNKNOWN}.
+     * Notifies every registered listener that the call has terminated.
      *
-     * @param callId  the identifier of the call that ended
-     * @param fromJid the JID of the party that ended the call
+     * <p>The wire reason literal is parsed into a typed {@link CallEndReason} via
+     * {@link CallEndReason#fromWireValue(String)}; unrecognized literals surface as
+     * {@link CallEndReason#UNKNOWN}. Each listener is invoked on its own virtual thread.
+     *
+     * @param callId     the identifier of the call that ended
+     * @param fromJid    the JID of the party that ended the call
      * @param wireReason the wire-level reason literal, or {@code null}
      */
     private void notifyEnded(String callId, Jid fromJid, String wireReason) {
@@ -589,10 +568,12 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners of a preaccept signal.
+     * Notifies every registered listener of a pre-accept signal.
+     *
+     * <p>Each listener is invoked on its own virtual thread.
      *
      * @param callId  the call identifier
-     * @param fromJid the peer that sent the preaccept
+     * @param fromJid the peer that sent the pre-accept
      */
     private void notifyPreaccept(String callId, Jid fromJid) {
         for (var listener : whatsapp.store().listeners()) {
@@ -601,7 +582,9 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners of a microphone-mute change.
+     * Notifies every registered listener of a microphone-mute change.
+     *
+     * <p>Each listener is invoked on its own virtual thread.
      *
      * @param callId  the call identifier
      * @param fromJid the participant that toggled mute
@@ -614,7 +597,9 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners of a video on/off change.
+     * Notifies every registered listener of a video on/off change.
+     *
+     * <p>Each listener is invoked on its own virtual thread.
      *
      * @param callId  the call identifier
      * @param fromJid the participant that toggled video
@@ -627,13 +612,14 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners of a peer-state update. The
-     * wire {@code state} attribute is parsed into a typed
-     * {@link CallPeerState}; unknown literals surface as
-     * {@link CallPeerState#UNKNOWN}.
+     * Notifies every registered listener of a peer-state update.
      *
-     * @param callId  the call identifier
-     * @param fromJid the peer whose state changed
+     * <p>The wire state literal is parsed into a typed {@link CallPeerState} via
+     * {@link CallPeerState#fromWireValue(String)}; unrecognized literals surface as
+     * {@link CallPeerState#UNKNOWN}. Each listener is invoked on its own virtual thread.
+     *
+     * @param callId    the call identifier
+     * @param fromJid   the peer whose state changed
      * @param wireState the wire-level state literal
      */
     private void notifyPeerState(String callId, Jid fromJid, String wireState) {
@@ -644,14 +630,15 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners that group-call participants were
-     * added or removed.
+     * Notifies every registered listener that group-call participants were added or removed.
+     *
+     * <p>Each listener is invoked on its own virtual thread.
      *
      * @param callId       the call identifier
-     * @param groupJid     the group JID that owns the call (may be
-     *                     {@code null} when the stanza did not carry one)
+     * @param groupJid     the group JID that owns the call, or {@code null} when the stanza carried
+     *                     none
      * @param participants the JIDs that were added or removed
-     * @param added        {@code true} for add, {@code false} for remove
+     * @param added        {@code true} for an addition, {@code false} for a removal
      */
     private void notifyParticipantsChanged(String callId, Jid groupJid, List<Jid> participants, boolean added) {
         for (var listener : whatsapp.store().listeners()) {
@@ -660,8 +647,9 @@ public final class CallReceiver implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners of an offer-notice (call missed
-     * while offline).
+     * Notifies every registered listener of an offer notice for a call missed while offline.
+     *
+     * <p>Each listener is invoked on its own virtual thread.
      *
      * @param call the call descriptor parsed from the notice
      */

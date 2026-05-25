@@ -36,44 +36,36 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The orchestrator of the rich link-preview pipeline that decorates
- * outgoing {@link ExtendedTextMessage} bodies with title, description,
- * inline JPEG thumbnail, and (when applicable) payment-link metadata.
+ * Orchestrates the rich link-preview pipeline that decorates outgoing
+ * {@link ExtendedTextMessage} bodies with title, description, inline JPEG
+ * thumbnail, and (when applicable) payment-link metadata.
  *
- * <p>The service walks a fixed sequence on every outgoing message:
+ * <p>On every outgoing message the pipeline walks a fixed sequence. It first
+ * consults the user's privacy gate ({@code store.disableLinkPreviews()}) and
+ * scans the body for the first detected URL via
+ * {@link Linkify#findLink(String, boolean)}. It drops the URL when
+ * {@link #isSuspicious(Jid, Linkify.Match)} flags an IDN homograph attempt or
+ * when {@link #isPreviewable(Jid, String)} closes the newsletter allow-list.
+ * It then dispatches the four WhatsApp deep-link shapes recognised by
+ * {@link DeepLinkParser} (group invite, catalog, product, payment link) to
+ * their per-source resolvers. Failing a deep-link match, newsletter chats are
+ * routed through the server-mediated MEX branch
+ * ({@link NewsletterPreviewResolver}) while ordinary chats issue an HTTP fetch
+ * via the embedded {@link LinkPreview} library and extract the og-tags.
  *
- * <ul>
- *   <li>consult the user's privacy gate
- *       ({@code store.disableLinkPreviews()}) and the body for the
- *       first detected URL via {@link Linkify#findLink};</li>
- *   <li>drop the URL when {@link #isSuspicious} flags an IDN
- *       homograph attempt or when {@link #isPreviewable} closes the
- *       newsletter allow-list;</li>
- *   <li>dispatch the four WhatsApp deep-link shapes recognised by
- *       {@link DeepLinkParser} (group invite, catalog, product,
- *       payment link) to their per-source resolvers;</li>
- *   <li>route newsletter chats through the server-mediated MEX
- *       branch ({@link NewsletterPreviewResolver}); for ordinary
- *       chats, issue an HTTP fetch via the embedded
- *       {@link LinkPreview} library and extract the og-tags.</li>
- * </ul>
- *
- * @apiNote
- * Mirrors {@code WAWebLinkPreviewChatAction.getLinkPreview}.
- * Cobalt is the primary device, so the JS branch that delegates the
- * fetch to the paired phone via the
- * {@code GENERATE_LINK_PREVIEW} peer-data-operation does not apply;
- * the direct fetch path is the canonical implementation. Instances
- * are owned by the caller and re-used across sends so the per-session
- * preview cache and HTTP client amortise their setup cost.
+ * <p>Because Cobalt is the primary device, the WA Web branch that delegates
+ * the fetch to the paired phone via the {@code GENERATE_LINK_PREVIEW}
+ * peer-data-operation does not apply; the direct fetch path is the canonical
+ * implementation. Instances are owned by the caller and re-used across sends
+ * so the per-session preview cache and HTTP client amortise their setup cost.
  *
  * @implNote
- * This implementation applies the {@link #isSuspicious} gate up
- * front rather than after the deep-link branches as the JS does,
- * because the recognised deep-link patterns are restricted to
- * canonical WhatsApp domains that always pass the gate. The
- * PDO-to-companion branch in {@code WAWebLinkPreviewChatAction} is
- * not implemented because Cobalt is the primary, not the companion.
+ * This implementation applies the {@link #isSuspicious(Jid, Linkify.Match)}
+ * gate up front rather than after the deep-link branches as the JS does,
+ * because the recognised deep-link patterns are restricted to canonical
+ * WhatsApp domains that always pass the gate. The peer-data-operation branch
+ * to the companion in {@code WAWebLinkPreviewChatAction} is not implemented
+ * because Cobalt is the primary, not the companion.
  */
 @WhatsAppWebModule(moduleName = "WAWebLinkPreviewChatAction")
 @WhatsAppWebModule(moduleName = "WASuspiciousLinks")
@@ -82,65 +74,60 @@ import java.util.Set;
 @WhatsAppWebModule(moduleName = "WAWebGenMinimalLinkPreviewChatAction")
 public final class TextPipeline {
     /**
-     * The country-code sentinel used when no phone country code can
-     * be extracted from a JID.
+     * Holds the country-code sentinel used when no phone country code can be
+     * extracted from a JID.
      *
-     * @apiNote
-     * Applied to LID, group, and newsletter JIDs. Matches the
-     * {@code "ZZ"} literal that {@code WASuspiciousLinks} returns
-     * when the JID type is {@code lidUser}.
+     * <p>This value is applied to LID, group, and newsletter JIDs. It matches
+     * the {@code "ZZ"} literal that {@code WASuspiciousLinks} returns when the
+     * JID type is {@code lidUser}.
      */
     private static final String LID_COUNTRY_CODE_SENTINEL = "ZZ";
 
     /**
-     * The owning {@link WhatsAppClient} used for store access, media
-     * uploads, and newsletter / catalog MEX round-trips.
+     * Holds the owning {@link WhatsAppClient} used for store access, media
+     * uploads, and newsletter and catalog MEX round-trips.
      */
     private final WhatsAppClient client;
 
     /**
-     * The {@link ABPropsService} consulted to gate the rich fetch
+     * Holds the {@link ABPropsService} consulted to gate the rich fetch
      * ({@link ABProp#WEB_LINK_PREVIEW_SYNC_ENABLED}) and derive the
-     * per-request timeout ({@code link_preview_wait_time}).
+     * per-request timeout ({@link ABProp#LINK_PREVIEW_WAIT_TIME}).
      */
     private final ABPropsService abPropsService;
 
     /**
-     * The shared {@link MediaConnectionService} used to upload the HQ
+     * Holds the shared {@link MediaConnectionService} used to upload the HQ
      * thumbnail to WhatsApp's CDN.
      */
     private final MediaConnectionService mediaConnectionService;
 
     /**
-     * The per-session {@link LinkPreviewCache} keyed by URL.
+     * Holds the per-session {@link LinkPreviewCache} keyed by URL.
      */
     private final LinkPreviewCache cache;
 
     /**
-     * The {@link HttpClient} used to download the inline JPEG
-     * thumbnail.
+     * Holds the {@link HttpClient} used to download the inline JPEG thumbnail.
      *
-     * @apiNote
-     * The {@link LinkPreview} library supplies its own client for
-     * HTML fetches; this one is reserved for the thumbnail GET so the
-     * connect timeout and redirect policy can be tuned independently.
+     * <p>The {@link LinkPreview} library supplies its own client for HTML
+     * fetches; this one is reserved for the thumbnail GET so the connect
+     * timeout and redirect policy can be tuned independently.
      */
     private final HttpClient httpClient;
 
     /**
-     * Creates a fresh service bound to {@code client}.
+     * Creates a fresh pipeline bound to {@code client}.
      *
-     * @apiNote
-     * Invoked once per session, typically from the message-sending
-     * service; the constructor seeds the cache and the HTTP client
-     * but performs no network I/O.
+     * <p>This constructor seeds the per-session cache and the thumbnail HTTP
+     * client but performs no network I/O. It is invoked once per session,
+     * typically from the message-sending service.
      *
      * @param client                 the owning client
-     * @param abPropsService         the AB-props service used for
-     *                               feature gating and timeout
-     *                               configuration
-     * @param mediaConnectionService the CDN credentials singleton used
-     *                               to upload the HQ thumbnail
+     * @param abPropsService         the AB-props service used for feature
+     *                               gating and timeout configuration
+     * @param mediaConnectionService the CDN credentials service used to
+     *                               upload the HQ thumbnail
      * @throws NullPointerException if any argument is {@code null}
      */
     public TextPipeline(WhatsAppClient client, ABPropsService abPropsService,
@@ -159,16 +146,14 @@ public final class TextPipeline {
      * Returns the per-request HTTP timeout derived from
      * {@link ABProp#LINK_PREVIEW_WAIT_TIME}.
      *
-     * @apiNote
-     * Mirrors WA Web's use of the {@code link_preview_wait_time}
-     * AB-prop to bound the wait on the primary device's PDO response;
-     * Cobalt is the primary, so the same value bounds the direct HTTP
-     * fetch instead.
+     * <p>WA Web uses the {@code link_preview_wait_time} AB-prop to bound the
+     * wait on the primary device's peer-data-operation response. Cobalt is the
+     * primary, so the same value bounds the direct HTTP fetch instead.
      *
      * @implNote
-     * This implementation clamps the prop value to a minimum of one
-     * second so a misconfigured AB-prop never produces a zero-length
-     * timeout that would cause an immediate request abort.
+     * This implementation clamps the prop value to a minimum of one second so
+     * a misconfigured AB-prop never produces a zero-length timeout that would
+     * cause an immediate request abort.
      *
      * @return the per-request timeout
      */
@@ -180,23 +165,21 @@ public final class TextPipeline {
     }
 
     /**
-     * Decorates {@code message} with a rich link preview derived from
-     * the first URL detected in its body, when one is present and all
-     * privacy and abuse gates pass.
+     * Decorates {@code message} with a rich link preview derived from the
+     * first URL detected in its body, when one is present and all privacy and
+     * abuse gates pass.
      *
-     * @apiNote
-     * Called by the message-sending pipeline on every outgoing
-     * {@link ExtendedTextMessage} immediately before encryption and
-     * dispatch. A {@code null} message, a disabled-previews privacy
-     * setting, an empty body, a body without any URL, a suspicious
-     * IDN host, or a newsletter chat with the news-URL-preview gate
-     * closed all short-circuit before any I/O. The resolved preview
-     * (or the negative sentinel) is stored on the per-session cache
-     * so subsequent sends of the same URL re-use the prior outcome.
+     * <p>This method is called by the message-sending pipeline on every
+     * outgoing {@link ExtendedTextMessage} immediately before encryption and
+     * dispatch. A {@code null} message, a disabled-previews privacy setting,
+     * an empty body, a body without any URL, a suspicious IDN host, or a
+     * newsletter chat with the news-URL-preview gate closed all short-circuit
+     * before any I/O. The resolved preview (or the negative sentinel) is
+     * stored on the per-session cache so subsequent sends of the same URL
+     * re-use the prior outcome.
      *
-     * @param chatJid the target chat JID; controls the newsletter
-     *                branch and the country-code derivation for the
-     *                suspicious-link gate
+     * @param chatJid the target chat JID; controls the newsletter branch and
+     *                the country-code derivation for the suspicious-link gate
      * @param message the outgoing message; mutated in place
      */
     @WhatsAppWebExport(moduleName = "WAWebLinkPreviewChatAction", exports = "getLinkPreview",
@@ -263,27 +246,23 @@ public final class TextPipeline {
     }
 
     /**
-     * Returns whether the URL detected at {@code match} should be
-     * dropped before any preview is generated.
+     * Returns whether the URL detected at {@code match} should be dropped
+     * before any preview is generated.
      *
-     * @apiNote
-     * Mirrors {@code WASuspiciousLinks.findSuspiciousCharacters} +
-     * {@code WAWebLinkify.fillSuspiciousCharacters}: resolves the
-     * recipient and sender country codes from the JIDs and delegates
-     * to {@link Idn#isSuspicious}. Returning {@code true} causes the
-     * URL to be left unenhanced; the recipient still sees the
-     * literal URL but no clickable preview card.
+     * <p>This method resolves the recipient and sender country codes from the
+     * JIDs and delegates to {@link Idn#isSuspicious(String, String, String, List)}.
+     * Returning {@code true} causes the URL to be left unenhanced; the
+     * recipient still sees the literal URL but no clickable preview card.
      *
      * @implNote
-     * This implementation passes an empty recipient-language list to
-     * the heuristic because WA Web's
-     * {@code WAWebLinkify.fillSuspiciousCharacters} also passes an
-     * empty array; the recipient locale is not propagated through
-     * the suspicious-character path in the JS pipeline.
+     * This implementation passes an empty recipient-language list to the
+     * heuristic because WA Web's {@code WAWebLinkify.fillSuspiciousCharacters}
+     * also passes an empty array; the recipient locale is not propagated
+     * through the suspicious-character path in the JS pipeline.
      *
-     * @param chatJid the recipient chat JID; phone users contribute
-     *                their country code, LID, group, and newsletter
-     *                chats use {@link #LID_COUNTRY_CODE_SENTINEL}
+     * @param chatJid the recipient chat JID; phone users contribute their
+     *                country code, while LID, group, and newsletter chats use
+     *                {@link #LID_COUNTRY_CODE_SENTINEL}
      * @param match   the URL match
      * @return {@code true} when the host is flagged as suspicious
      */
@@ -300,17 +279,17 @@ public final class TextPipeline {
     }
 
     /**
-     * Returns the phone country code associated with {@code jid}, or
-     * the LID sentinel when no phone country code can be extracted.
+     * Returns the phone country code associated with {@code jid}, or the LID
+     * sentinel when no phone country code can be extracted.
      *
-     * @apiNote
-     * The country code is fed to {@link Idn#isSuspicious} where it
-     * acts as a strong allow-list signal for confusable characters
-     * tied to that region's natural orthographies.
+     * <p>The country code is fed to
+     * {@link Idn#isSuspicious(String, String, String, List)} where it acts as
+     * a strong allow-list signal for confusable characters tied to that
+     * region's natural orthographies.
      *
      * @param jid the JID
-     * @return the country-code prefix, or
-     *         {@link #LID_COUNTRY_CODE_SENTINEL} for non-phone JIDs
+     * @return the country-code prefix, or {@link #LID_COUNTRY_CODE_SENTINEL}
+     *         for non-phone JIDs
      */
     private static String countryCodeFor(Jid jid) {
         if (jid == null || !jid.hasUserServer()) {
@@ -324,26 +303,21 @@ public final class TextPipeline {
     }
 
     /**
-     * Returns whether {@code domain} is allowed to render a rich
-     * link preview for {@code chatJid}.
+     * Returns whether {@code domain} is allowed to render a rich link preview
+     * for {@code chatJid}.
      *
-     * @apiNote
-     * Mirrors
-     * {@code WAWebCheckIfDomainIsPreviewable.checkIfDomainIsPreviewable}:
-     * for non-newsletter chats the gate is open by design; for
-     * newsletter chats the gate is controlled by
-     * {@link ABProp#CHANNELS_HIDE_NEWS_URL_PREVIEW} and the
-     * server-side
+     * <p>For non-newsletter chats the gate is open by design. For newsletter
+     * chats the gate is controlled by
+     * {@link ABProp#CHANNELS_HIDE_NEWS_URL_PREVIEW} and the server-side
      * {@code WAWebNewsletterIsDomainPreviewableAction.isDomainPreviewable}
      * allow-list.
      *
      * @implNote
-     * Any transport-level error from the server allow-list query
-     * closes the gate so a hostile or flapping server cannot leak
+     * This implementation closes the gate on any transport-level error from
+     * the server allow-list query so a hostile or flapping server cannot leak
      * URL metadata into newsletter chats.
      *
-     * @param chatJid the target chat JID; used to detect newsletter
-     *                chats
+     * @param chatJid the target chat JID; used to detect newsletter chats
      * @param domain  the link's host portion
      * @return {@code true} when previews are allowed
      */
@@ -364,20 +338,18 @@ public final class TextPipeline {
     }
 
     /**
-     * Issues the HTTP fetch via {@link LinkPreview} and attaches the
-     * resulting og-tag metadata to {@code message}.
+     * Issues the HTTP fetch via {@link LinkPreview} and attaches the resulting
+     * og-tag metadata to {@code message}.
      *
-     * @apiNote
-     * Called when no deep-link branch matched (or the matched branch
-     * declined to produce a card) and the chat is not a newsletter.
-     * Falls back to {@link #attachMinimal} on any failure so the
-     * recipient always sees a clickable preview.
+     * <p>This method runs when no deep-link branch matched (or the matched
+     * branch declined to produce a card) and the chat is not a newsletter. It
+     * falls back to {@link #attachMinimal(Linkify.Match, ExtendedTextMessage)}
+     * on any failure so the recipient always sees a clickable preview.
      *
      * @implNote
-     * This implementation skips the rich fetch and applies the
-     * minimal card directly when
-     * {@link ABProp#WEB_LINK_PREVIEW_SYNC_ENABLED} is off, mirroring
-     * the JS
+     * This implementation skips the rich fetch and applies the minimal card
+     * directly when {@link ABProp#WEB_LINK_PREVIEW_SYNC_ENABLED} is off,
+     * mirroring the JS
      * {@code !web_link_preview_sync_enabled || !PrimaryFeatures.linkPreview}
      * branch.
      *
@@ -410,27 +382,24 @@ public final class TextPipeline {
     }
 
     /**
-     * Uploads the JPEG thumbnail as the HQ variant for {@code message}
-     * and stamps the inline placeholder.
+     * Uploads the JPEG thumbnail as the HQ variant for {@code message} and
+     * stamps the inline placeholder.
      *
-     * @apiNote
-     * Mirrors {@code WAWebLinkPreviewUtils.getThumbnailDetails}: on a
-     * successful upload the CDN coordinates ({@code thumbnailDirectPath},
-     * {@code thumbnailEncSha256}, {@code mediaKey},
-     * {@code mediaKeyTimestamp}) and the {@code jpegThumbnail} placeholder
-     * land directly on {@code message} so recipients can download the HQ
-     * image on demand while the inline LQ JPEG renders immediately.
+     * <p>On a successful upload the CDN coordinates ({@code thumbnailDirectPath},
+     * {@code thumbnailEncSha256}, {@code mediaKey}, {@code mediaKeyTimestamp})
+     * and the {@code jpegThumbnail} placeholder land directly on
+     * {@code message} so recipients can download the HQ image on demand while
+     * the inline LQ JPEG renders immediately.
      *
      * @implNote
      * This implementation gracefully degrades on any failure (no media
-     * connection, network error, interruption) by stamping the inline
-     * bytes and the plaintext SHA-256 onto {@code message} so the
-     * receiver still renders the LQ preview. The HQ upload goes
-     * directly through
-     * {@link com.github.auties00.cobalt.media.MediaConnection#upload}
-     * because the JPEG payload already matches the
-     * {@code WAWebLinkPreviewUtils} wire format; bypassing the
-     * transcoder avoids a redundant decode/encode round-trip.
+     * connection, network error, interruption) by stamping the inline bytes
+     * and the plaintext SHA-256 onto {@code message} so the receiver still
+     * renders the LQ preview. The HQ upload goes directly through
+     * {@link MediaConnectionService#upload(com.github.auties00.cobalt.model.media.MediaProvider, MediaPayload)}
+     * because the JPEG payload already matches the {@code WAWebLinkPreviewUtils}
+     * wire format; bypassing the transcoder avoids a redundant decode and
+     * encode round-trip.
      *
      * @param message        the outgoing message to enrich
      * @param thumbnailBytes the JPEG bytes to embed and upload, or
@@ -459,15 +428,15 @@ public final class TextPipeline {
 
     /**
      * Attaches the minimal
-     * {@code {title=domain, description=url, doNotPlayInline=true}}
-     * fallback card to {@code message}.
+     * {@code {title=domain, description=url, doNotPlayInline=true}} fallback
+     * card to {@code message}.
      *
-     * @apiNote
-     * Mirrors
-     * {@code WAWebGenMinimalLinkPreviewChatAction.genMinimalLinkPreview};
-     * invoked by {@link #attachRichPreview} on every failure path so
-     * the recipient always sees a clickable preview even when the
-     * rich fetch could not produce a card.
+     * <p>This method is invoked by
+     * {@link #attachRichPreview(Linkify.Match, ExtendedTextMessage)} on every
+     * failure path so the recipient always sees a clickable preview even when
+     * the rich fetch could not produce a card. The preview type is left
+     * unchanged when already set and otherwise defaults to
+     * {@link ExtendedTextMessage.PreviewType#NONE}.
      *
      * @param match   the detected URL
      * @param message the outgoing message to enrich
@@ -484,20 +453,18 @@ public final class TextPipeline {
     }
 
     /**
-     * Materialises a {@code PaymentLinkMetadata} on {@code message}
-     * for the matched PSP.
+     * Materialises a {@code PaymentLinkMetadata} on {@code message} for the
+     * matched payment-service-provider.
      *
-     * @apiNote
-     * Mirrors the payment-link branch of
-     * {@code WAWebLinkPreviewUtils.genLinkPreview}: a
-     * {@code PaymentLinkProvider} carrying the PSP and a
-     * {@code PaymentLinkHeader} of type {@code LINK_PREVIEW} are
-     * attached so the recipient renders the payment card.
+     * <p>A {@code PaymentLinkProvider} carrying the PSP and a
+     * {@code PaymentLinkHeader} of type
+     * {@link PaymentLinkHeaderType#LINK_PREVIEW} are attached so the recipient
+     * renders the payment card. A {@code null} PSP is a no-op.
      *
      * @implNote
-     * The payment-link header carries no button text because button
-     * text in WA Web is server-localised and only attached by the
-     * business composer, never by URL detection.
+     * The payment-link header carries no button text because button text in
+     * WA Web is server-localised and only attached by the business composer,
+     * never by URL detection.
      *
      * @param message the outgoing message to enrich
      * @param psp     the payment-service-provider label matched from
@@ -523,19 +490,18 @@ public final class TextPipeline {
     }
 
     /**
-     * Resolves the wire-format preview type from the page's og-type
-     * hint, preserving any baseline the deep-link dispatch already
-     * selected.
+     * Resolves the wire-format preview type from the page's og-type hint,
+     * preserving any baseline the deep-link dispatch already selected.
      *
-     * @apiNote
-     * Mirrors the JS helper that maps {@code "video"} pages to
-     * {@link ExtendedTextMessage.PreviewType#VIDEO} and otherwise
-     * preserves the baseline (NONE for plain URLs, PAYMENT_LINKS for
+     * <p>This method maps {@code "video"} pages to
+     * {@link ExtendedTextMessage.PreviewType#VIDEO} and otherwise preserves
+     * the baseline ({@link ExtendedTextMessage.PreviewType#NONE} for plain
+     * URLs, {@link ExtendedTextMessage.PreviewType#PAYMENT_LINKS} for
      * payment-link cards).
      *
-     * @param mediaType the og-type / og-medium value
-     * @param baseline  the baseline preview-type already set on the
-     *                  message by an earlier branch
+     * @param mediaType the og-type or og-medium value
+     * @param baseline  the baseline preview-type already set on the message by
+     *                  an earlier branch
      * @return the resolved preview type
      */
     @WhatsAppWebExport(moduleName = "WAWebLinkPreviewChatAction", exports = "getLinkPreview",
@@ -552,17 +518,17 @@ public final class TextPipeline {
     }
 
     /**
-     * Downloads the first image referenced by the og-image set and
-     * returns the raw bytes.
+     * Downloads the first image referenced by the og-image set and returns the
+     * raw bytes.
      *
-     * @apiNote
-     * Routed through {@link PreviewThumbnailFetcher#download} so the
-     * payload is size-capped and resized to the inline thumbnail
-     * format when {@code java.desktop} is on the runtime path.
+     * <p>The download is routed through
+     * {@link PreviewThumbnailFetcher#download(HttpClient, URI, Duration)} so
+     * the payload is size-capped and resized to the inline thumbnail format
+     * when {@code java.desktop} is on the runtime path.
      *
      * @param images the image set returned by the linkpreview library
-     * @return the raw bytes, or {@code null} when the set is empty or
-     *         the download failed
+     * @return the raw bytes, or {@code null} when the set is empty or the
+     *         download failed
      */
     private byte[] downloadThumbnail(Set<LinkPreviewMedia> images) {
         if (images == null || images.isEmpty()) {
@@ -578,19 +544,17 @@ public final class TextPipeline {
     /**
      * Computes the SHA-256 digest of {@code bytes}.
      *
-     * @apiNote
-     * Used as the plaintext digest stamped onto
-     * {@link ExtendedTextMessage#thumbnailSha256()} when the
-     * HQ-upload path fails and only the inline JPEG is available.
+     * <p>The digest is used as the plaintext value stamped onto
+     * {@link ExtendedTextMessage#thumbnailSha256()} when the HQ-upload path
+     * fails and only the inline JPEG is available.
      *
      * @implNote
-     * This implementation returns {@code null} when SHA-256 is
-     * unavailable in the JCA provider chain, which is effectively
-     * impossible on any standard JVM.
+     * This implementation returns {@code null} when SHA-256 is unavailable in
+     * the JCA provider chain, which is effectively impossible on any standard
+     * JVM.
      *
      * @param bytes the bytes to hash
-     * @return the SHA-256 digest, or {@code null} when SHA-256 is
-     *         unavailable
+     * @return the SHA-256 digest, or {@code null} when SHA-256 is unavailable
      */
     private static byte[] sha256(byte[] bytes) {
         try {
@@ -601,30 +565,24 @@ public final class TextPipeline {
     }
 
     /**
-     * Stores the resolved preview in the cache so subsequent sends
-     * of the same URL short-circuit.
+     * Stores the resolved preview in the cache so subsequent sends of the same
+     * URL short-circuit.
      *
-     * @apiNote
-     * Mirrors the JS {@code C.set(e.url, b)} placements throughout
-     * {@code WAWebLinkPreviewChatAction.getLinkPreview}: a failed
-     * resolution stores the negative sentinel; a successful one
-     * stores a snapshot built from the just-decorated message so
-     * the cache value carries only preview fields, not the message
-     * body.
+     * <p>A failed resolution stores the negative sentinel; a successful one
+     * stores a snapshot built from the just-decorated message so the cache
+     * value carries only preview fields, not the message body.
      *
      * @implNote
-     * This implementation skips caching for newsletter previews
-     * when no HQ thumbnail was received; subsequent sends re-query
-     * the server because a LQ-only result is considered transient,
-     * matching the JS guard
+     * This implementation skips caching for newsletter previews when no HQ
+     * thumbnail was received; subsequent sends re-query the server because a
+     * LQ-only result is considered transient, matching the JS guard
      * {@code i.thumbnailHQ != null && r.set(t.url, l)}.
      *
      * @param url            the URL key
-     * @param newsletterChat whether the resolution happened in a
-     *                       newsletter chat
+     * @param newsletterChat whether the resolution happened in a newsletter
+     *                       chat
      * @param attached       whether a preview was attached
-     * @param message        the message that just had the preview
-     *                       attached
+     * @param message        the message that just had the preview attached
      */
     private void cacheCurrentMessage(String url, boolean newsletterChat, boolean attached, ExtendedTextMessage message) {
         if (!attached) {
@@ -652,14 +610,14 @@ public final class TextPipeline {
     }
 
     /**
-     * Copies the preview-bearing fields of a cached snapshot onto a
-     * fresh outgoing message.
+     * Copies the preview-bearing fields of a cached snapshot onto a fresh
+     * outgoing message.
      *
-     * @apiNote
-     * Called from {@link #run} on a cache hit so two messages
-     * sharing the same URL render the same preview without
-     * re-fetching; only preview fields move across, not the body or
-     * mentions of the cached snapshot.
+     * <p>This method runs from
+     * {@link #run(Jid, ExtendedTextMessage)} on a cache hit so two messages
+     * sharing the same URL render the same preview without re-fetching; only
+     * preview fields move across, not the body or mentions of the cached
+     * snapshot.
      *
      * @param cached  the cached snapshot
      * @param message the outgoing message to enrich

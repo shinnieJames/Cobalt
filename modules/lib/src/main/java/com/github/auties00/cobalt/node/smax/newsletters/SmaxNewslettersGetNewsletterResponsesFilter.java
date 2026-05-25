@@ -15,36 +15,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the at-most-one filter applied to a
- * {@link SmaxNewslettersGetNewsletterResponsesRequest}.
+ * Selects the at-most-one filter applied to a {@link SmaxNewslettersGetNewsletterResponsesRequest}.
  *
- * @apiNote
- * Pick this when narrowing the question-responses slice; the variant
- * maps onto WA Web's {@code ResponsesFilterType.CONTACTS} or
- * {@code ResponsesFilterType.REPLIED} toggle as wired through
- * {@code WAWebNewsletterGetQuestionResponsesQuery.getQuestionResponsesQuery}.
- * The two variants are mutually exclusive and the parameter remains
- * optional; omit it entirely to disable filtering.
+ * <p>Narrows the question-responses slice to either address-book contacts ({@link Contacts}) or
+ * entries the question owner has explicitly replied to ({@link Replied}). The two variants are
+ * mutually exclusive and the parameter remains optional; omit it entirely to disable filtering.</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersContactsOrRepliedFilterMixinMixinGroup")
 public sealed interface SmaxNewslettersGetNewsletterResponsesFilter permits SmaxNewslettersGetNewsletterResponsesFilter.Contacts, SmaxNewslettersGetNewsletterResponsesFilter.Replied {
 
     /**
-     * The variant that restricts the slice to address-book contacts.
+     * Restricts the slice to address-book contacts.
      *
-     * @apiNote
-     * Surfaces the WA Web "contacts" toggle on the question-responses
-     * UI, materialised on the wire as an empty {@code <contacts/>}
-     * marker inside the {@code <filters>} block.
+     * <p>Materialised on the wire as an empty {@code <contacts/>} marker inside the
+     * {@code <filters>} block.</p>
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersContactsFilterMixinMixin")
     final class Contacts implements SmaxNewslettersGetNewsletterResponsesFilter {
         /**
          * Constructs the contacts filter marker.
          *
-         * @apiNote
-         * Carries no data; the variant identity alone selects the
-         * filter on the wire.
+         * <p>Carries no data; the variant identity alone selects the filter on the wire.</p>
          */
         public Contacts() {
         }
@@ -85,22 +76,17 @@ public sealed interface SmaxNewslettersGetNewsletterResponsesFilter permits Smax
     }
 
     /**
-     * The variant that restricts the slice to entries the question
-     * owner has explicitly replied to.
+     * Restricts the slice to entries the question owner has explicitly replied to.
      *
-     * @apiNote
-     * Surfaces the WA Web "replied" toggle on the question-responses
-     * UI, materialised on the wire as an empty {@code <replied/>}
-     * marker inside the {@code <filters>} block.
+     * <p>Materialised on the wire as an empty {@code <replied/>} marker inside the
+     * {@code <filters>} block.</p>
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersRepliedFilterMixinMixin")
     final class Replied implements SmaxNewslettersGetNewsletterResponsesFilter {
         /**
          * Constructs the replied filter marker.
          *
-         * @apiNote
-         * Carries no data; the variant identity alone selects the
-         * filter on the wire.
+         * <p>Carries no data; the variant identity alone selects the filter on the wire.</p>
          */
         public Replied() {
         }

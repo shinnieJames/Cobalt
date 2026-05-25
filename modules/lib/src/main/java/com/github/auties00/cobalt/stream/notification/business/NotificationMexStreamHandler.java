@@ -26,47 +26,32 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Handles {@code type="mex"} notifications carrying server-pushed Meta
- * Exchange (MEX) GraphQL subscription updates.
+ * Handles {@code type="mex"} notifications carrying server-pushed Meta Exchange GraphQL subscription updates.
  *
- * @apiNote
- * Dispatched by {@link NotificationBusinessDispatcher}. The
- * {@code <update op_name="..." />} child carries the JSON payload, and
- * the {@code op_name} attribute selects the per-operation handler:
- * newsletter mutations, text-status updates, group property updates,
- * community-owner updates, username changes, and LID changes. Any
- * operation whose data carries a fatal extension error is logged and
- * skipped without ACK; any operation with no registered handler raises
- * {@link MissingMexNotificationHandlerException} which the dispatch
- * branch turns into a NACK (no ACK sent).
+ * <p>Dispatched by {@link NotificationBusinessDispatcher}. The {@code <update op_name="..."/>} child carries a JSON
+ * payload, and the {@code op_name} attribute selects the per-operation handler: newsletter mutations, text-status
+ * updates, group property updates, community-owner updates, username changes, and LID changes. Any operation whose
+ * payload carries a fatal extension error is logged and skipped without an ack; any operation with no registered
+ * handler raises {@link MissingMexNotificationHandlerException}, which the dispatch branch turns into a NACK by
+ * omitting the ack so the server retries. The ack is sent only on a successful dispatch.
  *
  * @implNote
- * This implementation collapses WA Web's per-operation MEX handlers
- * ({@code WAWebMexNewsletterJoinHandler},
- * {@code WAWebMexUsernameUpdateNotificationHandler}, etc.) into one
- * Cobalt handler that walks the JSON payload directly. WA Web routes
- * each operation through its own SMAX RPC parser; Cobalt reads the
- * JSON inline because the {@code <update>} content is plain JSON
- * (not a SMAX-encoded sub-stanza) and a typed parser would add no
- * validation beyond a key check.
+ * This implementation collapses WhatsApp Web's per-operation Meta Exchange handlers into one Cobalt handler that walks
+ * the JSON payload directly, because the {@code <update>} content is plain JSON rather than a SMAX-encoded sub-stanza
+ * and a typed parser would add no validation beyond a key check.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMexNotification")
 final class NotificationMexStreamHandler implements SocketStream.Handler {
     /**
-     * Logger used for warnings about parse failures and debug messages
-     * about UI-only operations that Cobalt explicitly drops.
+     * Logs warnings about parse failures and debug messages about UI-only operations that Cobalt explicitly drops.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationMexStreamHandler.class.getName());
 
     /**
-     * Operation names WA Web recognises but Cobalt has no consumer for.
+     * Names the operations WhatsApp Web recognises but Cobalt has no consumer for.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleMexNotification} top-level
-     * {@code KNOWN_UNSUPPORTED_OPS} set. Hitting one of these emits a
-     * warning log; hitting any other unknown op emits an error log so
-     * the orchestrator can sample it for further inspection.
+     * <p>Hitting one of these emits a warning log; hitting any other unknown op emits an error log so the operation can
+     * be sampled for further inspection.
      */
     private static final Set<String> KNOWN_UNSUPPORTED_OPS = Set.of(
             "NotificationLinkedProfilesUpdatesSideSub",
@@ -75,35 +60,28 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     );
 
     /**
-     * The {@link WhatsAppClient} used for store reads, server queries
-     * (newsletter metadata, push name, about), and ack sends.
+     * Reads the store, runs server queries (newsletter metadata, push name, about), and sends acks.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The {@link LidMigrationService} used by
-     * {@link #handleLidChange(JSONObject)} to migrate a contact's
-     * PN-LID mapping atomically across the store.
+     * Migrates a contact's phone-number-to-LID mapping atomically across the store on a LID-change event.
      */
     private final LidMigrationService lidMigrationService;
 
     /**
-     * The {@link AckSender} used to ship the post-processing
-     * {@code <ack class="notification" type="mex"/>} stanza on
-     * success.
+     * Ships the post-processing {@code <ack class="notification" type="mex"/>} stanza on success.
      */
     private final AckSender ackSender;
 
     /**
      * Constructs the handler with shared dependencies.
      *
-     * @apiNote
-     * Called once by {@link NotificationBusinessDispatcher}; embedders
-     * do not instantiate this handler directly.
+     * <p>Called once by {@link NotificationBusinessDispatcher}.
      *
-     * @param whatsapp            the {@link WhatsAppClient}
-     * @param lidMigrationService the {@link LidMigrationService}
-     * @param ackSender           the {@link AckSender}
+     * @param whatsapp            the client used for store reads, server queries, and acks
+     * @param lidMigrationService the LID migration service used by {@link #handleLidChange(JSONObject)}
+     * @param ackSender           the ack sender used for the success ack
      */
     NotificationMexStreamHandler(WhatsAppClient whatsapp, LidMigrationService lidMigrationService, AckSender ackSender) {
         this.whatsapp = whatsapp;
@@ -112,19 +90,10 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Validates the stanza shape and delegates to
-     * {@link #handleNotification(Node)}.
+     * Validates the stanza shape and delegates to {@link #handleNotification(Node)}.
      *
-     * @apiNote
-     * Invoked by {@link NotificationBusinessDispatcher}. Stanzas whose
-     * description is not {@code notification} or whose {@code type} is
-     * not {@code mex} are silently dropped.
-     *
-     * @implNote
-     * This implementation sends the ACK from the inner dispatch flow
-     * (only on success); WA Web returns the ack from the parser
-     * promise resolution path of
-     * {@code WAWebHandleMexNotification.handleMexNotification}.
+     * <p>Stanzas whose description is not {@code notification} or whose {@code type} is not {@code mex} are silently
+     * dropped.
      *
      * @param node the incoming {@code <notification>} stanza
      */
@@ -138,15 +107,12 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses the {@code <update>} child's JSON payload, validates it for
-     * fatal extension errors, and dispatches to the per-operation
-     * handler.
+     * Parses the {@code <update>} child's JSON payload, validates it for fatal extension errors, and dispatches to the
+     * per-operation handler.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code mexNotificationParser} + {@code handleMexNotification}
-     * combination. The ACK is only sent on success; failures (parser
-     * error, unknown op) NACK by omitting the ACK.
+     * <p>The ack is sent only on success. A parser error, an unknown op, or any other failure NACKs by omitting the
+     * ack. An unknown op among {@link #KNOWN_UNSUPPORTED_OPS} is warned about; any other unknown op is logged at error
+     * level.
      *
      * @param node the {@code <notification>} stanza
      */
@@ -180,27 +146,16 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Routes the operation to its handler, validates the payload, and
-     * sends the ACK on success.
+     * Routes the operation to its handler, validates the payload, and sends the ack on success.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleMexNotification.f(...)} dispatch table and the
-     * {@code h/y(...)} wrapper which checks
-     * {@code WAWebMexRelayEnvironment.parseFatalExtensionError} and
-     * the non-null {@code data} guard before invoking the handler.
+     * <p>The payload is rejected when it carries a fatal extension error or a {@code null} {@code data} member. The
+     * recognised op names map to newsletter, text-status, group, community-owner, and username/LID handlers; UI-only
+     * ops (brigading, limit sharing, reachout timelock, integrity challenge, message capping) are debug-logged because
+     * Cobalt has no equivalent UI surface; any other op name raises {@link MissingMexNotificationHandlerException}.
      *
-     * @implNote
-     * This implementation handles 23 known op names by name and
-     * delegates the rest to
-     * {@link MissingMexNotificationHandlerException}. UI-only ops
-     * (brigading, limit sharing, reachout timelock, integrity
-     * challenge, message capping) are explicitly debug-logged because
-     * Cobalt has no equivalent UI surface.
-     *
-     * @param operationName the MEX op name from the {@code op_name} attribute
-     * @param stanzaId      the stanza id used in the ACK
-     * @param stanzaFrom    the {@code from} JID used in the ACK
+     * @param operationName the Meta Exchange op name from the {@code op_name} attribute
+     * @param stanzaId      the stanza id used in the ack
+     * @param stanzaFrom    the {@code from} JID used in the ack
      * @param payload       the parsed JSON payload
      * @throws MissingMexNotificationHandlerException when no handler exists for {@code operationName}
      */
@@ -276,11 +231,8 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     /**
      * Parses the {@code <update>} child's text content as a JSON object.
      *
-     * @apiNote
-     * Returns an empty {@link JSONObject} on blank content or parse
-     * failure, mirroring WA Web's {@code XmppParsingFailure} fallback
-     * which produces an empty object before
-     * {@code parseFatalExtensionError} validates it.
+     * <p>Returns an empty {@link JSONObject} on blank content or parse failure so that the downstream fatal-error
+     * validation always operates on a non-{@code null} object.
      *
      * @param updateNode the {@code <update>} child of the notification
      * @return the parsed JSON object, never {@code null}
@@ -305,25 +257,17 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Returns whether the {@code errors} array contains a fatal
-     * extension error.
+     * Returns whether the {@code errors} array contains a fatal extension error.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexRelayEnvironment.parseFatalExtensionError} which
-     * walks the array and flags any error whose
-     * {@code extensions.is_summary} is {@code true} or whose
-     * {@code extensions.error_code} is non-null. Any non-empty errors
-     * array is also treated as fatal.
+     * <p>An entry is fatal when its {@code extensions.is_summary} is {@code true} or its
+     * {@code extensions.error_code} is non-{@code null}.
      *
      * @implNote
-     * This implementation returns {@code true} for any non-empty errors
-     * array even when no entry passes the {@code is_summary}/{@code error_code}
-     * check, matching WA Web's behaviour where an unrecognised error
-     * triggers a default 500 status.
+     * This implementation returns {@code true} for any non-empty {@code errors} array even when no entry passes the
+     * {@code is_summary} or {@code error_code} check, treating an unrecognised error as fatal.
      *
      * @param errors the {@code errors} JSON array, or {@code null}
-     * @return {@code true} when a fatal extension error is present, {@code false} otherwise
+     * @return {@code true} when a fatal extension error is present; {@code false} otherwise
      */
     private boolean hasFatalExtensionError(JSONArray errors) {
         if (errors == null || errors.isEmpty()) {
@@ -351,18 +295,13 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Routes newsletter MEX operations to per-op helpers.
+     * Routes newsletter Meta Exchange operations to per-op helpers.
      *
-     * @apiNote
-     * Most newsletter ops resolve to a metadata refresh
-     * ({@link #refreshNewsletters(JSONObject)}); the
-     * {@code NotificationNewsletterLeave} op removes the newsletter
-     * from the store and
-     * {@code NotificationNewsletterStateChange} branches on
-     * {@code state.type} ({@code "DELETED"} when requestor leaves vs
-     * remote termination).
+     * <p>Most newsletter ops resolve to a metadata refresh through {@link #refreshNewsletters(JSONObject)}. The
+     * {@code NotificationNewsletterLeave} op removes the newsletter from the store, and
+     * {@code NotificationNewsletterStateChange} branches through {@link #handleNewsletterStateChange(JSONObject)}.
      *
-     * @param operationName the MEX op name
+     * @param operationName the Meta Exchange op name
      * @param payload       the parsed JSON payload
      */
     private void handleNewsletterOperation(String operationName, JSONObject payload) {
@@ -379,17 +318,13 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Applies a newsletter state-change event by removing, terminating,
-     * or refreshing the newsletter depending on the new state.
+     * Applies a newsletter state-change event by removing, terminating, or refreshing the newsletter depending on the
+     * new state.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexNewsletterStateChangeHandler.mexHandleNewsletterStateChange}:
-     * a {@code DELETED} state with {@code is_requestor=true} removes the
-     * newsletter locally; a {@code DELETED} state without
-     * {@code is_requestor} marks it terminated (so the UI can show the
-     * "this newsletter no longer exists" tombstone); any other state
-     * refreshes the metadata.
+     * <p>A {@code DELETED} state with {@code is_requestor=true} removes the newsletter locally; a {@code DELETED} state
+     * without {@code is_requestor} marks it terminated so the UI can show the "this newsletter no longer exists"
+     * tombstone; any other state refreshes the metadata. A payload without the
+     * {@code xwa2_notify_newsletter_on_state_change} envelope falls back to a full newsletter refresh.
      *
      * @param payload the parsed JSON payload
      */
@@ -421,14 +356,11 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Re-queries each user/LID JID in the payload's about text and
-     * writes the result to the contact text-status record.
+     * Re-queries each user or LID JID in the payload's about text and writes the result to the contact text-status
+     * record.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexTextStatusUpdateNotificationHandler.mexHandleTextStatusUpdate}
-     * which refreshes the text status for every JID in the
-     * {@code xwa2_notify_text_status_update.id} array.
+     * <p>Only JIDs on the user or LID server are processed; a failure on one JID is debug-logged and the loop
+     * continues.
      *
      * @param payload the parsed JSON payload
      */
@@ -451,15 +383,12 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Routes username/LID-change MEX operations to per-op helpers.
+     * Routes username and LID-change Meta Exchange operations to per-op helpers.
      *
-     * @apiNote
-     * Username operations split into set, delete, update (side-sub),
-     * account-sync, and LID change. Each path applies the change to
-     * both the contact record and the chat record so the username
-     * displays consistently across surfaces.
+     * <p>Username operations split into set, delete, update (side-sub), account-sync, and LID change. Each path applies
+     * the change to both the contact record and the chat record so the username displays consistently across surfaces.
      *
-     * @param operationName the MEX op name
+     * @param operationName the Meta Exchange op name
      * @param payload       the parsed JSON payload
      */
     private void handleUserOperation(String operationName, JSONObject payload) {
@@ -474,13 +403,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Writes the new username from a
-     * {@code xwa2_notify_username_on_change} payload to the contact
-     * keyed by LID.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexUsernameUpdateNotificationHandler.mexHandleUsernameChange}.
+     * Writes the new username from a {@code xwa2_notify_username_on_change} payload to the contact keyed by LID.
      *
      * @param payload the parsed JSON payload
      */
@@ -500,12 +423,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Clears the username on the contact keyed by LID from a
-     * {@code xwa2_notify_username_delete} payload.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexUsernameUpdateNotificationHandler.mexHandleUsernameDelete}.
+     * Clears the username on the contact keyed by LID from a {@code xwa2_notify_username_delete} payload.
      *
      * @param payload the parsed JSON payload
      */
@@ -524,13 +442,8 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Applies the username carried by the
-     * {@code xwa2_notify_wa_user} envelope (the account-sync username
-     * payload) to the contact keyed by LID.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexUsernameAccountSyncNotificationHandler.mexHandleUsernameAccountSync}.
+     * Applies the username carried by the {@code xwa2_notify_wa_user} account-sync envelope to the contact keyed by
+     * LID.
      *
      * @param payload the parsed JSON payload
      */
@@ -551,25 +464,18 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Migrates a contact's LID from {@code old} to {@code new} across the
-     * store using {@link LidMigrationService#changeLid(Jid, Jid, Jid)}.
+     * Migrates a contact's LID from {@code old} to {@code new} across the store using
+     * {@link LidMigrationService#changeLid(Jid, Jid, Jid)}.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebMexLidChangeNotificationHandler.mexHandleLidChangeNotification}
-     * which feeds the {@code (oldLid, newLid)} pair to the LID
-     * migration pipeline.
+     * <p>The phone JID is resolved by first consulting the LID-to-phone mapping, then a contact record, then a chat
+     * record. When a phone JID is found the change is delegated to the migration service. When none of the three match,
+     * the LID is rewritten in place on both the contact and chat records as a fallback.
      *
      * @implNote
      * This implementation does not call the typed
-     * {@link com.github.auties00.cobalt.node.mex.json.user.LidChangeNotificationMexResponse}
-     * parser because the MEX notification body is inline JSON rather
-     * than the IQ-wrapped envelope the typed parser expects. The
-     * {@code old}/{@code new} keys under
-     * {@code xwa2_notify_lid_change} are read directly. When neither
-     * a {@code findPhoneByLid} mapping nor a contact record matches,
-     * the LID is rewritten in-place on both the contact and chat
-     * records as a fallback.
+     * {@link com.github.auties00.cobalt.node.mex.json.user.LidChangeNotificationMexResponse} parser because the
+     * notification body is inline JSON rather than the IQ-wrapped envelope that parser expects; the {@code old} and
+     * {@code new} keys under {@code xwa2_notify_lid_change} are read directly.
      *
      * @param payload the parsed JSON payload
      */
@@ -609,13 +515,10 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Re-queries the metadata for every group/community JID found in the
-     * payload.
+     * Re-queries the metadata for every group or community JID found in the payload.
      *
-     * @apiNote
-     * Used by every {@code NotificationGroup*PropertyUpdate} op and by
-     * {@code NotificationCommunityOwnerUpdate}. Failures are debug-logged
-     * and the loop continues.
+     * <p>Used by every {@code NotificationGroup*PropertyUpdate} op and by {@code NotificationCommunityOwnerUpdate}. A
+     * failure on one JID is debug-logged and the loop continues.
      *
      * @param payload the parsed JSON payload
      */
@@ -639,9 +542,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     /**
      * Refreshes every newsletter JID found in the payload.
      *
-     * @apiNote
-     * Used by the catch-all newsletter branch when no specific handler
-     * matches the op name.
+     * <p>Used by the catch-all newsletter branch when no specific handler matches the op name.
      *
      * @param payload the parsed JSON payload
      */
@@ -656,12 +557,10 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes the push name for every user/LID/bot JID found in the
-     * payload.
+     * Refreshes the push name for every user, LID, or bot JID found in the payload.
      *
-     * @apiNote
-     * Used by {@code UsernameUpdateNotification} (the side-sub variant)
-     * and by the default user-op branch.
+     * <p>Used by the {@code UsernameUpdateNotification} side-sub variant and by the default user-op branch. A contact
+     * record is created when none exists; a failure on one JID is debug-logged and the loop continues.
      *
      * @param payload the parsed JSON payload
      */
@@ -687,12 +586,8 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Writes the username on the contact and its associated chat,
-     * preferring the PN-keyed record when a LID-PN mapping exists.
-     *
-     * @apiNote
-     * Internal helper shared by the username set/delete/account-sync
-     * paths.
+     * Writes the username on the contact and its associated chat, preferring the phone-number-keyed record when a
+     * LID-to-phone mapping exists.
      *
      * @param lidJid   the LID JID of the contact
      * @param username the new username, or {@code null} to clear
@@ -718,10 +613,6 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     /**
      * Reads a newsletter JID nested under {@code payload[rootKey][idKey]}.
      *
-     * @apiNote
-     * Internal helper used by the newsletter leave/state-change paths
-     * to descend the envelope before reading the id.
-     *
      * @param payload the JSON payload to descend
      * @param rootKey the outer key (envelope name)
      * @param idKey   the inner key naming the id field
@@ -736,12 +627,10 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Reads a newsletter id from the given JSON object, appending the
-     * {@code @newsletter} server when the value is bare.
+     * Reads a newsletter id from the given JSON object, appending the {@code @newsletter} server when the value is
+     * bare.
      *
-     * @apiNote
-     * Internal helper that accepts both forms WA Web's server emits:
-     * fully-qualified {@code 123@newsletter} and bare {@code 123}.
+     * <p>Accepts both forms the server emits: fully-qualified {@code 123@newsletter} and bare {@code 123}.
      *
      * @param payload the JSON object to read from
      * @param idKey   the id key
@@ -761,15 +650,11 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Recursively walks a JSON value and collects every string that
-     * parses as a {@link Jid}.
+     * Recursively walks a JSON value and collects every string that parses as a {@link Jid}.
      *
-     * @apiNote
-     * Used by {@link #refreshGroups(JSONObject)},
-     * {@link #refreshNewsletters(JSONObject)},
-     * {@link #refreshUsers(JSONObject)}, and
-     * {@link #handleTextStatusOperation(JSONObject)} to extract the
-     * affected ids without coupling to specific envelope shapes.
+     * <p>Used by {@link #refreshGroups(JSONObject)}, {@link #refreshNewsletters(JSONObject)},
+     * {@link #refreshUsers(JSONObject)}, and {@link #handleTextStatusOperation(JSONObject)} to extract the affected ids
+     * without coupling to specific envelope shapes.
      *
      * @param value the JSON value to scan (an object, array, or string)
      * @return an insertion-ordered set of parsed JIDs
@@ -781,12 +666,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Accumulates JIDs into the supplied set as part of the recursive
-     * walk started by {@link #collectJids(Object)}.
-     *
-     * @apiNote
-     * Internal recursion helper; not intended for direct call from
-     * outside {@link #collectJids(Object)}.
+     * Accumulates JIDs into the supplied set as part of the recursive walk started by {@link #collectJids(Object)}.
      *
      * @param value  the current JSON value
      * @param result the accumulator set
@@ -812,12 +692,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses a string as a {@link Jid}, returning {@link Optional#empty()}
-     * for blank or {@code @}-less values.
-     *
-     * @apiNote
-     * Internal helper used by both the JID-collection walk and the
-     * username payload paths.
+     * Parses a string as a {@link Jid}, returning {@link Optional#empty()} for blank or {@code @}-less values.
      *
      * @param value the string to parse
      * @return the parsed JID, or empty
@@ -835,18 +710,13 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Creates or merges a {@link ContactTextStatus} record and fires
-     * the change to listeners.
+     * Creates or merges a {@link ContactTextStatus} record and fires the change to listeners.
      *
-     * @apiNote
-     * Shared between the {@code TextStatusUpdateNotification} MEX op
-     * branch and possible future text-status sources.
-     *
-     * @param contactJid              the contact JID
-     * @param text                    the new text, or {@code null}
-     * @param emoji                   the new emoji, or {@code null}
+     * @param contactJid               the contact JID
+     * @param text                     the new text, or {@code null}
+     * @param emoji                    the new emoji, or {@code null}
      * @param ephemeralDurationSeconds the new ephemeral duration in seconds, or {@code null}
-     * @param lastUpdateTime          the new last-update time, or {@code null}
+     * @param lastUpdateTime           the new last-update time, or {@code null}
      * @return the merged text-status record
      */
     private ContactTextStatus upsertContactTextStatus(
@@ -870,13 +740,8 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Fires
-     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onContactTextStatus}
+     * Fires {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onContactTextStatus(WhatsAppClient, Jid, ContactTextStatus)}
      * on every registered listener on its own virtual thread.
-     *
-     * @apiNote
-     * Internal helper used by
-     * {@link #upsertContactTextStatus(Jid, String, String, Integer, Instant)}.
      *
      * @param contactJid the JID whose text status changed
      * @param status     the updated text-status record
@@ -888,11 +753,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Returns the newsletter with the given JID, creating a blank record
-     * when none exists.
-     *
-     * @apiNote
-     * Internal helper used by every newsletter-update branch.
+     * Returns the newsletter with the given JID, creating a blank record when none exists.
      *
      * @param newsletterJid the newsletter JID
      * @return the matching {@link Newsletter}
@@ -904,14 +765,11 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes a newsletter's metadata by re-querying it from the
-     * server and applying the result fields.
+     * Refreshes a newsletter's metadata by re-querying it from the server and applying the result fields.
      *
-     * @apiNote
-     * Preserves the existing viewer role (subscriber, admin, etc.)
-     * across the refresh by passing it as the query parameter, so a
-     * server response that omits the role-specific fields does not
-     * downgrade the local record.
+     * <p>The existing viewer role (subscriber, admin, and so on) is preserved across the refresh by passing it as the
+     * query parameter, so a server response that omits the role-specific fields does not downgrade the local record. A
+     * {@code null} server response leaves the local record untouched.
      *
      * @param newsletterJid the newsletter JID to refresh
      */
@@ -934,14 +792,10 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Marks the newsletter as terminated by flipping the
-     * {@code terminated} flag on the metadata.
+     * Marks the newsletter as terminated by flipping the {@code terminated} flag on the metadata.
      *
-     * @apiNote
-     * Used when a {@code DELETED} state arrives without
-     * {@code is_requestor=true}, meaning the owner deleted the
-     * newsletter; the local record is retained so the UI can show a
-     * tombstone.
+     * <p>Used when a {@code DELETED} state arrives without {@code is_requestor=true}, meaning the owner deleted the
+     * newsletter; the local record is retained so the UI can show a tombstone.
      *
      * @param newsletterJid the newsletter JID to mark as terminated
      */
@@ -958,9 +812,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     /**
      * Removes the newsletter from the local store.
      *
-     * @apiNote
-     * Used when the user leaves the newsletter (the
-     * {@code NotificationNewsletterLeave} op) and when a
+     * <p>Used when the user leaves the newsletter (the {@code NotificationNewsletterLeave} op) and when a
      * {@code DELETED} state arrives with {@code is_requestor=true}.
      *
      * @param newsletterJid the newsletter JID to remove
@@ -972,11 +824,8 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     /**
      * Sends the {@code <ack class="notification" type="mex"/>} stanza.
      *
-     * @apiNote
-     * Fire-and-forget; identical attribute set to WA Web's
-     * {@code WAWebHandleMexNotification.C(stanzaId, from)} ack-builder.
-     * Only invoked on successful dispatch; parse failures and
-     * unsupported operations omit the ACK so the server retries.
+     * <p>Fire-and-forget. Invoked only on successful dispatch; parse failures and unsupported operations omit the ack
+     * so the server retries. The ack is suppressed when either the stanza id or the {@code from} JID is missing.
      *
      * @param stanzaId   the stanza id
      * @param stanzaFrom the {@code from} JID
@@ -994,28 +843,18 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Raised when {@link #dispatch(String, String, Jid, JSONObject)}
-     * encounters an op name no Cobalt handler knows.
+     * Signals that {@link #dispatch(String, String, Jid, JSONObject)} encountered an op name no Cobalt handler knows.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleMexNotification.MissingMEXNotificationHandler}.
-     * Caught inside
-     * {@link #handleNotification(Node)} and turned into a NACK (no ACK
-     * sent) so the server retries.
+     * <p>Caught inside {@link #handleNotification(Node)} and turned into a NACK (no ack sent) so the server retries.
      */
     private static final class MissingMexNotificationHandlerException extends RuntimeException {
         /**
-         * The op name that had no registered handler.
+         * Holds the op name that had no registered handler.
          */
         private final String operationName;
 
         /**
          * Constructs the exception for the given op name.
-         *
-         * @apiNote
-         * Constructor is private to the enclosing class; not part of
-         * any public API.
          *
          * @param operationName the op name with no handler
          */
@@ -1027,10 +866,8 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
         /**
          * Returns the op name that triggered this exception.
          *
-         * @apiNote
-         * Read by {@link #handleNotification(Node)} to choose between
-         * the {@code KNOWN_UNSUPPORTED_OPS} warning path and the
-         * unknown-op error path.
+         * <p>Read by {@link NotificationMexStreamHandler#handleNotification(Node)} to choose between the
+         * {@link NotificationMexStreamHandler#KNOWN_UNSUPPORTED_OPS} warning path and the unknown-op error path.
          *
          * @return the op name
          */
@@ -1041,10 +878,7 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
         /**
          * {@inheritDoc}
          *
-         * @implNote
-         * This implementation formats as
-         * {@code "MissingMEXNotificationHandler: <op>"} to match WA
-         * Web's logging format for the same error.
+         * @return the {@code "MissingMEXNotificationHandler: <op>"} text
          */
         @Override
         public String toString() {

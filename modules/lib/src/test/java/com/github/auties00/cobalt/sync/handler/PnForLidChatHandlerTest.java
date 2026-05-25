@@ -30,29 +30,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Exercises {@link PnForLidChatHandler} against the
- * {@code WAWebPnForLidChatSync.applyMutations} per-mutation flow.
- *
- * @apiNote
- * Verifies the
- * {@link ABProp#PNH_PN_FOR_LID_CHAT_SYNC}
- * gate, the
- * {@link SyncdOperation#SET}
- * happy path that registers a bidirectional
- * {@code phoneJid <-> lidJid} mapping on the store, the malformed
- * classification when the index JID is empty / non-WID / non-LID,
- * the malformed classification when the action payload or its
- * {@link PnForLidChatAction#pnJid()} is missing, the unsupported
- * classification for
- * {@link SyncdOperation#REMOVE},
- * and the default timestamp-based conflict resolution.
- *
- * @implNote
- * This implementation builds mutations directly via the local
- * {@code build} helper because no public outgoing-mutation factory
- * exists for this action. The AB-prop is opted-in by default in
- * the fixture so happy-path tests do not have to repeat the gate
- * call.
+ * Covers {@link PnForLidChatHandler}: the {@link ABProp#PNH_PN_FOR_LID_CHAT_SYNC} gate,
+ * the {@link SyncdOperation#SET} path that registers a bidirectional
+ * {@code phoneJid}/{@code lidJid} mapping on the store, the malformed classifications when
+ * the index JID is empty or non-LID or when the action payload or its
+ * {@link PnForLidChatAction#pnJid()} is missing, the {@link SyncActionState#UNSUPPORTED}
+ * classification for {@link SyncdOperation#REMOVE}, and the default timestamp-based
+ * conflict resolution. The AB prop is opted in by default in the fixture so happy-path
+ * tests do not repeat the gate call.
  */
 @DisplayName("PnForLidChatHandler")
 class PnForLidChatHandlerTest {
@@ -76,28 +61,7 @@ class PnForLidChatHandlerTest {
         handler = new PnForLidChatHandler(props);
     }
 
-    /**
-     * Builds a trusted mutation whose value carries the given action
-     * under the canonical {@code ["pnForLidChat", lidJid]} index.
-     *
-     * @apiNote
-     * Internal helper consumed by every test in this class; not used
-     * outside it. Setting {@code action} to {@code null} omits the
-     * {@code pnForLidChatAction} field on the value so the
-     * malformed-value branch can be exercised.
-     *
-     * @implNote
-     * This implementation builds the index via
-     * {@link JSON#toJSONString(Object)} to
-     * match the on-wire JSON encoding the production handler reads
-     * back via {@link JSON#parseArray(String)}.
-     *
-     * @param lidJid the LID JID
-     * @param action the action payload; may be {@code null}
-     * @param op     the sync operation
-     * @param ts     the timestamp
-     * @return the trusted mutation
-     */
+    // Passing action == null omits the pnForLidChatAction sub-message so the malformed-value branch can be exercised.
     private DecryptedMutation.Trusted build(Jid lidJid, PnForLidChatAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
         if (action != null) valueBuilder.pnForLidChatAction(action);

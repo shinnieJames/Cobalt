@@ -7,28 +7,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises the outgoing-mutation wire shape produced by
- * {@link PaymentTosMutationFactory}.
- *
- * @apiNote
- * Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.PaymentTosHandler}
- * whose incoming-side coverage lives in
- * {@code PaymentTosHandlerTest}; the parity target is
- * {@code WAWebPaymentTosSync.getPaymentTosSetMutation}.
- *
- * @implNote
- * This implementation only verifies the oracle loads when present; the
- * full byte-equality check requires a fully populated
+ * Covers the outgoing-mutation wire shape of {@link PaymentTosMutationFactory}.
+ * Full byte-equality would require a fully populated
  * {@link com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction}
- * that the corpus capture does not yet emit, so the test stops at the
- * non-null oracle check until the fixture grows.
+ * that the corpus capture does not yet emit, so this suite stops at confirming the
+ * oracle loads when present and returns early when its fixture is absent.
  */
 @DisplayName("PaymentTosMutationFactory")
 class PaymentTosMutationFactoryTest {
-    /**
-     * Verifies that the oracle loads when the fixture is present.
-     */
     @Test
     @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
     void oracle() {

@@ -11,40 +11,18 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Live wire oracle for {@link AckParser}.
+ * Live wire oracle for {@link AckParser}, feeding captured inbound {@code <ack>} stanzas through the
+ * parser and asserting that the success-side attribute slots round-trip identically.
  *
- * @apiNote
- * Feeds every captured inbound {@code <ack>} stanza through the parser
- * and asserts that the success-side attribute slots (timestamp, optional
- * {@code count} on group acks, optional {@code server_id} on newsletter
- * acks) round-trip identically. Each fixture {@code <topic>.ack.jsonl}
- * corresponds to a successful server ack of an outgoing send, so the
- * captured shape carries no {@code error} attribute and no {@code phash};
- * the error and phash branches are exercised by the synthetic
- * {@link AckParserTest}.
- *
- * @implNote
- * This implementation loads ack fixtures via
- * {@link MessageFixtures#loadEvents}
- * and topic-filters on
- * {@link MessageFixtures#isAvailable}
- * so cells skip cleanly when a particular topic's capture is missing.
+ * <p>Fixtures are loaded by topic via {@link MessageFixtures}: each {@code <topic>.ack.jsonl} capture
+ * is a successful server ack of an outgoing send, so it carries no {@code error} attribute and no
+ * {@code phash}; the error and phash branches are exercised by the synthetic {@link AckParserTest}.
+ * Topics whose capture is missing are filtered out via {@link MessageFixtures#isAvailable}, so cells
+ * skip cleanly rather than fail.
  */
 @DisplayName("AckParser live wire oracle")
 class AckParserLiveOracleTest {
 
-    /**
-     * Returns the topic identifiers whose {@code <topic>.ack.jsonl}
-     * fixture is available in the test resources.
-     *
-     * @apiNote
-     * Feeds {@link #successAckParses(String)} and
-     * {@link #allAcksAreMessageClass()}; topics whose capture is missing
-     * are filtered out via
-     * {@link MessageFixtures#isAvailable}.
-     *
-     * @return the topic {@link Stream}
-     */
     static Stream<String> ackTopics() {
         return Stream.of(
                 "send/peer-text",
@@ -58,10 +36,6 @@ class AckParserLiveOracleTest {
         ).filter(t -> MessageFixtures.isAvailable(t + ".ack"));
     }
 
-    /**
-     * Asserts that the captured ack parses with the success shape (no
-     * {@code error}, no {@code phash}, no {@code refresh_lid}).
-     */
     @ParameterizedTest(name = "ack for {0}")
     @MethodSource("ackTopics")
     @DisplayName("captured server ack parses with the success shape")
@@ -91,9 +65,6 @@ class AckParserLiveOracleTest {
         }
     }
 
-    /**
-     * Asserts that group acks carry a positive {@code count} attribute.
-     */
     @ParameterizedTest(name = "group ack count for {0}")
     @MethodSource("groupAckTopics")
     @DisplayName("group acks carry count=<int> attribute")
@@ -109,30 +80,11 @@ class AckParserLiveOracleTest {
         }
     }
 
-    /**
-     * Returns the group-ack topic identifiers whose fixture is available.
-     *
-     * @apiNote
-     * Feeds {@link #groupAckHasCount(String)}; the topic filter mirrors
-     * {@link #ackTopics()}.
-     *
-     * @return the topic {@link Stream}
-     */
     static Stream<String> groupAckTopics() {
         return Stream.of("send/group-small-text", "send/group-large-text", "send/cag-text")
                 .filter(t -> MessageFixtures.isAvailable(t + ".ack"));
     }
 
-    /**
-     * Asserts that the newsletter ack carries a {@code server_id}
-     * attribute on the raw node even though {@link AckParser} does not
-     * surface it.
-     *
-     * @apiNote
-     * The newsletter publish-receipt id is read by higher-level newsletter
-     * handlers off the raw node rather than off the parsed
-     * {@link AckResult}.
-     */
     @Test
     @DisplayName("newsletter ack carries server_id (not a parsed attribute; preserved on the node)")
     void newsletterAckCarriesServerId() {
@@ -142,17 +94,13 @@ class AckParserLiveOracleTest {
         assertFalse(events.isEmpty(), "newsletter ack fixture must have an event");
         for (var event : events) {
             var ack = MessageFixtures.buildNodeFromEvent(event);
-            // server_id is the newsletter publish receipt id; AckParser
-            // doesn't surface it but it must be on the captured node so
-            // higher-level newsletter handlers can read it.
+            // server_id is the newsletter publish receipt id; AckParser does not surface it but it
+            // must be on the captured node so higher-level newsletter handlers can read it.
             assertTrue(ack.getAttributeAsString("server_id").isPresent(),
                     "newsletter ack must carry server_id attribute");
         }
     }
 
-    /**
-     * Asserts that every captured ack carries {@code class="message"}.
-     */
     @Test
     @DisplayName("every captured ack uses class=\"message\"")
     void allAcksAreMessageClass() {
@@ -166,7 +114,6 @@ class AckParserLiveOracleTest {
                         topic + ": ack class must be \"message\"");
             }
         }
-        // sanity: we did exercise the loop
         assertFalse(topics.isEmpty());
     }
 }

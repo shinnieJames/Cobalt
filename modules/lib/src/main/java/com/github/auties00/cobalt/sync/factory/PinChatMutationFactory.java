@@ -15,32 +15,23 @@ import java.util.List;
 /**
  * Builds outgoing pin-chat sync mutations.
  *
- * @apiNote
- * Drives the chat-list pin gesture and the newsletter pin toggle in the
- * Newsletters surface; consumed on receiving devices by
- * {@link com.github.auties00.cobalt.sync.handler.PinChatHandler} which
- * applies the pin update to the chat table and, when locked, runs the
- * 4-chat-limit eviction. Also used internally by
- * {@link LockChatMutationFactory} and {@link ArchiveChatMutationFactory}
- * to attach a companion unpin when an archive or lock takes effect.
+ * <p>Backs the chat-list pin gesture and the newsletter pin toggle in the Newsletters surface.
+ * Mutations produced here are consumed on receiving devices by
+ * {@link com.github.auties00.cobalt.sync.handler.PinChatHandler}, which applies the pin update to
+ * the chat table and, when locked, runs the four-chat-limit eviction. This factory is also used
+ * internally by {@link LockChatMutationFactory} and {@link ArchiveChatMutationFactory} to attach a
+ * companion unpin when an archive or lock takes effect.
  *
  * @implNote
- * This implementation mirrors {@code WAWebPinChatSync.getPinMutation}.
- * Receiver-side conflict resolution and the
- * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} telemetry emitted on
- * unpinning the 4th chat are handler-side concerns and do not surface
- * here.
+ * This implementation mirrors {@code WAWebPinChatSync.getPinMutation}. Receiver-side conflict
+ * resolution and the {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} telemetry emitted on
+ * unpinning the fourth chat are handler-side concerns and do not surface here.
  */
 public final class PinChatMutationFactory {
     /**
      * Constructs a pin-chat mutation factory.
      *
-     * @apiNote
-     * Required by the dependency-injection container before the factory
-     * is wired into the public pin setter and into
-     * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
-     * The factory keeps no state, so a single instance is sufficient per
-     * client.
+     * <p>The factory keeps no state, so a single instance is sufficient per client.
      */
     public PinChatMutationFactory() {
 
@@ -49,27 +40,21 @@ public final class PinChatMutationFactory {
     /**
      * Builds a pending mutation that pins or unpins a chat or newsletter.
      *
-     * @apiNote
-     * Invoked from the public pin setter on
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient} and from
+     * <p>Called from the public pin setter and from
      * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
-     * Newsletters are supported on the same builder because WA Web's
-     * {@code applyMutation} routes them through the same
-     * {@code applyUpdates} call after detecting
-     * {@code wid.isNewsletter()}.
+     * Newsletters are supported on the same builder because WA Web routes them through the same
+     * apply path after detecting a newsletter JID.
      *
      * @implNote
-     * This implementation passes the supplied {@code chatJid} verbatim
-     * into the index. WA Web's {@code getChatJidMutationIndexForChat}
-     * would swap a PN for its paired LID under LID1x1 migration, which
-     * Cobalt does not maintain at this layer. The mutation is routed
-     * through the {@code RegularLow} collection alongside the other
-     * chat-scoped sync actions and uses {@code SET} as the operation.
+     * This implementation passes the supplied {@code chatJid} verbatim into the index. WA Web's
+     * {@code getChatJidMutationIndexForChat} would swap a PN for its paired LID under LID1x1
+     * migration, which Cobalt does not maintain at this layer. The mutation is routed through the
+     * {@code RegularLow} collection alongside the other chat-scoped sync actions and uses
+     * {@code SET} as the operation.
      *
-     * @param timestamp the mutation timestamp recorded on both the outer
-     *                  mutation and the inner {@code SyncActionValue}
-     * @param pinned    {@code true} to pin the chat, {@code false} to
-     *                  unpin
+     * @param timestamp the mutation timestamp recorded on both the outer mutation and the inner
+     *                  {@code SyncActionValue}
+     * @param pinned    {@code true} to pin the chat, {@code false} to unpin
      * @param chatJid   the JID of the chat or newsletter
      * @return the pending mutation for the pin action
      */

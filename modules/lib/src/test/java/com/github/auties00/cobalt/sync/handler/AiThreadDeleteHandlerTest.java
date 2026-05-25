@@ -27,25 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link AiThreadDeleteHandler}, Cobalt's adapter for
- * {@code WAWebAiThreadDeleteSync}.
- *
- * <p>The handler deletes an AI conversation thread keyed by
- * {@code "<botJid>|<threadId>"} from the flat {@code aiThreadTitles} store.
- *
- * <p>Matrix:
- * <ul>
- *   <li>Metadata wire constants.</li>
- *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
- *   <li>Malformed index branches (short index, blank parts, non-bot JID).</li>
- *   <li>Feature gating via {@link DeviceCapabilities.AiThread.SupportLevel}
- *       - {@code NONE} or unset capability returns {@code UNSUPPORTED}.</li>
- *   <li>ORPHAN when the local store has no matching title.</li>
- *   <li>Happy path: removes the title and returns {@code SUCCESS}.</li>
- *   <li>Default conflict resolution.</li>
- *   <li>Default batch dispatch (n/a override).</li>
- *   <li>{@code getAiThreadDeleteMutation} builder.</li>
- * </ul>
+ * Covers {@link AiThreadDeleteHandler}, which deletes an AI conversation thread keyed by
+ * {@code "<botJid>|<threadId>"} from the flat {@code aiThreadTitles} store. The thread feature is
+ * gated on {@link DeviceCapabilities.AiThread.SupportLevel}, so the harness starts with the
+ * capability unset and individual tests advertise the level they need.
  */
 @DisplayName("AiThreadDeleteHandler")
 class AiThreadDeleteHandlerTest {
@@ -58,22 +43,12 @@ class AiThreadDeleteHandlerTest {
     private WhatsAppStore store;
     private TestWhatsAppClient client;
 
-    /**
-     * Builds a fresh harness with an empty store. The AI-thread capability is
-     * not enabled by default so individual tests can install it.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
-    /**
-     * Enables AI-thread support on the store's primary-device capabilities at
-     * the given {@link DeviceCapabilities.AiThread.SupportLevel}.
-     *
-     * @param level the support level to advertise
-     */
     private void primaryAiThreadSupport(DeviceCapabilities.AiThread.SupportLevel level) {
         var aiThread = new DeviceCapabilitiesAiThreadBuilder()
                 .supportLevel(level)
@@ -84,13 +59,6 @@ class AiThreadDeleteHandlerTest {
         store.setPrimaryDeviceCapabilities(caps);
     }
 
-    /**
-     * Builds a trusted SET mutation with the canonical
-     * {@code ["ai_thread_delete", botJid, threadId]} index.
-     *
-     * @param index the JSON-encoded index
-     * @return the trusted mutation
-     */
     private static DecryptedMutation.Trusted setMutation(String index) {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
         var value = new SyncActionValueBuilder().timestamp(ts).build();
@@ -242,8 +210,7 @@ class AiThreadDeleteHandlerTest {
         @Test
         @DisplayName("the handler ignores the SyncActionValue contents entirely")
         void notExercised() {
-            // The action carries no payload. The index alone identifies the thread. Test that
-            // an empty SyncActionValue is fine when every other precondition is met.
+            // The index alone identifies the thread, so an empty SyncActionValue is still SUCCESS.
             primaryAiThreadSupport(DeviceCapabilities.AiThread.SupportLevel.FULL);
             store.putAiThreadTitle(new AiThreadTitleBuilder()
                     .threadId(STORE_KEY).title("My AI Thread").build());

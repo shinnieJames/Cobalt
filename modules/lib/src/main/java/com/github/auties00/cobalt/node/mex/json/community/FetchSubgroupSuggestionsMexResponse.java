@@ -22,43 +22,40 @@ import java.util.OptionalLong;
 /**
  * Parsed response of the {@code mexFetchSubgroupSuggestions} MEX query.
  *
- * @apiNote Carries the per-community list of suggested subgroups projected
- * from {@code data.xwa2_group_query_by_id.sub_group_suggestions}. Paired
- * with {@link FetchSubgroupSuggestionsMexRequest}; consumed by
- * {@code WAWebQueryAndUpdateSubgroupSuggestionsJob} to populate the
- * "suggested subgroups" picker.
+ * <p>This response carries the per-community list of suggested subgroups
+ * projected from
+ * {@code data.xwa2_group_query_by_id.sub_group_suggestions}. It is the inbound
+ * counterpart of {@link FetchSubgroupSuggestionsMexRequest} and populates the
+ * suggested-subgroups picker.
  *
  * @implNote This implementation preserves the GraphQL connection shape
- * ({@code sub_group_suggestions.edges[].node}) verbatim rather than
- * flattening it into a single list, so callers can distinguish a missing
- * suggestions container from an empty edges list. Unlike WA Web's
- * {@code WAWebMexFetchSubgroupSuggestionsJob.m()} helper, missing
- * {@code id}, {@code creator.id} or {@code is_existing_group} fields do
- * not raise; they collapse to empty fields on the projection.
+ * ({@code sub_group_suggestions.edges[].node}) verbatim rather than flattening
+ * it into a single list, so callers can distinguish a missing suggestions
+ * container from an empty edges list. Unlike WA Web, missing {@code id},
+ * {@code creator.id} or {@code is_existing_group} fields do not raise; they
+ * collapse to empty fields on the projection.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchSubgroupSuggestionsJob")
 public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.Response.Json {
     /**
-     * Community group identifier returned by the relay.
+     * Community group identifier returned by the relay, or {@code null} when
+     * the relay omitted it.
      *
-     * @apiNote Identifies the parent community that the suggestions belong
-     * to; matches the {@code group_id} sent in the request.
+     * <p>Identifies the parent community that the suggestions belong to;
+     * matches the {@code group_id} sent in the request.
      */
     private final String id;
 
     /**
-     * Subgroup suggestions container returned by the relay.
+     * Subgroup suggestions container returned by the relay, or {@code null}
+     * when the relay did not project it.
      *
-     * @apiNote Wraps the {@code edges} GraphQL array of suggested subgroup
-     * nodes; empty when the relay did not project the container.
+     * <p>Wraps the {@code edges} GraphQL array of suggested subgroup nodes.
      */
     private final SubGroupSuggestions subGroupSuggestions;
 
     /**
      * Constructs a new response with the given fields.
-     *
-     * @apiNote Package-private; instances are produced by the
-     * {@link #of(Node)} factory after parsing the inbound IQ payload.
      *
      * @param id                  the community group identifier
      * @param subGroupSuggestions the subgroup suggestions container
@@ -71,15 +68,15 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Entry point for receivers handling
+     * <p>This is the entry point for receivers handling
      * {@code <iq xmlns="w:mex">} replies tagged with
-     * {@link FetchSubgroupSuggestionsMexRequest#QUERY_ID}. Unwraps the
-     * {@code <result>} child, reads its content bytes and decodes the
-     * GraphQL JSON envelope.
+     * {@link FetchSubgroupSuggestionsMexRequest#QUERY_ID}. It unwraps the
+     * {@code <result>} child, reads its content bytes and decodes the GraphQL
+     * JSON envelope.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the
-     *         expected JSON shape is absent
+     * @return the parsed response, or {@link Optional#empty()} if the expected
+     *         JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchSubgroupSuggestionsJob", exports = "mexFetchSubgroupSuggestions",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -92,12 +89,10 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
     /**
      * Returns the community group identifier returned by the relay.
      *
-     * @apiNote Matches the {@code group_id} sent in the request; surfaced as
-     * an {@link Optional} because the field may be absent from malformed
-     * relay replies.
+     * <p>Matches the {@code group_id} sent in the request; the value is empty
+     * when the field is absent from a malformed relay reply.
      *
-     * @return an {@link Optional} containing the identifier, or empty if
-     *         absent
+     * @return an {@link Optional} containing the identifier, or empty if absent
      */
     public Optional<String> id() {
         return Optional.ofNullable(id);
@@ -106,12 +101,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
     /**
      * Returns the subgroup suggestions container.
      *
-     * @apiNote Empty when the relay omitted the
-     * {@code sub_group_suggestions} GraphQL container; the edges list
-     * inside may itself be empty when the community has no candidates.
+     * <p>The value is empty when the relay omitted the
+     * {@code sub_group_suggestions} GraphQL container; the edges list inside
+     * may itself be empty when the community has no candidates.
      *
-     * @return an {@link Optional} containing the container, or empty if
-     *         absent
+     * @return an {@link Optional} containing the container, or empty if absent
      */
     public Optional<SubGroupSuggestions> subGroupSuggestions() {
         return Optional.ofNullable(subGroupSuggestions);
@@ -121,24 +115,20 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
      * Subgroup suggestions container wrapping the {@code edges} array of
      * suggested subgroup nodes.
      *
-     * @apiNote Preserves the GraphQL connection shape; each {@link Edges}
+     * <p>This type preserves the GraphQL connection shape; each {@link Edges}
      * entry wraps a single suggested {@link Edges.Node}.
      */
     public static final class SubGroupSuggestions {
         /**
-         * Suggestion edges returned by the relay.
-         *
-         * @apiNote Mirrors the {@code sub_group_suggestions.edges} GraphQL
-         * array; never {@code null} once
+         * Suggestion edges returned by the relay, never {@code null} once
          * {@link SubGroupSuggestions#of(JSONObject)} has succeeded.
+         *
+         * <p>Mirrors the {@code sub_group_suggestions.edges} GraphQL array.
          */
         private final List<Edges> edges;
 
         /**
          * Constructs a new suggestions container with the given edges.
-         *
-         * @apiNote Package-private; instances are produced by
-         * {@link SubGroupSuggestions#of(JSONObject)}.
          *
          * @param edges the suggestion edges
          */
@@ -149,9 +139,9 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
         /**
          * Returns the suggestion edges.
          *
-         * @apiNote Iterate this list to walk the suggested subgroups; each
-         * entry exposes a {@link Edges#node()} accessor that may be empty
-         * when the relay returned a malformed edge.
+         * <p>Iterate this list to walk the suggested subgroups; each entry
+         * exposes a {@link Edges#node()} accessor that may be empty when the
+         * relay returned a malformed edge.
          *
          * @return the list of edges, empty if absent
          */
@@ -162,23 +152,18 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
         /**
          * Single edge wrapper around a suggested subgroup node.
          *
-         * @apiNote The edge level exists to leave room for future GraphQL
-         * cursor metadata without breaking the binary shape.
+         * <p>The edge level exists to leave room for future GraphQL cursor
+         * metadata without breaking the binary shape.
          */
         public static final class Edges {
             /**
-             * Suggested subgroup node carried by the edge.
-             *
-             * @apiNote Nullable; a {@code null} value indicates the relay
-             * returned an edge envelope without a {@code node} child.
+             * Suggested subgroup node carried by the edge, or {@code null} when
+             * the relay returned an edge envelope without a {@code node} child.
              */
             private final Node node;
 
             /**
              * Constructs a new edge wrapping the given node.
-             *
-             * @apiNote Package-private; instances are produced by
-             * {@link Edges#of(JSONObject)}.
              *
              * @param node the suggested subgroup node
              */
@@ -189,11 +174,9 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
             /**
              * Returns the suggested subgroup node.
              *
-             * @apiNote Empty when the relay returned the edge envelope
-             * without a {@code node} child; WA Web treats this case as an
-             * error ({@code ServerStatusCodeError(500, "null node in
-             * sub_group_suggestions")}), Cobalt prefers to surface it as
-             * {@link Optional#empty()}.
+             * <p>The value is empty when the relay returned the edge envelope
+             * without a {@code node} child; WA Web treats this case as an error
+             * whereas Cobalt prefers to surface it as {@link Optional#empty()}.
              *
              * @return an {@link Optional} containing the node, or empty if
              *         absent
@@ -203,93 +186,88 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
             }
 
             /**
-             * Suggested subgroup node carrying the subgroup identifier with
-             * its subject, description, creator, creation timestamp,
-             * participant count, existing-group flag and hidden-group state.
+             * Suggested subgroup node carrying the subgroup identifier with its
+             * subject, description, creator, creation timestamp, participant
+             * count, existing-group flag and hidden-group state.
              *
-             * @apiNote One per candidate suggestion under the community;
-             * this is the node consumed by
-             * {@code WAWebQueryAndUpdateSubgroupSuggestionsJob} to populate
-             * the suggestions store.
+             * <p>There is one such node per candidate suggestion under the
+             * community; it populates the suggestions store.
              */
             public static final class Node {
                 /**
-                 * Subgroup identifier.
+                 * Subgroup identifier, or {@code null} when the relay omitted
+                 * it.
                  *
-                 * @apiNote The suggested subgroup's WhatsApp WID
-                 * stringified; in WA Web it is funnelled through the
-                 * {@code WAWebWid} constructor with
-                 * {@code intentionallyUsePrivateConstructor: true}.
+                 * <p>The suggested subgroup's WhatsApp WID stringified.
                  */
                 private final String id;
 
                 /**
-                 * Subgroup subject metadata.
+                 * Subgroup subject metadata, or {@code null} when the relay
+                 * omitted it.
                  *
-                 * @apiNote Carries the subject text only; the suggestions
-                 * GraphQL document does not project the creation timestamp.
+                 * <p>Carries the subject text only; the suggestions GraphQL
+                 * document does not project the creation timestamp.
                  */
                 private final Subject subject;
 
                 /**
-                 * Subgroup description metadata.
+                 * Subgroup description metadata, or {@code null} when the relay
+                 * omitted it.
                  *
-                 * @apiNote Carries the description text and the description
-                 * metadata identifier; both fields are projected from the
-                 * {@code description} GraphQL object.
+                 * <p>Carries the description text and the description metadata
+                 * identifier.
                  */
                 private final Description description;
 
                 /**
-                 * Subgroup creator metadata.
+                 * Subgroup creator metadata, or {@code null} when the relay
+                 * omitted it.
                  *
-                 * @apiNote Carries the creator WID; WA Web treats a missing
-                 * creator id as a hard error.
+                 * <p>Carries the creator WID.
                  */
                 private final Creator creator;
 
                 /**
-                 * Subgroup creation epoch-second timestamp.
+                 * Subgroup creation epoch-second timestamp, or {@code null}
+                 * when the relay omitted it.
                  *
-                 * @apiNote Wire-side {@code Long} sourced from the
-                 * {@code creation_time} GraphQL scalar; widened to
-                 * {@link Instant} on read.
+                 * <p>Sourced from the {@code creation_time} GraphQL scalar;
+                 * widened to {@link Instant} on read.
                  */
                 private final Long creationTime;
 
                 /**
-                 * Total participant count for the subgroup.
+                 * Total participant count for the subgroup, or {@code null}
+                 * when the relay omitted it.
                  *
-                 * @apiNote Mirrors the {@code total_participants_count}
-                 * GraphQL scalar; reflects all members, not just those who
-                 * already overlap with the community.
+                 * <p>Mirrors the {@code total_participants_count} GraphQL
+                 * scalar; reflects all members, not just those who already
+                 * overlap with the community.
                  */
                 private final Long totalParticipantsCount;
 
                 /**
-                 * Whether the suggested subgroup is already an existing
-                 * group the user is part of.
+                 * Whether the suggested subgroup is already an existing group
+                 * the user is part of, or {@code null} when the relay omitted
+                 * the field.
                  *
-                 * @apiNote {@code true} when the user is already a member
-                 * (and the community admin could promote it to a subgroup),
+                 * <p>{@code true} when the user is already a member (and the
+                 * community admin could promote it to a subgroup),
                  * {@code false} when it is a discovery suggestion.
                  */
                 private final Boolean isExistingGroup;
 
                 /**
-                 * Hidden-group state tag.
+                 * Hidden-group state tag, or {@code null} when the relay
+                 * omitted it.
                  *
-                 * @apiNote Wire-side string sourced from the
-                 * {@code hidden_group} GraphQL scalar; WA Web stores it
-                 * verbatim on the suggestion record.
+                 * <p>Sourced from the {@code hidden_group} GraphQL scalar.
                  */
                 private final String hiddenGroup;
 
                 /**
                  * Constructs a new suggested subgroup node.
-                 *
-                 * @apiNote Package-private; instances are produced by the
-                 * {@link Node#of(JSONObject)} factory.
                  *
                  * @param id                     the subgroup identifier
                  * @param subject                the subject metadata
@@ -316,9 +294,8 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the subgroup identifier.
                  *
-                 * @apiNote Empty when the relay omitted the {@code id} field
-                 * from this suggested subgroup; WA Web treats this case as
-                 * a hard error.
+                 * <p>The value is empty when the relay omitted the {@code id}
+                 * field from this suggested subgroup.
                  *
                  * @return an {@link Optional} containing the identifier, or
                  *         empty if absent
@@ -330,11 +307,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the subgroup subject metadata.
                  *
-                 * @apiNote Empty when the relay omitted the {@code subject}
-                 * GraphQL object.
+                 * <p>The value is empty when the relay omitted the
+                 * {@code subject} GraphQL object.
                  *
-                 * @return an {@link Optional} containing the subject, or
-                 *         empty if absent
+                 * @return an {@link Optional} containing the subject, or empty
+                 *         if absent
                  */
                 public Optional<Subject> subject() {
                     return Optional.ofNullable(subject);
@@ -343,7 +320,7 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the subgroup description metadata.
                  *
-                 * @apiNote Empty when the relay omitted the
+                 * <p>The value is empty when the relay omitted the
                  * {@code description} GraphQL object; suggestions for groups
                  * without a description return empty here.
                  *
@@ -357,11 +334,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the subgroup creator metadata.
                  *
-                 * @apiNote Empty when the relay omitted the {@code creator}
-                 * GraphQL object; WA Web treats this case as a hard error.
+                 * <p>The value is empty when the relay omitted the
+                 * {@code creator} GraphQL object.
                  *
-                 * @return an {@link Optional} containing the creator, or
-                 *         empty if absent
+                 * @return an {@link Optional} containing the creator, or empty
+                 *         if absent
                  */
                 public Optional<Creator> creator() {
                     return Optional.ofNullable(creator);
@@ -370,12 +347,12 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the subgroup creation timestamp.
                  *
-                 * @apiNote Widened from the wire epoch-second long through
-                 * {@link Instant#ofEpochSecond(long)}; empty when the
-                 * relay omitted the {@code creation_time} field.
+                 * <p>Present values are widened from the wire epoch-second long
+                 * through {@link Instant#ofEpochSecond(long)}; the value is
+                 * empty when the relay omitted the {@code creation_time} field.
                  *
-                 * @return an {@link Optional} containing the
-                 *         {@link Instant}, or empty if absent
+                 * @return an {@link Optional} containing the {@link Instant}, or
+                 *         empty if absent
                  */
                 public Optional<Instant> creationTime() {
                     return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
@@ -384,25 +361,26 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the total participant count for the subgroup.
                  *
-                 * @apiNote Empty when the relay omitted the
-                 * {@code total_participants_count} field; callers that need
-                 * a primitive can fall back to {@code 0}.
+                 * <p>The value is empty when the relay omitted the
+                 * {@code total_participants_count} field; callers that need a
+                 * primitive can fall back to {@code 0}.
                  *
-                 * @return an {@link OptionalLong} containing the count, or
-                 *         empty if absent
+                 * @return an {@link OptionalLong} containing the count, or empty
+                 *         if absent
                  */
                 public OptionalLong totalParticipantsCount() {
                     return totalParticipantsCount != null ? OptionalLong.of(totalParticipantsCount) : OptionalLong.empty();
                 }
 
                 /**
-                 * Returns whether the suggested subgroup is already an
-                 * existing group the user is part of.
+                 * Returns whether the suggested subgroup is already an existing
+                 * group the user is part of.
                  *
-                 * @apiNote Returns {@code false} when the relay omitted the
-                 * field; WA Web treats a missing field as a hard error, but
-                 * Cobalt prefers to fall back to {@code false} so callers
-                 * can decide.
+                 * <p>Returns {@code false} when the relay omitted the field.
+                 *
+                 * @implNote WA Web treats a missing field as a hard error,
+                 * whereas Cobalt falls back to {@code false} so callers can
+                 * decide how to handle the gap.
                  *
                  * @return {@code true} when the flag is present and set,
                  *         {@code false} otherwise
@@ -414,11 +392,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Returns the hidden-group state tag.
                  *
-                 * @apiNote Empty when the GraphQL object did not project a
-                 * {@code hidden_group} field.
+                 * <p>The value is empty when the GraphQL object did not project
+                 * a {@code hidden_group} field.
                  *
-                 * @return an {@link Optional} containing the tag, or empty
-                 *         if absent
+                 * @return an {@link Optional} containing the tag, or empty if
+                 *         absent
                  */
                 public Optional<String> hiddenGroup() {
                     return Optional.ofNullable(hiddenGroup);
@@ -427,25 +405,23 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Subject metadata for a suggested subgroup.
                  *
-                 * @apiNote Carries the subject text value only; unlike
+                 * <p>This carries the subject text value only; unlike
                  * {@link FetchAllSubgroupsMexResponse.SubGroups.Edges.Node.Subject},
                  * the suggestions document does not project a creation
                  * timestamp here.
                  */
                 public static final class Subject {
                     /**
-                     * Subject text value.
+                     * Subject text value, or {@code null} when the GraphQL
+                     * object did not project it.
                      *
-                     * @apiNote User-visible group title as the relay last
+                     * <p>The user-visible group title as the relay last
                      * recorded it.
                      */
                     private final String value;
 
                     /**
                      * Constructs a new subject record.
-                     *
-                     * @apiNote Package-private; instances are produced by
-                     * the {@link Subject#of(JSONObject)} factory.
                      *
                      * @param value the subject text value
                      */
@@ -456,8 +432,8 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     /**
                      * Returns the subject text value.
                      *
-                     * @apiNote Empty when the GraphQL object did not project
-                     * a {@code value} field.
+                     * <p>The value is empty when the GraphQL object did not
+                     * project a {@code value} field.
                      *
                      * @return an {@link Optional} containing the value, or
                      *         empty if absent
@@ -469,12 +445,9 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     /**
                      * Parses a subject record from the given JSON object.
                      *
-                     * @apiNote Package-private; invoked from the parent
-                     * {@link Node#of(JSONObject)} factory.
-                     *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed
-                     *         record, or empty if {@code obj} is {@code null}
+                     * @return an {@link Optional} containing the parsed record,
+                     *         or empty if {@code obj} is {@code null}
                      */
                     static Optional<Subject> of(JSONObject obj) {
                         if (obj == null) {
@@ -487,18 +460,15 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
 
                     /**
                      * Parses a list of subject records from the given JSON
-                     * array.
+                     * array, skipping {@code null} entries.
                      *
-                     * @apiNote Package-private; symmetry helper for callers
-                     * that need to read array-shaped subject data. Currently
-                     * unused at the call sites of this response.
-                     *
-                     * @implNote This implementation skips {@code null}
-                     * entries without raising.
+                     * <p>This is a symmetry helper for array-shaped subject
+                     * data; it is currently unused at the call sites of this
+                     * response.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed records, empty if
-                     *         {@code arr} is {@code null}
+                     * @return the list of parsed records, empty if {@code arr}
+                     *         is {@code null}
                      */
                     static List<Subject> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -516,33 +486,32 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Description metadata for a suggested subgroup.
                  *
-                 * @apiNote Carries the description text and the description
+                 * <p>This carries the description text and the description
                  * metadata identifier the relay assigns to each description
                  * change.
                  */
                 public static final class Description {
                     /**
-                     * Description text value.
+                     * Description text value, or {@code null} when the GraphQL
+                     * object did not project it.
                      *
-                     * @apiNote User-visible group description as the relay
-                     * last recorded it.
+                     * <p>The user-visible group description as the relay last
+                     * recorded it.
                      */
                     private final String value;
 
                     /**
-                     * Description metadata identifier.
+                     * Description metadata identifier, or {@code null} when the
+                     * GraphQL object did not project it.
                      *
-                     * @apiNote Opaque identifier the relay assigns to each
-                     * description revision; used by WA Web to detect stale
+                     * <p>Opaque identifier the relay assigns to each
+                     * description revision; WA Web uses it to detect stale
                      * cached descriptions.
                      */
                     private final String id;
 
                     /**
                      * Constructs a new description record.
-                     *
-                     * @apiNote Package-private; instances are produced by
-                     * the {@link Description#of(JSONObject)} factory.
                      *
                      * @param value the description text value
                      * @param id    the description metadata identifier
@@ -555,8 +524,8 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     /**
                      * Returns the description text value.
                      *
-                     * @apiNote Empty when the GraphQL object did not project
-                     * a {@code value} field.
+                     * <p>The value is empty when the GraphQL object did not
+                     * project a {@code value} field.
                      *
                      * @return an {@link Optional} containing the value, or
                      *         empty if absent
@@ -568,26 +537,22 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     /**
                      * Returns the description metadata identifier.
                      *
-                     * @apiNote Empty when the GraphQL object did not project
-                     * an {@code id} field.
+                     * <p>The value is empty when the GraphQL object did not
+                     * project an {@code id} field.
                      *
-                     * @return an {@link Optional} containing the identifier,
-                     *         or empty if absent
+                     * @return an {@link Optional} containing the identifier, or
+                     *         empty if absent
                      */
                     public Optional<String> id() {
                         return Optional.ofNullable(id);
                     }
 
                     /**
-                     * Parses a description record from the given JSON
-                     * object.
-                     *
-                     * @apiNote Package-private; invoked from the parent
-                     * {@link Node#of(JSONObject)} factory.
+                     * Parses a description record from the given JSON object.
                      *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed
-                     *         record, or empty if {@code obj} is {@code null}
+                     * @return an {@link Optional} containing the parsed record,
+                     *         or empty if {@code obj} is {@code null}
                      */
                     static Optional<Description> of(JSONObject obj) {
                         if (obj == null) {
@@ -600,19 +565,16 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     }
 
                     /**
-                     * Parses a list of description records from the given
-                     * JSON array.
+                     * Parses a list of description records from the given JSON
+                     * array, skipping {@code null} entries.
                      *
-                     * @apiNote Package-private; symmetry helper for callers
-                     * that need to read array-shaped description data.
-                     * Currently unused at the call sites of this response.
-                     *
-                     * @implNote This implementation skips {@code null}
-                     * entries without raising.
+                     * <p>This is a symmetry helper for array-shaped description
+                     * data; it is currently unused at the call sites of this
+                     * response.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed records, empty if
-                     *         {@code arr} is {@code null}
+                     * @return the list of parsed records, empty if {@code arr}
+                     *         is {@code null}
                      */
                     static List<Description> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -630,23 +592,20 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 /**
                  * Creator metadata for a suggested subgroup.
                  *
-                 * @apiNote Carries the creator WID; the suggestions document
+                 * <p>This carries the creator WID; the suggestions document
                  * only projects the {@code id} field of the creator object.
                  */
                 public static final class Creator {
                     /**
-                     * Creator identifier.
+                     * Creator identifier, or {@code null} when the GraphQL
+                     * object did not project it.
                      *
-                     * @apiNote The creator's WhatsApp WID stringified; WA
-                     * Web treats a missing creator id as a hard error.
+                     * <p>The creator's WhatsApp WID stringified.
                      */
                     private final String id;
 
                     /**
                      * Constructs a new creator record.
-                     *
-                     * @apiNote Package-private; instances are produced by
-                     * the {@link Creator#of(JSONObject)} factory.
                      *
                      * @param id the creator identifier
                      */
@@ -657,11 +616,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     /**
                      * Returns the creator identifier.
                      *
-                     * @apiNote Empty when the GraphQL object did not project
-                     * an {@code id} field.
+                     * <p>The value is empty when the GraphQL object did not
+                     * project an {@code id} field.
                      *
-                     * @return an {@link Optional} containing the identifier,
-                     *         or empty if absent
+                     * @return an {@link Optional} containing the identifier, or
+                     *         empty if absent
                      */
                     public Optional<String> id() {
                         return Optional.ofNullable(id);
@@ -670,12 +629,9 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                     /**
                      * Parses a creator record from the given JSON object.
                      *
-                     * @apiNote Package-private; invoked from the parent
-                     * {@link Node#of(JSONObject)} factory.
-                     *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed
-                     *         record, or empty if {@code obj} is {@code null}
+                     * @return an {@link Optional} containing the parsed record,
+                     *         or empty if {@code obj} is {@code null}
                      */
                     static Optional<Creator> of(JSONObject obj) {
                         if (obj == null) {
@@ -688,18 +644,15 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
 
                     /**
                      * Parses a list of creator records from the given JSON
-                     * array.
+                     * array, skipping {@code null} entries.
                      *
-                     * @apiNote Package-private; symmetry helper for callers
-                     * that need to read array-shaped creator data. Currently
-                     * unused at the call sites of this response.
-                     *
-                     * @implNote This implementation skips {@code null}
-                     * entries without raising.
+                     * <p>This is a symmetry helper for array-shaped creator
+                     * data; it is currently unused at the call sites of this
+                     * response.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed records, empty if
-                     *         {@code arr} is {@code null}
+                     * @return the list of parsed records, empty if {@code arr}
+                     *         is {@code null}
                      */
                     static List<Creator> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -715,12 +668,7 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 }
 
                 /**
-                 * Parses a suggested subgroup node from the given JSON
-                 * object.
-                 *
-                 * @apiNote Package-private; invoked from
-                 * {@link Edges#of(JSONObject)} to project the
-                 * {@code edge.node} GraphQL object.
+                 * Parses a suggested subgroup node from the given JSON object.
                  *
                  * @param obj the JSON object to parse
                  * @return an {@link Optional} containing the parsed node, or
@@ -743,15 +691,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
                 }
 
                 /**
-                 * Parses a list of suggested subgroup nodes from the given
-                 * JSON array.
+                 * Parses a list of suggested subgroup nodes from the given JSON
+                 * array, skipping {@code null} entries.
                  *
-                 * @apiNote Package-private; symmetry helper for callers that
-                 * need to read array-shaped node data. Currently unused at
-                 * the call sites of this response.
-                 *
-                 * @implNote This implementation skips {@code null} entries
-                 * without raising.
+                 * <p>This is a symmetry helper for array-shaped node data; it
+                 * is currently unused at the call sites of this response.
                  *
                  * @param arr the JSON array to parse
                  * @return the list of parsed nodes, empty if {@code arr} is
@@ -773,13 +717,9 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
             /**
              * Parses an edge wrapper from the given JSON object.
              *
-             * @apiNote Package-private; invoked from
-             * {@link SubGroupSuggestions#of(JSONObject)} per array element
-             * of {@code sub_group_suggestions.edges}.
-             *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed edge, or
-             *         empty if {@code obj} is {@code null}
+             * @return an {@link Optional} containing the parsed edge, or empty
+             *         if {@code obj} is {@code null}
              */
             static Optional<Edges> of(JSONObject obj) {
                 if (obj == null) {
@@ -791,14 +731,8 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
             }
 
             /**
-             * Parses a list of edge wrappers from the given JSON array.
-             *
-             * @apiNote Package-private; called from
-             * {@link SubGroupSuggestions#of(JSONObject)} to project the
-             * entire {@code edges} array in one shot.
-             *
-             * @implNote This implementation skips {@code null} entries
-             * without raising.
+             * Parses a list of edge wrappers from the given JSON array,
+             * skipping {@code null} entries.
              *
              * @param arr the JSON array to parse
              * @return the list of parsed edges, empty if {@code arr} is
@@ -820,13 +754,9 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
         /**
          * Parses a suggestions container from the given JSON object.
          *
-         * @apiNote Package-private; invoked from
-         * {@link FetchSubgroupSuggestionsMexResponse#of(byte[])} to project
-         * the {@code sub_group_suggestions} GraphQL container.
-         *
          * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed container, or
-         *         empty if {@code obj} is {@code null}
+         * @return an {@link Optional} containing the parsed container, or empty
+         *         if {@code obj} is {@code null}
          */
         static Optional<SubGroupSuggestions> of(JSONObject obj) {
             if (obj == null) {
@@ -838,14 +768,11 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
         }
 
         /**
-         * Parses a list of suggestions containers from the given JSON array.
+         * Parses a list of suggestions containers from the given JSON array,
+         * skipping {@code null} entries.
          *
-         * @apiNote Package-private; symmetry helper for callers that need to
-         * read array-shaped container data. Currently unused at the call
-         * sites of this response.
-         *
-         * @implNote This implementation skips {@code null} entries without
-         * raising.
+         * <p>This is a symmetry helper for array-shaped container data; it is
+         * currently unused at the call sites of this response.
          *
          * @param arr the JSON array to parse
          * @return the list of parsed containers, empty if {@code arr} is
@@ -867,20 +794,19 @@ public final class FetchSubgroupSuggestionsMexResponse implements MexOperation.R
     /**
      * Parses the response from the raw JSON payload bytes.
      *
-     * @apiNote Package-private; only invoked via the {@link #of(Node)} entry
-     * point after unwrapping the IQ stanza.
+     * <p>This is only invoked via the {@link #of(Node)} entry point after the
+     * IQ stanza has been unwrapped.
      *
      * @implNote This implementation requires the {@code data} and
      * {@code data.xwa2_group_query_by_id} envelopes to be present, matching
      * WA Web's pre-check before destructuring; a missing
-     * {@code sub_group_suggestions} container collapses to {@code null} on
-     * the response rather than raising, which is laxer than WA Web's
-     * {@code ServerStatusCodeError(500)} path so callers can decide how to
-     * surface the gap.
+     * {@code sub_group_suggestions} container collapses to {@code null} on the
+     * response rather than raising, which is laxer than WA Web's server error
+     * path so callers can decide how to surface the gap.
      *
      * @param json the raw JSON bytes from the {@code <result>} child
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the envelope is missing
+     * @return an {@link Optional} containing the parsed response, or empty if
+     *         the envelope is missing
      */
     private static Optional<FetchSubgroupSuggestionsMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

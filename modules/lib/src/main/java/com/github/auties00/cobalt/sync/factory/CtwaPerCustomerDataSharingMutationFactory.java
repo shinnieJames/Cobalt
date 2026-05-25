@@ -17,21 +17,17 @@ import java.util.List;
 /**
  * Builds outgoing app-state mutations that record a Click-To-WhatsApp per-customer data-sharing preference.
  *
- * @apiNote
- * Drives the SMB "share my data with the advertiser" toggle that the WA Web
- * CTWA system-message surface ({@code maybeGeneratePerCustomerDataSharingSystemMessage})
- * exposes per customer LID. The mutation populates the
- * {@code data-sharing-3pd-lid-v2} table on the primary device and on every
- * linked device. The factory is the outgoing-mutation counterpart of
+ * <p>The mutation captures the SMB "share my data with the advertiser" toggle
+ * per customer LID, populating the per-customer data-sharing table on the
+ * primary device and on every linked device. This factory builds the outgoing
+ * mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.CtwaPerCustomerDataSharingHandler}.
  */
 public final class CtwaPerCustomerDataSharingMutationFactory {
     /**
-     * Creates an instance with no collaborators.
+     * Creates a stateless factory with no collaborators.
      *
-     * @apiNote
-     * The factory is stateless; a single instance may be shared across the
-     * lifetime of the client.
+     * <p>A single instance may be shared across the lifetime of the client.
      */
     public CtwaPerCustomerDataSharingMutationFactory() {
 
@@ -40,20 +36,16 @@ public final class CtwaPerCustomerDataSharingMutationFactory {
     /**
      * Returns a SET mutation that records the per-customer data-sharing preference for the given account LID.
      *
-     * @apiNote
-     * The mutation index follows
+     * <p>The mutation index follows
      * {@snippet :
      *     ["adsCtwaPerCustomerDataSharing", accountLid.toString()]
      * }
      * and the {@link CtwaPerCustomerDataSharingAction} sub-message carries
      * {@code isCtwaPerCustomerDataSharingEnabled}. The receive-side handler
-     * upserts the row and emits a CTWA system message tagged with
-     * {@code SYNCD_MUTATION} as the entry point.
+     * upserts the row and emits a CTWA system message.
      *
      * @implNote
-     * This implementation captures the timestamp via {@link Instant#now()};
-     * WA Web's {@code WAWebCtwaPerCustomerDataSharingSync.getCtwaPerCustomerDataSharingMutation}
-     * uses {@code WATimeUtils.unixTimeMs()} for the same purpose.
+     * This implementation captures the timestamp via {@link Instant#now()}.
      *
      * @param accountLid the customer's LID-form {@link Jid}
      * @param isEnabled  {@code true} to opt the customer into per-customer data sharing, {@code false} to opt them out

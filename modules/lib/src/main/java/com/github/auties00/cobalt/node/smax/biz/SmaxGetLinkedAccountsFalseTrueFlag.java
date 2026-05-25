@@ -7,42 +7,24 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * The {@code show_on_profile} boolean enum surfaced by the
- * {@code WASmaxInBizLinkingHasShowOnProfileMixin} on the
- * {@code <fb_page/>} and {@code <ig_professional/>} children of
- * the {@code GetLinkedAccounts} success reply.
- *
- * @apiNote
- * Drives the visibility toggle for the linked Facebook page or
- * Instagram-professional identity on the business profile surface
- * consumed by
- * {@code WAWebLinkedAccountsJob.queryLinkedPagesInfo}; callers
- * branch on {@link #TRUE} to render the badge and on {@link #FALSE}
- * to suppress it.
- *
- * @implNote
- * This implementation accepts only the case-insensitive literals
- * {@code "TRUE"} and {@code "FALSE"} surfaced by
- * {@code WASmaxInBizLinkingEnums.ENUM_FALSE_TRUE}.
+ * Models the {@code show_on_profile} boolean enum on the {@code <fb_page/>} and
+ * {@code <ig_professional/>} children of the {@code GetLinkedAccounts} success reply.
+ * <p>
+ * The value controls whether the linked Facebook page or Instagram-professional identity is
+ * shown on the business profile surface: {@link #TRUE} renders the badge and {@link #FALSE}
+ * suppresses it. Only the case-insensitive wire literals {@code "true"} and {@code "false"}
+ * are recognised.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingEnums")
 public enum SmaxGetLinkedAccountsFalseTrueFlag {
     /**
-     * Wire form {@code "false"}.
-     *
-     * @apiNote
-     * The linked identity is hidden on the business profile
-     * surface.
+     * Wire form {@code "false"}; the linked identity is hidden on the business profile surface.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingEnums",
             exports = "ENUM_FALSE_TRUE", adaptation = WhatsAppAdaptation.DIRECT)
     FALSE,
     /**
-     * Wire form {@code "true"}.
-     *
-     * @apiNote
-     * The linked identity is shown on the business profile
-     * surface.
+     * Wire form {@code "true"}; the linked identity is shown on the business profile surface.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingEnums",
             exports = "ENUM_FALSE_TRUE", adaptation = WhatsAppAdaptation.DIRECT)
@@ -50,23 +32,15 @@ public enum SmaxGetLinkedAccountsFalseTrueFlag {
 
     /**
      * Resolves a wire-form value into the matching enum constant.
+     * <p>
+     * Accepts both the attribute and the element-content forms of the show-on-profile mixin.
      *
-     * @apiNote
-     * Invoked while parsing a successful {@code GetLinkedAccounts}
-     * reply for both the attribute and the element-content forms
-     * of the show-on-profile mixin.
-     *
-     * @implNote
-     * This implementation upper-cases the input under
-     * {@link Locale#ROOT} before delegating to
-     * {@link #valueOf(String)} and swallows the resulting
+     * @implNote This implementation upper-cases the input under {@link Locale#ROOT} before
+     * delegating to {@link #valueOf(String)} and swallows the resulting
      * {@link IllegalArgumentException} as an empty result.
-     *
-     * @param value the attribute or element-content value; may be
-     *              {@code null}
-     * @return an {@link Optional} carrying the matching enum
-     *         constant, or empty when the value is {@code null} or
-     *         does not match a documented literal
+     * @param value the attribute or element-content value; may be {@code null}
+     * @return an {@link Optional} carrying the matching enum constant, or empty when the value
+     *         is {@code null} or does not match a documented literal
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingEnums",
             exports = "ENUM_FALSE_TRUE", adaptation = WhatsAppAdaptation.ADAPTED)

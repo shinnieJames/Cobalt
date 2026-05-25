@@ -11,19 +11,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of
- * {@code <notification type="hosted"><onboarding_status/></notification>}.
+ * Holds the inbound projection of {@code <notification type="hosted"><onboarding_status/></notification>}.
  *
- * @apiNote
- * Surfaced by WA Web's {@code WAWebHandleHostedNotification} pipeline
- * when a third-party-coexistence link finishes (or fails) being
- * established; WA Web pivots on
- * {@code (onboardingStatusStatus, productSurface)} and, on
- * {@code ("completed", "automation")}, fires
- * {@code WAWebCTWADetectedOutcomeOnboardingStatusNotification.handleCTWADetectedOutcomeOnboardingStatusNotification(true)}.
- * Cobalt embedders wait on this projection to flip local provider
- * state to active and unblock messages routed through the new
- * integration.
+ * <p>This response is surfaced when a third-party-coexistence link finishes, or fails, being
+ * established. It carries the notification id used to acknowledge delivery, the {@code from} JID
+ * (always the WA server), the {@code status} of the attempt ({@code "completed"} or
+ * {@code "failed"}), the {@code product_surface} it applies to, and the {@code <provider_info/>}
+ * block identifying the integration. WA Web fires its CTWA outcome handler only on the
+ * {@code ("completed", "automation")} pairing; Cobalt consumers wait on this projection to flip
+ * local provider state to active and unblock messages routed through the new integration.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceOnboardingStatusNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceServerNotificationMixin")
@@ -31,73 +27,55 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceEnums")
 public final class SmaxCoexistenceOnboardingStatusNotificationResponse implements SmaxOperation.Response {
     /**
-     * The notification id used for delivery acknowledgement.
+     * Holds the notification id used for delivery acknowledgement.
      *
-     * @apiNote
-     * Routed back to the relay in the {@code <ack/>} the receiver
-     * sends after handling the notification.
+     * <p>Routed back to the relay in the {@code <ack/>} the receiver sends after handling the
+     * notification.
      */
     private final String notificationId;
 
     /**
-     * The notification {@code from} JID, always {@code s.whatsapp.net}.
+     * Holds the notification {@code from} JID, always the WA server JID.
      *
-     * @apiNote
-     * Validated against the WA server domain in {@link #of(Node)}.
+     * <p>Validated against the WA server domain in {@link #of(Node)} so the dispatch layer can
+     * route the projection by sender.
      */
     private final Jid notificationFrom;
 
     /**
-     * The {@code status} attribute on {@code <onboarding_status/>}.
+     * Holds the {@code status} attribute on {@code <onboarding_status/>}.
      *
-     * @apiNote
-     * One of {@code "completed"} or {@code "failed"} per
-     * {@code WASmaxInCoexistenceEnums.ENUM_COMPLETED_FAILED}; only
-     * {@code "completed"} crosses the CTWA outcome handler in WA Web.
+     * <p>One of {@code "completed"} or {@code "failed"}. Only {@code "completed"} crosses the CTWA
+     * outcome handler in WA Web.
      */
     private final String onboardingStatusStatus;
 
     /**
-     * The {@code product_surface} attribute on
-     * {@code <onboarding_status/>}.
+     * Holds the {@code product_surface} attribute on {@code <onboarding_status/>}.
      *
-     * @apiNote
-     * One of {@code "ai_from_meta"}, {@code "automation"},
-     * {@code "business_platform"} per
-     * {@code WASmaxInCoexistenceEnums.ENUM_AIFROMMETA_AUTOMATION_BUSINESSPLATFORM}.
+     * <p>One of {@code "ai_from_meta"}, {@code "automation"}, or {@code "business_platform"}.
      */
     private final String onboardingStatusProductSurface;
 
     /**
-     * The {@code <provider_info/>} sub-child.
+     * Holds the {@code <provider_info/>} sub-child.
      *
-     * @apiNote
-     * Carries the provider's display name, logo URL, and stable id;
-     * see {@link SmaxCoexistenceOffboardingNotificationProviderInfo}
-     * for per-field semantics.
+     * <p>Carries the provider's optional display name, logo URL, and stable id; see
+     * {@link SmaxCoexistenceOffboardingNotificationProviderInfo} for the per-field semantics.
      */
     private final SmaxCoexistenceOffboardingNotificationProviderInfo onboardingStatusProviderInfo;
 
     /**
      * Constructs a new onboarding-status-notification projection.
      *
-     * @apiNote
-     * Called by {@link #of(Node)} after the inbound stanza passes the
-     * type, status, surface, and provider-info validation; embedders
-     * rarely instantiate this class directly outside tests.
+     * <p>Invoked by {@link #of(Node)} after the inbound stanza passes the type, status, surface, and
+     * provider-info validation. Every argument is required.
      *
-     * @param notificationId                 the notification id;
-     *                                       never {@code null}
-     * @param notificationFrom               the from JID; never
-     *                                       {@code null}
-     * @param onboardingStatusStatus         the status enum literal;
-     *                                       never {@code null}
-     * @param onboardingStatusProductSurface the product-surface enum
-     *                                       literal; never
-     *                                       {@code null}
-     * @param onboardingStatusProviderInfo   the provider-info
-     *                                       projection; never
-     *                                       {@code null}
+     * @param notificationId                 the notification id; never {@code null}
+     * @param notificationFrom               the from JID; never {@code null}
+     * @param onboardingStatusStatus         the status enum literal; never {@code null}
+     * @param onboardingStatusProductSurface the product-surface enum literal; never {@code null}
+     * @param onboardingStatusProviderInfo   the provider-info projection; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxCoexistenceOnboardingStatusNotificationResponse(String notificationId,
@@ -115,8 +93,7 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
     /**
      * Returns the notification id.
      *
-     * @apiNote
-     * Used to build the corresponding {@code <ack/>} stanza.
+     * <p>Used to build the corresponding {@code <ack/>} stanza.
      *
      * @return the id; never {@code null}
      */
@@ -127,9 +104,7 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
     /**
      * Returns the notification {@code from} JID.
      *
-     * @apiNote
-     * Always the WA server JID; exposed so dispatch can key handlers
-     * by sender.
+     * <p>Always the WA server JID; exposed so dispatch can key handlers by sender.
      *
      * @return the JID; never {@code null}
      */
@@ -140,10 +115,8 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
     /**
      * Returns the status enum literal.
      *
-     * @apiNote
-     * One of {@code "completed"} or {@code "failed"}; embedders branch
-     * on the value to decide whether the provider is now active or the
-     * onboarding attempt was rejected.
+     * <p>One of {@code "completed"} or {@code "failed"}; consumers branch on the value to decide
+     * whether the provider is now active or the onboarding attempt was rejected.
      *
      * @return the literal; never {@code null}
      */
@@ -154,9 +127,7 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
     /**
      * Returns the product-surface enum literal.
      *
-     * @apiNote
-     * One of {@code "ai_from_meta"}, {@code "automation"},
-     * {@code "business_platform"}.
+     * <p>One of {@code "ai_from_meta"}, {@code "automation"}, or {@code "business_platform"}.
      *
      * @return the literal; never {@code null}
      */
@@ -167,9 +138,8 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
     /**
      * Returns the provider-info projection.
      *
-     * @apiNote
-     * Carries the optional logo URL, name bytes, and provider id; see
-     * {@link SmaxCoexistenceOffboardingNotificationProviderInfo}.
+     * <p>Carries the optional logo URL, name bytes, and provider id; see
+     * {@link SmaxCoexistenceOffboardingNotificationProviderInfo} for the per-field semantics.
      *
      * @return the projection; never {@code null}
      */
@@ -178,23 +148,22 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
     }
 
     /**
-     * Tries to parse a {@link SmaxCoexistenceOnboardingStatusNotificationResponse}
-     * projection from the given stanza.
+     * Parses a {@link SmaxCoexistenceOnboardingStatusNotificationResponse} projection from the given stanza.
      *
-     * @apiNote
-     * Mirrors
-     * {@code WASmaxInCoexistenceOnboardingStatusNotificationRequest.parseOnboardingStatusNotificationRequest}
-     * composed with the status, product-surface, and provider-info
-     * mixins; empty when any attribute fails the documented
-     * validation.
+     * <p>Returns {@link Optional#empty()} unless {@code node} is a {@code <notification>} with an
+     * {@code <onboarding_status/>} child, a {@code from} attribute that resolves to the WA server
+     * JID via {@link Jid#isServerJid(JidServer)} against {@link JidServer#user()}, a {@code type}
+     * attribute equal to {@code "hosted"}, an {@code <onboarding_status/>} {@code status} that is
+     * {@code "completed"} or {@code "failed"}, a {@code product_surface} that is one of
+     * {@code "ai_from_meta"}, {@code "automation"}, or {@code "business_platform"}, a parseable
+     * {@code <provider_info/>} block, and a non-null {@code id} attribute. When all checks pass, a
+     * fully populated projection is returned.
      *
      * @implNote
-     * This implementation only lifts the notification {@code id} from
-     * the server-notification mixin; the server timestamp {@code t}
-     * and the optional {@code offline} batch index (0 to 1024) are
-     * dropped because Cobalt's notification dispatch keys solely on
-     * the id. WA Web's {@code parseServerNotificationMixin} returns
-     * all three fields.
+     * This implementation only lifts the notification {@code id} from the server-notification mixin;
+     * the server timestamp {@code t} and the optional {@code offline} batch index (0 to 1024) are
+     * dropped because Cobalt's notification dispatch keys solely on the id, whereas WA Web's
+     * {@code parseServerNotificationMixin} returns all three fields.
      *
      * @param node the inbound notification stanza; never {@code null}
      * @return an {@link Optional} carrying the projection
@@ -244,6 +213,15 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
         return Optional.of(new SmaxCoexistenceOnboardingStatusNotificationResponse(id, from, status, productSurface, providerInfo));
     }
 
+    /**
+     * Compares this projection with another for value equality.
+     *
+     * <p>Two projections are equal when their notification id, from JID, status, product surface,
+     * and provider-info block are pairwise equal.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} if {@code obj} is an equal projection
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -260,12 +238,27 @@ public final class SmaxCoexistenceOnboardingStatusNotificationResponse implement
                 && Objects.equals(this.onboardingStatusProviderInfo, that.onboardingStatusProviderInfo);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * <p>Combines the hashes of the notification id, from JID, status, product surface, and
+     * provider-info block.
+     *
+     * @return the hash code for this projection
+     */
     @Override
     public int hashCode() {
         return Objects.hash(notificationId, notificationFrom, onboardingStatusStatus,
                 onboardingStatusProductSurface, onboardingStatusProviderInfo);
     }
 
+    /**
+     * Returns a debug string describing this projection.
+     *
+     * <p>Renders the notification id, from JID, status, product surface, and provider-info block.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxCoexistenceOnboardingStatusNotificationResponse[notificationId=" + notificationId

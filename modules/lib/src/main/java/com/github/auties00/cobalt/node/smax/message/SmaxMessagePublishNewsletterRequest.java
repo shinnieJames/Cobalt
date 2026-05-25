@@ -12,46 +12,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <message to=NEWSLETTER_JID>} stanza builder for
- * publishing to a newsletter; carries either a brand-new post or a
- * reply / reaction / poll-vote keyed by the target's server-id.
+ * Builds the outbound {@code <message to=NEWSLETTER_JID>} stanza for publishing to a newsletter.
  *
- * @apiNote
- * Used by callers driving the WA Web
- * {@code WAWebNewsletterSendMessageQueryJob} surface that dispatches
- * through
- * {@code WASmaxMessagePublishNewsletterRPC.sendNewsletterRPC}. The
- * relay replies with a {@link SmaxMessagePublishNewsletterResponse}:
- * a {@link SmaxMessagePublishNewsletterResponse.Success} when the
- * publish landed, a {@link SmaxMessagePublishNewsletterResponse.Negative}
- * when it was rejected.
+ * <p>The publish carries either a brand-new post or a reply, reaction, or poll-vote keyed by the
+ * target's server id, expressed through the {@link SmaxMessagePublishNewsletterPayload} disjunction.
+ * The relay answers with a {@link SmaxMessagePublishNewsletterResponse}: a
+ * {@link SmaxMessagePublishNewsletterResponse.Success} when the publish landed, or a
+ * {@link SmaxMessagePublishNewsletterResponse.Negative} when it was rejected.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterRequest")
 public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.Request {
     /**
-     * The target newsletter JID; routed verbatim into the message's
-     * {@code to} attribute.
+     * Holds the target newsletter JID, routed verbatim into the message's {@code to} attribute.
      */
     private final Jid newsletterJid;
 
     /**
-     * The disjunctive publish payload selecting between server-id
-     * addressing and brand-new-post addressing.
+     * Holds the disjunctive publish payload selecting between server-id addressing and
+     * brand-new-post addressing.
      */
     private final SmaxMessagePublishNewsletterPayload payload;
 
     /**
-     * Constructs a newsletter publish request.
+     * Constructs a newsletter publish request for dispatch through the smax send pipeline.
      *
-     * @apiNote
-     * Use this when assembling a
-     * {@link SmaxMessagePublishNewsletterRequest} for dispatch through
-     * the smax send pipeline.
-     *
-     * @param newsletterJid the target newsletter JID; never
-     *                      {@code null}
-     * @param payload       the disjunctive publish payload; never
-     *                      {@code null}
+     * @param newsletterJid the target newsletter JID; never {@code null}
+     * @param payload       the disjunctive publish payload; never {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxMessagePublishNewsletterRequest(Jid newsletterJid, SmaxMessagePublishNewsletterPayload payload) {
@@ -78,24 +64,18 @@ public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.
     }
 
     /**
-     * Builds the outbound {@code <message>} stanza ready for
-     * dispatch.
+     * Builds the outbound {@code <message>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The brand-new-post arm folds the optional msg-meta-origin and
-     * sender-content-type-media RCAT children alongside the
-     * client-id content node; the server-id arm stamps the
-     * {@code server_id} attribute and embeds the inner content
-     * directly.
+     * <p>The brand-new-post arm folds the optional msg-meta-origin and sender-content-type-media RCAT
+     * children alongside the client-id content node; the server-id arm stamps the {@code server_id}
+     * attribute and embeds the inner content directly. The returned builder is left unbuilt so the
+     * dispatch layer can stamp the message's outer id-correlation envelope.
      *
      * @implNote
-     * This implementation dispatches on the
-     * {@link SmaxMessagePublishNewsletterPayload} sealed-interface
-     * variants via a Java pattern-matching switch; the dispatch layer
-     * stamps the message's outer id-correlation envelope.
+     * This implementation dispatches on the {@link SmaxMessagePublishNewsletterPayload}
+     * sealed-interface variants via a Java pattern-matching switch.
      *
-     * @return a {@link NodeBuilder} carrying the partially-built
-     *         message envelope
+     * @return a {@link NodeBuilder} carrying the partially-built message envelope; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterRequest",
@@ -123,12 +103,11 @@ public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.
     }
 
     /**
-     * Compares this request to another for value equality on the
-     * newsletter JID and publish payload.
+     * Compares this request to another object for value equality on the newsletter JID and publish
+     * payload.
      *
      * @param obj the object to compare against
-     * @return {@code true} when {@code obj} is a
-     *         {@link SmaxMessagePublishNewsletterRequest} with
+     * @return {@code true} when {@code obj} is a {@link SmaxMessagePublishNewsletterRequest} with
      *         identical fields
      */
     @Override
@@ -157,9 +136,7 @@ public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.
     /**
      * Returns a debug-friendly representation of this request.
      *
-     * @apiNote
-     * Intended for logging; the format is not part of the public
-     * contract.
+     * <p>The format is intended for logging and is not part of any stable contract.
      *
      * @return the string form
      */

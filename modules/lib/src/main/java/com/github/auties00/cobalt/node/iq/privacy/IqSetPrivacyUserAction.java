@@ -3,33 +3,29 @@ package com.github.auties00.cobalt.node.iq.privacy;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 
 /**
- * Per-user action enum carried by each {@link IqSetPrivacyUserEntry} on the user-list payload of an
+ * Per-user action carried by each {@link IqSetPrivacyUserEntry} on the user-list payload of an
  * {@link IqSetPrivacyRequest}.
- *
- * @apiNote
- * Use {@link #ADD} when extending the per-category exclusion list (e.g. blocking someone from
- * seeing the user's last-seen) and {@link #REMOVE} when retracting a previous block. The relay
- * applies the mutations in-place and echoes the new {@link IqSetPrivacyResponse.CategoryOutcome}
- * back.
+ * <p>
+ * {@link #ADD} extends the per-category exclusion list (for example, blocking someone from seeing
+ * the user's last-seen) and {@link #REMOVE} retracts a previous block. The relay applies the
+ * mutations in place and echoes the new {@link IqSetPrivacyResponse.CategoryOutcome} back.
  *
  * @implNote
  * This implementation mirrors the {@code PrivacyUserAction} enum exported by
- * {@code WAWebSetPrivacyJob} (values {@code "add"} / {@code "remove"}).
+ * {@code WAWebSetPrivacyJob} (values {@code "add"} and {@code "remove"}).
  */
 @WhatsAppWebModule(moduleName = "WAWebSetPrivacyJob")
 public enum IqSetPrivacyUserAction {
     /**
      * The {@code add} action.
-     *
-     * @apiNote
+     * <p>
      * Adds the user to the per-category exclusion list.
      */
     ADD("add"),
 
     /**
      * The {@code remove} action.
-     *
-     * @apiNote
+     * <p>
      * Removes the user from the per-category exclusion list.
      */
     REMOVE("remove");
@@ -42,9 +38,6 @@ public enum IqSetPrivacyUserAction {
     /**
      * Constructs a user-action constant from its wire token.
      *
-     * @apiNote
-     * Constructor is package-private as enum constants are the only producers.
-     *
      * @param wire the wire token; never {@code null}
      */
     IqSetPrivacyUserAction(String wire) {
@@ -53,9 +46,8 @@ public enum IqSetPrivacyUserAction {
 
     /**
      * Returns the wire token for this action.
-     *
-     * @apiNote
-     * Use when serialising a {@code <user action=...>} attribute on an
+     * <p>
+     * Used when serialising a {@code <user action=...>} attribute on an
      * {@link IqSetPrivacyUserEntry}.
      *
      * @return the wire token; never {@code null}

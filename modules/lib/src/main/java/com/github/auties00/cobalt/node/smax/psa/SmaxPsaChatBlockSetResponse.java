@@ -13,16 +13,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound reply to a {@link SmaxPsaChatBlockSetRequest}, projecting
- * either the {@link Success} variant carrying the resulting PSA blocking
- * status or the {@link ServerError} variant collapsing the documented
- * {@code 5xx}/{@code 4xx} errors.
+ * Models the inbound reply to a {@link SmaxPsaChatBlockSetRequest} as a
+ * sealed disjunction of its documented variants.
  *
- * @apiNote
- * Consumed by the Cobalt analogue of
- * {@code WAWebBlockUserJob.blockUnblockPSAUser}: a {@link Success} commits
- * the local "PSA muted" preference change; a {@link ServerError} surfaces
- * the server's reason for refusing the flip.
+ * <p>A reply resolves to either the {@link Success} variant, which carries
+ * the resulting PSA {@link SmaxPsaChatBlockGetBlockingStatus}, or the
+ * {@link ServerError} variant, which collapses the documented {@code 5xx} and
+ * {@code 4xx} error envelopes into a single {@code (errorCode, errorText)}
+ * pair. A successful reply confirms the new mute state for the local PSA-muted
+ * preference; an error reply surfaces the relay's reason for refusing the flip.
  */
 public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Response
         permits SmaxPsaChatBlockSetResponse.Success, SmaxPsaChatBlockSetResponse.ServerError {
@@ -30,10 +29,14 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
     /**
      * Parses an inbound stanza into the first matching reply variant.
      *
-     * @apiNote
-     * Mirrors {@code WASmaxPsaChatBlockSetRPC.sendChatBlockSetRPC}; Cobalt
-     * returns {@link Optional#empty()} on no-match instead of throwing the
-     * JS {@code SmaxParsingFailure}.
+     * <p>Attempts {@link Success#of(Node, Node)} first and falls back to
+     * {@link ServerError#of(Node, Node)}, returning {@link Optional#empty()}
+     * when neither variant matches.
+     *
+     * @implNote
+     * This implementation returns an empty {@link Optional} on no-match
+     * rather than throwing, diverging from the WA Web parser that raises a
+     * {@code SmaxParsingFailure}.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -53,25 +56,24 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The successful reply carrying the resulting PSA blocking status.
+     * Models the successful reply carrying the resulting PSA blocking status.
      *
-     * @apiNote
-     * The {@link #blockingStatus()} value confirms whether the channel is
-     * now muted or unmuted server-side; callers commit this state to the
-     * local "PSA muted" preference.
+     * <p>The {@link #blockingStatus()} value confirms whether the channel is
+     * now muted or delivering server-side, which callers commit to the local
+     * PSA-muted preference.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPsaChatBlockSetResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInPsaIQResultResponseMixin")
     final class Success implements SmaxPsaChatBlockSetResponse {
         /**
-         * The blocking status after the toggle was applied. Either
+         * Holds the blocking status after the toggle was applied, either
          * {@link SmaxPsaChatBlockGetBlockingStatus#BLOCKED} or
          * {@link SmaxPsaChatBlockGetBlockingStatus#UNBLOCKED}.
          */
         private final SmaxPsaChatBlockGetBlockingStatus blockingStatus;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a successful reply around the given blocking status.
          *
          * @param blockingStatus the blocking status; never {@code null}
          * @throws NullPointerException if {@code blockingStatus} is {@code null}
@@ -92,13 +94,12 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
         /**
          * Parses an inbound stanza into a {@link Success} variant.
          *
-         * @implNote
-         * This implementation mirrors {@code parseChatBlockSetResponseSuccess}:
-         * after validating the shared
-         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} envelope it
-         * requires an inner {@code <blocking>} child carrying a {@code status}
-         * attribute admitted by
-         * {@link SmaxPsaChatBlockGetBlockingStatus#ofWire(String)}.
+         * <p>Validates the shared
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} result
+         * envelope, then requires an inner {@code <blocking>} child whose
+         * {@code status} attribute resolves through
+         * {@link SmaxPsaChatBlockGetBlockingStatus#ofWire(String)}. Any
+         * missing or unrecognised element yields {@link Optional#empty()}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -150,30 +151,31 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The server-error reply collapsing the four documented PSA error
-     * variants into a single {@code (errorCode, errorText)} pair.
+     * Models the server-error reply collapsing the documented PSA error
+     * envelopes into a single {@code (errorCode, errorText)} pair.
      *
-     * @apiNote
-     * The collapse strategy is identical to
-     * {@link SmaxPsaChatBlockGetResponse.ServerError}: the four mixins
-     * ({@code 500}/{@code 408}/{@code 503}/{@code 429}) carry only a code
-     * and an optional message and the surfaced UI only consumes the pair.
+     * @implNote
+     * This implementation flattens the four WA Web error mixins
+     * ({@code 500}, {@code 408}, {@code 503}, {@code 429}) into one pair,
+     * mirroring {@link SmaxPsaChatBlockGetResponse.ServerError}, because the
+     * surfaced behaviour consumes only the numeric code and the optional
+     * message.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPsaChatBlockSetResponseServerError")
     @WhatsAppWebModule(moduleName = "WASmaxInPsaChatBlockError")
     final class ServerError implements SmaxPsaChatBlockSetResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text supplied by the relay.
+         * Holds the optional human-readable error text supplied by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a server-error reply around the given code and text.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be {@code null}
@@ -184,7 +186,7 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -193,7 +195,7 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text supplied by the relay.
          *
          * @return an {@link Optional} carrying the error text, or empty when omitted
          */
@@ -204,12 +206,11 @@ public sealed interface SmaxPsaChatBlockSetResponse extends SmaxOperation.Respon
         /**
          * Parses an inbound stanza into a {@link ServerError} variant.
          *
-         * @implNote
-         * This implementation delegates to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which validates the IQ-error envelope and extracts the
-         * {@code (code, text)} pair from whichever of the four documented
-         * error mixins matched.
+         * <p>Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} to
+         * validate the IQ-error envelope and extract the {@code (code, text)}
+         * pair, returning {@link Optional#empty()} when the stanza does not
+         * match a server-error envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request

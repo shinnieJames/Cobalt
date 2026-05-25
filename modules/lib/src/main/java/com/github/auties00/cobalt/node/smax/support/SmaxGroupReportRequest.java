@@ -16,21 +16,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound {@code spam} IQ that reports a WhatsApp group, with the offending messages and calls
- * inlined under {@code <spam_list>}.
+ * Reports a WhatsApp group as an outbound {@code spam} IQ, inlining the offending messages and
+ * calls under {@code <spam_list>}.
  *
- * @apiNote
- * Drives the "Report group" surface invoked by WA Web's {@code WAWebReportSpamJob}; pair with
- * {@link SmaxGroupReportResponse} to consume the relay's verdict. The {@link Builder} mirrors
- * WA Web's six optional mixins layered over the base envelope; a minimal report only requires
- * {@link Builder#spamListJid(Jid)} and {@link Builder#spamListSpamFlow(String)}.
+ * <p>A minimal report requires only {@link Builder#spamListJid(Jid)} and
+ * {@link Builder#spamListSpamFlow(String)}; the remaining optional fields (source, subject,
+ * is-known-chat, FRX) refine the attribution. The relay's verdict is parsed by
+ * {@link SmaxGroupReportResponse}.
  *
  * @implNote
- * This implementation flattens the WA Web mixin chain (BaseIQSetRequest, BaseReport,
- * EntitySubject, IsKnownChat, FRX) into a single {@link NodeBuilder} that pins
+ * This implementation flattens the WA Web mixin chain into a single {@link NodeBuilder} that pins
  * {@code xmlns="spam"}, {@code to=JidServer.user()} and {@code type="set"}. Optional attributes
- * and children are only emitted when their builder fields are non-{@code null} or non-empty,
- * matching WA Web's {@code OPTIONAL}/{@code OPTIONAL_CHILD} semantics.
+ * and children are emitted only when their builder fields are non-{@code null} or non-empty.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamGroupReportRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamBaseReportMixin")
@@ -40,82 +37,56 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutSpamIsKnownChatMixin")
 public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     /**
-     * The group JID being reported.
-     *
-     * @apiNote
-     * Routed into the {@code <spam_list jid="..."/>} attribute via WA Web's {@code GROUP_JID}
-     * marshaller.
+     * Holds the group JID being reported, routed into {@code <spam_list jid="..."/>}.
      */
     private final Jid spamListJid;
 
     /**
-     * The spam-flow identifier surfacing the user-facing report flow.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list spam_flow="..."/>}; carries the WA Web enum that names the
-     * surface from which the report was issued.
+     * Holds the spam-flow identifier routed into {@code <spam_list spam_flow="..."/>}, naming the
+     * user-facing surface that issued the report.
      */
     private final String spamListSpamFlow;
 
     /**
-     * The optional adder JID (the user who added the reporter to the group).
-     *
-     * @apiNote
-     * Routed into {@code <spam_list source="..."/>} when present; empty when WA Web's
-     * EntitySubject mixin was not supplied a source.
+     * Holds the optional adder JID (the user who added the reporter to the group), routed into
+     * {@code <spam_list source="..."/>} when present.
      */
     private final Jid spamListSource;
 
     /**
-     * The optional group subject string echoed by the relay for attribution context.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list subject="..."/>} when present.
+     * Holds the optional group subject string routed into {@code <spam_list subject="..."/>} when
+     * present.
      */
     private final String spamListSubject;
 
     /**
-     * The optional {@code is_known_chat} marker indicating whether the reporter has prior
-     * history with the group.
-     *
-     * @apiNote
-     * Routed into {@code <spam_list is_known_chat="..."/>} when present.
+     * Holds the optional {@code is_known_chat} marker routed into
+     * {@code <spam_list is_known_chat="..."/>} when present, indicating prior history with the
+     * group.
      */
     private final String spamListIsKnownChat;
 
     /**
-     * The optional pre-built {@code <frx>} (free-form reporting extensions) child.
-     *
-     * @apiNote
-     * Appended verbatim under the IQ envelope when present; bundles tagset, context and
-     * parameters that the FRX backend consumes.
+     * Holds the optional pre-built {@code <frx>} (free-form reporting extensions) child appended
+     * verbatim under the IQ envelope when present.
      */
     private final Node frxChild;
 
     /**
-     * The pre-built {@code <message>} children harvested from the offending chat (WA Web caps
-     * this at 210).
-     *
-     * @apiNote
-     * Appended in insertion order under {@code <spam_list>}; never {@code null}.
+     * Holds the pre-built {@code <message>} children harvested from the offending chat (WA Web
+     * caps this at 210), appended in insertion order under {@code <spam_list>}; never
+     * {@code null}.
      */
     private final List<Node> messageChildren;
 
     /**
-     * The pre-built {@code <call>} children harvested from the offending chat (WA Web caps this
-     * at 5).
-     *
-     * @apiNote
-     * Appended in insertion order under {@code <spam_list>}; never {@code null}.
+     * Holds the pre-built {@code <call>} children harvested from the offending chat (WA Web caps
+     * this at 5), appended in insertion order under {@code <spam_list>}; never {@code null}.
      */
     private final List<Node> callChildren;
 
     /**
      * Constructs a request from the assembled {@link Builder} state.
-     *
-     * @apiNote
-     * Invoked by {@link Builder#build()}; consumers use {@link #builder()} rather than calling
-     * this constructor directly.
      *
      * @param builder the source builder; never {@code null}
      */
@@ -132,10 +103,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns a new {@link Builder}.
-     *
-     * @apiNote
-     * The canonical entry point for assembling a group spam report.
+     * Returns a new {@link Builder}, the canonical entry point for assembling a group spam
+     * report.
      *
      * @return a new builder; never {@code null}
      */
@@ -144,10 +113,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the group JID being reported.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list jid>} value.
+     * Returns the group JID being reported, the {@code <spam_list jid>} value.
      *
      * @return the JID; never {@code null}
      */
@@ -156,10 +122,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the spam-flow identifier.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list spam_flow>} value naming the user-facing surface.
+     * Returns the spam-flow identifier, the {@code <spam_list spam_flow>} value.
      *
      * @return the spam-flow; never {@code null}
      */
@@ -168,10 +131,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional adder JID.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list source>} value; empty when WA Web did not supply one.
+     * Returns the optional adder JID, the {@code <spam_list source>} value.
      *
      * @return an {@link Optional} carrying the JID, or empty when omitted
      */
@@ -180,10 +140,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional group subject.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list subject>} value.
+     * Returns the optional group subject, the {@code <spam_list subject>} value.
      *
      * @return an {@link Optional} carrying the subject, or empty when omitted
      */
@@ -192,10 +149,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional {@code is_known_chat} marker.
-     *
-     * @apiNote
-     * Surfaces the {@code <spam_list is_known_chat>} value.
+     * Returns the optional {@code is_known_chat} marker, the {@code <spam_list is_known_chat>}
+     * value.
      *
      * @return an {@link Optional} carrying the marker, or empty when omitted
      */
@@ -204,10 +159,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional FRX child.
-     *
-     * @apiNote
-     * Surfaces the pre-built {@code <frx>} payload appended to the IQ.
+     * Returns the optional pre-built {@code <frx>} child appended to the IQ.
      *
      * @return an {@link Optional} carrying the node, or empty when omitted
      */
@@ -216,10 +168,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the offending-message children.
-     *
-     * @apiNote
-     * Surfaces the {@code <message>} children that were captured from the chat at report time.
+     * Returns the offending-message children captured from the chat at report time.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -228,10 +177,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the offending-call children.
-     *
-     * @apiNote
-     * Surfaces the {@code <call>} children that were captured from the chat at report time.
+     * Returns the offending-call children captured from the chat at report time.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -242,14 +188,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Emits the outbound group-report IQ ready for {@link com.github.auties00.cobalt.node.smax}
-     * dispatch.
-     *
-     * @implNote
-     * This implementation assembles the {@code <spam_list>} child first (attributes plus
-     * message and call children) and only attaches the FRX child to the outer {@code <iq>} when
-     * present; identical to WA Web's mixin composition order.
+     * <p>Assembles the {@code <spam_list>} child (attributes plus message and call children) and
+     * attaches the FRX child to the outer {@code <iq>} when present.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutSpamGroupReportRequest",
@@ -287,6 +227,12 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
                 .content(iqChildren);
     }
 
+    /**
+     * Compares this request to another for value equality across all fields.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is an equal {@link SmaxGroupReportRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -306,12 +252,22 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
                 && Objects.equals(this.callChildren, that.callChildren);
     }
 
+    /**
+     * Returns a hash code derived from all fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(spamListJid, spamListSpamFlow, spamListSource, spamListSubject,
                 spamListIsKnownChat, frxChild, messageChildren, callChildren);
     }
 
+    /**
+     * Returns a debug string listing the scalar fields and the child counts.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupReportRequest[spamListJid=" + spamListJid
@@ -324,98 +280,67 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Step-builder that assembles a {@link SmaxGroupReportRequest} from the WA Web mixin inputs.
+     * Assembles a {@link SmaxGroupReportRequest} from the WA Web mixin inputs.
      *
-     * @apiNote
-     * The canonical entry point for callers that need to issue a group spam report; use
-     * {@link SmaxGroupReportRequest#builder()} to obtain an instance.
+     * <p>The required {@link #spamListJid} and {@link #spamListSpamFlow} are validated at setter
+     * time; the remaining fields are optional. Obtain an instance via
+     * {@link SmaxGroupReportRequest#builder()}.
      *
      * @implNote
-     * This implementation collects the optional mixin payloads into private fields and validates
-     * the required {@link #spamListJid} and {@link #spamListSpamFlow} at setter time; the
-     * resulting {@code build()} copy is immutable.
+     * This implementation collects the optional mixin payloads into private fields and produces an
+     * immutable copy from {@link #build()}.
      */
     public static final class Builder {
         /**
-         * The required group JID.
-         *
-         * @apiNote
-         * Set via {@link #spamListJid(Jid)}; must be set before {@link #build()}.
+         * Holds the required group JID, set via {@link #spamListJid(Jid)}.
          */
         private Jid spamListJid;
 
         /**
-         * The required spam-flow string.
-         *
-         * @apiNote
-         * Set via {@link #spamListSpamFlow(String)}; must be set before {@link #build()}.
+         * Holds the required spam-flow string, set via {@link #spamListSpamFlow(String)}.
          */
         private String spamListSpamFlow;
 
         /**
-         * The optional adder JID.
-         *
-         * @apiNote
-         * Set via {@link #spamListSource(Jid)}; {@code null} when omitted.
+         * Holds the optional adder JID, set via {@link #spamListSource(Jid)}.
          */
         private Jid spamListSource;
 
         /**
-         * The optional group subject.
-         *
-         * @apiNote
-         * Set via {@link #spamListSubject(String)}; {@code null} when omitted.
+         * Holds the optional group subject, set via {@link #spamListSubject(String)}.
          */
         private String spamListSubject;
 
         /**
-         * The optional {@code is_known_chat} marker.
-         *
-         * @apiNote
-         * Set via {@link #spamListIsKnownChat(String)}; {@code null} when omitted.
+         * Holds the optional {@code is_known_chat} marker, set via
+         * {@link #spamListIsKnownChat(String)}.
          */
         private String spamListIsKnownChat;
 
         /**
-         * The optional pre-built FRX child node.
-         *
-         * @apiNote
-         * Set via {@link #frxChild(Node)}; {@code null} when omitted.
+         * Holds the optional pre-built FRX child node, set via {@link #frxChild(Node)}.
          */
         private Node frxChild;
 
         /**
-         * The accumulated {@code <message>} children.
-         *
-         * @apiNote
-         * Appended via {@link #addMessageChild(Node)}; defaults to an empty list.
+         * Accumulates the {@code <message>} children appended via {@link #addMessageChild(Node)}.
          */
         private final List<Node> messageChildren = new ArrayList<>();
 
         /**
-         * The accumulated {@code <call>} children.
-         *
-         * @apiNote
-         * Appended via {@link #addCallChild(Node)}; defaults to an empty list.
+         * Accumulates the {@code <call>} children appended via {@link #addCallChild(Node)}.
          */
         private final List<Node> callChildren = new ArrayList<>();
 
         /**
          * Constructs an empty builder.
-         *
-         * @apiNote
-         * Prefer {@link SmaxGroupReportRequest#builder()} over invoking this constructor
-         * directly.
          */
         public Builder() {
         }
 
         /**
-         * Sets the target group JID.
-         *
-         * @apiNote
-         * Required; the resulting {@code <spam_list jid>} attribute names the group being
-         * reported.
+         * Sets the target group JID, naming the group being reported through
+         * {@code <spam_list jid>}.
          *
          * @param spamListJid the JID; never {@code null}
          * @return this builder
@@ -427,11 +352,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the spam-flow identifier.
-         *
-         * @apiNote
-         * Required; the resulting {@code <spam_list spam_flow>} attribute names the user-facing
-         * surface that triggered the report.
+         * Sets the spam-flow identifier, naming the user-facing surface that triggered the report
+         * through {@code <spam_list spam_flow>}.
          *
          * @param spamListSpamFlow the spam-flow; never {@code null}
          * @return this builder
@@ -444,11 +366,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional adder JID.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list source>} when set; identifies the user who added the
-         * reporter to the group.
+         * Sets the optional adder JID, identifying the user who added the reporter to the group
+         * through {@code <spam_list source>}.
          *
          * @param spamListSource the JID; may be {@code null}
          * @return this builder
@@ -459,11 +378,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional group subject.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list subject>} when set; surfaces the human-readable group
-         * title for attribution.
+         * Sets the optional group subject surfaced for attribution through
+         * {@code <spam_list subject>}.
          *
          * @param spamListSubject the subject; may be {@code null}
          * @return this builder
@@ -474,11 +390,8 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional {@code is_known_chat} marker.
-         *
-         * @apiNote
-         * Routes into {@code <spam_list is_known_chat>} when set; flags whether the reporter
-         * has prior history with the group.
+         * Sets the optional {@code is_known_chat} marker flagging prior history with the group
+         * through {@code <spam_list is_known_chat>}.
          *
          * @param spamListIsKnownChat the marker; may be {@code null}
          * @return this builder
@@ -489,12 +402,11 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional pre-built {@code <frx>} child.
+         * Sets the optional pre-built {@code <frx>} child appended verbatim under the outer
+         * {@code <iq>}.
          *
-         * @apiNote
-         * The supplied node is appended verbatim under the outer {@code <iq>} when set; the
-         * caller is responsible for building the tagset / context / parameters per the WA Web
-         * FRX schema.
+         * <p>The caller is responsible for building the tagset, context and parameters per the
+         * WA Web FRX schema.
          *
          * @param frxChild the FRX node; may be {@code null}
          * @return this builder
@@ -507,9 +419,9 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         /**
          * Appends a pre-built {@code <message>} child to the spam-list payload.
          *
-         * @apiNote
-         * WA Web caps the count at 210; this implementation does not enforce the cap and lets
-         * the relay reject oversize lists.
+         * @implNote
+         * WA Web caps the count at 210; this implementation does not enforce the cap and lets the
+         * relay reject oversize lists.
          *
          * @param messageNode the node; never {@code null}
          * @return this builder
@@ -524,7 +436,7 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
         /**
          * Appends a pre-built {@code <call>} child to the spam-list payload.
          *
-         * @apiNote
+         * @implNote
          * WA Web caps the count at 5; this implementation does not enforce the cap and lets the
          * relay reject oversize lists.
          *
@@ -540,10 +452,6 @@ public final class SmaxGroupReportRequest implements SmaxOperation.Request {
 
         /**
          * Builds an immutable {@link SmaxGroupReportRequest} from the accumulated state.
-         *
-         * @apiNote
-         * Invoke once after all required and optional fields have been set; the resulting
-         * instance can be reused across dispatches.
          *
          * @return a new {@link SmaxGroupReportRequest}; never {@code null}
          * @throws NullPointerException if any required field was not set

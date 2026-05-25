@@ -9,26 +9,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Structural tests for {@link NewsletterStanza}, mirroring the SMAX
- * publish-message payload mixin.
- *
- * @apiNote
- * Pins the {@code <plaintext>} wrapper: presence of the {@code mediatype}
- * attribute only when supplied, byte-for-byte payload round-trip, the
- * empty-payload edge case, and the absence of any Signal envelope on the
- * resulting node.
- *
- * @implNote
- * This implementation drives the two static overloads directly; no
- * fixture or store is needed.
+ * Structural tests for {@link NewsletterStanza}, pinning the
+ * {@code <plaintext>} wrapper: presence of the {@code mediatype} attribute
+ * only when supplied, byte-for-byte payload round-trip, the empty-payload
+ * edge case, and the absence of any Signal envelope on the resulting node.
+ * The two static overloads are driven directly; no fixture or store is
+ * needed.
  */
 @DisplayName("NewsletterStanza")
 class NewsletterStanzaTest {
 
-    /**
-     * The single-argument overload emits a bare
-     * {@code <plaintext>payload</plaintext>} with no attributes.
-     */
     @Test
     @DisplayName("buildPlaintext(bytes): emits <plaintext>payload</plaintext> with no attributes")
     void plaintextBasic() {
@@ -41,10 +31,6 @@ class NewsletterStanzaTest {
         assertArrayEquals(payload, node.toContentBytes().orElseThrow());
     }
 
-    /**
-     * The two-argument overload propagates the {@code mediatype}
-     * attribute verbatim.
-     */
     @Test
     @DisplayName("buildPlaintext(bytes, mediaType): mediatype attribute propagates verbatim")
     void plaintextWithMediaType() {
@@ -55,10 +41,6 @@ class NewsletterStanzaTest {
         assertArrayEquals(payload, node.toContentBytes().orElseThrow());
     }
 
-    /**
-     * Every SMAX media subtype string round-trips through the
-     * {@code mediatype} attribute.
-     */
     @Test
     @DisplayName("plaintext mediatype variants round-trip for image / video / url / audio")
     void plaintextMediaTypes() {
@@ -69,10 +51,6 @@ class NewsletterStanzaTest {
         }
     }
 
-    /**
-     * An empty payload is still a valid {@code <plaintext>} node with
-     * zero-byte content.
-     */
     @Test
     @DisplayName("empty payload: zero-byte content is still a valid plaintext node")
     void plaintextEmptyPayload() {
@@ -82,10 +60,6 @@ class NewsletterStanzaTest {
         assertEquals(0, bytes.length);
     }
 
-    /**
-     * Newsletter sends never carry an {@code <enc>} envelope; the
-     * payload travels in clear.
-     */
     @Test
     @DisplayName("no Signal envelope: plaintext node has no <enc> child")
     void noEncEnvelope() {

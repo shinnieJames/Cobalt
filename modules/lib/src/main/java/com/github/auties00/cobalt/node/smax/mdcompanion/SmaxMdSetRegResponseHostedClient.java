@@ -12,60 +12,47 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound
- * {@code <iq type="result"><hosted-pair-set><device-identity/></hosted-pair-set></iq>}
- * reply emitted by a hosted (Meta-hosted / business-platform)
- * companion after verifying a {@link SmaxMdSetRegResponse}.
+ * Models the outbound
+ * {@code <iq type="result"><hosted-pair-set><device-identity/></hosted-pair-set></iq>} reply a
+ * hosted (Meta-hosted, business-platform) companion emits after verifying a
+ * {@link SmaxMdSetRegResponse}.
  *
- * @apiNote
- * Hosted accounts (recognised by the ADV
- * {@code ADVEncryptionType.HOSTED} signal inside the inbound device
- * identity) reply with the bare {@code <hosted-pair-set/>} envelope
- * rather than the regular {@code <pair-device-sign/>} envelope:
- * key-attestation and GPIA are not signalled, and there is no
- * {@code key-index} attribute on the inner {@code <device-identity/>}.
- * Non-hosted companions use {@link SmaxMdSetRegResponseClient}
- * instead, and rejection flows use {@link SmaxMdSetRegResponseError}.
+ * <p>Hosted accounts, recognised by the ADV {@code ADVEncryptionType.HOSTED} signal inside the
+ * inbound device identity, reply with the bare {@code <hosted-pair-set/>} envelope rather than the
+ * regular {@code <pair-device-sign/>} envelope: key-attestation and GPIA are not signalled, and
+ * there is no {@code key-index} attribute on the inner {@code <device-identity/>}. Non-hosted
+ * companions use {@link SmaxMdSetRegResponseClient} instead, and rejection flows use
+ * {@link SmaxMdSetRegResponseError}.
  *
- * @implNote
- * This implementation folds WA Web's
- * {@code WASmaxOutMdHostedCompanionSetRegResponseBundleMixin} into
- * the builder: the outer envelope is pinned to
- * {@code <iq to="s.whatsapp.net" type="result">} and the inner
- * {@code <hosted-pair-set/>} carries a single
- * {@code <device-identity/>} child with no attributes.
+ * @implNote This implementation folds the WA Web hosted-companion bundle mixin into the builder:
+ * the outer envelope is pinned to {@code <iq to="s.whatsapp.net" type="result">} and the inner
+ * {@code <hosted-pair-set/>} carries a single {@code <device-identity/>} child with no attributes.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMdSetRegResponseHostedClientResponse")
 @WhatsAppWebModule(moduleName = "WASmaxOutMdHostedCompanionSetRegResponseBundleMixin")
 public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Request {
     /**
-     * The {@code id} of the inbound IQ being replied to.
+     * Holds the {@code id} of the inbound IQ being replied to.
      *
-     * @apiNote
-     * Echoed into the outbound {@code <iq id="..."/>} attribute.
+     * <p>Echoed into the outbound {@code <iq id="..."/>} attribute.
      */
     private final String iqId;
 
     /**
-     * The signed device-identity bytes carried in the inner
-     * {@code <device-identity/>}.
+     * Holds the signed device-identity bytes carried in the inner {@code <device-identity/>}.
      *
-     * @apiNote
-     * The re-encoded {@code ADVSignedDeviceIdentity} produced by the
-     * hosted companion; the upstream signing path additionally
-     * prefixes the device identity with the
-     * {@code ADV_HOSTED_PREFIX_DEVICE_IDENTITY_ACCOUNT_SIGNATURE}
-     * constant before HMAC verification.
+     * <p>The re-encoded {@code ADVSignedDeviceIdentity} produced by the hosted companion; the
+     * upstream signing path additionally prefixes the device identity with the
+     * {@code ADV_HOSTED_PREFIX_DEVICE_IDENTITY_ACCOUNT_SIGNATURE} constant before HMAC
+     * verification.
      */
     private final byte[] deviceIdentity;
 
     /**
      * Constructs a hosted pair-success reply.
      *
-     * @apiNote
-     * Library code typically derives {@code iqId} from the matching
-     * {@link SmaxMdSetRegResponse} and obtains
-     * {@code deviceIdentity} from the post-pair signing pipeline.
+     * <p>Callers typically derive {@code iqId} from the matching {@link SmaxMdSetRegResponse} and
+     * obtain {@code deviceIdentity} from the post-pair signing pipeline.
      *
      * @param iqId           the inbound IQ id; never {@code null}
      * @param deviceIdentity the signed device-identity bytes; never {@code null}
@@ -97,15 +84,11 @@ public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Req
     /**
      * Builds the outbound hosted pair-success reply stanza.
      *
-     * @apiNote
-     * Returns the unfinished {@link NodeBuilder} so the dispatch path
-     * can stamp the wire-level identifiers before flushing, matching
-     * {@link SmaxOperation.Request#toNode()}.
+     * <p>Returns the unfinished {@link NodeBuilder} so the dispatch path can stamp the wire-level
+     * identifiers before flushing, matching the contract of {@link SmaxOperation.Request#toNode()}.
      *
-     * @implNote
-     * This implementation does not emit the {@code key-index}
-     * attribute on the inner {@code <device-identity/>}; the upstream
-     * hosted mixin omits attributes entirely.
+     * @implNote This implementation does not emit the {@code key-index} attribute on the inner
+     * {@code <device-identity/>}; the upstream hosted mixin omits attributes entirely.
      *
      * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
      */
@@ -130,6 +113,15 @@ public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Req
                 .content(hostedPairSetNode);
     }
 
+    /**
+     * Compares this reply to another object for value equality.
+     *
+     * <p>Two replies are equal when their IQ id matches and their device-identity bytes match
+     * element by element.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an equal reply
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -143,6 +135,14 @@ public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Req
                 && Arrays.equals(this.deviceIdentity, that.deviceIdentity);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * <p>The device-identity bytes contribute through {@link Arrays#hashCode(byte[])} so equal
+     * contents yield equal codes.
+     *
+     * @return the hash code derived from the IQ id and device-identity bytes
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(iqId);
@@ -150,6 +150,11 @@ public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Req
         return result;
     }
 
+    /**
+     * Returns a debug string listing the IQ id and device-identity bytes.
+     *
+     * @return the string representation
+     */
     @Override
     public String toString() {
         return "SmaxMdSetRegResponseHostedClient[iqId=" + iqId

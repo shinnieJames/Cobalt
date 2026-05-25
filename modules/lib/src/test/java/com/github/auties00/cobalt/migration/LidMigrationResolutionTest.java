@@ -13,40 +13,17 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LidMigrationResolution}.
- *
- * @apiNote
- * Pins the public surface of the sealed
- * {@link LidMigrationResolution} interface so callers (notably
- * {@code LidMigrationService.executeResolutions}) can pattern-match
- * against {@link LidMigrationResolution.Migrate},
- * {@link LidMigrationResolution.Keep}, and
- * {@link LidMigrationResolution.Delete} exhaustively, and pins the
- * {@link LidMigrationResolution.KeepReason} and
- * {@link LidMigrationResolution.DeleteReason} enum membership against
- * WA Web's branches in {@code getResolvedThreadAccountLid}.
- *
- * @implNote
- * This implementation is a Cobalt-internal pin; no MCP-side oracle exists
- * because WA Web models the same shape as an untyped object literal.
+ * Pins the public surface of the sealed {@link LidMigrationResolution}
+ * hierarchy so callers can pattern-match the {@code Migrate}, {@code Keep},
+ * and {@code Delete} variants exhaustively, and pins the membership of the
+ * {@code KeepReason} and {@code DeleteReason} enums.
  */
 @DisplayName("LidMigrationResolution")
 class LidMigrationResolutionTest {
 
-    /**
-     * Synthetic phone-number JID drawn from the Italian number block.
-     */
     private static final Jid PN = Jid.of("393495089819@s.whatsapp.net");
-
-    /**
-     * Synthetic LID; arbitrary but stable.
-     */
     private static final Jid LID = Jid.of("258252122116273@lid");
 
-    /**
-     * The {@code Migrate} record exposes both {@code originalJid} and
-     * {@code targetLid}.
-     */
     @Test
     @DisplayName("Migrate carries originalJid and targetLid")
     void migrateAccessors() {
@@ -55,10 +32,6 @@ class LidMigrationResolutionTest {
         assertEquals(LID, resolution.targetLid());
     }
 
-    /**
-     * The {@code Keep} record exposes both {@code originalJid} and
-     * {@code reason}.
-     */
     @Test
     @DisplayName("Keep carries originalJid and reason")
     void keepAccessors() {
@@ -67,10 +40,6 @@ class LidMigrationResolutionTest {
         assertEquals(LidMigrationResolution.KeepReason.ALREADY_LID, resolution.reason());
     }
 
-    /**
-     * The {@code Delete} record exposes both {@code originalJid} and
-     * {@code reason}.
-     */
     @Test
     @DisplayName("Delete carries originalJid and reason")
     void deleteAccessors() {
@@ -79,10 +48,6 @@ class LidMigrationResolutionTest {
         assertEquals(LidMigrationResolution.DeleteReason.NO_LID_MAPPING, resolution.reason());
     }
 
-    /**
-     * {@link LidMigrationResolution.KeepReason} exposes every documented
-     * variant.
-     */
     @Test
     @DisplayName("KeepReason exposes every documented variant")
     void keepReasonVariants() {
@@ -100,10 +65,6 @@ class LidMigrationResolutionTest {
                 )));
     }
 
-    /**
-     * {@link LidMigrationResolution.DeleteReason} exposes every documented
-     * variant.
-     */
     @Test
     @DisplayName("DeleteReason exposes every documented variant")
     void deleteReasonVariants() {
@@ -117,10 +78,6 @@ class LidMigrationResolutionTest {
                 )));
     }
 
-    /**
-     * The three records implement value-based equality and hash codes
-     * derived from their components.
-     */
     @Test
     @DisplayName("records implement equals/hashCode by value")
     void recordEquality() {
@@ -143,18 +100,10 @@ class LidMigrationResolutionTest {
         assertNotEquals(keepA, delA);
     }
 
-    /**
-     * The sealed type permits exactly {@code Migrate}, {@code Keep}, and
-     * {@code Delete}.
-     *
-     * @implNote
-     * Reflects on {@link Class#getPermittedSubclasses()} so a future
-     * addition of a fourth variant would fail this test and force a
-     * conscious update to the pattern-match call sites.
-     */
     @Test
     @DisplayName("sealed permits exactly Migrate/Keep/Delete")
     void sealedPermits() {
+        // Adding a fourth variant fails here, forcing a conscious update to the pattern-match call sites.
         var permitted = LidMigrationResolution.class.getPermittedSubclasses();
         assertEquals(3, permitted.length);
         var permittedSet = Set.of(permitted);

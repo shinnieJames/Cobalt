@@ -15,27 +15,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the optional pagination cursor of a
- * {@link SmaxNewslettersGetNewsletterMessagesRequest}.
+ * Selects the optional pagination cursor of a {@link SmaxNewslettersGetNewsletterMessagesRequest}.
  *
- * @apiNote
- * Pick this when scrolling a newsletter's message history; omitting
- * the cursor altogether requests the latest slice. WA Web's Channels
- * surface (see
- * {@code WAWebNewsletterGetMessagesQueryJob.queryNewsletterMessagesByJid})
- * sets {@link Before} when the user scrolls up into older content.
+ * <p>Used when scrolling a newsletter's message history; omitting the cursor altogether requests
+ * the latest slice. {@link Before} walks up into older content, {@link After} walks down into
+ * newer content.</p>
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersMessageDirections")
 public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits SmaxNewslettersGetNewsletterMessagesDirection.Before, SmaxNewslettersGetNewsletterMessagesDirection.After {
 
     /**
-     * The variant that walks backwards from a pivot server-id.
+     * Selects messages with server-ids strictly below a pivot.
      *
-     * @apiNote
-     * Selects messages with server-ids strictly less than
-     * {@link #pivot()}, materialised as the {@code before} attribute on
-     * the wire {@code <messages>} element. This is the dominant cursor
-     * direction in WA Web's history-scroll-up UI.
+     * <p>Materialised as the {@code before} attribute on the wire {@code <messages>} element; this
+     * is the cursor a history-scroll-up walk uses to fetch older messages.</p>
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersBeforeMixinMixin")
     final class Before implements SmaxNewslettersGetNewsletterMessagesDirection {
@@ -47,12 +40,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits Sm
         /**
          * Constructs a backward-walking cursor at the given pivot.
          *
-         * @apiNote
-         * Used when paginating older newsletter messages, typically
-         * with the lowest-known server-id of the previous slice.
-         *
-         * @param pivot the server-id pivot; the relay returns messages
-         *              strictly less than this value
+         * @param pivot the server-id pivot; the relay returns messages strictly less than this value
          */
         public Before(long pivot) {
             this.pivot = pivot;
@@ -71,8 +59,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits Sm
          * Compares two cursors for value equality on {@link #pivot()}.
          *
          * @param obj the reference object to compare against
-         * @return {@code true} when {@code obj} is a {@link Before}
-         *         carrying the same pivot
+         * @return {@code true} when {@code obj} is a {@link Before} carrying the same pivot
          */
         @Override
         public boolean equals(Object obj) {
@@ -101,12 +88,10 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits Sm
     }
 
     /**
-     * The variant that walks forwards from a pivot server-id.
+     * Selects messages with server-ids strictly above a pivot.
      *
-     * @apiNote
-     * Selects messages with server-ids strictly greater than
-     * {@link #pivot()}, materialised as the {@code after} attribute on
-     * the wire {@code <messages>} element.
+     * <p>Materialised as the {@code after} attribute on the wire {@code <messages>} element; used to
+     * fetch newsletter messages newer than the highest-known server-id of the previous slice.</p>
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersAfterMixinMixin")
     final class After implements SmaxNewslettersGetNewsletterMessagesDirection {
@@ -118,12 +103,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits Sm
         /**
          * Constructs a forward-walking cursor at the given pivot.
          *
-         * @apiNote
-         * Used when fetching newsletter messages newer than the
-         * highest-known server-id of the previous slice.
-         *
-         * @param pivot the server-id pivot; the relay returns messages
-         *              strictly greater than this value
+         * @param pivot the server-id pivot; the relay returns messages strictly greater than this value
          */
         public After(long pivot) {
             this.pivot = pivot;
@@ -142,8 +122,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits Sm
          * Compares two cursors for value equality on {@link #pivot()}.
          *
          * @param obj the reference object to compare against
-         * @return {@code true} when {@code obj} is an {@link After}
-         *         carrying the same pivot
+         * @return {@code true} when {@code obj} is an {@link After} carrying the same pivot
          */
         @Override
         public boolean equals(Object obj) {

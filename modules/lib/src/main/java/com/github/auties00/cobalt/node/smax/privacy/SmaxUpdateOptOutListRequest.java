@@ -11,17 +11,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="optoutlist" type="set">} stanza applying a marketing-message opt-out action.
+ * Builds the outbound {@code <iq xmlns="optoutlist" type="set">} stanza that applies a marketing-message opt-out
+ * action against a business JID.
  *
- * @apiNote
- * Drives the marketing-messages user-controls flows; the WA Web caller is
- * {@code WAWebOptOutUserJob.optOutUser}, {@code optInUser}, and {@code signupUser}, which all funnel through
- * {@code WASmaxBlocklistsUpdateOptOutListRPC.sendUpdateOptOutListRPC}. The three mandatory attributes
- * ({@code jid}, {@code category}, {@code action}) identify the target business and the action being applied;
- * the five optional attributes pass the cache digest, opt-out reason, entry-point, signup id, and duration.
+ * <p>This request drives the marketing-messages user-controls flows (opt out, opt in, and signup). The three
+ * mandatory attributes ({@link #itemJid()}, {@link #itemCategory()}, {@link #itemAction()}) identify the target
+ * business and the action being applied, while the five optional attributes pass the cache digest, the opt-out
+ * reason, the entry-point, the signup id, and the duration. The {@link #itemAction()} string is derived from the
+ * high-level operation: {@code "block"} to opt out, {@code "unblock"} to opt in, and {@code "signup"} to register.
  *
- * @implNote
- * This implementation centralises {@code generateId()} on the client dispatcher, so {@link #toNode()} omits the
+ * @implNote This implementation centralises id generation on the client dispatcher, so {@link #toNode()} omits the
  * {@code id} attribute; every other SMAX request in the package follows the same convention.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateOptOutListRequest")
@@ -67,12 +66,11 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     private final Integer itemDuration;
 
     /**
-     * Constructs an update-opt-out request with every optional field.
+     * Constructs an update-opt-out request from the three mandatory attributes and every optional field.
      *
-     * @apiNote
-     * The caller derives {@code itemAction} from the high-level operation: {@code "block"} for
-     * {@code WAWebOptOutUserJob.optOutUser}, {@code "unblock"} for {@code optInUser}, {@code "signup"} for
-     * {@code signupUser}. Pass {@code null} for any optional field whose value is unknown.
+     * <p>The {@code itemAction} string is the wire selector derived from the high-level operation: {@code "block"}
+     * to opt out, {@code "unblock"} to opt in, and {@code "signup"} to register. Any optional field whose value is
+     * unknown may be passed as {@code null}, in which case {@link #toNode()} omits the corresponding attribute.
      *
      * @param itemJid        the target business JID; never {@code null}
      * @param itemCategory   the marketing category; never {@code null}
@@ -82,8 +80,7 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
      * @param itemEntryPoint the entry-point marker; may be {@code null}
      * @param itemSignupId   the signup id; may be {@code null}
      * @param itemDuration   the opt-out duration in seconds; may be {@code null}
-     * @throws NullPointerException if {@code itemJid}, {@code itemCategory}, or {@code itemAction} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code itemJid}, {@code itemCategory}, or {@code itemAction} is {@code null}
      */
     public SmaxUpdateOptOutListRequest(Jid itemJid, String itemCategory, String itemAction,
                    String itemDhash, String itemReason, String itemEntryPoint,
@@ -108,7 +105,7 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the marketing category.
+     * Returns the marketing category that scopes the opt-out.
      *
      * @return the category; never {@code null}
      */
@@ -117,7 +114,7 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the action string.
+     * Returns the wire action string ({@code "block"}, {@code "unblock"}, or {@code "signup"}).
      *
      * @return the action; never {@code null}
      */
@@ -127,6 +124,9 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
 
     /**
      * Returns the cached digest when set.
+     *
+     * <p>Absence means the request carries no cache-match shortcut, so the relay always returns a full mismatch
+     * reply rather than a cache-match confirmation.
      *
      * @return an {@link Optional} carrying the digest, or empty when no cached digest was supplied
      */
@@ -173,11 +173,11 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     /**
      * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * @apiNote
-     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="optoutlist"} and
-     * {@code type="set"}; the inner {@code <item>} child always carries the three mandatory attributes
-     * (target JID, category, action), and the five optional attributes are added only when their fields are
-     * set. The {@code id} attribute is filled in downstream.
+     * <p>The returned {@link NodeBuilder} addresses {@link JidServer#user()} with {@code xmlns="optoutlist"} and
+     * {@code type="set"}. The inner {@code <item>} child always carries the three mandatory attributes (target JID,
+     * category, action), and the five optional attributes ({@code dhash}, {@code reason}, {@code entry_point},
+     * {@code signup_id}, {@code duration}) are added only when their fields are set. The {@code id} attribute is
+     * filled in downstream by the client dispatcher.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -213,6 +213,12 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
                 .content(itemBuilder.build());
     }
 
+    /**
+     * Compares this request to another object for value equality across every attribute field.
+     *
+     * @param obj the object to compare against; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxUpdateOptOutListRequest} with equal fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -232,12 +238,22 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
                 && Objects.equals(this.itemDuration, that.itemDuration);
     }
 
+    /**
+     * Returns a hash code derived from every attribute field.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(itemJid, itemCategory, itemAction, itemDhash, itemReason,
                 itemEntryPoint, itemSignupId, itemDuration);
     }
 
+    /**
+     * Returns a debug rendering listing every attribute field.
+     *
+     * @return a diagnostic string; never {@code null}
+     */
     @Override
     public String toString() {
         return "SmaxUpdateOptOutListRequest[itemJid=" + itemJid

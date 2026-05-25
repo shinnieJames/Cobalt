@@ -26,23 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link WaffleAccountLinkStateHandler}'s parity with
- * {@code WAWebWaffleAccountLinkStateSync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the {@code WEB_WAFFLE} AB-prop gate
- * (closed by default in the fixture), the
- * {@link SyncdOperation#REMOVE} unsupported branch, and the default
- * conflict-resolution tiebreaker.
- *
- * @implNote
- * The handler is non-singleton because it depends on the injected
- * {@link DefaultWamService} for the
- * {@code NonMessagePeerDataRequestEvent} emission that fires when an
- * {@code Active} link state arrives. The end-to-end happy path that
- * exercises {@code requestNonceFromPrimary} requires send-message
- * infrastructure {@link TestWhatsAppClient} does not stub today; that
- * path lives in {@code WebAppStateServiceTest} instead.
+ * Covers {@link WaffleAccountLinkStateHandler}: the wire-constant trio, the {@code WEB_WAFFLE}
+ * AB-prop gate (closed by default in the fixture), the {@link SyncdOperation#REMOVE} unsupported
+ * branch, and the default conflict-resolution tiebreaker. The handler is constructed per test with
+ * its injected {@link DefaultWamService}, against a fresh temporary store and a fresh AB-props
+ * snapshot, so gate-flip tests could opt in by mutating their local copy. The SET happy path and
+ * the malformed surface sit behind the gate and need send-message infrastructure that
+ * {@link TestWhatsAppClient} does not stub; those are exercised end-to-end in
+ * {@code WebAppStateServiceTest}.
  */
 @DisplayName("WaffleAccountLinkStateHandler")
 class WaffleAccountLinkStateHandlerTest {
@@ -53,16 +44,6 @@ class WaffleAccountLinkStateHandlerTest {
     private TestABPropsService props;
     private WaffleAccountLinkStateHandler handler;
 
-    /**
-     * Builds the per-test harness with the default-off
-     * {@code WEB_WAFFLE} AB prop.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore} and a
-     * fresh AB-props snapshot so gate-flip tests can opt in by
-     * mutating their local copy.
-     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -72,20 +53,6 @@ class WaffleAccountLinkStateHandlerTest {
         handler = new WaffleAccountLinkStateHandler(props, wam);
     }
 
-    /**
-     * Wraps the given link state and operation into a trusted mutation
-     * under the canonical {@code ["waffle_account_link_state"]} index.
-     *
-     * @apiNote
-     * Pass {@code null} for {@code linkState} to exercise the malformed
-     * branch where {@link WaffleAccountLinkStateAction#linkState()} is
-     * empty.
-     *
-     * @param linkState the new link state, or {@code null} to omit
-     * @param op        the mutation operation
-     * @param ts        the mutation timestamp
-     * @return the trusted mutation
-     */
     private static DecryptedMutation.Trusted waffleMutation(
             WaffleAccountLinkStateAction.AccountLinkState linkState, SyncdOperation op, Instant ts) {
         var action = new WaffleAccountLinkStateActionBuilder().linkState(linkState).build();
@@ -123,9 +90,7 @@ class WaffleAccountLinkStateHandlerTest {
         @Test
         @DisplayName("a SET mutation with WEB_WAFFLE off returns UNSUPPORTED")
         void setIsUnsupportedWhenGateClosed() {
-            // The handler reads its constructor-injected ABPropsService.WEB_WAFFLE, which
-            // defaults to false. The full SET happy path is exercised end-to-end in
-            // WebAppStateServiceTest where the gate is opened.
+            // WEB_WAFFLE defaults to false on the constructor-injected ABPropsService.
             var result = handler.applyMutation(client,
                     waffleMutation(WaffleAccountLinkStateAction.AccountLinkState.ACTIVE,
                             SyncdOperation.SET, Instant.now()));

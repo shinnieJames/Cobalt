@@ -20,60 +20,54 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 
 /**
- * The inline-thumbnail downloader shared by every preview source
+ * Downloads and re-encodes inline thumbnails for every preview source
  * (group picture, business product image, page favicon).
  *
- * @apiNote
- * Mirrors {@code WAWebMediaDataUtils.getResizedThumbData} at the
- * download seam: fetches the URL, caps the response size to defend
- * against hostile servers, and re-encodes the bytes as a small JPEG so
- * the result fits the inline-thumbnail slot on
- * {@code ExtendedTextMessage}.
+ * <p>Fetches an image URL, caps the response size to defend against
+ * hostile servers, and re-encodes the bytes as a small JPEG so the
+ * result fits the inline-thumbnail slot on {@link com.github.auties00.cobalt.model.message.text.ExtendedTextMessage}.
  *
- * @implNote
- * This implementation resizes via {@link ImageIO} +
- * {@link BufferedImage} when the optional {@code java.desktop} module
- * is on the runtime path and falls back to the source bytes when it
- * is not. The Cobalt module is declared
- * {@code requires static java.desktop} so the build still succeeds on
- * minimal runtimes.
+ * @implNote This implementation resizes via {@link ImageIO} and
+ * {@link BufferedImage} when the optional {@code java.desktop} module is
+ * on the runtime path and falls back to the source bytes when it is not.
+ * The Cobalt module is declared {@code requires static java.desktop} so
+ * the build still succeeds on minimal runtimes.
  */
 @WhatsAppWebModule(moduleName = "WAWebMediaDataUtils")
 public final class PreviewThumbnailFetcher {
     /**
-     * The maximum response size accepted by
+     * Holds the maximum response size, in bytes, accepted by
      * {@link #download(HttpClient, URI, Duration)}.
      *
-     * @apiNote
-     * Larger responses are dropped because the inline JPEG slot is
+     * <p>Larger responses are dropped because the inline JPEG slot is
      * meant for a small preview and an attacker-controlled server must
-     * not be able to allocate hundreds of megabytes through the
-     * preview pipeline.
+     * not be able to allocate hundreds of megabytes through the preview
+     * pipeline.
+     *
+     * @implNote This implementation caps the payload at 5 MiB.
      */
     private static final int MAX_BYTES = 5 * 1024 * 1024;
 
     /**
-     * The target side length, in pixels, of the resized JPEG
+     * Holds the target side length, in pixels, of the resized JPEG
      * thumbnail.
      *
-     * @apiNote
-     * Matches WA Web's {@code WAWebBizLinkPreviewCatalogUtils} /
-     * {@code WAWebLinkPreviewGroupUtils} sizing parameter
-     * ({@code {width: 100, height: 100, ...}}).
+     * @implNote This implementation uses 100 pixels, matching WA Web's
+     * preview sizing parameter ({@code {width: 100, height: 100, ...}}).
      */
     private static final int TARGET_SIZE = 100;
 
     /**
-     * The JPEG quality applied to the re-encoded thumbnail.
+     * Holds the JPEG quality applied to the re-encoded thumbnail.
      *
-     * @apiNote
-     * Matches the {@code imageFormatOptions: .75} parameter WA Web
-     * passes when computing the preview thumbnail.
+     * @implNote This implementation uses 0.75, matching the
+     * {@code imageFormatOptions: .75} parameter WA Web passes when
+     * computing the preview thumbnail.
      */
     private static final float JPEG_QUALITY = 0.75f;
 
     /**
-     * The hidden constructor of the utility class.
+     * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
      */
@@ -82,22 +76,23 @@ public final class PreviewThumbnailFetcher {
     }
 
     /**
-     * Fetches {@code uri} via {@code httpClient} and returns the
-     * resized JPEG bytes, capped at {@link #MAX_BYTES}.
+     * Fetches {@code uri} via {@code httpClient} and returns the resized
+     * JPEG bytes.
      *
-     * @apiNote
-     * Used by every per-source resolver
-     * ({@link CatalogPreviewResolver},
-     * {@link GroupInvitePreviewResolver},
-     * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline}'s og-image branch) so the
-     * size cap and resize logic are not duplicated. Returns
-     * {@code null} on any failure (non-2xx response, empty body,
-     * oversized payload, transport error) so the caller can fall back
-     * to a minimal preview without inspecting the cause.
+     * <p>Issues a GET on {@code uri}, rejects non-2xx responses, empty
+     * bodies, and bodies larger than {@link #MAX_BYTES}, then resizes
+     * the body via {@link #tryResize(byte[])}. When resize is
+     * unavailable the source bytes are returned unchanged. Returns
+     * {@code null} on any failure (a {@code null} {@code httpClient} or
+     * {@code uri}, a non-2xx response, an empty body, an oversized
+     * payload, or a transport error) so the caller can fall back to a
+     * minimal preview without inspecting the cause. When {@code timeout}
+     * is {@code null} a 15-second timeout is applied.
      *
      * @param httpClient the HTTP client to issue the GET on
      * @param uri        the image URI
-     * @param timeout    the per-request timeout
+     * @param timeout    the per-request timeout; {@code null} applies a
+     *                   15-second default
      * @return the resized JPEG bytes, the source bytes when resize was
      *         unavailable, or {@code null} on failure
      */
@@ -128,22 +123,21 @@ public final class PreviewThumbnailFetcher {
     }
 
     /**
-     * Decodes {@code source} as an image and re-encodes it as a square
-     * {@link #TARGET_SIZE} JPEG at {@link #JPEG_QUALITY}.
+     * Decodes {@code source} as an image and re-encodes it as a JPEG
+     * bounded by {@link #TARGET_SIZE} at {@link #JPEG_QUALITY}.
      *
-     * @apiNote
-     * Mirrors the JS canvas-based resize step inside
-     * {@code WAWebMediaDataUtils.getResizedThumbData}; aspect ratio is
-     * preserved by computing the scale factor from the smaller side.
+     * <p>Aspect ratio is preserved by computing the scale factor from
+     * the larger side so neither dimension exceeds {@link #TARGET_SIZE};
+     * each output dimension is clamped to at least one pixel.
      *
-     * @implNote
-     * This implementation returns {@code null} when
+     * @implNote This implementation returns {@code null} when
      * {@code java.desktop} is unavailable at runtime (the module is
      * declared {@code requires static java.desktop} so the JVM may run
-     * without it) or when the source bytes are not a recognised image
-     * format. The caller falls back to the source bytes in that case.
+     * without it), when the source bytes are not a recognised image
+     * format, or when no JPEG writer is registered. The caller falls
+     * back to the source bytes in that case.
      *
-     * @param source the source bytes
+     * @param source the source image bytes
      * @return the resized JPEG bytes, or {@code null} when the resize
      *         failed
      */

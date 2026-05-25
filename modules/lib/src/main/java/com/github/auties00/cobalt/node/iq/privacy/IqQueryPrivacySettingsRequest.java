@@ -10,27 +10,23 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 /**
  * Outbound legacy {@code <iq xmlns="privacy" type="get"><privacy/></iq>} stanza that fetches the
  * user's full set of privacy settings from the relay.
- *
- * @apiNote
- * Cobalt embedders dispatch this request to seed or refresh the local privacy snapshot consumed by
- * downstream features (read-receipt gating, last-seen visibility, group-add audience, defense
- * mode). WA Web's {@code WAWebAccountSyncJob.updatePrivacySettings} caches the result for the
- * Settings UI and the privacy-disallowed-list sync. The reply is one of
- * {@link IqQueryPrivacySettingsResponse.Success},
+ * <p>
+ * Dispatching this request seeds or refreshes the local privacy snapshot consumed by downstream
+ * features (read-receipt gating, last-seen visibility, group-add audience, defense mode). The reply
+ * is one of {@link IqQueryPrivacySettingsResponse.Success},
  * {@link IqQueryPrivacySettingsResponse.ClientError}, or
  * {@link IqQueryPrivacySettingsResponse.ServerError}.
  *
  * @implNote
- * This implementation emits only the legacy XML path; WA Web additionally has a MEX-based
- * variant gated by {@code mex_get_privacy_settings_mode} that fetches the same data over a GraphQL
- * mutation. Cobalt does not model the MEX variant.
+ * This implementation emits only the legacy XML path; WA Web additionally has a MEX-based variant
+ * gated by {@code mex_get_privacy_settings_mode} that fetches the same data over a GraphQL mutation.
+ * Cobalt does not model the MEX variant.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryPrivacySettingsJob")
 public final class IqQueryPrivacySettingsRequest implements IqOperation.Request {
     /**
      * Constructs a new request.
-     *
-     * @apiNote
+     * <p>
      * The request carries no parameters; the relay returns every documented category in one shot.
      */
     public IqQueryPrivacySettingsRequest() {
@@ -89,8 +85,8 @@ public final class IqQueryPrivacySettingsRequest implements IqOperation.Request 
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation emits a parameterless debug representation; the format is not stable
-     * and must not be parsed.
+     * This implementation emits a parameterless debug representation; the format is not stable and
+     * must not be parsed.
      */
     @Override
     public String toString() {

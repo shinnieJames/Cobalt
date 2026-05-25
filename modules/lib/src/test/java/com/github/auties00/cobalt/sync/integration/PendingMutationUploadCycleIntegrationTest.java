@@ -23,24 +23,20 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Integration cycle for user-initiated pending mutation upload.
- *
- * <p>End-to-end flow: user invokes a sync-state-changing API (e.g.
- * {@code Whatsapp.archive(chatJid)}) → the action's handler builds a
- * {@link com.github.auties00.cobalt.sync.SyncPendingMutation} → the orchestrator
- * marks the collection dirty, calls
- * {@link WebAppStateService#pushPatches(SyncPatchType, java.util.SequencedCollection)
- * pushPatches}, which delegates to {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder}
- * to build the outgoing {@code <iq xmlns="w:sync:app:state">} stanza, encrypts each
- * mutation, computes snapshot/patch MACs, and dispatches the IQ.
- *
- * <p>Per WA Web {@code WAWebSyncdServerSync._uploadSuccessful}, after the server
- * ACK the client persists the encrypted mutations as sync-action entries,
- * advances the collection version + LT-Hash, and clears the pending bucket.
- *
- * <p>The {@code integration/pending-mutation-upload-cycle/} fixture corpus
- * pairs (a) a captured outgoing IQ during a real archive/pin/mute action and
- * (b) the resulting Cobalt store-state oracle.
+ * Exercises the user-initiated pending-mutation upload cycle: a sync-state change
+ * (archive, pin, mute) builds a
+ * {@link com.github.auties00.cobalt.sync.SyncPendingMutation} that the
+ * orchestrator pushes through
+ * {@link WebAppStateService#pushPatches(SyncPatchType, java.util.SequencedCollection)},
+ * which delegates to
+ * {@link com.github.auties00.cobalt.sync.exchange.MutationRequestBuilder} to
+ * encrypt each mutation, compute the snapshot and patch MACs, dispatch the
+ * upload IQ, and on server ACK advance the collection version and LT-Hash and
+ * clear the pending bucket. The pipeline is wired in-process via
+ * {@link TestWhatsAppClient} whose send path is stubbed, so the synthetic group
+ * stops at the pre-dispatch step. The captured group is gated on
+ * {@link SyncFixtures#isAvailable(String)} so it skips cleanly until the recorded
+ * corpus is committed.
  */
 @DisplayName("PendingMutationUploadCycle integration")
 class PendingMutationUploadCycleIntegrationTest {
@@ -72,11 +68,9 @@ class PendingMutationUploadCycleIntegrationTest {
         @Test
         @DisplayName("pushPatches with an empty mutation list does not throw")
         void emptyPushNoOp() {
-            // The orchestrator marks the collection dirty and forwards an empty
-            // batch to MutationRequestBuilder, which produces a no-op IQ. Without
-            // a live network the dispatch step is short-circuited by
-            // TestWhatsAppClient.sendNode throwing; the smoke test stops at the
-            // pre-dispatch step.
+            // An empty batch builds a no-op IQ; the stubbed send path then throws,
+            // so the smoke test stops before dispatch and tolerates only the
+            // exceptions the stub raises at unconfigured collaborators.
             assertDoesNotThrow(() -> {
                 try {
                     service.pushPatches(SyncPatchType.REGULAR_LOW, List.of());
@@ -86,8 +80,6 @@ class PendingMutationUploadCycleIntegrationTest {
                             || t instanceof NullPointerException)) {
                         throw t;
                     }
-                    // The stubbed client surfaces those expected exceptions when
-                    // hitting unconfigured collaborators (sync key, send path).
                 }
             });
         }
@@ -101,13 +93,9 @@ class PendingMutationUploadCycleIntegrationTest {
         void archiveUploadParity() {
             if (!SyncFixtures.isAvailable(
                     "integration/pending-mutation-upload-cycle/archive")) return;
-            // Replay: feed the same pending archive mutation through the pipeline,
-            // intercept the outgoing IQ via the onNodeSent listener (now firing on
-            // sendNodeWithNoResponse — see TestWhatsAppClient), and assert the
-            // structural parity (collection name, version, mutation count,
-            // snapshot/patch MAC presence). Byte-equal ciphertext parity is
-            // intentionally not asserted because IV is random per call; structural
-            // and decoded-protobuf parity is asserted instead.
+            // Asserts structural and decoded-protobuf parity (collection name,
+            // version, mutation count, MAC presence) of the intercepted IQ. Byte-
+            // equal ciphertext is not asserted because the IV is random per call.
             assertNotNull(SyncFixtures.loadEvents(
                     "integration/pending-mutation-upload-cycle/archive"));
         }

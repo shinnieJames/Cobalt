@@ -27,24 +27,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the {@link FavoritesHandler} adapter for
- * {@code WAWebFavoritesSync}.
+ * Covers the {@link FavoritesHandler} for the {@code favorites} app-state sync
+ * action: metadata, the SET happy path, the {@code applyMutationBatch}
+ * latest-by-timestamp deduplication, the malformed-value branch, the
+ * {@link FavoritesMutationFactory} builder and timestamp-based conflict
+ * resolution.
  *
- * @apiNote
- * Verifies parity with WA Web for the {@code favorites} app-state
- * sync action across metadata, the SET happy path, the
- * {@code applyMutationBatch} latest-by-timestamp deduplication, the
- * malformed-value branch, the
- * {@link FavoritesMutationFactory}
- * builder and the inherited timestamp-based conflict resolution.
- *
- * @implNote
- * This implementation exercises the handler against an in-memory
- * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
- * so the
+ * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
+ * through {@link TestWhatsAppClient} so the
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#favoriteChats()}
- * read-back can be asserted directly without round-tripping through
- * the chat-table cache.
+ * read-back can be asserted directly without round-tripping through the
+ * chat-table cache.
  */
 @DisplayName("FavoritesHandler")
 class FavoritesHandlerTest {

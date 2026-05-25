@@ -9,37 +9,35 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * Outbound legacy {@code <iq xmlns="privacy" type="set"><privacy><category name="readreceipts" value="all|none"/></privacy></iq>}
- * stanza that toggles the user's read-receipts visibility.
+ * Models the outbound legacy IQ stanza that toggles the user's read-receipts visibility.
  *
- * @apiNote
- * Cobalt embedders dispatch this when the user flips the read-receipts switch in the Settings UI;
- * it is the single-row dedicated counterpart of the multi-row {@link IqSetPrivacyRequest} and
+ * <p>The serialised stanza is
+ * {@code <iq xmlns="privacy" type="set"><privacy><category name="readreceipts" value="all|none"/></privacy></iq>}.
+ * It is the single-row dedicated counterpart of the multi-row {@link IqSetPrivacyRequest} and
  * always targets the {@link IqQueryPrivacySettingsCategoryName#READ_RECEIPTS} category. Disabling
- * read receipts also suppresses outbound delivery notifications for the user (the relay drops
- * receipts on send when the value is {@code "none"}).
+ * read receipts also suppresses outbound delivery notifications for the user, because the relay
+ * drops receipts on send when the value is {@code "none"}.
  *
  * @implNote
- * This implementation maps directly to WA Web's
- * {@code WAWebSetReadReceiptJob}'s default export, which always emits the
- * {@code readreceipts} category and toggles between {@code "all"} and {@code "none"}; no other
- * category is reachable through this stanza.
+ * This implementation always emits the {@code readreceipts} category and toggles only between
+ * {@code "all"} and {@code "none"}; no other category is reachable through this stanza.
  */
 @WhatsAppWebModule(moduleName = "WAWebSetReadReceiptJob")
 public final class IqSetReadReceiptRequest implements IqOperation.Request {
     /**
-     * The new toggle state; {@code true} serialises to the wire value {@code "all"} and
-     * {@code false} to {@code "none"}.
+     * Holds the new toggle state.
+     *
+     * <p>A value of {@code true} serialises to the wire value {@code "all"} and {@code false} to
+     * {@code "none"}.
      */
     private final boolean enabled;
 
     /**
-     * Constructs a new request.
+     * Constructs a new request for the given toggle state.
      *
-     * @apiNote
-     * Pass {@code true} to enable read receipts (the relay accepts and replays them to peers) or
-     * {@code false} to disable them (the relay drops outbound receipts and the peer's UI no
-     * longer shows the double-tick).
+     * <p>Pass {@code true} to enable read receipts, so the relay accepts and replays them to
+     * peers, or {@code false} to disable them, so the relay drops outbound receipts and the peer's
+     * UI no longer shows the double-tick.
      *
      * @param enabled {@code true} to enable read receipts, {@code false} to disable
      */
@@ -59,12 +57,13 @@ public final class IqSetReadReceiptRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation wraps a single {@code <category name="readreceipts" value="all|none"/>}
-     * marker in a {@code <privacy>} envelope inside the canonical
-     * {@code <iq xmlns="privacy" to="s.whatsapp.net" type="set">} stanza; the value attribute is
-     * selected by {@link #enabled} as {@code "all"} / {@code "none"} matching WA Web's
-     * {@code t?"all":"none"} branch.
+     * <p>Wraps a single {@code <category name="readreceipts" value="all|none"/>} marker in a
+     * {@code <privacy>} envelope inside the canonical
+     * {@code <iq xmlns="privacy" to="s.whatsapp.net" type="set">} stanza. The {@code value}
+     * attribute is selected by {@link #enabled} as {@code "all"} when enabled and {@code "none"}
+     * when disabled.
+     *
+     * @return the outbound stanza builder, never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetReadReceiptJob",
@@ -89,10 +88,11 @@ public final class IqSetReadReceiptRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to another object for equality by toggle state.
      *
-     * @implNote
-     * This implementation compares the toggle state by value.
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is an {@link IqSetReadReceiptRequest} with the same
+     *         {@link #enabled()} state
      */
     @Override
     public boolean equals(Object obj) {
@@ -107,10 +107,11 @@ public final class IqSetReadReceiptRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code derived from the toggle state.
      *
-     * @implNote
-     * This implementation hashes the toggle state consistently with {@link #equals(Object)}.
+     * <p>The result is consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code for this request
      */
     @Override
     public int hashCode() {
@@ -118,11 +119,11 @@ public final class IqSetReadReceiptRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug-only string representation of this request.
      *
-     * @implNote
-     * This implementation emits a debug-only representation; the format is not stable and must
-     * not be parsed.
+     * <p>The format is not stable and must not be parsed.
+     *
+     * @return a debug string describing the toggle state
      */
     @Override
     public String toString() {

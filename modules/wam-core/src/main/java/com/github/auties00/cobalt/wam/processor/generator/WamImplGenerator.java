@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.wam.processor.generator;
 import com.github.auties00.cobalt.wam.binary.WamEventDecoder;
 import com.github.auties00.cobalt.wam.binary.WamEventEncoder;
 import com.github.auties00.cobalt.wam.binary.WamEventSizes;
+import com.github.auties00.cobalt.wam.binary.WamWireValue;
 import com.github.auties00.cobalt.wam.processor.element.WamEnumElement;
 import com.github.auties00.cobalt.wam.processor.element.WamEventElement;
 import com.github.auties00.cobalt.wam.processor.element.WamPropertyElement;
@@ -13,6 +14,7 @@ import com.palantir.javapoet.*;
 import javax.lang.model.element.Modifier;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
@@ -41,6 +43,20 @@ public final class WamImplGenerator {
     private static final ClassName STRING = ClassName.get(String.class);
     private static final ClassName DOUBLE = ClassName.get(Double.class);
     private static final ClassName INSTANT = ClassName.get(Instant.class);
+    private static final ClassName NAVIGABLE_MAP = ClassName.get(NavigableMap.class);
+    private static final ClassName WAM_WIRE_VALUE = ClassName.get(WamWireValue.class);
+    private static final ClassName WAM_WIRE_INT = WAM_WIRE_VALUE.nestedClass("WamInt");
+    private static final ClassName WAM_WIRE_FLOAT = WAM_WIRE_VALUE.nestedClass("WamFloat");
+    private static final ClassName WAM_WIRE_STRING = WAM_WIRE_VALUE.nestedClass("WamString");
+
+    /**
+     * Field-count ceiling for the efficient per-field implementation. Events
+     * with more properties than this generate a compact map-based impl
+     * instead, because a per-field constructor would exceed the JVM's
+     * 255-parameter limit and the inline {@code encode}/{@code decode} bodies
+     * would exceed the 64KB per-method bytecode limit.
+     */
+    public static final int MAP_THRESHOLD = 100;
 
     private WamImplGenerator() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
@@ -54,6 +70,10 @@ public final class WamImplGenerator {
      * @return the generated Java file ready to be written
      */
     public static JavaFile generate(WamEventElement event) {
+        if (event.properties().size() > MAP_THRESHOLD) {
+            return generateMapBased(event);
+        }
+
         var implName = event.className().simpleName() + "Impl";
         var implBuilder = TypeSpec.classBuilder(implName)
                 .addModifiers(Modifier.FINAL)
@@ -69,6 +89,44 @@ public final class WamImplGenerator {
         addEncode(implBuilder, event);
         addDecode(implBuilder, event);
         addEnumEncoders(implBuilder, event);
+        addEnumDecoders(implBuilder, event);
+
+        return JavaFile.builder(event.packageName(), implBuilder.build())
+                .indent("    ")
+                .skipJavaLangImports(true)
+                .build();
+    }
+
+    /**
+     * Generates a compact, map-backed {@code *Impl} for an event whose field
+     * count exceeds {@link #MAP_THRESHOLD}.
+     *
+     * <p>Instead of one field, parameter, and inline encode/decode branch per
+     * property, the event's values live in a single sorted
+     * {@code NavigableMap<Integer, WamWireValue>}. The {@code sizeOf},
+     * {@code encode}, and {@code decode} methods delegate to the shared
+     * generic helpers, so their bytecode size is independent of the field
+     * count. Typed accessors read the map and reinterpret the wire value for
+     * their declared {@link WamType}.
+     *
+     * @param event the parsed event metadata
+     * @return the generated Java file ready to be written
+     */
+    private static JavaFile generateMapBased(WamEventElement event) {
+        var implName = event.className().simpleName() + "Impl";
+        var implBuilder = TypeSpec.classBuilder(implName)
+                .addModifiers(Modifier.FINAL)
+                .addSuperinterface(event.className());
+
+        addCommittedField(implBuilder);
+        addMetadataAccessors(implBuilder, event);
+        addValuesField(implBuilder);
+        addMapConstructor(implBuilder);
+        addMapGetterOverrides(implBuilder, event);
+        addMarkCommitted(implBuilder);
+        addMapSizeOf(implBuilder, event);
+        addMapEncode(implBuilder, event);
+        addMapDecode(implBuilder, event);
         addEnumDecoders(implBuilder, event);
 
         return JavaFile.builder(event.packageName(), implBuilder.build())
@@ -354,7 +412,88 @@ public final class WamImplGenerator {
         implBuilder.addMethod(method.build());
     }
 
-    private static void addEnumEncoders(TypeSpec.Builder implBuilder, WamEventElement event) {
+    private static TypeName valuesType() {
+        return ParameterizedTypeName.get(NAVIGABLE_MAP, INTEGER, WAM_WIRE_VALUE);
+    }
+
+    private static void addValuesField(TypeSpec.Builder implBuilder) {
+        implBuilder.addField(FieldSpec.builder(valuesType(), "values", Modifier.PRIVATE, Modifier.FINAL).build());
+    }
+
+    private static void addMapConstructor(TypeSpec.Builder implBuilder) {
+        implBuilder.addMethod(MethodSpec.constructorBuilder()
+                .addParameter(valuesType(), "values")
+                .addStatement("this.values = values")
+                .build());
+    }
+
+    private static void addMapGetterOverrides(TypeSpec.Builder implBuilder, WamEventElement event) {
+        for (var prop : event.properties()) {
+            var method = MethodSpec.methodBuilder(prop.fieldName())
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(optionalReturnType(prop));
+            addMapGetterBody(method, prop);
+            implBuilder.addMethod(method.build());
+        }
+    }
+
+    private static void addMapGetterBody(MethodSpec.Builder method, WamPropertyElement prop) {
+        switch (prop.wamType()) {
+            case INTEGER -> method.addStatement(
+                    "return this.values.get($L) instanceof $T value ? $T.of((int) value.value()) : $T.empty()",
+                    prop.index(), WAM_WIRE_INT, OPTIONAL_INT, OPTIONAL_INT);
+            case BOOLEAN -> method.addStatement(
+                    "return this.values.get($L) instanceof $T value ? $T.of(value.value() != 0L) : $T.empty()",
+                    prop.index(), WAM_WIRE_INT, OPTIONAL, OPTIONAL);
+            case STRING -> method.addStatement(
+                    "return this.values.get($L) instanceof $T value ? $T.of(value.value()) : $T.empty()",
+                    prop.index(), WAM_WIRE_STRING, OPTIONAL, OPTIONAL);
+            case FLOAT -> method.addStatement(
+                    "return this.values.get($L) instanceof $T value ? $T.of(value.value()) : $T.empty()",
+                    prop.index(), WAM_WIRE_FLOAT, OPTIONAL_DOUBLE, OPTIONAL_DOUBLE);
+            case TIMER -> method.addStatement(
+                    "return this.values.get($L) instanceof $T value ? $T.of($T.ofEpochMilli(value.value())) : $T.empty()",
+                    prop.index(), WAM_WIRE_INT, OPTIONAL, INSTANT, OPTIONAL);
+            case ENUM -> method.addStatement(
+                    "return this.values.get($L) instanceof $T value ? $T.ofNullable($N((int) value.value())) : $T.empty()",
+                    prop.index(), WAM_WIRE_INT, OPTIONAL, enumDecoderName(prop), OPTIONAL);
+        }
+    }
+
+    private static void addMapSizeOf(TypeSpec.Builder implBuilder, WamEventElement event) {
+        implBuilder.addMethod(MethodSpec.methodBuilder("sizeOf")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(int.class)
+                .addParameter(int.class, "weight")
+                .addStatement("return $T.sizeOf($L, weight, this.values)", WAM_EVENT_SIZES, event.eventId())
+                .build());
+    }
+
+    private static void addMapEncode(TypeSpec.Builder implBuilder, WamEventElement event) {
+        implBuilder.addMethod(MethodSpec.methodBuilder("encode")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(void.class)
+                .addParameter(WAM_EVENT_ENCODER, "encoder")
+                .addParameter(int.class, "weight")
+                .addStatement("encoder.writeEvent($L, weight, this.values)", event.eventId())
+                .build());
+    }
+
+    private static void addMapDecode(TypeSpec.Builder implBuilder, WamEventElement event) {
+        var implType = ClassName.get(event.packageName(), event.className().simpleName() + "Impl");
+        implBuilder.addMethod(MethodSpec.methodBuilder("decode")
+                .addModifiers(Modifier.STATIC)
+                .returns(implType)
+                .addParameter(WAM_EVENT_DECODER, "decoder")
+                .addParameter(boolean.class, "hasFields")
+                .addStatement("return new $T($T.readFields(decoder, hasFields))", implType, WAM_EVENT_DECODER)
+                .build());
+    }
+
+    static void addEnumEncoders(TypeSpec.Builder implBuilder, WamEventElement event) {
         var generated = new HashSet<String>();
         for (var prop : event.properties()) {
             if (prop.wamType() != WamType.ENUM || prop.enumElement() == null) {
@@ -442,7 +581,7 @@ public final class WamImplGenerator {
         };
     }
 
-    private static String enumEncoderName(WamPropertyElement prop) {
+    static String enumEncoderName(WamPropertyElement prop) {
         var enumElement = prop.enumElement();
         if (enumElement == null) {
             throw new IllegalStateException("No enum element for property " + prop.fieldName());

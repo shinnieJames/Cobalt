@@ -14,10 +14,8 @@ import java.util.Objects;
  * Typed container for one one-time pre-key entry inside the {@code <list/>} wrapper of an
  * {@link IqUploadPreKeysRequest}.
  *
- * @apiNote
- * Maps the WA Web {@code xmppPreKey({keyId, keyPair})} render: one {@code <key/>} subtree with a
- * three-byte big-endian {@code <id/>} content and a thirty-two-byte raw {@code <value/>} content
- * carrying the X25519 public key.
+ * <p>One {@code <key/>} subtree holds a three-byte big-endian {@code <id/>} content and a
+ * thirty-two-byte raw {@code <value/>} content carrying the X25519 public key.
  */
 @WhatsAppWebModule(moduleName = "WAWebSignalUtilsApi")
 public final class IqUploadPreKeysPreKey {
@@ -66,16 +64,14 @@ public final class IqUploadPreKeysPreKey {
     /**
      * Renders this pre-key as the canonical {@code <key/>} subtree.
      *
-     * @apiNote
-     * Called by {@link IqUploadPreKeysRequest#toNode()} and
+     * <p>Called by {@link IqUploadPreKeysRequest#toNode()} and
      * {@link IqUploadPrekeysForRegRequest#toNode()} to assemble the {@code <list/>} payload one
      * entry at a time.
      *
      * @implNote
      * This implementation packs the identifier with
      * {@link DataUtils#intToBytes(int, int) DataUtils.intToBytes(id, 3)} so the wire content is
-     * three bytes regardless of {@link #id()}'s magnitude, matching WA Web's
-     * {@code BIG_ENDIAN_CONTENT(keyId, 3)}.
+     * three bytes regardless of {@link #id()}'s magnitude.
      *
      * @return the rendered {@code <key/>} node
      */

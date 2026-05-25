@@ -28,23 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link ShareOwnPnHandler}'s parity with
- * {@code WAWebShareOwnPnSync.applyMutations}.
- *
- * @apiNote
- * Covers the wire-constant trio, the {@link ABProp#SHARE_OWN_PN_SYNC}
- * AB-prop gate, the happy {@code SET} path that upserts a LID contact
- * with {@code phoneNumberShared = true}, the rejection of non-LID JIDs,
- * the malformed-index branches (empty array, missing slot, empty
- * string), the {@link SyncdOperation#REMOVE} unsupported branch, and
- * the default conflict-resolution tiebreaker.
- *
- * @implNote
- * The {@code shareOwnPn} action carries no value payload of its own;
- * the {@link DecryptedMutation.Trusted#value()} only transports the
- * wire timestamp. Test fixtures therefore build the
- * {@link com.github.auties00.cobalt.model.sync.SyncActionValue} with
- * only the timestamp set.
+ * Verifies {@link ShareOwnPnHandler}: applying an incoming shareOwnPn
+ * mutation and asserting the contact store side-effect, gated on the
+ * {@link ABProp#SHARE_OWN_PN_SYNC} AB-prop. The {@code shareOwnPn} action
+ * carries no value payload of its own, so the
+ * {@link com.github.auties00.cobalt.model.sync.SyncActionValue} fixture
+ * sets only the wire timestamp.
  */
 @DisplayName("ShareOwnPnHandler")
 class ShareOwnPnHandlerTest {
@@ -58,15 +47,6 @@ class ShareOwnPnHandlerTest {
     private WhatsAppClient client;
     private ShareOwnPnHandler handler;
 
-    /**
-     * Builds the per-test harness with the
-     * {@link ABProp#SHARE_OWN_PN_SYNC} gate pre-opened.
-     *
-     * @apiNote
-     * Each test runs against a fresh
-     * {@link WhatsAppStore} and a
-     * fresh AB-props snapshot so gating-flip tests do not leak state.
-     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -77,20 +57,6 @@ class ShareOwnPnHandlerTest {
         handler = new ShareOwnPnHandler(props);
     }
 
-    /**
-     * Wraps the given LID JID into a trusted mutation under the
-     * canonical {@code ["shareOwnPn", lidJid]} index.
-     *
-     * @apiNote
-     * The {@code shareOwnPn} action has no value payload of its own;
-     * the inner {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
-     * only carries the wire timestamp.
-     *
-     * @param lidJid the LID JID at index slot 1
-     * @param op     the sync operation
-     * @param ts     the mutation timestamp (also the {@code SyncActionValue} timestamp)
-     * @return the trusted mutation
-     */
     private DecryptedMutation.Trusted build(Jid lidJid, SyncdOperation op, Instant ts) {
         var value = new SyncActionValueBuilder().timestamp(ts).build();
         var index = JSON.toJSONString(List.of("shareOwnPn", lidJid.toString()));
@@ -186,12 +152,9 @@ class ShareOwnPnHandlerTest {
         @Test
         @DisplayName("the action has no value payload - value contents are ignored")
         void valueContentsIgnored() {
-            // The shareOwnPn action carries no value payload: WAWebShareOwnPnSync.applyMutations
-            // never reads value.action(). Even when the SyncActionValue carries a foreign payload,
-            // the handler still succeeds as long as the index is well-formed.
+            // shareOwnPn carries no value payload; the handler never reads value.action(),
+            // so a well-formed index alone yields SUCCESS regardless of the value contents.
             var ts = Instant.now();
-            // We use the default-empty SyncActionValue; carrying a foreign payload would be redundant
-            // since the handler does not inspect any value fields.
             var value = new SyncActionValueBuilder().timestamp(ts).build();
             var index = JSON.toJSONString(List.of("shareOwnPn", CONTACT_LID.toString()));
             var mutation = new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, handler.version());

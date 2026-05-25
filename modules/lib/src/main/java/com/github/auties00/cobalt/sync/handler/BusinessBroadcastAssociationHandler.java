@@ -21,12 +21,11 @@ import java.util.List;
 /**
  * Adds or removes a single recipient JID from a business broadcast list in response to a {@code broadcast_jid} sync mutation.
  *
- * @apiNote
- * Drives the per-recipient diff of a Business broadcast list when the
- * user adds or removes one recipient on another device. The
- * {@link BusinessBroadcastAssociationAction#deleted()} flag inside the
- * mutation value distinguishes additions from removals; both arrive
- * over the wire as {@link SyncdOperation#SET}.
+ * <p>This handles the per-recipient diff of a Business broadcast list when one
+ * recipient is added or removed on another device. The
+ * {@link BusinessBroadcastAssociationAction#deleted()} flag inside the mutation
+ * value distinguishes additions from removals; both arrive over the wire as
+ * {@link SyncdOperation#SET}.
  *
  * @implNote
  * This implementation is forward-looking: WA Web reserves the
@@ -53,9 +52,7 @@ public final class BusinessBroadcastAssociationHandler implements WebAppStateAct
     /**
      * Constructs the singleton broadcast-association handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this type exactly once.
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public BusinessBroadcastAssociationHandler() {
@@ -83,25 +80,27 @@ public final class BusinessBroadcastAssociationHandler implements WebAppStateAct
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the JSON index {@code ["broadcast_jid", listId, recipientJid]},
-     * resolves the parent {@link BusinessBroadcastListAction} from the
-     * store, removes any existing entry for the recipient, and
-     * (when the action is not {@code deleted}) appends a fresh
-     * {@link BroadcastListParticipantAction} entry. Returns
-     * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     * operations and an orphan result keyed by list id with model
-     * type {@code "BroadcastList"} when the parent list is not in the
-     * store.
+     * <p>Validates the JSON index {@code ["broadcast_jid", listId, recipientJid]},
+     * resolves the parent broadcast list from the store, removes any existing
+     * entry for the recipient, and (when the action is not
+     * {@link BusinessBroadcastAssociationAction#deleted()}) appends a fresh
+     * {@link BroadcastListParticipant} entry. Returns
+     * {@link MutationApplicationResult#unsupported()} for non-{@link SyncdOperation#SET}
+     * operations, {@link MutationApplicationResult#malformed()} when the index
+     * or value is shaped wrong, and an orphan result keyed by list id with model
+     * type {@code "BroadcastList"} when the parent list is not in the store.
      *
      * @implNote
      * This implementation copies the existing participant array into a
      * mutable {@link ArrayList} before mutating because the model
      * exposes an unmodifiable {@link List}; the parent list is then
      * upserted via
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#putBusinessBroadcastList(BusinessBroadcastListAction)}.
-     * An empty participant array is normalized to {@code null} so the
-     * stored list shape matches the wire shape.
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#putBusinessBroadcastList(com.github.auties00.cobalt.model.business.BusinessBroadcastList)}.
+     * Phone-number recipients resolve their LID via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findLidByPhone(Jid)},
+     * falling back to the phone-number JID itself when no LID is known. An empty
+     * participant array is normalized to {@code null} so the stored list shape
+     * matches the wire shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)

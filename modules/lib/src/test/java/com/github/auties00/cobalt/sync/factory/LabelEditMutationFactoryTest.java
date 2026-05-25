@@ -13,37 +13,20 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Exercises {@link LabelEditMutationFactory} against captured WhatsApp Web encode payloads.
- *
- * @apiNote
- * Parity gate for the outgoing label-edit mutation against the
- * {@code WAWebLabelSync} JS encoder. Pairs with
- * {@link com.github.auties00.cobalt.sync.handler.LabelEditHandler} whose
- * inbound-side coverage lives in {@code LabelEditHandlerTest}.
- *
- * @implNote
- * This implementation pins every label field (id, name, colour, deleted
- * flag, predefined id, active flag, list type, timestamp) to the values
- * captured by the WA Web oracle so byte parity holds.
+ * Verifies that {@link LabelEditMutationFactory} encodes byte-for-byte against the captured WhatsApp
+ * Web encode oracle under {@code handler/label-edit/encode}. Every label field (id, name, colour,
+ * deleted flag, predefined id, active flag, list type, timestamp) is pinned to the values the oracle
+ * was captured with so byte parity holds. The test skips when the oracle fixture is absent.
  */
 @DisplayName("LabelEditMutationFactory")
 class LabelEditMutationFactoryTest {
-    /**
-     * The factory under test; rebuilt before each scenario.
-     */
     private LabelEditMutationFactory factory;
 
-    /**
-     * Builds a fresh {@link LabelEditMutationFactory} before each test.
-     */
     @BeforeEach
     void setUp() {
         factory = new LabelEditMutationFactory();
     }
 
-    /**
-     * Asserts byte parity between the captured oracle and Cobalt's encoded action value.
-     */
     @Test
     @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
     void byteEqualityWithOracle() {

@@ -17,9 +17,11 @@ import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.util.Collection;
 import java.util.List;
@@ -513,17 +515,19 @@ public interface WhatsAppClientListener {
 
     /**
      * Notifies the listener that an inbound call offer has arrived.
-     * The listener must respond by calling
-     * {@link IncomingCall#accept} or {@link IncomingCall#reject} on
-     * the supplied handle within the WhatsApp-imposed offer timeout
-     * (~30 s); otherwise the offer expires.
      *
-     * <p>The listener is invoked from the call layer's signaling
-     * thread; long-running decisions should hand off to a virtual
-     * thread to avoid stalling signaling.
+     * <p>The listener must respond by calling
+     * {@link WhatsAppClient#acceptCall(IncomingCall, com.github.auties00.cobalt.call.CallOptions)}
+     * or
+     * {@link WhatsAppClient#rejectCall(IncomingCall, com.github.auties00.cobalt.call.CallEndReason)}
+     * with the supplied offer within the WhatsApp-imposed offer timeout
+     * (about 30 seconds); otherwise the offer expires. The listener is
+     * invoked from the call layer's signaling thread, so long-running
+     * decisions should hand off to a virtual thread to avoid stalling
+     * signaling.
      *
      * @param whatsapp the client emitting the event
-     * @param incoming the inbound offer with metadata + accept/reject
+     * @param incoming the inbound offer carrying its metadata
      */
     default void onCall(WhatsAppClient whatsapp, IncomingCall incoming) {
     }
@@ -531,11 +535,9 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that a call has terminated.
      *
-     * <p>Fired by the {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiver}
-     * when a {@code <call><terminate>} stanza is parsed. The
-     * {@code reason} carries the {@code reason} attribute the peer sent on
-     * the wire (for example {@code "timeout"} or {@code "hangup"}); it is
-     * {@code null} when the stanza did not carry the attribute.
+     * <p>The {@code reason} carries the cause the peer supplied (for
+     * example a timeout or a hangup); it is {@link CallEndReason#UNKNOWN}
+     * when the peer did not supply one or the cause was unrecognised.
      *
      * @param whatsapp the client emitting the event
      * @param callId   the identifier of the call that ended
@@ -551,8 +553,7 @@ public interface WhatsAppClientListener {
      * Notifies the listener that the local pre-acceptance phase of an
      * incoming call has begun.
      *
-     * <p>Fired when a {@code <call><preaccept>} stanza is received,
-     * meaning the peer confirms our device is alerting the user.
+     * <p>Fired when the peer confirms this device is alerting the user.
      *
      * @param whatsapp the client emitting the event
      * @param callId   the identifier of the call
@@ -564,9 +565,6 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that a call participant has muted or unmuted
      * their microphone.
-     *
-     * <p>Fired when a {@code <call><mute>} stanza is received with a
-     * {@code state} attribute of {@code "muted"} or {@code "unmuted"}.
      *
      * @param whatsapp the client emitting the event
      * @param callId   the identifier of the call
@@ -581,9 +579,6 @@ public interface WhatsAppClientListener {
      * Notifies the listener that a call participant has turned video on or
      * off.
      *
-     * <p>Fired when a {@code <call><video_state>} stanza is received with
-     * a {@code state} attribute of {@code "on"} or {@code "off"}.
-     *
      * @param whatsapp the client emitting the event
      * @param callId   the identifier of the call
      * @param fromJid  the JID of the participant whose video state changed
@@ -595,8 +590,7 @@ public interface WhatsAppClientListener {
 
     /**
      * Notifies the listener that the peer is asking to upgrade an
-     * audio-only call to audio plus video; this is the M4
-     * video-upgrade flow.
+     * audio-only call to audio plus video.
      *
      * <p>The application can call
      * {@link com.github.auties00.cobalt.call.ActiveCall#acceptVideoUpgrade}
@@ -615,12 +609,10 @@ public interface WhatsAppClientListener {
 
     /**
      * Notifies the listener that someone has clicked a call-link the
-     * local user owns and is now waiting in the lobby for the host
-     * to admit them; this is the M6 lobby-flow signal.
+     * local user owns and is now waiting in the lobby for the host to
+     * admit them.
      *
-     * <p>The application can call
-     * {@code whatsapp.admitCallLinkParticipant(token, peer)} or
-     * {@code whatsapp.denyCallLinkParticipant(token, peer)} in
+     * <p>The host is expected to admit or deny the waiting joiner in
      * response.
      *
      * @param whatsapp the client emitting the event
@@ -659,7 +651,7 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that a peer broadcast an in-call
      * interaction (emoji reaction, raise/lower hand, peer-mute
-     * request, or keyframe request); this is the M8 in-call UX surface.
+     * request, or keyframe request).
      *
      * @param whatsapp    the client emitting the event
      * @param callId      the identifier of the call
@@ -674,9 +666,6 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that participants have been added to or removed
      * from an in-progress group call.
-     *
-     * <p>Fired when a {@code <call><group_update>} stanza is received with
-     * an {@code action} attribute of {@code "add"} or {@code "remove"}.
      *
      * @param whatsapp     the client emitting the event
      * @param callId       the identifier of the group call
@@ -693,10 +682,8 @@ public interface WhatsAppClientListener {
      * Notifies the listener that a peer-state update was received during a
      * call.
      *
-     * <p>Fired when a {@code <call><peer_state>} stanza is received.
-     * The wire {@code state} attribute is parsed into a typed
-     * {@link CallPeerState}; values not in the enum surface as
-     * {@link CallPeerState#UNKNOWN}.
+     * <p>The peer state is parsed into a typed {@link CallPeerState};
+     * unrecognised values surface as {@link CallPeerState#UNKNOWN}.
      *
      * @param whatsapp the client emitting the event
      * @param callId   the identifier of the call
@@ -707,13 +694,13 @@ public interface WhatsAppClientListener {
     }
 
     /**
-     * Notifies the listener of an offer-notice stanza, which the relay
-     * sends to inform the device about a call offer that arrived while it
-     * was offline.
+     * Notifies the listener of an offer notice, which the server sends to
+     * inform the device about a call offer that arrived while it was
+     * offline.
      *
-     * <p>Mirrors {@code WAWebHandleVoipOfferNotice}'s entry point. The call
-     * itself is also propagated through the regular {@link #onCall} flow
-     * so most listeners do not need to override this method.
+     * <p>The call itself is also propagated through the regular
+     * {@link #onCall} flow, so most listeners do not need to override
+     * this method.
      *
      * @param whatsapp the client emitting the event
      * @param call     the offer-notice call descriptor

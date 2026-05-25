@@ -12,34 +12,30 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="urn:xmpp:whatsapp:dirty" type="set">} stanza acknowledging that
- * a batch of dirty-bit resources has been resynchronised on the client.
+ * Builds the outbound {@code <iq xmlns="urn:xmpp:whatsapp:dirty" type="set">} stanza that
+ * acknowledges resynchronisation of a batch of dirty-bit resources.
  *
- * @apiNote
- * Used by the dirty-bit pipeline: when the relay raises an {@code <ib>} broadcast that one
- * of the supported resource types ({@code account_sync}, {@code groups}, {@code blocklist},
- * {@code syncd_app_state}, ...) needs a refresh, the client performs the corresponding sync
- * and then sends this request to clear the relay-side dirty marker so the broadcast is not
- * repeated. WA Web invokes it from {@code WAWebHandleDirtyBits.handleDirtyBits} at the end
- * of every dirty-bit processing pass.
+ * <p>When the relay raises an {@code <ib>} broadcast that one of the supported resource types
+ * ({@code account_sync}, {@code groups}, {@code blocklist}, {@code syncd_app_state}, and
+ * similar) needs a refresh, the client performs the corresponding sync and then sends this
+ * request to clear the relay-side dirty marker so the broadcast is not repeated. Each
+ * {@link DirtyEntry} in the batch becomes one {@code <clean/>} child of the {@code <iq>}
+ * envelope produced by {@link #toNode()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebClearDirtyBitsJob")
 public final class IqClearDirtyBitsRequest implements IqOperation.Request {
     /**
-     * Dirty-bit entries to clear.
+     * Holds the dirty-bit entries to clear.
      *
-     * @apiNote
-     * Must be non-empty; WA Web's {@code clearDirtyBits(t)} early-returns on
-     * {@code t.length === 0} without dispatching anything, and Cobalt rejects the same shape
-     * at construction time so the empty-batch invariant fails fast on the caller side.
+     * <p>Never {@code null} or empty; the {@link #IqClearDirtyBitsRequest(List)} constructor
+     * rejects an empty batch so the empty-batch invariant fails fast on the caller side.
      */
     private final List<DirtyEntry> entries;
 
     /**
-     * Constructs a new clear-dirty-bits request.
+     * Constructs a new clear-dirty-bits request from the given batch of entries.
      *
-     * @apiNote
-     * Defensively copies {@code entries} so subsequent mutation by the caller does not
+     * <p>The supplied list is defensively copied so subsequent mutation by the caller does not
      * affect the dispatched stanza.
      *
      * @param entries the dirty entries to clear
@@ -66,11 +62,9 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Produces a {@code <iq xmlns="urn:xmpp:whatsapp:dirty" type="set">} envelope addressed
-     * to {@link Jid#userServer()} and wrapping one
-     * {@code <clean type="..." timestamp="..."/>} child per entry, mirroring WA Web's
-     * {@code t.map(e => wap("clean", {type, timestamp}))} fan-out.
+     * <p>Produces a {@code <iq xmlns="urn:xmpp:whatsapp:dirty" type="set">} envelope addressed
+     * to {@link Jid#userServer()} and wrapping one {@code <clean type="..." timestamp="..."/>}
+     * child per {@link DirtyEntry}.
      *
      * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
      *         {@code <clean/>} payload children
@@ -97,7 +91,13 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request to another object for equality.
+     *
+     * <p>Two requests are equal when their {@link #entries()} lists are equal.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if {@code obj} is an {@link IqClearDirtyBitsRequest} with equal
+     *         entries, {@code false} otherwise
      */
     @Override
     public boolean equals(Object obj) {
@@ -112,7 +112,9 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code derived from the {@link #entries()} list.
+     *
+     * @return the hash code
      */
     @Override
     public int hashCode() {
@@ -120,7 +122,9 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a debug string describing this request and its entries.
+     *
+     * @return the string representation
      */
     @Override
     public String toString() {
@@ -128,38 +132,34 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
     }
 
     /**
-     * Per-resource dirty-bit entry, materialised as a single {@code <clean/>} child of the
-     * outbound request.
+     * Carries the per-resource dirty-bit data that materialises as a single {@code <clean/>}
+     * child of the outbound request.
      *
-     * @apiNote
-     * Carries the {@code (type, timestamp)} pair that the relay needs to identify the dirty
-     * marker; {@code timestamp} is the high-water-mark the client reached during the
-     * corresponding sync, and the relay only clears markers whose own timestamp is at most
-     * this value.
+     * <p>Each entry pairs a resource {@code type} with the high-water-mark {@code timestamp}
+     * the client reached during the corresponding sync; the relay only clears markers whose
+     * own timestamp is at most this value.
      */
     @WhatsAppWebModule(moduleName = "WAWebClearDirtyBitsJob")
     public static final class DirtyEntry {
         /**
-         * Resource type for the dirty marker.
+         * Holds the resource type for the dirty marker.
          *
-         * @apiNote
-         * One of the documented resource keys ({@code account_sync}, {@code groups},
-         * {@code blocklist}, {@code syncd_app_state}, ...); routed verbatim into the
-         * {@code type} attribute.
+         * <p>One of the documented resource keys ({@code account_sync}, {@code groups},
+         * {@code blocklist}, {@code syncd_app_state}, and similar); routed verbatim into the
+         * {@code type} attribute of the {@code <clean/>} node.
          */
         private final String type;
 
         /**
-         * High-water-mark timestamp the relay should treat as "clean as of".
+         * Holds the high-water-mark timestamp the relay treats as the clean-as-of point.
          *
-         * @apiNote
-         * Routed verbatim into the {@code timestamp} attribute via WA Web's
-         * {@code WAWap.INT} wrapper; expressed in the relay's native dirty-bit clock units.
+         * <p>Routed verbatim into the {@code timestamp} attribute of the {@code <clean/>}
+         * node and expressed in the relay's native dirty-bit clock units.
          */
         private final long timestamp;
 
         /**
-         * Constructs a new dirty-bit entry.
+         * Constructs a new dirty-bit entry from a resource type and high-water-mark timestamp.
          *
          * @param type      the resource type
          * @param timestamp the high-water-mark timestamp
@@ -189,7 +189,14 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
         }
 
         /**
-         * {@inheritDoc}
+         * Compares this entry to another object for equality.
+         *
+         * <p>Two entries are equal when both their {@link #type()} and {@link #timestamp()}
+         * are equal.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} if {@code obj} is a {@link DirtyEntry} with equal type and
+         *         timestamp, {@code false} otherwise
          */
         @Override
         public boolean equals(Object obj) {
@@ -205,7 +212,9 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a hash code derived from the {@link #type()} and {@link #timestamp()}.
+         *
+         * @return the hash code
          */
         @Override
         public int hashCode() {
@@ -213,7 +222,9 @@ public final class IqClearDirtyBitsRequest implements IqOperation.Request {
         }
 
         /**
-         * {@inheritDoc}
+         * Returns a debug string describing this entry's type and timestamp.
+         *
+         * @return the string representation
          */
         @Override
         public String toString() {

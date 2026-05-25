@@ -14,11 +14,10 @@ import java.util.Optional;
 /**
  * The outbound {@code <ack class="notification">} stanza that confirms receipt of a
  * {@link SmaxGroupsGroupsDirtyNotificationResponse}.
- *
- * @apiNote The WA Web pipeline ({@code WAWebHandleGroupsDirtyNotification.handleGroupsDirtyNotificationJob}) always
- * acks the notification before re-querying the affected groups; emitting the ack stops the relay from re-pushing the
- * same {@code <notification type="w:gp2"/>} on the next socket reconnection. Build one via {@link #from(Node)} when
- * the inbound notification is in hand.
+ * <p>
+ * The client acks the dirty notification after re-querying the affected groups; emitting the ack stops the relay from
+ * re-pushing the same {@code <notification type="w:gp2"/>} on the next socket reconnection. Build one via
+ * {@link #from(Node)} when the inbound notification is in hand.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGroupsDirtyNotificationResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsNotificationClientAckMixin")
@@ -29,7 +28,7 @@ public final class SmaxGroupsGroupsDirtyNotificationAcknowledgement implements S
     private final String notificationId;
 
     /**
-     * The {@code from} attribute of the notification (routed verbatim into the ack's {@code to}).
+     * The {@code from} attribute of the notification, routed verbatim into the ack's {@code to}.
      */
     private final Jid notificationFrom;
 
@@ -40,9 +39,9 @@ public final class SmaxGroupsGroupsDirtyNotificationAcknowledgement implements S
 
     /**
      * Constructs an acknowledgement from raw attribute values.
-     *
-     * @apiNote Prefer {@link #from(Node)} when the inbound notification stanza is available; it lifts every required
-     * attribute in one step.
+     * <p>
+     * Prefer {@link #from(Node)} when the inbound notification stanza is available; it lifts every required attribute
+     * in one step.
      *
      * @param notificationId   the notification id; never {@code null}
      * @param notificationFrom the notification sender {@link Jid}; never {@code null}
@@ -57,10 +56,9 @@ public final class SmaxGroupsGroupsDirtyNotificationAcknowledgement implements S
 
     /**
      * Constructs an acknowledgement from a parsed inbound notification.
-     *
-     * @apiNote Convenience factory mirroring the WA Web closure-builder returned by
-     * {@code WASmaxGroupsGroupsDirtyNotificationRPC.receiveGroupsDirtyNotificationRPC}: lifts the {@code id},
-     * {@code from}, and {@code type} attributes verbatim from the supplied {@code <notification/>} stanza.
+     * <p>
+     * Lifts the {@code id}, {@code from}, and {@code type} attributes verbatim from the supplied
+     * {@code <notification/>} stanza.
      *
      * @param notification the inbound notification stanza; never {@code null}
      * @return a new {@link SmaxGroupsGroupsDirtyNotificationAcknowledgement}
@@ -107,8 +105,8 @@ public final class SmaxGroupsGroupsDirtyNotificationAcknowledgement implements S
 
     /**
      * Materialises the outbound ack stanza ready for dispatch.
-     *
-     * @apiNote The resulting envelope is
+     * <p>
+     * The resulting envelope is
      * {@snippet :
      *     <ack id="<notificationId>" to="<notificationFrom>" class="notification" type="<notificationType>"/>
      * }

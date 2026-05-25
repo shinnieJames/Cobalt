@@ -10,54 +10,51 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Outbound {@code <iq xmlns="privatestats" type="get">} stanza asking the relay to sign a
- * blinded credential point so the client can mint a redeemable private-stats token.
+ * Models the outbound {@code <iq xmlns="privatestats" type="get">} stanza that asks the relay to
+ * sign a blinded credential point.
  *
- * @apiNote
- * Used by the privacy-preserving analytics pipeline (WA "Private Stats"): WA Web's
- * {@code WAWebIssuePrivateStatsToken.getToken} acquires a blinded EC point via
- * {@code WAACSTokenUtils}, sends it here to be signed by the relay, then unblinds the
- * returned signature to obtain an unlinkable token. The token is later redeemed (one per
- * project) by {@code WAWebUploadPrivateStatsBackend} when uploading anonymous metrics, so
- * the relay can verify the upload came from a valid client without learning which one.
+ * <p>This request drives the privacy-preserving analytics pipeline (WhatsApp "Private Stats").
+ * A blinded elliptic-curve point and the project name that scopes the credential are carried to
+ * the relay, which signs the point and returns the signed-credential bytes; the client then
+ * unblinds that signature locally against the random blinding factor it retained, yielding an
+ * unlinkable token. The token is later redeemed, one per project, when uploading anonymous
+ * metrics, so the relay can confirm the upload came from a valid client without learning which
+ * one. The matching reply variants are modelled by {@link IqIssuePrivateStatsTokenResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPrivatestatsSignCredentialRequest")
 public final class IqIssuePrivateStatsTokenRequest implements IqOperation.Request {
     /**
-     * Protocol version advertised on the {@code <sign_credential>} tag.
+     * Holds the protocol version advertised on the {@code <sign_credential>} tag.
      *
-     * @apiNote
-     * Fixed at {@code "2"} in the current WA Web bundle; bumped when the relay's signing
-     * scheme changes incompatibly.
+     * <p>The relay bumps this value when its signing scheme changes incompatibly; the current
+     * WhatsApp Web bundle pins it to {@code "2"}.
      */
     private static final String SIGN_CREDENTIAL_VERSION = "2";
 
     /**
-     * Raw bytes of the blinded elliptic-curve point.
+     * Holds the raw bytes of the blinded elliptic-curve point.
      *
-     * @apiNote
-     * The relay signs this point and returns the signed-credential bytes; the client
-     * unblinds the signature locally using the random blinding factor that was multiplied
-     * into the point at request-build time, producing an unlinkable redeemable token.
+     * <p>The relay signs this point and returns the signed-credential bytes; the client unblinds
+     * the returned signature locally using the random blinding factor that was multiplied into
+     * the point at request-build time, producing an unlinkable redeemable token.
      */
     private final byte[] blindedCredential;
 
     /**
-     * Project-name bytes (UTF-8) that scope the minted credential to a particular collector.
+     * Holds the UTF-8 project-name bytes that scope the minted credential to a particular
+     * collector.
      *
-     * @apiNote
-     * Routed verbatim into the {@code <project_name>} grandchild; the project name maps
-     * one-to-one to the analytics surface the token will be redeemed against
-     * (for example a specific WAM event family) so the relay can mint per-project rate
-     * caps.
+     * <p>These bytes are routed verbatim into the {@code <project_name>} grandchild. The project
+     * name maps one-to-one to the analytics surface the token will be redeemed against, so the
+     * relay can mint per-project rate caps.
      */
     private final byte[] projectName;
 
     /**
-     * Constructs a new issue-private-stats-token request.
+     * Constructs a new issue-private-stats-token request from the given blinded point and project
+     * name.
      *
-     * @apiNote
-     * Defensively clones both byte arrays so subsequent mutation by the caller does not
+     * <p>Both byte arrays are defensively cloned, so subsequent mutation by the caller does not
      * affect the dispatched stanza.
      *
      * @param blindedCredential the blinded credential bytes
@@ -80,8 +77,8 @@ public final class IqIssuePrivateStatsTokenRequest implements IqOperation.Reques
     }
 
     /**
-     * Returns a defensive copy of the project-name bytes routed into the
-     * {@code <project_name>} child.
+     * Returns a defensive copy of the project-name bytes routed into the {@code <project_name>}
+     * child.
      *
      * @return a clone of the project-name bytes, never {@code null}
      */
@@ -92,11 +89,10 @@ public final class IqIssuePrivateStatsTokenRequest implements IqOperation.Reques
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Produces a {@code <iq xmlns="privatestats" type="get">} envelope addressed to
-     * {@link JidServer#user()} and wrapping a single {@code <sign_credential version="2">}
-     * child carrying the {@code <blinded_credential>} and {@code <project_name>}
-     * grandchildren in that order.
+     * <p>Produces an {@code <iq xmlns="privatestats" type="get">} envelope addressed to
+     * {@link JidServer#user()} and wrapping a single {@code <sign_credential version="2">} child
+     * that carries the {@code <blinded_credential>} and {@code <project_name>} grandchildren in
+     * that order.
      *
      * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
      *         {@code <sign_credential>} payload
@@ -129,7 +125,13 @@ public final class IqIssuePrivateStatsTokenRequest implements IqOperation.Reques
     }
 
     /**
-     * {@inheritDoc}
+     * Compares this request with the given object for equality.
+     *
+     * <p>Two requests are equal when their blinded-credential and project-name byte arrays are
+     * element-wise equal.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} if the objects are equal, {@code false} otherwise
      */
     @Override
     public boolean equals(Object obj) {
@@ -145,7 +147,9 @@ public final class IqIssuePrivateStatsTokenRequest implements IqOperation.Reques
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a hash code derived from the blinded-credential and project-name byte arrays.
+     *
+     * @return the hash code consistent with {@link #equals(Object)}
      */
     @Override
     public int hashCode() {
@@ -153,7 +157,12 @@ public final class IqIssuePrivateStatsTokenRequest implements IqOperation.Reques
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a diagnostic string carrying the lengths of the two byte arrays.
+     *
+     * <p>Only the array lengths are rendered, never the raw credential or project-name bytes, so
+     * the value can be logged without leaking the blinded point.
+     *
+     * @return a string describing this request
      */
     @Override
     public String toString() {

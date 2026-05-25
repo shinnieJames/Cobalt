@@ -27,26 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link NewsletterSavedInterestsHandler} against the
- * protobuf-only {@code "newsletter_saved_interests"} action shape.
- *
- * @apiNote
- * Verifies the Cobalt forward-looking implementation: WA Web ships
- * the protobuf in {@code WAWebProtobufSyncAction.pb} (with the inline
- * router mapping the action to {@code REGULAR}) but no
- * {@code WAWebNewsletterSavedInterestsSync} handler module exists.
- * The Cobalt handler accepts only
- * {@link SyncdOperation#SET}
+ * Covers {@link NewsletterSavedInterestsHandler} for the protobuf-only
+ * {@code "newsletter_saved_interests"} action: the handler accepts only {@link SyncdOperation#SET}
  * with a non-empty interests token, persists it via
- * {@link WhatsAppStore#setNewsletterSavedInterests}, and rejects a
- * wrong-typed value or an empty token as
- * {@link SyncActionState#MALFORMED}.
+ * {@link WhatsAppStore#setNewsletterSavedInterests}, and rejects a wrong-typed value or an empty
+ * token as {@link SyncActionState#MALFORMED}.
  *
- * @implNote
- * This implementation drives the handler directly through
- * {@link NewsletterSavedInterestsHandler#applyMutation} with
- * hand-built {@link DecryptedMutation.Trusted} mutations because no
- * public outgoing-mutation factory exists for this action.
+ * <p>No public outgoing-mutation factory exists for this action, so each test drives the handler
+ * directly through {@link NewsletterSavedInterestsHandler#applyMutation} with hand-built
+ * {@link DecryptedMutation.Trusted} mutations.
  */
 @DisplayName("NewsletterSavedInterestsHandler")
 class NewsletterSavedInterestsHandlerTest {

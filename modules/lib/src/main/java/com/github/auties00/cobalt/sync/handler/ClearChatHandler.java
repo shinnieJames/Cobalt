@@ -19,12 +19,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Clears the message history of a chat in response to a {@code clearChat} sync mutation.
  *
- * @apiNote
- * Drives the per-chat "Clear messages" action. When the user clears
- * a chat on another device, the server replays the resulting
- * {@link ClearChatAction} here. Cobalt embedders observe the effect
- * via the affected {@link com.github.auties00.cobalt.model.chat.Chat}
- * losing its message history while the chat row itself remains.
+ * <p>This handler drives the per-chat "Clear messages" action. When the user
+ * clears a chat on another device, the server replays the resulting
+ * {@link ClearChatAction} here, and the affected
+ * {@link com.github.auties00.cobalt.model.chat.Chat} loses its message history
+ * while the chat row itself remains.
  *
  * @implNote
  * This implementation reduces WA Web's
@@ -45,11 +44,8 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
     /**
      * The zero-based index slot of the chat JID inside a {@code clearChat} mutation index array.
      *
-     * @apiNote
-     * Equal to WA Web's {@code chatJidIndex = 1} on the
-     * {@code WAWebClearChatSync} constructor; the {@code deleteStarred}
-     * and {@code deleteMedia} flags sit at the two slots immediately
-     * after.
+     * <p>The {@code deleteStarred} and {@code deleteMedia} flags sit at the two
+     * slots immediately after.
      */
     @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int CHAT_JID_INDEX = 1;
@@ -57,9 +53,8 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
     /**
      * Constructs the singleton clear-chat handler.
      *
-     * @apiNote
-     * Instantiated once by the sync handler registry. Embedders do not
-     * normally construct this directly.
+     * <p>The sync handler registry instantiates this once during client
+     * bootstrap.
      */
     @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public ClearChatHandler() {
@@ -86,19 +81,17 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Validates the four-element JSON index
+     * <p>Validates the four-element JSON index
      * {@code ["clearChat", chatJid, deleteStarred, deleteMedia]} where
-     * {@code deleteStarred} and {@code deleteMedia} are the wire
-     * strings {@code "1"} or {@code "0"}, locates the target
-     * {@link com.github.auties00.cobalt.model.chat.Chat}, and drops
-     * its messages. Returns
-     * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     * operations, an orphan result keyed by chat JID and model type
-     * {@code "Chat"} when the chat is not in the store, malformed
-     * results when the index or value is shaped wrong, and
-     * {@link MutationApplicationResult#failed()} on any thrown
-     * exception (including a {@link Jid#of(String)} parse failure).
+     * {@code deleteStarred} and {@code deleteMedia} are the wire strings
+     * {@code "1"} or {@code "0"}, locates the target
+     * {@link com.github.auties00.cobalt.model.chat.Chat}, and drops its
+     * messages. Returns {@link MutationApplicationResult#unsupported()} for
+     * non-{@code SET} operations, an orphan result keyed by chat JID and model
+     * type {@code "Chat"} when the chat is not in the store, malformed results
+     * when the index or value is shaped wrong, and
+     * {@link MutationApplicationResult#failed()} on any thrown exception
+     * (including a {@link Jid#of(String)} parse failure).
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = {"applyMutations", "getMessageRange"}, adaptation = WhatsAppAdaptation.ADAPTED)
@@ -155,15 +148,14 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * @apiNote
-     * Resolves the local-vs-remote tie by comparing the message ranges
+     * <p>Resolves the local-vs-remote tie by comparing the message ranges
      * carried inside each {@link ClearChatAction}. Returns
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the
-     * remote range encloses the local one,
-     * {@link ConflictResolutionState#SKIP_REMOTE} when the local range
-     * encloses the remote one, a timestamp tiebreaker when ranges are
-     * equal, and a merged {@link ConflictResolution} carrying the
-     * union of both ranges when ranges partially overlap.
+     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the remote
+     * range encloses the local one,
+     * {@link ConflictResolutionState#SKIP_REMOTE} when the local range encloses
+     * the remote one, a timestamp tiebreaker when ranges are equal, and a
+     * merged {@link ConflictResolution} carrying the union of both ranges when
+     * ranges partially overlap.
      *
      * @implNote
      * This implementation returns the merged mutation for the caller

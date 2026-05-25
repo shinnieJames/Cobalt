@@ -24,27 +24,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Loads migration-package fixtures captured from a live WhatsApp Web
- * session and exposes them to JUnit tests.
- *
- * @apiNote
- * Backing storage for the migration-package live-oracle tests. Both
- * fixture families live under
- * {@code src/test/resources/fixtures/migration/} and are discovered
- * via the classpath; missing fixtures are reported by
- * {@link #isAvailable(String)} so the tests can opt-in cleanly without
- * a corpus.
- *
- * @implNote
- * This implementation supports two fixture shapes: JSONL stanza
- * captures from the MCP {@code web_live_stanza_dump_to_file} tool
- * (decoded back into {@link Node} instances via
- * {@link #loadEvents(String)} and {@link #buildNode(JSONObject)}), and
- * oracle outputs from {@code web_live_debug_eval_to_file} exposed
- * verbatim as {@link JSONObject} via {@link #loadExpected(String)} or
- * unwrapped via {@link #loadOracle(String)}. The class mirrors
- * {@code com.github.auties00.cobalt.device.DeviceFixtures}; only
- * {@link #FIXTURE_ROOT} differs.
+ * Test harness that loads migration-package fixtures captured from a live WhatsApp Web session and
+ * exposes them to JUnit tests. Both fixture families live under
+ * {@code src/test/resources/fixtures/migration/} and are discovered on the classpath; missing fixtures
+ * are reported by {@link #isAvailable(String)} so a corpus-less checkout can opt in cleanly. Two shapes
+ * are supported: JSONL stanza captures decoded back into {@link Node} instances via {@link #loadEvents(String)}
+ * and {@link #buildNode(JSONObject)}, and eval-style oracle outputs exposed verbatim through
+ * {@link #loadExpected(String)} or unwrapped through {@link #loadOracle(String)}.
  */
 public final class MigrationFixtures {
     /**
@@ -61,13 +47,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Loads every captured stanza event in the given JSONL fixture, in
-     * capture order.
-     *
-     * @apiNote
-     * The standard entry point for tests that walk a captured stanza
-     * stream end-to-end; pair with {@link #loadEventWhere(String, String, JSONObject)}
-     * to single out a specific event by tag and attributes.
+     * Loads every captured stanza event in the given JSONL fixture, in capture order. Pair with
+     * {@link #loadEventWhere(String, String, JSONObject)} to single out a specific event by tag and
+     * attributes.
      *
      * @param topic the fixture topic without the {@code .jsonl}
      *              extension
@@ -98,14 +80,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns the first event in the given fixture whose {@code tag}
-     * matches and whose attributes contain every key/value pair in
-     * {@code attrs}.
-     *
-     * @apiNote
-     * Used by tests that need to pick a single representative stanza
-     * (for example, the first {@code <ib>} with a specific
-     * {@code from} attribute) out of a longer capture.
+     * Returns the first event in the given fixture whose {@code tag} matches and whose attributes contain
+     * every key/value pair in {@code attrs}, for picking a single representative stanza out of a longer
+     * capture.
      *
      * @param topic the fixture topic
      * @param tag   the required stanza tag, or {@code null} to match
@@ -137,13 +114,8 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node}
-     * sub-tree of a captured event.
-     *
-     * @apiNote
-     * Companion to {@link #loadEvents(String)} for tests that drive
-     * the Cobalt stanza receivers against captured input by feeding
-     * them real {@link Node} instances.
+     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a captured event, for driving
+     * the Cobalt stanza receivers against captured input.
      *
      * @param event the event object returned by
      *              {@link #loadEvents(String)}
@@ -160,13 +132,8 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Reconstructs a {@link Node} from a plain-JSON tree without an
-     * enclosing event wrapper.
-     *
-     * @apiNote
-     * Use when the fixture is a bare node tree rather than the full
-     * {@code {event: {node: ...}}} envelope produced by
-     * {@link #loadEvents(String)}.
+     * Reconstructs a {@link Node} from a bare plain-JSON {@code {tag, attrs, content}} tree, without the
+     * enclosing {@code {event: {node: ...}}} envelope produced by {@link #loadEvents(String)}.
      *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed {@link Node}
@@ -177,13 +144,8 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Loads the expected-output JSON document paired with the given
-     * fixture topic.
-     *
-     * @apiNote
-     * Returns the raw {@code <topic>.expected.json} contents so
-     * individual tests can pick out the fields they care about; for
-     * the common case of an {@code eval}-style payload use
+     * Loads the raw {@code <topic>.expected.json} document paired with the given fixture topic, so tests
+     * can pick out the fields they care about. For the common eval-style payload use
      * {@link #loadOracle(String)} instead.
      *
      * @param topic the fixture topic
@@ -202,18 +164,11 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns the unwrapped live-runtime result payload for an
-     * eval-style oracle fixture.
-     *
-     * @apiNote
-     * Standard helper for tests that consume
-     * {@code web_live_debug_eval_to_file} captures, which wrap the
-     * evaluation outcome as
-     * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}.
-     * Most oracle invocations stringify their result before
-     * returning so the live runtime can deliver it through CDP
-     * without structured-clone hazards; this helper undoes the
-     * stringification in one place.
+     * Returns the unwrapped live-runtime result payload for an eval-style oracle fixture. Such captures
+     * wrap the evaluation outcome as
+     * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}: the oracle
+     * stringifies its result so the live runtime can deliver it without structured-clone hazards, and this
+     * helper undoes the stringification in one place.
      *
      * @param topic the fixture topic
      * @return the parsed inner result document
@@ -236,13 +191,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns whether the given fixture topic exists on the
-     * classpath.
-     *
-     * @apiNote
-     * Used as the opt-in gate in fresh checkouts, where the live
-     * captures are committed separately and a topic-specific
-     * fixture may not yet be present.
+     * Returns whether the given fixture topic exists on the classpath, serving as the opt-in gate for
+     * fresh checkouts where the live captures are committed separately and a topic-specific fixture may
+     * not yet be present.
      *
      * @param topic the fixture topic
      * @return {@code true} when {@code <topic>.jsonl} is on the
@@ -253,12 +204,8 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns the parsed expected document for the given topic, or
-     * an empty {@link Optional} when no expected file is present.
-     *
-     * @apiNote
-     * Companion to {@link #isAvailable(String)} for tests that
-     * gracefully skip when the oracle output is not yet committed.
+     * Returns the parsed expected document for the given topic, or an empty {@link Optional} when no
+     * expected file is present, so tests can gracefully skip when the oracle output is not yet committed.
      *
      * @param topic the fixture topic
      * @return the parsed document, or {@link Optional#empty()} when
@@ -275,17 +222,11 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Creates an in-memory temporary {@link WhatsAppStore} configured
-     * with the given self-PN and optional self-LID.
-     *
-     * @apiNote
-     * Standard {@code store} dependency for any migration-package
-     * test that builds a {@link com.github.auties00.cobalt.client.WhatsAppClient}
-     * harness. The store is pre-advanced past the offline-delivery
-     * gate so
-     * {@link LidMigrationService#executeMigration()}
-     * proceeds immediately; production code drives the gate through
-     * the connection lifecycle.
+     * Creates an in-memory temporary {@link WhatsAppStore} configured with the given self-PN and optional
+     * self-LID, the standard {@code store} dependency for any migration-package test that builds a
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient} harness. The store is pre-advanced past the
+     * offline-delivery gate so {@link LidMigrationService#executeMigration()} proceeds immediately;
+     * production code drives that gate through the connection lifecycle.
      *
      * @param selfPn  the local user's PN-form bare JID
      * @param selfLid the local user's LID-form bare JID, or
@@ -311,12 +252,8 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Opens the named classpath resource.
-     *
-     * @apiNote
-     * Centralises the resource lookup so every fixture-loading
-     * helper surfaces a consistent error message when the resource
-     * is missing.
+     * Opens the named classpath resource, centralising the lookup so every fixture-loading helper surfaces
+     * a consistent error message when the resource is missing.
      *
      * @param resourcePath the resource path under
      *                     {@code src/test/resources/}
@@ -332,16 +269,11 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Flattens a captured attribute value into the string form the
-     * Cobalt {@link NodeBuilder#attribute(String, String)} setter
-     * expects.
-     *
-     * @apiNote
-     * Captured attributes may arrive as JID objects with a
-     * {@code $1} wrapper that encodes {@code user}, {@code server},
-     * {@code domainType}, and {@code device} fields; this helper
-     * unwraps the wrapper and rebuilds the canonical
-     * {@code user[:device]@server} string form.
+     * Flattens a captured attribute value into the string form the Cobalt
+     * {@link NodeBuilder#attribute(String, String)} setter expects. Captured attributes may arrive as JID
+     * objects with a {@code $1} wrapper encoding {@code user}, {@code server}, {@code domainType}, and
+     * {@code device} fields; this helper unwraps it and rebuilds the canonical {@code user[:device]@server}
+     * string form.
      *
      * @param value the raw captured attribute value
      * @return the canonical string form
@@ -373,12 +305,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Decodes a captured binary leaf into raw bytes.
-     *
-     * @apiNote
-     * Binary node content is captured as
-     * {@code {kind: "binary", base64: "..."}}; this helper unwraps
-     * the base64 payload for {@link #applyContent(NodeBuilder, Object)}.
+     * Decodes a captured binary leaf into raw bytes. Binary node content is captured as
+     * {@code {kind: "binary", base64: "..."}}; this helper unwraps the base64 payload for
+     * {@link #applyContent(NodeBuilder, Object)}.
      *
      * @param binary the binary leaf object
      * @return the decoded bytes
@@ -394,13 +323,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Builds a {@link Node} by walking a plain-JSON
-     * {@code {tag, attrs, content}} tree.
-     *
-     * @apiNote
-     * Shared core of {@link #buildNodeFromEvent(JSONObject)} and
-     * {@link #buildNodeFromTree(JSONObject)}; recurses into nested
-     * objects through {@link #applyContent(NodeBuilder, Object)}.
+     * Builds a {@link Node} by walking a plain-JSON {@code {tag, attrs, content}} tree. Shared core of
+     * {@link #buildNodeFromEvent(JSONObject)} and {@link #buildNodeFromTree(JSONObject)}; recurses into
+     * nested objects through {@link #applyContent(NodeBuilder, Object)}.
      *
      * @param tree the captured tree
      * @return the reconstructed {@link Node}
@@ -429,13 +354,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Applies a captured {@code content} value (binary leaf, child
-     * array, string, or {@code null}) onto the given builder.
-     *
-     * @apiNote
-     * Handles the four content shapes WA Web emits over its capture
-     * channel and rebuilds the structure the Cobalt
-     * {@link NodeBuilder} expects.
+     * Applies a captured {@code content} value onto the given builder, handling the four content shapes
+     * WA Web emits over its capture channel (binary leaf, child array, string, or {@code null}) and
+     * rebuilding the structure the Cobalt {@link NodeBuilder} expects.
      *
      * @param builder the target builder
      * @param content the JSON-shaped content value

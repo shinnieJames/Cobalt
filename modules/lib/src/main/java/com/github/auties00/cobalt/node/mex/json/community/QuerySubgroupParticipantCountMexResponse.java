@@ -19,47 +19,38 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Parsed response of the {@code mexQuerySubgroupParticipantCountJob} MEX
- * query.
+ * Parsed response of the {@code mexQuerySubgroupParticipantCountJob} MEX query.
  *
- * @apiNote Carries the per-subgroup participant counts projected from
- * {@code data.xwa2_group_query_by_id.sub_groups.edges}. Paired with
- * {@link QuerySubgroupParticipantCountMexRequest}; consumed by
- * {@code WAWebQueryAndUpdateSubgroupParticipantCountAction} to refresh the
- * counter badges next to each subgroup in the community panel.
+ * <p>This response carries the per-subgroup participant counts projected from
+ * {@code data.xwa2_group_query_by_id.sub_groups.edges}. It is the inbound
+ * counterpart of {@link QuerySubgroupParticipantCountMexRequest} and refreshes
+ * the counter badges next to each subgroup in the community panel.
  *
  * @implNote This implementation preserves the GraphQL connection shape
- * ({@code sub_groups.edges[].node}) verbatim rather than flattening it to
- * a {@code Map<id, count>}, so callers can distinguish a missing
- * {@code sub_groups} container from an empty edges list. Unlike WA Web's
- * {@code WAWebMexQuerySubgroupParticipantCountJob}, missing edges or
- * {@code null} edge nodes are surfaced as empty fields rather than raised
- * as {@code ServerStatusCodeError(500)} errors.
+ * ({@code sub_groups.edges[].node}) verbatim rather than flattening it to a
+ * map of id to count, so callers can distinguish a missing {@code sub_groups}
+ * container from an empty edges list. Unlike WA Web, missing edges or
+ * {@code null} edge nodes are surfaced as empty fields rather than raised as
+ * server errors.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexQuerySubgroupParticipantCountJob")
 public final class QuerySubgroupParticipantCountMexResponse implements MexOperation.Response.Json {
     /**
-     * Subgroup edges container returned by the relay.
-     *
-     * @apiNote Wraps the {@code edges} GraphQL array carrying subgroup ids
-     * and participant counts; empty when the relay did not project the
-     * container.
+     * Subgroup edges container returned by the relay, or {@code null} when the
+     * relay did not project it.
      */
     private final SubGroups subGroups;
 
     /**
-     * Community group identifier returned by the relay.
+     * Community group identifier returned by the relay, or {@code null} when
+     * the relay omitted it.
      *
-     * @apiNote Matches the {@code group_id} sent in the request through
-     * {@code input.group_jid}.
+     * <p>Matches the {@code group_jid} sent in the request input.
      */
     private final String id;
 
     /**
      * Constructs a new response with the given fields.
-     *
-     * @apiNote Package-private; instances are produced by the
-     * {@link #of(Node)} factory after parsing the inbound IQ payload.
      *
      * @param subGroups the subgroup edges container
      * @param id        the community group identifier
@@ -72,15 +63,15 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Entry point for receivers handling
+     * <p>This is the entry point for receivers handling
      * {@code <iq xmlns="w:mex">} replies tagged with
-     * {@link QuerySubgroupParticipantCountMexRequest#QUERY_ID}. Unwraps the
-     * {@code <result>} child, reads its content bytes and decodes the
-     * GraphQL JSON envelope.
+     * {@link QuerySubgroupParticipantCountMexRequest#QUERY_ID}. It unwraps the
+     * {@code <result>} child, reads its content bytes and decodes the GraphQL
+     * JSON envelope.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the
-     *         expected JSON shape is absent
+     * @return the parsed response, or {@link Optional#empty()} if the expected
+     *         JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexQuerySubgroupParticipantCountJob", exports = "mexQuerySubgroupParticipantCountJob",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -93,12 +84,11 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
     /**
      * Returns the subgroup edges container.
      *
-     * @apiNote Empty when the relay omitted the {@code sub_groups} GraphQL
-     * container; the edges list inside may itself be empty when the
+     * <p>The value is empty when the relay omitted the {@code sub_groups}
+     * GraphQL container; the edges list inside may itself be empty when the
      * request named a community with no regular subgroups.
      *
-     * @return an {@link Optional} containing the container, or empty if
-     *         absent
+     * @return an {@link Optional} containing the container, or empty if absent
      */
     public Optional<SubGroups> subGroups() {
         return Optional.ofNullable(subGroups);
@@ -107,39 +97,33 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
     /**
      * Returns the community group identifier.
      *
-     * @apiNote Matches the {@code group_jid} sent in the request input;
-     * surfaced as an {@link Optional} because the field may be absent from
-     * malformed relay replies.
+     * <p>Matches the {@code group_jid} sent in the request input; the value is
+     * empty when the relay omitted the field.
      *
-     * @return an {@link Optional} containing the identifier, or empty if
-     *         absent
+     * @return an {@link Optional} containing the identifier, or empty if absent
      */
     public Optional<String> id() {
         return Optional.ofNullable(id);
     }
 
     /**
-     * Subgroup edges container wrapping the array of subgroup nodes
-     * carrying participant counts.
+     * Subgroup edges container wrapping the array of subgroup nodes carrying
+     * participant counts.
      *
-     * @apiNote Preserves the GraphQL connection shape; each {@link Edges}
+     * <p>This type preserves the GraphQL connection shape; each {@link Edges}
      * entry wraps a single {@link Edges.Node}.
      */
     public static final class SubGroups {
         /**
-         * Subgroup edges returned by the relay.
+         * Subgroup edges returned by the relay, never {@code null} once
+         * {@link SubGroups#of(JSONObject)} has succeeded.
          *
-         * @apiNote Mirrors the {@code sub_groups.edges} GraphQL array;
-         * never {@code null} once {@link SubGroups#of(JSONObject)} has
-         * succeeded.
+         * <p>Mirrors the {@code sub_groups.edges} GraphQL array.
          */
         private final List<Edges> edges;
 
         /**
          * Constructs a new container with the given edges.
-         *
-         * @apiNote Package-private; instances are produced by
-         * {@link SubGroups#of(JSONObject)}.
          *
          * @param edges the subgroup edges
          */
@@ -150,10 +134,9 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
         /**
          * Returns the subgroup edges.
          *
-         * @apiNote Iterate this list to walk the subgroups whose counts the
-         * relay returned; each entry exposes a {@link Edges#node()}
-         * accessor that may be empty when the relay returned a malformed
-         * edge.
+         * <p>Iterate this list to walk the subgroups whose counts the relay
+         * returned; each entry exposes a {@link Edges#node()} accessor that may
+         * be empty when the relay returned a malformed edge.
          *
          * @return the list of edges, empty if absent
          */
@@ -164,23 +147,18 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
         /**
          * Single edge wrapper around a subgroup participant-count node.
          *
-         * @apiNote The edge level exists to leave room for future GraphQL
-         * cursor metadata without breaking the binary shape.
+         * <p>The edge level exists to leave room for future GraphQL cursor
+         * metadata without breaking the binary shape.
          */
         public static final class Edges {
             /**
-             * Subgroup node carried by the edge.
-             *
-             * @apiNote Nullable; a {@code null} value indicates the relay
+             * Subgroup node carried by the edge, or {@code null} when the relay
              * returned an edge envelope without a {@code node} child.
              */
             private final Node node;
 
             /**
              * Constructs a new edge wrapping the given node.
-             *
-             * @apiNote Package-private; instances are produced by
-             * {@link Edges#of(JSONObject)}.
              *
              * @param node the subgroup node
              */
@@ -191,10 +169,9 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
             /**
              * Returns the subgroup node carried by this edge.
              *
-             * @apiNote Empty when the relay returned the edge envelope
-             * without a {@code node} child; WA Web treats this case as an
-             * error, Cobalt prefers to surface it as
-             * {@link Optional#empty()}.
+             * <p>The value is empty when the relay returned the edge envelope
+             * without a {@code node} child; WA Web treats this case as an error
+             * whereas Cobalt prefers to surface it as {@link Optional#empty()}.
              *
              * @return an {@link Optional} containing the node, or empty if
              *         absent
@@ -204,38 +181,32 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
             }
 
             /**
-             * Subgroup participant-count node carrying the subgroup
-             * identifier and the total participant count.
+             * Subgroup participant-count node carrying the subgroup identifier
+             * and the total participant count.
              *
-             * @apiNote One per subgroup whose count was requested; this is
-             * the projection consumed by
-             * {@code WAWebQueryAndUpdateSubgroupParticipantCountAction} to
-             * update the per-subgroup counter badge.
+             * <p>There is one such node per subgroup whose count was requested;
+             * it is the projection that updates the per-subgroup counter badge.
              */
             public static final class Node {
                 /**
-                 * Subgroup identifier.
+                 * Subgroup identifier, or {@code null} when the relay omitted
+                 * it.
                  *
-                 * @apiNote The subgroup's WhatsApp WID stringified; in WA
-                 * Web it is funnelled through
-                 * {@code WAWebWidFactory.createWid}.
+                 * <p>The subgroup's WhatsApp WID stringified.
                  */
                 private final String id;
 
                 /**
-                 * Total participant count for the subgroup.
+                 * Total participant count for the subgroup, or {@code null}
+                 * when the relay omitted it.
                  *
-                 * @apiNote Mirrors the {@code total_participants_count}
-                 * GraphQL scalar; reflects all members regardless of
-                 * status.
+                 * <p>Mirrors the {@code total_participants_count} GraphQL
+                 * scalar; reflects all members regardless of status.
                  */
                 private final Long totalParticipantsCount;
 
                 /**
                  * Constructs a new node.
-                 *
-                 * @apiNote Package-private; instances are produced by the
-                 * {@link Node#of(JSONObject)} factory.
                  *
                  * @param id                     the subgroup identifier
                  * @param totalParticipantsCount the total participant count
@@ -248,8 +219,8 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
                 /**
                  * Returns the subgroup identifier.
                  *
-                 * @apiNote Empty when the relay omitted the {@code id} field
-                 * from this node.
+                 * <p>The value is empty when the relay omitted the {@code id}
+                 * field from this node.
                  *
                  * @return an {@link Optional} containing the identifier, or
                  *         empty if absent
@@ -261,24 +232,19 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
                 /**
                  * Returns the total participant count for this subgroup.
                  *
-                 * @apiNote Empty when the relay omitted the
-                 * {@code total_participants_count} field; callers that need
-                 * a primitive can fall back to {@code 0}.
+                 * <p>The value is empty when the relay omitted the
+                 * {@code total_participants_count} field; callers that need a
+                 * primitive can fall back to {@code 0}.
                  *
-                 * @return an {@link OptionalLong} containing the count, or
-                 *         empty if absent
+                 * @return an {@link OptionalLong} containing the count, or empty
+                 *         if absent
                  */
                 public OptionalLong totalParticipantsCount() {
                     return totalParticipantsCount != null ? OptionalLong.of(totalParticipantsCount) : OptionalLong.empty();
                 }
 
                 /**
-                 * Parses a participant-count node from the given JSON
-                 * object.
-                 *
-                 * @apiNote Package-private; invoked from
-                 * {@link Edges#of(JSONObject)} to project the
-                 * {@code edge.node} GraphQL object.
+                 * Parses a participant-count node from the given JSON object.
                  *
                  * @param obj the JSON object to parse
                  * @return an {@link Optional} containing the parsed node, or
@@ -295,15 +261,11 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
                 }
 
                 /**
-                 * Parses a list of participant-count nodes from the given
-                 * JSON array.
+                 * Parses a list of participant-count nodes from the given JSON
+                 * array, skipping {@code null} entries.
                  *
-                 * @apiNote Package-private; symmetry helper for callers
-                 * that need to read array-shaped node data. Currently
-                 * unused at the call sites of this response.
-                 *
-                 * @implNote This implementation skips {@code null} entries
-                 * without raising.
+                 * <p>This is a symmetry helper for array-shaped node data; it
+                 * is currently unused at the call sites of this response.
                  *
                  * @param arr the JSON array to parse
                  * @return the list of parsed nodes, empty if {@code arr} is
@@ -325,13 +287,9 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
             /**
              * Parses an edge wrapper from the given JSON object.
              *
-             * @apiNote Package-private; invoked from
-             * {@link SubGroups#of(JSONObject)} per array element of
-             * {@code sub_groups.edges}.
-             *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed edge, or
-             *         empty if {@code obj} is {@code null}
+             * @return an {@link Optional} containing the parsed edge, or empty
+             *         if {@code obj} is {@code null}
              */
             static Optional<Edges> of(JSONObject obj) {
                 if (obj == null) {
@@ -343,14 +301,8 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
             }
 
             /**
-             * Parses a list of edge wrappers from the given JSON array.
-             *
-             * @apiNote Package-private; called from
-             * {@link SubGroups#of(JSONObject)} to project the entire
-             * {@code edges} array in one shot.
-             *
-             * @implNote This implementation skips {@code null} entries
-             * without raising.
+             * Parses a list of edge wrappers from the given JSON array,
+             * skipping {@code null} entries.
              *
              * @param arr the JSON array to parse
              * @return the list of parsed edges, empty if {@code arr} is
@@ -372,13 +324,9 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
         /**
          * Parses a subgroups container from the given JSON object.
          *
-         * @apiNote Package-private; invoked from
-         * {@link QuerySubgroupParticipantCountMexResponse#of(byte[])} to
-         * project the {@code sub_groups} GraphQL container.
-         *
          * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed container, or
-         *         empty if {@code obj} is {@code null}
+         * @return an {@link Optional} containing the parsed container, or empty
+         *         if {@code obj} is {@code null}
          */
         static Optional<SubGroups> of(JSONObject obj) {
             if (obj == null) {
@@ -390,14 +338,11 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
         }
 
         /**
-         * Parses a list of subgroups containers from the given JSON array.
+         * Parses a list of subgroups containers from the given JSON array,
+         * skipping {@code null} entries.
          *
-         * @apiNote Package-private; symmetry helper for callers that need to
-         * read array-shaped container data. Currently unused at the call
-         * sites of this response.
-         *
-         * @implNote This implementation skips {@code null} entries without
-         * raising.
+         * <p>This is a symmetry helper for array-shaped container data; it is
+         * currently unused at the call sites of this response.
          *
          * @param arr the JSON array to parse
          * @return the list of parsed containers, empty if {@code arr} is
@@ -419,18 +364,17 @@ public final class QuerySubgroupParticipantCountMexResponse implements MexOperat
     /**
      * Parses the response from the raw JSON payload bytes.
      *
-     * @apiNote Package-private; only invoked via the {@link #of(Node)} entry
-     * point after unwrapping the IQ stanza.
+     * <p>This is only invoked via the {@link #of(Node)} entry point after the
+     * IQ stanza has been unwrapped.
      *
      * @implNote This implementation requires the {@code data} and
      * {@code data.xwa2_group_query_by_id} envelopes to be present, matching
      * WA Web's pre-check before destructuring; a missing {@code sub_groups}
-     * container collapses to {@code null} on the response rather than
-     * raising.
+     * container collapses to {@code null} on the response rather than raising.
      *
      * @param json the raw JSON bytes from the {@code <result>} child
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the envelope is missing
+     * @return an {@link Optional} containing the parsed response, or empty if
+     *         the envelope is missing
      */
     private static Optional<QuerySubgroupParticipantCountMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

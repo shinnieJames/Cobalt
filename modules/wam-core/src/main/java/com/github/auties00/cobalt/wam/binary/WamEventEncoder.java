@@ -7,6 +7,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.NavigableMap;
 import java.util.Objects;
 
 import static com.github.auties00.cobalt.wam.binary.WamTags.*;
@@ -242,6 +243,39 @@ public abstract sealed class WamEventEncoder
      */
     public final void writeFloatField(int fieldId, double value, boolean hasMore) {
         writeFloat(fieldId, FIELD | (hasMore ? 0 : LAST), value);
+    }
+
+    /**
+     * Writes a complete event, marker and fields, from a sorted map of
+     * decoded wire values.
+     *
+     * <p>The marker is written first with its {@link WamTags#LAST} flag set
+     * when the field map is empty. Fields are then emitted in ascending
+     * field-identifier order; the entry with the highest identifier carries
+     * the {@code LAST} flag. Each value is dispatched by its
+     * {@link WamWireValue} variant to the matching primitive writer.
+     *
+     * @param eventId the numeric event identifier
+     * @param weight  the resolved sampling weight (written as {@code -weight})
+     * @param fields  the fields to write, sorted by identifier; must not be
+     *                {@code null}
+     */
+    public final void writeEvent(int eventId, int weight, NavigableMap<Integer, WamWireValue> fields) {
+        var hasFields = !fields.isEmpty();
+        writeEventMarker(eventId, weight, hasFields);
+        if (!hasFields) {
+            return;
+        }
+        var lastKey = fields.lastKey();
+        for (var entry : fields.entrySet()) {
+            int fieldId = entry.getKey();
+            var hasMore = !entry.getKey().equals(lastKey);
+            switch (entry.getValue()) {
+                case WamWireValue.WamInt value -> writeIntField(fieldId, value.value(), hasMore);
+                case WamWireValue.WamFloat value -> writeFloatField(fieldId, value.value(), hasMore);
+                case WamWireValue.WamString value -> writeStringField(fieldId, value.value(), hasMore);
+            }
+        }
     }
 
     /**

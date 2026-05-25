@@ -10,62 +10,47 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 /**
- * Routes inbound {@code <notification>} stanzas whose category covers
- * WhatsApp Business (verified name, business profile, product catalog,
- * subscriptions, CTWA suggestions, SMB privacy settings, ad-account
- * nonces, marketing-campaign updates, MEX GraphQL events, and payment
- * transactions) to the matching per-type handler.
+ * Routes inbound {@code <notification>} stanzas whose category covers WhatsApp Business to the matching per-type handler.
  *
- * @apiNote
- * Cobalt's {@code NotificationStreamHandler} forwards every stanza whose
- * {@code type} attribute falls in the business branch to this dispatcher;
- * embedders do not invoke it directly. The dispatcher owns one
- * instance of each concrete handler.
+ * <p>The covered categories are verified name, business profile, product catalog, subscriptions, click-to-WhatsApp
+ * suggestions, small-business privacy settings, ad-account nonces, marketing-campaign updates, Meta Exchange GraphQL
+ * events, and payment transactions. The parent notification pipeline forwards every stanza whose {@code type} attribute
+ * falls in the business branch to this dispatcher; it owns one instance of each concrete handler and forwards each
+ * stanza to the handler whose category matches the {@code type} attribute.
  *
  * @implNote
- * This implementation merges three WA Web modules
- * ({@code WAWebHandleBusinessNotification},
- * {@code WAWebHandleMexNotification},
- * {@code WAWebPaymentNotificationHandler}) under one Cobalt dispatcher
- * because they share the business-account fan-out surface. Each
- * sub-handler remains keyed to its WA Web type via the
+ * This implementation merges three WhatsApp Web modules under one Cobalt dispatcher because they share the
+ * business-account fan-out surface; each sub-handler remains keyed to its source module via the
  * {@link WhatsAppWebModule} annotation on the handler class.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
 public final class NotificationBusinessDispatcher implements SocketStream.Handler {
     /**
-     * Handler for {@code business}, {@code digital_commerce_subscription},
-     * and {@code fb:update} notifications.
+     * Handles {@code business}, {@code digital_commerce_subscription}, and {@code fb:update} notifications.
      */
     private final NotificationBusinessStreamHandler businessHandler;
 
     /**
-     * Handler for {@code mex} notifications carrying MEX GraphQL
-     * subscription update payloads.
+     * Handles {@code mex} notifications carrying Meta Exchange GraphQL subscription update payloads.
      */
     private final NotificationMexStreamHandler mexHandler;
 
     /**
-     * Handler for {@code pay} notifications carrying payment-invite and
-     * payment-transaction stanzas.
+     * Handles {@code pay} notifications carrying payment-invite and payment-transaction stanzas.
      */
     private final NotificationPaymentStreamHandler paymentHandler;
 
     /**
-     * Constructs the dispatcher and eagerly instantiates every
-     * sub-handler with the shared client and migration service.
+     * Constructs the dispatcher and eagerly instantiates every sub-handler with the shared client and migration service.
      *
-     * @apiNote
-     * Called once during
-     * {@link SocketStream} setup;
-     * embedders do not construct it directly.
+     * <p>Called once during {@link SocketStream} setup. The {@code lidMigrationService} is consumed only by the
+     * {@code NotificationMexStreamHandler} when applying LID-change Meta Exchange events; the {@link WhatsAppClient}
+     * and {@link AckSender} are forwarded to every sub-handler for store and node access and for emitting the
+     * per-notification outbound {@code <ack>} stanza.
      *
-     * @param whatsapp            the {@link WhatsAppClient} forwarded to every sub-handler for store and node access
-     * @param lidMigrationService the {@link LidMigrationService} consumed only by the {@link NotificationMexStreamHandler} when applying {@code LidChangeNotification} MEX events
-     * @param ackSender           the {@link AckSender} forwarded to every
-     *                            sub-handler for emitting the
-     *                            per-notification outbound {@code <ack>}
-     *                            stanza
+     * @param whatsapp            the client forwarded to every sub-handler
+     * @param lidMigrationService the LID migration service forwarded to the Meta Exchange handler
+     * @param ackSender           the ack sender forwarded to every sub-handler
      */
     public NotificationBusinessDispatcher(WhatsAppClient whatsapp, LidMigrationService lidMigrationService, AckSender ackSender) {
         this.businessHandler = new NotificationBusinessStreamHandler(whatsapp, ackSender);
@@ -74,22 +59,13 @@ public final class NotificationBusinessDispatcher implements SocketStream.Handle
     }
 
     /**
-     * Forwards {@code node} to the sub-handler whose category matches the
-     * stanza's {@code type} attribute; drops stanzas with no type and
-     * stanzas whose type this dispatcher does not own.
+     * Forwards {@code node} to the sub-handler whose category matches the stanza's {@code type} attribute.
      *
-     * @apiNote
-     * Invoked by the parent {@code NotificationStreamHandler}. The
-     * outer stream pipeline owns the NACK decision for stanzas this
-     * dispatcher does not match.
-     *
-     * @implNote
-     * This implementation maps three business-flavoured types
-     * ({@code business}, {@code digital_commerce_subscription},
-     * {@code fb:update}) to the same {@link NotificationBusinessStreamHandler}
-     * because WA Web's
-     * {@code WAWebHandleBusinessNotification.handleBusinessNotificationJob}
-     * is the entry point for all three.
+     * <p>Stanzas with no {@code type} and stanzas whose {@code type} this dispatcher does not own are dropped; the
+     * outer stream pipeline owns the NACK decision for stanzas this dispatcher does not match. The three
+     * business-flavoured types {@code business}, {@code digital_commerce_subscription}, and {@code fb:update} all route
+     * to {@link NotificationBusinessStreamHandler}; {@code mex} routes to {@code NotificationMexStreamHandler} and
+     * {@code pay} routes to {@code NotificationPaymentStreamHandler}.
      *
      * @param node the incoming {@code <notification>} stanza
      */
@@ -113,9 +89,7 @@ public final class NotificationBusinessDispatcher implements SocketStream.Handle
     /**
      * Propagates {@link SocketStream.Handler#reset()} to every sub-handler.
      *
-     * @apiNote
-     * Invoked by the parent {@code NotificationStreamHandler} when the
-     * stream reset signal fires. Embedders do not call this directly.
+     * <p>Invoked by the parent notification pipeline when the stream reset signal fires.
      */
     @Override
     public void reset() {

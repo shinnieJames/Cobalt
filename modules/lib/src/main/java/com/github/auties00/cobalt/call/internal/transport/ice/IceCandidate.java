@@ -4,38 +4,38 @@ import java.net.InetSocketAddress;
 import java.util.Objects;
 
 /**
- * One ICE candidate — a {@code (transport address, type, base, etc.)}
- * tuple per RFC 8445 §5.1.
+ * Represents one ICE candidate, the transport-address tuple defined by RFC 8445 section 5.1.
  *
- * <p>The {@link #priority()} is the standard RFC 8445 §5.1.2.1
- * formula:
+ * <p>A candidate bundles the transport address datagrams actually flow over, the base address it
+ * was learned from, the candidate {@link IceCandidateType type}, the {@link IceComponent component}
+ * it serves, a foundation string grouping candidates of common network provenance, and a
+ * local-preference tie-breaker. {@link #priority()} folds the type, the local preference, and the
+ * component id into the single ordering key the agent uses to rank candidate pairs.
  *
- * <pre>{@code
+ * <p>The priority is the RFC 8445 section 5.1.2.1 formula:
+ *
+ * {@snippet :
  *   priority = (2^24 * type_preference)
  *            + (2^8  * local_preference)
- *            + (2^0  * (256 - component_id))
- * }</pre>
+ *            + (2^0  * (256 - component_id));
+ * }
  *
- * @param type             the candidate type — drives the
- *                         {@code type_preference}
- * @param component        which RTP/RTCP component this candidate
- *                         serves
- * @param transportAddress the {@code (host, port)} datagrams are
- *                         actually sent / received on; for HOST
- *                         candidates this is the local NIC; for
- *                         RELAYED it's the relay-allocated address
- * @param baseAddress      the base address for non-HOST candidates —
- *                         the local address from which the candidate
- *                         was learned. Equal to {@code transportAddress}
- *                         for HOST candidates
- * @param foundation       the foundation string per RFC 8445 §5.1.1.3,
- *                         identifying candidates that share network
- *                         provenance (same-base + same-type + same-stun
- *                         server)
- * @param localPreference  the local-preference component of the
- *                         priority formula (0..65535) — orders
- *                         multiple candidates of the same type, e.g.
- *                         multiple IPv4 NICs
+ * @param type             the candidate type, which supplies the {@code type_preference} term of
+ *                         the priority formula
+ * @param component        the RTP or RTCP component this candidate serves
+ * @param transportAddress the {@code (host, port)} datagrams are sent from and received on; for a
+ *                         {@link IceCandidateType#HOST} candidate this is the local NIC address,
+ *                         and for a {@link IceCandidateType#RELAYED} candidate it is the
+ *                         relay-allocated address
+ * @param baseAddress      the base address for a non-host candidate, namely the local address the
+ *                         candidate was learned from; equal to {@code transportAddress} for a host
+ *                         candidate
+ * @param foundation       the foundation string per RFC 8445 section 5.1.1.3, identifying
+ *                         candidates that share network provenance (same base, same type, and same
+ *                         STUN server)
+ * @param localPreference  the local-preference term of the priority formula, in the range
+ *                         {@code 0} to {@code 65535}, ordering multiple candidates of the same type
+ *                         such as several IPv4 NICs
  */
 public record IceCandidate(
         IceCandidateType type,
@@ -46,14 +46,22 @@ public record IceCandidate(
         int localPreference
 ) {
     /**
-     * Default local preference for the single candidate per type
-     * gathered by the basic agent (RFC 8445 §5.1.2.1 hint: 65535
-     * means "preferred network of its kind").
+     * The default local preference assigned to the single candidate of each type the basic agent
+     * gathers.
+     *
+     * @implNote This implementation uses {@code 65535}, the largest 16-bit value, following the
+     * RFC 8445 section 5.1.2.1 convention that the highest local preference denotes the preferred
+     * network of its kind.
      */
     public static final int DEFAULT_LOCAL_PREFERENCE = 65535;
 
     /**
-     * Compact constructor — null-checks fields and validates ranges.
+     * Validates the components, rejecting {@code null} or empty fields and out-of-range local
+     * preferences.
+     *
+     * @throws NullPointerException     if any reference component is {@code null}
+     * @throws IllegalArgumentException if {@code foundation} is empty or {@code localPreference} is
+     *                                  outside {@code [0, 65535]}
      */
     public IceCandidate {
         Objects.requireNonNull(type, "type cannot be null");
@@ -71,14 +79,17 @@ public record IceCandidate(
     }
 
     /**
-     * Convenience factory for a HOST candidate, where
-     * {@link #baseAddress()} equals {@link #transportAddress()}.
+     * Creates a {@link IceCandidateType#HOST} candidate whose base address equals its transport
+     * address.
      *
-     * @param component     the RTP/RTCP component
-     * @param address       the local NIC's transport address
-     * @param foundation    the foundation string (typically the NIC
-     *                      name + IP family)
-     * @return a new HOST candidate at default local preference
+     * <p>The candidate is built at {@link #DEFAULT_LOCAL_PREFERENCE} since the basic gathering pass
+     * emits one host candidate per address family per interface.
+     *
+     * @param component  the RTP or RTCP component the candidate serves
+     * @param address    the local NIC transport address, used for both the transport and base
+     *                   address
+     * @param foundation the foundation string, typically the NIC name combined with the IP family
+     * @return a new host candidate at the default local preference
      */
     public static IceCandidate host(IceComponent component, InetSocketAddress address, String foundation) {
         return new IceCandidate(IceCandidateType.HOST, component, address, address,
@@ -86,16 +97,17 @@ public record IceCandidate(
     }
 
     /**
-     * Convenience factory for a RELAYED candidate.
+     * Creates a {@link IceCandidateType#RELAYED} candidate.
      *
-     * @param component     the RTP/RTCP component
-     * @param relayedAddr   the relay-allocated address (the address
-     *                      the peer will send datagrams to)
-     * @param baseAddr      the local socket from which we reach the
-     *                      relay
-     * @param foundation    the foundation string (typically the
-     *                      relay's STUN server identifier)
-     * @return a new RELAYED candidate at default local preference
+     * <p>The candidate is built at {@link #DEFAULT_LOCAL_PREFERENCE}. The transport address is the
+     * relay-allocated address the peer sends datagrams to, while the base address is the local
+     * socket the relay is reached through.
+     *
+     * @param component   the RTP or RTCP component the candidate serves
+     * @param relayedAddr the relay-allocated address the peer sends datagrams to
+     * @param baseAddr    the local socket the relay is reached through
+     * @param foundation  the foundation string, typically the relay's STUN server identifier
+     * @return a new relayed candidate at the default local preference
      */
     public static IceCandidate relayed(IceComponent component, InetSocketAddress relayedAddr,
                                        InetSocketAddress baseAddr, String foundation) {
@@ -104,16 +116,17 @@ public record IceCandidate(
     }
 
     /**
-     * Convenience factory for a SERVER_REFLEXIVE candidate.
+     * Creates a {@link IceCandidateType#SERVER_REFLEXIVE} candidate.
      *
-     * @param component   the RTP/RTCP component
-     * @param mappedAddr  the address the STUN server reported
-     * @param baseAddr    the local socket from which we reached the
-     *                    STUN server
-     * @param foundation  the foundation string (typically the STUN
-     *                    server identifier)
-     * @return a new SERVER_REFLEXIVE candidate at default local
-     *         preference
+     * <p>The candidate is built at {@link #DEFAULT_LOCAL_PREFERENCE}. The transport address is the
+     * mapped address the STUN server reported, while the base address is the local socket the STUN
+     * server was reached through.
+     *
+     * @param component  the RTP or RTCP component the candidate serves
+     * @param mappedAddr the mapped address the STUN server reported
+     * @param baseAddr   the local socket the STUN server was reached through
+     * @param foundation the foundation string, typically the STUN server identifier
+     * @return a new server-reflexive candidate at the default local preference
      */
     public static IceCandidate serverReflexive(IceComponent component, InetSocketAddress mappedAddr,
                                                InetSocketAddress baseAddr, String foundation) {
@@ -122,11 +135,14 @@ public record IceCandidate(
     }
 
     /**
-     * Computes the candidate's RFC 8445 §5.1.2.1 priority. The result
-     * is non-negative and fits in a {@code long} (32-bit unsigned in
-     * the SDP "priority" attribute).
+     * Computes the candidate's RFC 8445 section 5.1.2.1 priority.
      *
-     * @return the priority
+     * <p>The result combines the {@link IceCandidateType#typePreference() type preference} shifted
+     * left by 24 bits, the {@link #localPreference()} shifted left by 8 bits, and {@code 256} minus
+     * the {@link IceComponent#componentId() component id}. It is non-negative and fits in a
+     * {@code long}, matching the 32-bit unsigned range of the SDP {@code priority} attribute.
+     *
+     * @return the candidate priority
      */
     public long priority() {
         var typePref = (long) type.typePreference();

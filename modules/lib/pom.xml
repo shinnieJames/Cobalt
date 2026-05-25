@@ -4,12 +4,12 @@
 
     <parent>
         <groupId>com.github.auties00</groupId>
-        <artifactId>cobalt-parent</artifactId>
+        <artifactId>cobalt</artifactId>
         <version>0.1.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>cobalt</artifactId>
+    <artifactId>cobalt-lib</artifactId>
     <packaging>jar</packaging>
     <name>${project.groupId}:${project.artifactId}</name>
     <description>Standalone fully-featured WhatsApp Web API for Java and Kotlin</description>
@@ -144,9 +144,6 @@
                             <version>${project.version}</version>
                         </annotationProcessorPath>
                     </annotationProcessorPaths>
-                    <compilerArgs>
-                        <compilerArg>--enable-preview</compilerArg>
-                    </compilerArgs>
                 </configuration>
             </plugin>
 
@@ -155,7 +152,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
                 <configuration>
-                    <argLine>--enable-preview --add-modules jdk.incubator.vector --enable-native-access=ALL-UNNAMED</argLine>
+                    <argLine>--add-modules jdk.incubator.vector --enable-native-access=ALL-UNNAMED</argLine>
                 </configuration>
                 <dependencies>
                     <dependency>
@@ -173,7 +170,7 @@
                 <version>3.1.0</version>
                 <configuration>
                     <classpathScope>test</classpathScope>
-                    <commandlineArgs>--enable-preview --add-modules jdk.incubator.vector --add-opens java.base/jdk.internal.misc=ALL-UNNAMED</commandlineArgs>
+                    <commandlineArgs>--add-modules jdk.incubator.vector --add-opens java.base/jdk.internal.misc=ALL-UNNAMED</commandlineArgs>
                 </configuration>
             </plugin>
         </plugins>
@@ -293,13 +290,6 @@
             <groupId>com.github.auties00</groupId>
             <artifactId>collections</artifactId>
             <version>1.0.0</version>
-        </dependency>
-
-        <!-- LMDB key-value store for lazy message loading -->
-        <dependency>
-            <groupId>org.lmdbjava</groupId>
-            <artifactId>lmdbjava</artifactId>
-            <version>${lmdbjava.version}</version>
         </dependency>
 
         <!-- PDF rendering for document thumbnails in the upload transcoder -->

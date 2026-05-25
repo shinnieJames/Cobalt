@@ -3,26 +3,22 @@ package com.github.auties00.cobalt.call.internal.transport.ice;
 import java.util.Objects;
 
 /**
- * The local and remote ufrag/password pairs an {@link IceAgent} uses
- * to drive STUN binding requests per RFC 8445 §7.2.2 (USERNAME =
- * {@code remoteUfrag:localUfrag}, MESSAGE-INTEGRITY keyed on
- * {@code remotePassword}).
+ * Holds the local and remote ufrag/password pairs an {@link IceAgent} uses to authenticate STUN
+ * binding requests per RFC 8445 section 7.2.2.
  *
- * <p>For WhatsApp's relay-mediated path the {@code localPassword} is
- * actually the {@code relay_key} from {@code RelayListUpdate} —
- * {@link com.github.auties00.cobalt.call.internal.transport.relay.WaRelayMessageIntegrity}
- * documents the (non-RFC) keying derivation.
+ * <p>RFC 8445 keys the USERNAME of an outbound binding request as {@code remoteUfrag:localUfrag}
+ * and stamps MESSAGE-INTEGRITY with the peer's password. For WhatsApp's relay-mediated path the
+ * {@code localPassword} carried here is the {@code relay_key} delivered by {@code RelayListUpdate}
+ * rather than an SDP-negotiated password; the keying derivation is documented on
+ * {@link com.github.auties00.cobalt.call.internal.transport.relay.WaRelayMessageIntegrity}.
  *
- * @param localUfrag     the local user fragment (random 4..256 bytes
- *                       per RFC 8445 §5.3); peer's USERNAME prefixes
- *                       this when sending to us
- * @param localPassword  the local password — used to verify
- *                       MESSAGE-INTEGRITY on incoming binding
+ * @param localUfrag     the local user fragment (a random 4 to 256 byte token per RFC 8445
+ *                       section 5.3); the peer's USERNAME suffixes this when sending to the local
+ *                       endpoint
+ * @param localPassword  the local password, used to verify MESSAGE-INTEGRITY on inbound binding
  *                       requests
- * @param remoteUfrag    the remote user fragment, learned from the
- *                       peer's offer/answer
- * @param remotePassword the remote password — used to compute
- *                       MESSAGE-INTEGRITY on outgoing binding
+ * @param remoteUfrag    the remote user fragment, learned from the peer's offer or answer
+ * @param remotePassword the remote password, used to compute MESSAGE-INTEGRITY on outbound binding
  *                       requests
  */
 public record IceCredentials(
@@ -32,7 +28,10 @@ public record IceCredentials(
         byte[] remotePassword
 ) {
     /**
-     * Compact constructor — null-checks fields.
+     * Validates the components, rejecting {@code null} fields and empty ufrags.
+     *
+     * @throws NullPointerException     if any component is {@code null}
+     * @throws IllegalArgumentException if {@code localUfrag} or {@code remoteUfrag} is empty
      */
     public IceCredentials {
         Objects.requireNonNull(localUfrag, "localUfrag cannot be null");
@@ -48,12 +47,13 @@ public record IceCredentials(
     }
 
     /**
-     * Returns the USERNAME attribute the agent stamps into outbound
-     * binding requests per RFC 8445 §7.2.2 — concatenation of
-     * {@code remoteUfrag} and {@code localUfrag} separated by
-     * {@code ':'}.
+     * Returns the USERNAME attribute value for an outbound binding request per RFC 8445
+     * section 7.2.2.
      *
-     * @return the USERNAME string
+     * <p>The value is {@code remoteUfrag} and {@code localUfrag} joined by a {@code ':'}, so that
+     * the peer can match the request against its own local ufrag.
+     *
+     * @return the USERNAME string of the form {@code remoteUfrag:localUfrag}
      */
     public String outboundUsername() {
         return remoteUfrag + ":" + localUfrag;

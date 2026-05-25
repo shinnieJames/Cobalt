@@ -14,36 +14,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The sealed family of inbound replies to a
- * {@link SmaxWaffleEncryptedPayloadRequestRequest}.
- *
- * @apiNote
- * Mirrors WA Web's three documented {@code EncryptedPayloadRequest}
- * reply shapes: a {@link Success} carrying the encrypted Facebook-side
- * response plus an optional {@code <wf_deleted/>} marker (consumed by
- * {@code WAWebAccountLinkingAPI.sendLinkingMutation} and
- * {@code WAWebCrosspostingAPI}), a {@link ClientError} for malformed
- * or unauthorised requests, and a {@link ServerError} for transient
- * relay failures.
+ * Models the sealed family of inbound replies to a {@link SmaxWaffleEncryptedPayloadRequestRequest}.
+ * <p>
+ * A reply is exactly one of three shapes: a {@link Success} carrying the encrypted Facebook-side response
+ * plus an optional deleted-state marker, a {@link ClientError} for malformed or unauthorised requests
+ * (codes below {@code 500}), or a {@link ServerError} for transient relay failures (codes at or above
+ * {@code 500}).
  */
 public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOperation.Response
         permits SmaxWaffleEncryptedPayloadRequestResponse.Success, SmaxWaffleEncryptedPayloadRequestResponse.ClientError, SmaxWaffleEncryptedPayloadRequestResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxWaffleEncryptedPayloadRequestResponse}
-     * variant in priority order and returns the first that parses
-     * cleanly.
-     *
-     * @apiNote
-     * Mirrors WA Web's {@code sendEncryptedPayloadRequestRPC}
-     * dispatch: the incoming stanza is offered to the {@link Success}
-     * parser first, then the {@link ClientError} parser, then the
-     * {@link ServerError} parser.
+     * Parses the inbound stanza into the first matching variant.
+     * <p>
+     * The stanza is offered to the {@link Success} parser first, then the {@link ClientError} parser, then
+     * the {@link ServerError} parser; the first that parses cleanly wins. An empty {@link Optional} means
+     * none of the three matched.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when none of the three parsers matched
+     * @return an {@link Optional} carrying the parsed variant, or empty when none of the three parsers matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxWaffleEncryptedPayloadRequestRPC",
@@ -63,48 +53,31 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
     }
 
     /**
-     * The {@code Success} reply variant: the relay forwarded the
-     * encrypted Facebook-side response and, optionally, a
-     * {@code <wf_deleted/>} marker.
-     *
-     * @apiNote
-     * Consumed by {@code WAWebAccountLinkingAPI.sendLinkingMutation}
-     * (and {@code WAWebCrosspostingAPI}); the embedder decrypts
-     * {@link #encryptionMetadata()} via the WA Web equivalent of
-     * {@code decryptRSAEncryptedPayload} to recover the Facebook-side
-     * response. The optional {@link #wfDeleted()} flag surfaces only
-     * when the relay reports that the linked Waffle state has been
-     * deleted between the request and the reply.
+     * Models the success reply: the relay forwarded the encrypted Facebook-side response.
+     * <p>
+     * The encrypted response is carried by {@link #encryptionMetadata()}; embedders decrypt it to recover
+     * the Facebook-side payload. The optional {@link #wfDeleted()} flag surfaces only when the relay reports
+     * that the linked Waffle state was deleted between the request and the reply.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleEncryptedPayloadRequestResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleIQResultResponseMixin")
     final class Success implements SmaxWaffleEncryptedPayloadRequestResponse {
         /**
-         * The relay-returned encryption metadata.
+         * Holds the relay-returned encryption metadata.
          */
         private final SmaxWaffleRsaEncryptionMetadata encryptionMetadata;
 
         /**
-         * The optional {@code <wf_deleted/>} flag, parsed as a
-         * {@code FALSE_TRUE} enum; {@code null} when the marker is
-         * absent.
+         * Holds the deleted-state flag, or {@code null} when the marker is absent.
          */
         private final Boolean wfDeleted;
 
         /**
-         * Constructs a new success projection.
+         * Constructs a success reply from the relay-returned metadata and optional deleted-state flag.
          *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope and
-         * payload have been validated; embedders typically do not
-         * instantiate this directly.
-         *
-         * @param encryptionMetadata the relay-returned metadata; never
-         *                           {@code null}
-         * @param wfDeleted          the {@code <wf_deleted/>} flag, or
-         *                           {@code null} when absent
-         * @throws NullPointerException if {@code encryptionMetadata} is
-         *                              {@code null}
+         * @param encryptionMetadata the relay-returned metadata; never {@code null}
+         * @param wfDeleted          the deleted-state flag, or {@code null} when absent
+         * @throws NullPointerException if {@code encryptionMetadata} is {@code null}
          */
         public Success(SmaxWaffleRsaEncryptionMetadata encryptionMetadata, Boolean wfDeleted) {
             this.encryptionMetadata = Objects.requireNonNull(encryptionMetadata, "encryptionMetadata cannot be null");
@@ -114,48 +87,36 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         /**
          * Returns the relay-returned encryption metadata.
          *
-         * @return the metadata as supplied by the relay; never
-         *         {@code null}
+         * @return the metadata as supplied by the relay; never {@code null}
          */
         public SmaxWaffleRsaEncryptionMetadata encryptionMetadata() {
             return encryptionMetadata;
         }
 
         /**
-         * Returns the {@code <wf_deleted/>} flag when the relay
-         * surfaced one.
+         * Returns the deleted-state flag when the relay surfaced one.
+         * <p>
+         * An empty {@link Optional} represents the wire absence rather than {@code false}, so callers can
+         * distinguish a marker that was not surfaced from a marker that was explicitly false.
          *
-         * @apiNote
-         * {@link Optional#empty()} represents the wire absence rather
-         * than {@code false}, so callers can distinguish "marker not
-         * surfaced" from "marker explicitly false".
-         *
-         * @return an {@link Optional} carrying the flag, or empty when
-         *         absent
+         * @return an {@link Optional} carrying the flag, or empty when absent
          */
         public Optional<Boolean> wfDeleted() {
             return Optional.ofNullable(wfDeleted);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the inbound
-         * stanza.
+         * Parses a success variant from the inbound stanza.
+         * <p>
+         * Returns an empty {@link Optional} when the envelope check fails, when the encryption-metadata
+         * child is missing or malformed, or when the optional deleted-state child is unparsable.
          *
-         * @apiNote
-         * Returns {@link Optional#empty()} when the envelope check
-         * fails, when the {@code <encryption_metadata/>} child is
-         * missing or malformed, or when the optional
-         * {@code <wf_deleted/>} child is unparsable.
-         *
-         * @implNote
-         * This implementation matches the {@code wf_deleted} content
-         * case-insensitively against the literal {@code "true"} to
-         * mirror WA Web's {@code ENUM_FALSE_TRUE} parser.
+         * @implNote This implementation matches the deleted-state content case-insensitively against the
+         * literal {@code "true"}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleEncryptedPayloadRequestResponseSuccess",
                 exports = "parseEncryptedPayloadRequestResponseSuccess",
@@ -184,12 +145,10 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         }
 
         /**
-         * Returns whether the given object is a {@link Success} with
-         * equal payload fields.
+         * Returns whether the given object is a {@link Success} with equal payload fields.
          *
          * @param obj the candidate; may be {@code null}
-         * @return {@code true} when both metadata and {@code wfDeleted}
-         *         match
+         * @return {@code true} when both metadata and the deleted-state flag match
          */
         @Override
         public boolean equals(Object obj) {
@@ -207,8 +166,7 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         /**
          * Returns a hash code derived from the payload fields.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -229,38 +187,28 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
     }
 
     /**
-     * The {@code ClientError} reply variant: the relay rejected the
-     * request with a code below {@code 500}.
-     *
-     * @apiNote
-     * Surfaces malformed-request, unauthorised, and stale-nonce
-     * rejections; {@code WAWebAccountLinkingAPI.sendLinkingMutation}
-     * logs {@code [WAFFLE] Linking mutation failed} and surfaces the
-     * error name to its caller without retrying.
+     * Models the client-error reply: the relay rejected the request with a code below {@code 500}.
+     * <p>
+     * Surfaces malformed-request, unauthorised, and stale-nonce rejections. The carried {@link #errorCode()}
+     * and {@link #errorText()} are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleEncryptedPayloadRequestResponseError")
     final class ClientError implements SmaxWaffleEncryptedPayloadRequestResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * Constructs a client-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -279,26 +227,21 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
-         * which only matches codes below {@code 500}.
+         * Parses a client-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which only matches codes below {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleEncryptedPayloadRequestResponseError",
                 exports = "parseEncryptedPayloadRequestResponseError",
@@ -312,8 +255,7 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         }
 
         /**
-         * Returns whether the given object is a {@link ClientError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ClientError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -333,8 +275,7 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {
@@ -354,35 +295,28 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
     }
 
     /**
-     * The {@code ServerError} reply variant: the relay rejected the
-     * request with a code of {@code 500} or above.
-     *
-     * @apiNote
-     * Indicates a transient relay-side failure.
+     * Models the server-error reply: the relay rejected the request with a code of {@code 500} or above.
+     * <p>
+     * Indicates a transient relay-side failure. The carried {@link #errorCode()} and {@link #errorText()}
+     * are the relay-reported failure details.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInWaffleEncryptedPayloadRequestResponseError")
     final class ServerError implements SmaxWaffleEncryptedPayloadRequestResponse {
         /**
-         * The numeric error code.
+         * Holds the numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the human-readable error text, or {@code null} when the relay omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
-         *
-         * @apiNote
-         * Called by {@link #of(Node, Node)} after the envelope shape
-         * has been validated; embedders typically do not instantiate
-         * this directly.
+         * Constructs a server-error reply from the relay-reported code and text.
          *
          * @param errorCode the numeric error code
-         * @param errorText the human-readable text, or {@code null}
-         *                  when absent
+         * @param errorText the human-readable text, or {@code null} when absent
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -401,26 +335,21 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * inbound stanza.
-         *
-         * @apiNote
-         * Delegates the envelope and code-range check to
-         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
-         * which only matches codes at or above {@code 500}.
+         * Parses a server-error variant from the inbound stanza.
+         * <p>
+         * The envelope and code-range check is delegated to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which only matches codes at or above {@code 500}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant, or empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInWaffleEncryptedPayloadRequestResponseError",
                 exports = "parseEncryptedPayloadRequestResponseError",
@@ -434,8 +363,7 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         }
 
         /**
-         * Returns whether the given object is a {@link ServerError}
-         * with equal code and text.
+         * Returns whether the given object is a {@link ServerError} with equal code and text.
          *
          * @param obj the candidate; may be {@code null}
          * @return {@code true} when both code and text match
@@ -455,8 +383,7 @@ public sealed interface SmaxWaffleEncryptedPayloadRequestResponse extends SmaxOp
         /**
          * Returns a hash code derived from the code and text.
          *
-         * @return a content-based hash consistent with
-         *         {@link #equals(Object)}
+         * @return a content-based hash consistent with {@link #equals(Object)}
          */
         @Override
         public int hashCode() {

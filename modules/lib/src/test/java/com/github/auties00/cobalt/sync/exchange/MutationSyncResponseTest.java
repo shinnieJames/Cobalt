@@ -16,30 +16,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the structural invariants of {@link MutationSyncResponse}.
+ * Pins the structural invariants of {@link MutationSyncResponse}: required vs nullable
+ * fields, defensive defaults (a {@code null} patches list resolves to an empty list at the
+ * accessor), the unmodifiable patches accessor, equals/hashCode field coverage, and the
+ * toString format.
  *
- * @apiNote
- * Covers the value-class contract: required vs nullable fields,
- * defensive defaults (null patches list resolves to an empty list at the accessor),
- * unmodifiable patches accessor, equals/hashCode field coverage, and toString format.
- *
- * @implNote
- * This implementation is fully synthetic; the tests build {@link MutationSyncResponse}
- * instances directly via the public constructors so {@link MutationResponseParser} is
- * not in scope here.
+ * <p>The tests build {@link MutationSyncResponse} instances directly via the public
+ * constructors, so {@link MutationResponseParser} is not in scope here.
  */
 @DisplayName("MutationSyncResponse")
 class MutationSyncResponseTest {
 
-    /**
-     * Tests for the constructor's required vs nullable field contract.
-     */
     @Nested
     @DisplayName("required vs nullable fields")
     class Construction {
-        /**
-         * Asserts that a {@code null} collection name is rejected at construction.
-         */
         @Test
         @DisplayName("collection name must not be null")
         void collectionNameRequired() {
@@ -47,10 +37,6 @@ class MutationSyncResponseTest {
                     () -> new MutationSyncResponse(null, 0L, false, List.of(), null));
         }
 
-        /**
-         * Asserts that an absent snapshot reference surfaces as an empty
-         * {@link java.util.Optional}.
-         */
         @Test
         @DisplayName("snapshot reference defaults to empty Optional")
         void snapshotReferenceOptional() {
@@ -59,10 +45,6 @@ class MutationSyncResponseTest {
             assertFalse(response.isSnapshot());
         }
 
-        /**
-         * Asserts that the five-arg constructor leaves
-         * {@link MutationSyncResponse#collectionError()} empty.
-         */
         @Test
         @DisplayName("collectionError defaults to empty Optional (single-arg constructor)")
         void collectionErrorOptional() {
@@ -70,10 +52,6 @@ class MutationSyncResponseTest {
             assertTrue(response.collectionError().isEmpty());
         }
 
-        /**
-         * Asserts that an explicitly-supplied {@link WhatsAppWebAppStateSyncException}
-         * surfaces through {@link MutationSyncResponse#collectionError()}.
-         */
         @Test
         @DisplayName("explicit collectionError surfaces through Optional accessor")
         void explicitCollectionError() {
@@ -83,10 +61,6 @@ class MutationSyncResponseTest {
             assertEquals(error, response.collectionError().orElseThrow());
         }
 
-        /**
-         * Asserts that a {@code null} patches list defaults to an empty list at the
-         * accessor.
-         */
         @Test
         @DisplayName("patches list defaults to empty when null is passed")
         void nullPatchesYieldsEmpty() {
@@ -95,10 +69,6 @@ class MutationSyncResponseTest {
                     "constructor null patches -> accessor returns empty list");
         }
 
-        /**
-         * Asserts that {@link MutationSyncResponse#isSnapshot()} reflects whether a
-         * snapshot reference was supplied.
-         */
         @Test
         @DisplayName("isSnapshot returns true iff snapshotReference was supplied")
         void isSnapshotReflectsReference() {
@@ -110,16 +80,9 @@ class MutationSyncResponseTest {
         }
     }
 
-    /**
-     * Tests for the unmodifiable contract on the patches accessor.
-     */
     @Nested
     @DisplayName("patches accessor - unmodifiable")
     class PatchesAccessor {
-        /**
-         * Asserts that mutating the returned patches collection throws
-         * {@link UnsupportedOperationException}.
-         */
         @Test
         @DisplayName("patches() returns an unmodifiable sequenced collection")
         void patchesIsUnmodifiable() {
@@ -129,15 +92,9 @@ class MutationSyncResponseTest {
         }
     }
 
-    /**
-     * Tests for the equality and hash-code contract.
-     */
     @Nested
     @DisplayName("equality and hashCode")
     class Equality {
-        /**
-         * Asserts that two responses with identical fields are equal and share a hash code.
-         */
         @Test
         @DisplayName("two responses with the same fields are equal")
         void equalsByField() {
@@ -147,9 +104,6 @@ class MutationSyncResponseTest {
             assertEquals(a.hashCode(), b.hashCode());
         }
 
-        /**
-         * Asserts that a difference in {@code version} breaks equality.
-         */
         @Test
         @DisplayName("differing version makes responses unequal")
         void inequalityByVersion() {
@@ -158,9 +112,6 @@ class MutationSyncResponseTest {
             assertNotEquals(a, b);
         }
 
-        /**
-         * Asserts that a difference in {@code collectionName} breaks equality.
-         */
         @Test
         @DisplayName("differing collection name makes responses unequal")
         void inequalityByCollection() {
@@ -169,9 +120,6 @@ class MutationSyncResponseTest {
             assertNotEquals(a, b);
         }
 
-        /**
-         * Asserts that a difference in {@code hasMore} breaks equality.
-         */
         @Test
         @DisplayName("differing hasMore makes responses unequal")
         void inequalityByHasMore() {
@@ -181,16 +129,9 @@ class MutationSyncResponseTest {
         }
     }
 
-    /**
-     * Tests for the toString diagnostic format.
-     */
     @Nested
     @DisplayName("toString - diagnostic format")
     class ToStringFormat {
-        /**
-         * Asserts that {@link MutationSyncResponse#toString()} lists every field with its
-         * label.
-         */
         @Test
         @DisplayName("toString lists every field with its label")
         void toStringListsEveryField() {

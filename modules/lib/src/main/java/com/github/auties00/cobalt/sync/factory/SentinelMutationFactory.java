@@ -22,40 +22,32 @@ import java.util.logging.Logger;
 /**
  * Builds outgoing sentinel sync mutations.
  *
- * @apiNote
- * Drives the {@code WAWebSentinel} key-rotation flow which seeds one
- * sentinel mutation per app-state collection so that subsequent
- * mutations encrypted under the freshly rotated sync key have a
- * predecessor MAC chain anchored on the new key epoch. Mutations
- * produced here are consumed on receiving devices by
- * {@link com.github.auties00.cobalt.sync.handler.SentinelHandler} which
+ * <p>This factory drives the key-rotation flow which seeds one sentinel mutation per app-state
+ * collection so that subsequent mutations encrypted under the freshly rotated sync key have a
+ * predecessor MAC chain anchored on the new key epoch. Mutations produced here are consumed on
+ * receiving devices by {@link com.github.auties00.cobalt.sync.handler.SentinelHandler}, which
  * expires the matching key epoch in a transaction.
  *
  * @implNote
- * This implementation mirrors
- * {@code WAWebSentinelMutationSync.getSentinelMutations} which iterates
- * over {@code CollectionName.members()} and emits one mutation per
- * collection name; Cobalt iterates over {@link SyncPatchType#values()}
- * which lists the same set of names. Each mutation's index follows the
- * standard {@code [actionName, collectionName]} shape and carries the
- * newest key pair's epoch as {@code keyExpiration.expiredKeyEpoch}.
+ * WA Web iterates over its collection-name enum and emits one mutation per collection name; Cobalt
+ * iterates over {@link SyncPatchType#values()}, which lists the same set of names. Each mutation's
+ * index follows the standard {@code [actionName, collectionName]} shape and carries the newest key
+ * pair's epoch as the {@code keyExpiration.expiredKeyEpoch} field.
  */
 public final class SentinelMutationFactory {
     /**
-     * The class logger emitting the same WA Web tag strings
-     * ({@code preparing mutations...}, no-key-pair warning) for parity
-     * with the {@code WATagsLogger.TAGS(["syncd","SentinelMutationSync"])}
-     * tag used by the source.
+     * Logs the sentinel mutation preparation progress.
+     *
+     * @implNote
+     * This logger emits the same tag strings WA Web uses ({@code preparing mutations...} and the
+     * no-key-pair warning) for parity with the source's syncd sentinel tag.
      */
     private static final Logger LOGGER = Logger.getLogger(SentinelMutationFactory.class.getName());
 
     /**
      * Constructs a sentinel mutation factory.
      *
-     * @apiNote
-     * Required by the dependency-injection container before the factory
-     * is wired into the sentinel scheduling job. The factory keeps no
-     * state, so a single instance is sufficient per client.
+     * <p>The factory keeps no state, so a single instance is sufficient per client.
      */
     public SentinelMutationFactory() {
 
@@ -64,30 +56,23 @@ public final class SentinelMutationFactory {
     /**
      * Creates sentinel pending mutations for every sync collection type.
      *
-     * @apiNote
-     * Invoked by the sentinel scheduling job ahead of marking every
-     * collection for sync. The returned list contains one mutation per
-     * {@link SyncPatchType}; receiving devices expire the matching key
-     * epoch via {@code expireSyncKeyInTransaction} and mark the
-     * collection as ready for the next sync cycle. Returns
-     * {@link Collections#emptyList()} when no sync key pairs are
-     * available, which matches WA Web's no-key-pair early return.
+     * <p>The returned list contains one mutation per {@link SyncPatchType}; receiving devices
+     * expire the matching key epoch and mark the collection as ready for the next sync cycle. The
+     * list is {@link Collections#emptyList()} when no sync key pairs are available, matching WA
+     * Web's no-key-pair early return.
      *
      * @implNote
      * This implementation reads the newest sync-key pair via
-     * {@link SyncKeyUtils#findNewestKey(java.util.Collection)} and its
-     * epoch via {@link SyncKeyUtils#getKeyEpoch(byte[])}, then emits one
-     * {@code SET} mutation per {@link SyncPatchType}. The
-     * {@code SyncActionValue} (and therefore the inner
-     * {@code keyExpiration.expiredKeyEpoch}) is shared across every
-     * mutation because the epoch is per-account, not per-collection.
+     * {@link SyncKeyUtils#findNewestKey(java.util.Collection)} and its epoch via
+     * {@link SyncKeyUtils#getKeyEpoch(byte[])}, then emits one {@code SET} mutation per
+     * {@link SyncPatchType}. The {@code SyncActionValue} (and therefore the inner
+     * {@code keyExpiration.expiredKeyEpoch}) is shared across every mutation because the epoch is
+     * per-account, not per-collection.
      *
-     * @param client the WhatsApp client whose store is consulted for the
-     *               app-state-keys map; the newest key pair becomes the
-     *               epoch source
-     * @return a list of pending mutations, one per
-     *         {@link SyncPatchType}, or {@link Collections#emptyList()}
-     *         if no sync key pairs exist
+     * @param client the WhatsApp client whose store is consulted for the app-state-keys map; the
+     *               newest key pair becomes the epoch source
+     * @return a list of pending mutations, one per {@link SyncPatchType}, or
+     *         {@link Collections#emptyList()} if no sync key pairs exist
      */
     @WhatsAppWebExport(moduleName = "WAWebSentinelMutationSync", exports = "getSentinelMutations", adaptation = WhatsAppAdaptation.DIRECT)
     public List<SyncPendingMutation> getSentinelMutations(WhatsAppClient client) {

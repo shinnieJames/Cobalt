@@ -19,40 +19,35 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Builds the MEX IQ stanza that fetches the authenticated user's username
- * record.
+ * Builds the MEX IQ stanza that fetches the authenticated user's username record.
  *
- * @apiNote Powers the username pane of the Settings screen. WA Web's
- * {@code WAWebMexGetUsernameJob.mexGetUsernameQueryJob} treats an HTTP 404
- * reply as the absence of a registered username and synthesises a
- * {@code (null, null, null)} record; Cobalt does not collapse that case at
- * this layer, so callers should treat an empty
- * {@link GetUsernameMexResponse#usernameInfo()} as the no-username
- * outcome. Pair the dispatched stanza with {@link GetUsernameMexResponse}
- * to consume the reply.
+ * <p>The reply feeds the username pane of the Settings screen. The dispatched stanza is paired with
+ * {@link GetUsernameMexResponse} to consume the reply.
+ *
+ * @implNote WhatsApp Web treats an HTTP 404 reply as the absence of a registered username and
+ * synthesises a {@code (null, null, null)} record. Cobalt does not collapse that case at this layer,
+ * so callers treat an empty {@link GetUsernameMexResponse#usernameInfo()} as the no-username outcome.
  *
  * @see GetUsernameMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexGetUsernameJob")
 public final class GetUsernameMexRequest implements MexOperation.Request.Json {
     /**
-     * The compiled-document id the relay maps to the persisted query.
+     * Holds the compiled-document identifier the relay maps to the persisted query.
      *
-     * @apiNote Used as the {@code query_id} attribute of the outbound
-     * {@code <query>} node. Matches the {@code params.id} field of
-     * {@code WAWebMexGetUsernameJobQuery.graphql} for the snapshot this
-     * file was generated against.
+     * <p>Emitted as the {@code query_id} attribute of the outbound {@code <query>} node.
+     *
+     * @implNote The value matches the compiled query for the WhatsApp Web snapshot this file was
+     * generated against, and must be rotated together with that bundle.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetUsernameJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "25347099718279209";
 
     /**
-     * The GraphQL operation name reported alongside this request.
+     * Holds the GraphQL operation name reported alongside this request.
      *
-     * @apiNote Mirrors {@code params.name} on
-     * {@code WAWebMexGetUsernameJobQuery.graphql}; WA Web tags the value to
-     * {@code MexPerfTracker} for per-operation telemetry bucketing.
+     * <p>WhatsApp Web tags this name onto its per-operation latency metrics.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetUsernameJobQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -61,8 +56,8 @@ public final class GetUsernameMexRequest implements MexOperation.Request.Json {
     /**
      * Constructs a get-username request.
      *
-     * @apiNote The compiled GraphQL document declares no variables; the
-     * dispatched stanza carries an empty {@code variables} object.
+     * <p>The compiled GraphQL document declares no variables; the dispatched stanza carries an empty
+     * {@code variables} object.
      */
     public GetUsernameMexRequest() {
     }
@@ -86,9 +81,8 @@ public final class GetUsernameMexRequest implements MexOperation.Request.Json {
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation emits {@code {"variables": {}}} and
-     * defers envelope construction to
-     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
+     * @implNote This implementation emits {@code {"variables": {}}} and defers envelope construction
+     * to {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetUsernameJob", exports = "mexGetUsernameQueryJob",
             adaptation = WhatsAppAdaptation.ADAPTED)

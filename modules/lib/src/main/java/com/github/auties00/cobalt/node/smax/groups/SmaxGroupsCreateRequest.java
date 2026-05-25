@@ -17,140 +17,141 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq type="set" xmlns="w:g2" to="g.us">} stanza that creates a new group, community
- * sub-group, or community parent.
+ * Outbound {@code <iq type="set" xmlns="w:g2" to="g.us">} stanza that creates a new group, community sub-group,
+ * or community parent.
  *
- * @apiNote Drives every group-creation pipeline surfaced by {@code WAWebGroupCreateJob} and
- * {@code WAWebGroupCommunityJob}: regular group, breakout sub-group, community-parent, hidden sub-group, and so
- * on. The wide field surface mirrors the WA Web {@code WASmaxOutGroupsCreateRequest} mixin family which fuses
- * every optional child into one envelope. Prefer the fluent {@link Builder} over the all-args constructor.
+ * This request backs every group-creation pipeline: regular group, breakout sub-group, community-parent, hidden
+ * sub-group, and so on. The wide field surface fuses every optional child into a single envelope, so most fields
+ * are opt-in markers. New call sites should prefer the fluent {@link Builder} over the all-args constructor.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetServerMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
-     * The group's subject (display name) emitted as the {@code <create subject="...">} attribute.
+     * Holds the group's subject (display name) emitted as the {@code <create subject="...">} attribute.
      */
     private final String subject;
 
     /**
-     * The seed-participant rows emitted as {@code <participant>} children.
+     * Holds the seed-participant rows emitted as {@code <participant>} children.
      */
     private final List<RequestParticipant> participants;
 
     /**
-     * The optional description body, emitted under {@code <description><body/></description>}.
+     * Holds the optional description body, emitted under {@code <description><body/></description>}.
      */
     private final String descriptionBody;
 
     /**
-     * The optional description id emitted as the {@code <description id="...">} attribute.
+     * Holds the optional description id emitted as the {@code <description id="...">} attribute.
      */
     private final String descriptionId;
 
     /**
-     * Whether to attach a {@code <locked/>} child marking chat-info edits as admin-only.
+     * Indicates whether to attach a {@code <locked/>} child marking chat-info edits as admin-only.
      */
     private final boolean locked;
 
     /**
-     * Whether to attach an {@code <announcement/>} child restricting posting to admins.
+     * Indicates whether to attach an {@code <announcement/>} child restricting posting to admins.
      */
     private final boolean announcement;
 
     /**
-     * Whether to attach a {@code <parent default_membership_approval_mode="request_required"/>} child marking
-     * this group as a community parent.
+     * Indicates whether to attach a {@code <parent default_membership_approval_mode="request_required"/>} child
+     * marking this group as a community parent.
      */
     private final boolean parentDefaultMembershipApprovalMode;
 
     /**
-     * Whether to attach a {@code <no_frequently_forwarded/>} child.
+     * Indicates whether to attach a {@code <no_frequently_forwarded/>} child.
      */
     private final boolean noFrequentlyForwarded;
 
     /**
-     * The optional ephemeral-message expiration in seconds; non-null emits an {@code <ephemeral/>} child.
+     * Holds the optional ephemeral-message expiration in seconds; non-null emits an {@code <ephemeral/>} child.
      */
     private final Integer ephemeralExpiration;
 
     /**
-     * The optional ephemeral-message trigger value, paired with {@link #ephemeralExpiration}.
+     * Holds the optional ephemeral-message trigger value, paired with {@link #ephemeralExpiration}.
      */
     private final Integer ephemeralTrigger;
 
     /**
-     * The optional membership-approval join-mode value; non-null emits a {@code <membership_approval_mode/>}
+     * Holds the optional membership-approval join-mode value; non-null emits a {@code <membership_approval_mode/>}
      * child.
      */
     private final String membershipApprovalGroupJoinMode;
 
     /**
-     * Whether to attach a {@code <breakout/>} child marking the new group as a breakout sub-group.
+     * Indicates whether to attach a {@code <breakout/>} child marking the new group as a breakout sub-group.
      */
     private final boolean breakout;
 
     /**
-     * Whether to attach a {@code <created_as_lid/>} child.
+     * Indicates whether to attach a {@code <created_as_lid/>} child.
      */
     private final boolean createdAsLid;
 
     /**
-     * The optional {@code addressing_mode_override mode="..."} value.
+     * Holds the optional {@code addressing_mode_override mode="..."} value.
      */
     private final String addressingModeOverrideMode;
 
     /**
-     * The optional parent-community {@link Jid}; non-null emits a {@code <linked_parent jid="..."/>} child.
+     * Holds the optional parent-community {@link Jid}; non-null emits a {@code <linked_parent jid="..."/>} child.
      */
     private final Jid linkedParentJid;
 
     /**
-     * Whether to attach a {@code <hidden_group/>} child hiding the new group from the community directory.
+     * Indicates whether to attach a {@code <hidden_group/>} child hiding the new group from the community
+     * directory.
      */
     private final boolean hiddenGroup;
 
     /**
-     * Whether to attach an {@code <allow_non_admin_sub_group_creation/>} child.
+     * Indicates whether to attach an {@code <allow_non_admin_sub_group_creation/>} child.
      */
     private final boolean allowNonAdminSubGroupCreation;
 
     /**
-     * Whether to attach a {@code <create_general_chat/>} child.
+     * Indicates whether to attach a {@code <create_general_chat/>} child.
      */
     private final boolean createGeneralChat;
 
     /**
-     * Whether to attach a {@code <capi/>} child.
+     * Indicates whether to attach a {@code <capi/>} child.
      */
     private final boolean capi;
 
     /**
-     * The optional {@code dedup} attribute attached to the {@code <create/>} root.
+     * Holds the optional {@code dedup} attribute attached to the {@code <create/>} root.
      */
     private final String dedupAttr;
 
     /**
-     * The optional {@code member_add_mode} attribute attached to the {@code <create/>} root.
+     * Holds the optional {@code member_add_mode} attribute attached to the {@code <create/>} root.
      */
     private final String memberAddMode;
 
     /**
-     * The optional {@code member_link_mode} attribute attached to the {@code <create/>} root.
+     * Holds the optional {@code member_link_mode} attribute attached to the {@code <create/>} root.
      */
     private final String memberLinkMode;
 
     /**
-     * The optional {@code member_share_group_history_mode} attribute attached to the {@code <create/>} root.
+     * Holds the optional {@code member_share_group_history_mode} attribute attached to the {@code <create/>} root.
      */
     private final String memberShareGroupHistoryMode;
 
     /**
      * Constructs a fully-parametrised create-group request.
      *
-     * @apiNote Prefer {@link #builder()} for new call sites; the all-args constructor is intentionally
-     * package-friendly to keep the {@link Builder#build()} path single-call.
+     * New call sites should prefer {@link #builder()}; this all-args constructor is intentionally
+     * package-friendly in spirit so the {@link Builder#build()} path stays a single call. The supplied
+     * participant list is defensively copied.
      *
      * @param subject                             the group subject
      * @param participants                        the seed participants
@@ -234,7 +235,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns a fresh {@link Builder} for fluent construction.
      *
-     * @apiNote The canonical entry point for new call sites; the all-args constructor is provided primarily for
+     * This is the canonical entry point for new call sites; the all-args constructor is provided primarily for
      * the builder's {@link Builder#build()} method.
      *
      * @return a new {@link Builder}; never {@code null}
@@ -282,8 +283,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns whether the {@code <locked/>} child is attached.
      *
-     * @apiNote When {@code true} the relay marks chat-info edits (subject, picture, description) as
-     * admin-only.
+     * When {@code true} the relay marks chat-info edits (subject, picture, description) as admin-only.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -294,8 +294,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns whether the {@code <announcement/>} child is attached.
      *
-     * @apiNote When {@code true} the relay restricts posting to admins; the UI renders this as an
-     * "announcement group".
+     * When {@code true} the relay restricts posting to admins; the UI renders this as an announcement group.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -307,9 +306,8 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
      * Returns whether the {@code <parent default_membership_approval_mode="request_required"/>} marker is
      * attached.
      *
-     * @apiNote When {@code true} the new group becomes a community parent whose sub-groups inherit the
-     * approval-required default; the {@code request_required} attribute is the only value the WA Web mixin
-     * emits.
+     * When {@code true} the new group becomes a community parent whose sub-groups inherit the approval-required
+     * default; {@code request_required} is the only value emitted.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -356,8 +354,8 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns whether the {@code <breakout/>} child is attached.
      *
-     * @apiNote When {@code true} the new group is materialised as a breakout sub-group inside an existing
-     * community; the {@link #linkedParentJid()} must point at the community parent.
+     * When {@code true} the new group is materialised as a breakout sub-group inside an existing community; the
+     * {@link #linkedParentJid()} must point at the community parent.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -431,9 +429,8 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns the optional dedup token.
      *
-     * @apiNote When supplied, the relay uses the {@code (creator, dedup)} tuple to suppress duplicate creations
-     * and answer with {@link SmaxGroupsCreateResponse.GroupAlreadyExists} carrying the original group's
-     * {@link Jid}.
+     * When supplied, the relay uses the {@code (creator, dedup)} tuple to suppress duplicate creations and answers
+     * with {@link SmaxGroupsCreateResponse.GroupAlreadyExists} carrying the original group's {@link Jid}.
      *
      * @return an {@link Optional} carrying the token, or empty when omitted
      */
@@ -471,9 +468,8 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @apiNote The resulting envelope wraps a {@code <create subject="..." [dedup="..." ...]/>} root carrying
-     * one or more {@code <participant>} children plus every opt-in feature flag listed above as a marker child.
-     * Send via {@code WASmaxGroupsCreateRPC} (WA Web) and dispatch the reply via
+     * The resulting envelope wraps a {@code <create subject="..." [dedup="..." ...]/>} root carrying one or more
+     * {@code <participant>} children plus every opt-in feature flag as a marker child. The reply is parsed by
      * {@link SmaxGroupsCreateResponse#of(Node, Node)}.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <create/>} payload
@@ -633,9 +629,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns a hash composed of every field.
      *
-     * @implNote The hash is split into two {@code Objects.hash} batches because the all-args field list exceeds
-     * the practical width of a single varargs call; the {@code primary * 31 + secondary} mix preserves
-     * permutation-sensitive distribution across the batches.
+     * @implNote This implementation splits the hash into two {@code Objects.hash} batches because the all-args
+     * field list exceeds the practical width of a single varargs call; the {@code primary * 31 + secondary} mix
+     * preserves permutation-sensitive distribution across the batches.
      *
      * @return the hash code
      */
@@ -683,32 +679,31 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * A single seed-participant entry inside the outbound {@code <create/>} payload.
+     * Single seed-participant entry inside the outbound {@code <create/>} payload.
      *
-     * @apiNote Carries the participant's primary {@link Jid} plus optional secondary identity mixins
-     * (phone-number JID, username, permission token); WA Web's
-     * {@code WASmaxOutGroupsPermissionTokenMixin} surfaces the same shape.
+     * Carries the participant's primary {@link Jid} plus optional secondary identity attributes (phone-number JID,
+     * username, permission token).
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateRequest")
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsPermissionTokenMixin")
     public static final class RequestParticipant {
         /**
-         * The participant {@link Jid}.
+         * Holds the participant {@link Jid}.
          */
         private final Jid jid;
 
         /**
-         * The optional phone-number {@link Jid}.
+         * Holds the optional phone-number {@link Jid}.
          */
         private final Jid phoneNumber;
 
         /**
-         * The optional username.
+         * Holds the optional username.
          */
         private final String username;
 
         /**
-         * The optional permission token attached as the {@code permission_token} attribute.
+         * Holds the optional permission token attached as the {@code permission_token} attribute.
          */
         private final String permissionToken;
 
@@ -766,6 +761,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
 
         /**
          * Materialises the {@code <participant/>} child {@link Node} for this entry.
+         *
+         * The optional {@code phone_number}, {@code username} and {@code permission_token} attributes are only
+         * emitted when their backing field is present.
          *
          * @return the materialised {@link Node}
          */
@@ -833,131 +831,130 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Fluent builder for {@link SmaxGroupsCreateRequest}.
      *
-     * @apiNote Mandatory inputs are {@link #subject(String)} and at least one participant via
+     * Mandatory inputs are {@link #subject(String)} and at least one participant via
      * {@link #addParticipant(RequestParticipant)} or {@link #addParticipants(List)}; every other setter is
-     * optional. Call {@link #build()} once the toggles are picked; the builder validates the mandatory inputs at
-     * that point.
+     * optional. {@link #build()} validates the mandatory inputs.
      */
     public static final class Builder {
         /**
-         * The accumulating subject.
+         * Accumulates the subject.
          */
         private String subject;
 
         /**
-         * The accumulating participants list.
+         * Accumulates the participants list.
          */
         private final List<RequestParticipant> participants = new ArrayList<>();
 
         /**
-         * The accumulating optional description body.
+         * Accumulates the optional description body.
          */
         private String descriptionBody;
 
         /**
-         * The accumulating optional description id.
+         * Accumulates the optional description id.
          */
         private String descriptionId;
 
         /**
-         * The accumulating locked toggle.
+         * Accumulates the locked toggle.
          */
         private boolean locked;
 
         /**
-         * The accumulating announcement toggle.
+         * Accumulates the announcement toggle.
          */
         private boolean announcement;
 
         /**
-         * The accumulating parent-default membership-approval toggle.
+         * Accumulates the parent-default membership-approval toggle.
          */
         private boolean parentDefaultMembershipApprovalMode;
 
         /**
-         * The accumulating no-frequently-forwarded toggle.
+         * Accumulates the no-frequently-forwarded toggle.
          */
         private boolean noFrequentlyForwarded;
 
         /**
-         * The accumulating optional ephemeral expiration in seconds.
+         * Accumulates the optional ephemeral expiration in seconds.
          */
         private Integer ephemeralExpiration;
 
         /**
-         * The accumulating optional ephemeral trigger value.
+         * Accumulates the optional ephemeral trigger value.
          */
         private Integer ephemeralTrigger;
 
         /**
-         * The accumulating optional membership-approval join-mode value.
+         * Accumulates the optional membership-approval join-mode value.
          */
         private String membershipApprovalGroupJoinMode;
 
         /**
-         * The accumulating breakout toggle.
+         * Accumulates the breakout toggle.
          */
         private boolean breakout;
 
         /**
-         * The accumulating created-as-lid toggle.
+         * Accumulates the created-as-lid toggle.
          */
         private boolean createdAsLid;
 
         /**
-         * The accumulating optional addressing-mode-override value.
+         * Accumulates the optional addressing-mode-override value.
          */
         private String addressingModeOverrideMode;
 
         /**
-         * The accumulating optional linked parent community {@link Jid}.
+         * Accumulates the optional linked parent community {@link Jid}.
          */
         private Jid linkedParentJid;
 
         /**
-         * The accumulating hidden-group toggle.
+         * Accumulates the hidden-group toggle.
          */
         private boolean hiddenGroup;
 
         /**
-         * The accumulating allow-non-admin-sub-group-creation toggle.
+         * Accumulates the allow-non-admin-sub-group-creation toggle.
          */
         private boolean allowNonAdminSubGroupCreation;
 
         /**
-         * The accumulating create-general-chat toggle.
+         * Accumulates the create-general-chat toggle.
          */
         private boolean createGeneralChat;
 
         /**
-         * The accumulating capi toggle.
+         * Accumulates the capi toggle.
          */
         private boolean capi;
 
         /**
-         * The accumulating optional dedup token.
+         * Accumulates the optional dedup token.
          */
         private String dedupAttr;
 
         /**
-         * The accumulating optional member-add-mode value.
+         * Accumulates the optional member-add-mode value.
          */
         private String memberAddMode;
 
         /**
-         * The accumulating optional member-link-mode value.
+         * Accumulates the optional member-link-mode value.
          */
         private String memberLinkMode;
 
         /**
-         * The accumulating optional member-share-group-history-mode value.
+         * Accumulates the optional member-share-group-history-mode value.
          */
         private String memberShareGroupHistoryMode;
 
         /**
          * Constructs a fresh builder.
          *
-         * @apiNote Prefer {@link SmaxGroupsCreateRequest#builder()} as the canonical entry point.
+         * New call sites should prefer {@link SmaxGroupsCreateRequest#builder()} as the canonical entry point.
          */
         public Builder() {
         }

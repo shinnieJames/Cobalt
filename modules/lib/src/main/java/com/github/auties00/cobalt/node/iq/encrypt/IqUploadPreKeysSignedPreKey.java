@@ -11,15 +11,12 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Typed container for the {@code <skey/>} subtree carrying the currently advertised signed
- * pre-key.
+ * Typed container for the {@code <skey/>} subtree carrying the currently advertised signed pre-key.
  *
- * @apiNote
- * Maps the WA Web {@code xmppSignedPreKey({keyId, keyPair, signature})} render: one {@code <skey/>}
- * subtree with a three-byte big-endian {@code <id/>} content, a thirty-two-byte raw
- * {@code <value/>} content (the X25519 public key), and a sixty-four-byte {@code <signature/>}
- * content (the Ed25519 detached signature produced by the local identity key over the public key).
- * The same record is used both outbound (under {@link IqUploadPreKeysRequest},
+ * <p>One {@code <skey/>} subtree holds a three-byte big-endian {@code <id/>} content, a
+ * thirty-two-byte raw {@code <value/>} content (the X25519 public key), and a sixty-four-byte
+ * {@code <signature/>} content (the Ed25519 detached signature produced by the local identity key
+ * over the public key). The same record is used both outbound (under {@link IqUploadPreKeysRequest},
  * {@link IqUploadPrekeysForRegRequest}, {@link IqRotateKeyRequest}) and as a parsed sub-projection
  * of {@link IqDigestKeyResponse.Success}.
  */
@@ -86,16 +83,14 @@ public final class IqUploadPreKeysSignedPreKey {
     /**
      * Renders this signed pre-key as the canonical {@code <skey/>} subtree.
      *
-     * @apiNote
-     * Called by {@link IqUploadPreKeysRequest#toNode()},
+     * <p>Called by {@link IqUploadPreKeysRequest#toNode()},
      * {@link IqUploadPrekeysForRegRequest#toNode()} and {@link IqRotateKeyRequest#toNode()} to
      * assemble the {@code <skey/>} portion of the outbound payload.
      *
      * @implNote
      * This implementation packs the identifier with
      * {@link DataUtils#intToBytes(int, int) DataUtils.intToBytes(id, 3)} so the wire content is
-     * three bytes regardless of {@link #id()}'s magnitude, matching WA Web's
-     * {@code BIG_ENDIAN_CONTENT(keyId, 3)}.
+     * three bytes regardless of {@link #id()}'s magnitude.
      *
      * @return the rendered {@code <skey/>} node
      */

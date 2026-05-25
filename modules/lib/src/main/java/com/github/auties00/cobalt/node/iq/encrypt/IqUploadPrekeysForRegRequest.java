@@ -15,23 +15,20 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads the local Signal pre-key
- * bundle during multi-device registration.
+ * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads the local Signal pre-key bundle
+ * during multi-device registration.
  *
- * @apiNote
- * Distinct from {@link IqUploadPreKeysRequest}: this variant is fired exactly once during the
- * companion device-link flow, gated on the {@code UPLOAD_PREKEYS} stage of the
- * {@code MD_LINK_DEVICE_COMPANION_STAGE} pipeline. WA Web models it as a
- * {@code WAWebUploadPrekeysForRegTask} with two stages: {@code startKeyGenerationStage} fabricates
- * the bundle from {@code waSignalStore.getOrGenPreKeys(UPLOAD_KEYS_COUNT, ...)}, and
- * {@code startKeyUploadStage} ships it over the same wire shape as the steady-state upload. The
- * payload layout is identical to {@link IqUploadPreKeysRequest}: {@code <registration/>},
- * {@code <type/>}, {@code <identity/>}, {@code <list/>}, {@code <skey/>}.
+ * <p>Distinct from {@link IqUploadPreKeysRequest}: this variant is fired exactly once during the
+ * companion device-link flow, gated on the upload-pre-keys stage of the link pipeline. WA Web
+ * fabricates the bundle from {@code waSignalStore.getOrGenPreKeys(UPLOAD_KEYS_COUNT, ...)} and ships
+ * it over the same wire shape as the steady-state upload. The payload layout is identical to
+ * {@link IqUploadPreKeysRequest}: {@code <registration/>}, {@code <type/>}, {@code <identity/>},
+ * {@code <list/>}, {@code <skey/>}.
  *
  * @implNote
  * Cobalt keeps the registration-time and steady-state uploads as separate typed requests so the
  * caller can dispatch them through different code paths and observe distinct
- * {@link IqUploadPrekeysForRegResponse} vs {@link IqUploadPreKeysResponse} echoes; WA Web shares
+ * {@link IqUploadPrekeysForRegResponse} versus {@link IqUploadPreKeysResponse} echoes; WA Web shares
  * the payload assembly but parses the result with the same {@code uploadPreKeyResParser}.
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPrekeysForRegTask")
@@ -67,8 +64,7 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
     /**
      * Constructs an upload-for-registration request for the supplied key bundle.
      *
-     * @apiNote
-     * The {@code preKeys} list is defensively copied. WA Web generates this bundle exactly once
+     * <p>The {@code preKeys} list is defensively copied. WA Web generates this bundle exactly once
      * per device link via {@code getOrGenPreKeys(UPLOAD_KEYS_COUNT)}; the caller is expected to
      * persist the same {@code id}s against the local Signal store before issuing this request.
      *
@@ -148,7 +144,7 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
      * This implementation reproduces the payload shape of {@link IqUploadPreKeysRequest#toNode()}
      * byte for byte; the only differences from the steady-state variant are the
      * {@link WhatsAppWebExport#moduleName() module name} the annotation points at and the
-     * surrounding lifecycle (one-shot during link, vs the persisted-retry loop).
+     * surrounding lifecycle (one-shot during link, versus the persisted-retry loop).
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUploadPrekeysForRegTask",

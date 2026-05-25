@@ -27,14 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * End-to-end Phase 5 test: drives the full stack —
- * UDP → Cobalt {@link DatagramTransport} → {@link DtlsSrtpDriver} →
- * BC DTLS application-data transport → {@link SctpDtlsBridge} +
- * {@link DataChannelTransport} → SCTP INIT/INIT-ACK handshake →
- * DCEP data channel open — on loopback UDP sockets.
- *
- * <p>Proves the entire transport pipeline assembles cleanly and a
- * binary message round-trips through the negotiated data channel.
+ * End-to-end test over two loopback UDP sockets that drives the full transport
+ * stack: UDP, {@link DatagramTransport}, {@link DtlsSrtpDriver}, the DTLS
+ * application-data transport, {@link SctpDtlsBridge}, {@link DataChannelTransport},
+ * the SCTP handshake, and DCEP data-channel open. It proves the pipeline
+ * assembles cleanly and a binary message round-trips through the negotiated
+ * data channel. The {@link BoundUdp} helper binds each endpoint to a fixed
+ * local port so both sides know their peer's address at construction time.
  */
 @DisplayName("SCTP-over-DTLS — Phase 5 loopback")
 class SctpOverDtlsLoopbackTest {
@@ -69,8 +68,7 @@ class SctpOverDtlsLoopbackTest {
             assertNotNull(dtlsA, "client must expose DTLS app-data transport");
             assertNotNull(dtlsB, "server must expose DTLS app-data transport");
 
-            // Build the SCTP transports + bridges. Each side's
-            // outbound SCTP packet → DTLS encrypted record on its
+            // Each side's outbound SCTP packet is sent as a DTLS record on its
             // own DTLS transport.
             var sctpA = new DataChannelTransport(true /* dtlsClient */, p -> {
                 try { dtlsA.send(p, 0, p.length); } catch (IOException _) { }
@@ -102,8 +100,6 @@ class SctpOverDtlsLoopbackTest {
                 assertTrue(connectLatch.await(15, TimeUnit.SECONDS),
                         "SCTP simultaneous-open handshake must complete within 15s");
 
-                // Open a data channel from side A; side B observes it
-                // via the peer-open listener.
                 var bMessage = new AtomicReference<byte[]>();
                 var bChannelLatch = new CountDownLatch(1);
                 sctpB.setPeerOpenListener(channel -> {
@@ -117,7 +113,7 @@ class SctpOverDtlsLoopbackTest {
 
                 var channel = sctpA.open("test-channel",
                         DataChannelOptions.reliable());
-                // Wait for the channel to reach OPEN — DCEP ACK from B.
+                // The channel reaches OPEN once side B returns the DCEP ACK.
                 var openLatch = new CountDownLatch(1);
                 channel.setOpenListener(openLatch::countDown);
                 assertTrue(openLatch.await(5, TimeUnit.SECONDS),
@@ -134,11 +130,6 @@ class SctpOverDtlsLoopbackTest {
         }
     }
 
-    /**
-     * Test helper — a {@link DatagramTransport} backed by a
-     * {@link DatagramChannel} bound to a specific local port (so two
-     * endpoints can know each other's port at construction time).
-     */
     private static final class BoundUdp implements DatagramTransport, AutoCloseable {
         private final DatagramChannel channel;
         private final InetSocketAddress local;

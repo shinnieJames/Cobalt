@@ -3,40 +3,61 @@ package com.github.auties00.cobalt.call.internal.audio.opus;
 import com.github.auties00.cobalt.call.internal.audio.opus.bindings.Opus;
 
 /**
- * The Opus encoder's application mode — selects between three
- * latency/quality tradeoff profiles defined by RFC 6716 §2.1.4.
+ * Selects one of libopus's three application modes that trade latency
+ * against quality.
  *
- * <p>WhatsApp's wasm engine uses {@link #VOIP} for voice calls (the
- * captured {@code AudioDriverConfig} confirms 16 kHz mono with the
- * VoIP signal type and 10 ms framing).
+ * <p>The application mode is fixed at encoder construction and biases
+ * every later coding decision: which internal layer (SILK, CELT, or the
+ * hybrid of both) is preferred at a given bitrate, whether an aggressive
+ * transmit-side high-pass filter is applied, and how much algorithmic
+ * delay the encoder is allowed to introduce. It is passed once to
+ * {@code opus_encoder_create} and cannot be changed afterward. The three
+ * modes correspond exactly to the {@code OPUS_APPLICATION_*} constants
+ * defined by RFC 6716. WhatsApp's call engine uses {@link #VOIP}: its
+ * captured audio configuration is 16 kHz mono with 10 ms framing and a
+ * voice signal type.
  */
 public enum OpusApplication {
     /**
-     * Optimised for voice signals — emphasises intelligibility over
-     * fidelity, applies an aggressive transmit-side high-pass filter
-     * to remove DC and low-frequency rumble. Matches WhatsApp's wasm
-     * configuration.
+     * Favors voice intelligibility over fidelity.
+     *
+     * <p>This mode steers the encoder toward the SILK layer at voice
+     * bitrates and applies an aggressive transmit-side high-pass filter
+     * that removes DC offset and low-frequency rumble before coding. It
+     * matches WhatsApp's call engine configuration.
      */
     VOIP,
 
     /**
-     * Balanced for general audio — music + voice. Higher complexity
-     * encoder than VOIP, no aggressive HPF.
+     * Balances quality for mixed music and voice content.
+     *
+     * <p>This mode lets the encoder spend more complexity on broadband
+     * fidelity and does not apply the aggressive high-pass filter that
+     * {@link #VOIP} uses, at the cost of being less optimized for pure
+     * speech.
      */
     AUDIO,
 
     /**
-     * Restricted to fewer modes for lower algorithmic delay — used
-     * by latency-sensitive applications. Not relevant for WhatsApp
-     * call interop.
+     * Restricts the encoder to the modes with the lowest algorithmic
+     * delay.
+     *
+     * <p>This mode is intended for latency-sensitive applications that
+     * cannot tolerate the extra lookahead the other modes introduce. It
+     * is not used for WhatsApp call interoperability.
      */
     RESTRICTED_LOWDELAY;
 
     /**
-     * Maps the enum constant to libopus's {@code OPUS_APPLICATION_*}
-     * integer code passed to {@code opus_encoder_create}.
+     * Returns the libopus {@code OPUS_APPLICATION_*} integer code for
+     * this mode.
      *
-     * @return the libopus application code
+     * <p>The returned value is the native constant accepted by
+     * {@code opus_encoder_create}; each enum constant maps to exactly one
+     * {@code OPUS_APPLICATION_*} code resolved from the {@code Opus}
+     * bindings.
+     *
+     * @return the libopus application code corresponding to this constant
      */
     int toNative() {
         return switch (this) {

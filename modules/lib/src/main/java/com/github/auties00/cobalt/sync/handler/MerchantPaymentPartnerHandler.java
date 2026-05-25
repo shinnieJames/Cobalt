@@ -14,18 +14,17 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Applies the {@code merchant_payment_partner} app-state sync action that
  * persists the SMB merchant's payment service provider for Brazil.
  *
- * @apiNote
- * Drives the SMB Brazil merchant onboarding flow: when the primary
- * device finishes the BR PSP onboarding the resulting partner record
+ * <p>This handler backs the SMB Brazil merchant onboarding flow: when the
+ * primary device finishes the BR PSP onboarding the resulting partner record
  * fans out across the {@link SyncPatchType#REGULAR_LOW} collection so
- * companion devices can show the correct payment method. The handler
- * is gated by the SMB platform check
+ * companion devices can show the correct payment method. The handler is gated
+ * by the SMB platform check
  * ({@link ClientPlatformType#IOS_BUSINESS} /
  * {@link ClientPlatformType#ANDROID_BUSINESS}) and the
- * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} A/B
- * prop; while either gate is closed every mutation is reported as
- * {@link MutationApplicationResult#unsupported()}, exactly mirroring
- * WA Web. The mutation index has no variable parts and is always
+ * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} A/B prop; while
+ * either gate is closed every mutation is reported as
+ * {@link MutationApplicationResult#unsupported()}. The mutation index has no
+ * variable parts and is always
  * {@snippet :
  *     ["merchant_payment_partner"]
  * }
@@ -33,34 +32,23 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * @implNote
  * This implementation persists the action through
  * {@link com.github.auties00.cobalt.store.WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}
- * instead of WA Web's
- * {@code WAWebUserPrefsMerchantPaymentPartner.setMerchantPaymentPartner}
- * UserPrefs write, since Cobalt has no UserPrefs key-value store. The
- * SMB and A/B-prop gates are evaluated per mutation rather than once
- * for the batch, so a server-side prop flip reaches the next incoming
- * sync without restarting the client.
+ * instead of WA Web's UserPrefs write, since Cobalt has no UserPrefs
+ * key-value store. The SMB and A/B-prop gates are evaluated per mutation
+ * rather than once for the batch, so a server-side prop flip reaches the next
+ * incoming sync without restarting the client.
  */
 public final class MerchantPaymentPartnerHandler implements WebAppStateActionHandler {
     /**
-     * The {@link ABPropsService} consulted before every mutation to
-     * gate the handler on
-     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}.
+     * The {@link ABPropsService} consulted before every mutation to gate the
+     * handler on {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Constructs a {@link MerchantPaymentPartnerHandler} bound to the
-     * given A/B-props service.
+     * Constructs a {@link MerchantPaymentPartnerHandler} bound to the given
+     * A/B-props service for registration in the sync handler registry.
      *
-     * @apiNote
-     * The handler must consult
-     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} on
-     * every mutation rather than caching the value, so server-side
-     * prop flips reach the next incoming sync without restarting the
-     * client.
-     *
-     * @param abPropsService the A/B-props service consulted on every
-     *                       mutation
+     * @param abPropsService the A/B-props service consulted on every mutation
      */
     public MerchantPaymentPartnerHandler(ABPropsService abPropsService) {
         this.abPropsService = abPropsService;
@@ -93,13 +81,12 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
     /**
      * {@inheritDoc}
      *
-     * @implNote
-     * This implementation reads the SMB platform tag and the
-     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}
-     * flag first; when either gate is closed the mutation is reported
-     * as {@link MutationApplicationResult#unsupported()} matching WA
-     * Web's batch-wide return shape. When both gates are open the
-     * value is persisted directly through
+     * <p>The SMB platform tag and the
+     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} flag are
+     * read first; when either gate is closed the mutation is reported as
+     * {@link MutationApplicationResult#unsupported()}. When both gates are
+     * open and the operation is {@link SyncdOperation#SET}, the value is
+     * persisted directly through
      * {@link com.github.auties00.cobalt.store.WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}.
      */
     @Override

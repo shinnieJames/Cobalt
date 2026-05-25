@@ -24,72 +24,66 @@ import java.time.Instant;
 import java.util.LinkedHashSet;
 
 /**
- * Handles {@code type="w:gp2"} group/community notifications by applying
- * each action child to the local chat and group metadata, then
- * triggering a full metadata refresh for every referenced group JID.
+ * Handles {@code type="w:gp2"} group and community notifications.
  *
- * @apiNote
- * Dispatched by {@code NotificationStreamHandler}. Each notification
- * targets exactly one group (named by {@code from}) and carries one or
- * more action children selected from WA Web's
- * {@code WAWebHandleGroupNotificationConst.GROUP_NOTIFICATION_TAG} set
- * ({@code create}, {@code add}, {@code remove}, {@code promote},
- * {@code demote}, {@code subject}, {@code description},
- * {@code ephemeral}, {@code locked}, {@code announcement}, link/unlink,
- * membership approval, etc.). Per WA Web, a {@code groups_dirty} child
- * short-circuits to a full metadata refresh and skips inline mutation.
+ * <p>Each notification targets exactly one group, named by the {@code from}
+ * attribute, and carries one or more action children ({@code create},
+ * {@code add}, {@code remove}, {@code promote}, {@code demote},
+ * {@code subject}, {@code description}, {@code ephemeral}, {@code locked},
+ * {@code announcement}, link/unlink, membership approval, and others). For
+ * each notification this handler resolves or creates the target chat, applies
+ * every action child inline against the local {@link Chat} and
+ * {@link ChatMetadata}, then fires a full metadata refresh for every group
+ * JID the notification references (including linked groups and subgroup
+ * suggestions). A {@code groups_dirty} child short-circuits to a metadata
+ * refresh and skips inline mutation.
  *
  * @implNote
- * This implementation follows a two-phase approach: every action child
- * is applied inline against the local chat and metadata, then a full
- * metadata refresh is fired for every group JID referenced by the
- * notification (including linked groups and subgroup suggestions). WA
- * Web routes each action through
- * {@code WAWebHandleGroupNotificationAction.handleAction} which
- * additionally synthesises system messages in the chat thread; Cobalt
- * relies on the post-loop refresh to reach the same final state and
- * lets the chat-message stream produce its own system messages.
+ * This implementation follows a two-phase approach: every action child is
+ * applied inline against the local chat and metadata, then a full metadata
+ * refresh is fired for every group JID referenced by the notification.
+ * WA Web routes each action through
+ * {@link com.github.auties00.cobalt.node.Node} handlers that additionally
+ * synthesise system messages in the chat thread; Cobalt relies on the
+ * post-loop refresh to reach the same final state and lets the chat-message
+ * stream produce its own system messages.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleGroupNotification")
 public final class NotificationGroupStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger used for warnings about unhandled actions and debug
-     * messages about deferred metadata-refresh actions.
+     * Logs warnings about unhandled actions and debug messages about actions
+     * deferred to the post-loop metadata refresh.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationGroupStreamHandler.class.getName());
 
     /**
-     * The {@link WhatsAppClient} used for store reads and group
-     * metadata queries.
+     * Provides store reads and group metadata queries.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The {@link WamService} used to commit the {@code GroupJoinC}
-     * event when the user is added to a group they did not create.
+     * Commits the {@code GroupJoinC} event when the user is added to a group
+     * they did not create.
      */
     private final WamService wamService;
 
     /**
-     * The {@link AckSender} used to ship the post-processing
-     * {@code <ack class="notification" type="w:gp2"/>} stanza,
-     * echoing the original {@code participant} attribute back to the
+     * Ships the post-processing {@code <ack class="notification" type="w:gp2"/>}
+     * stanza, echoing the original {@code participant} attribute back to the
      * server.
      */
     private final AckSender ackSender;
 
     /**
-     * Constructs the handler with shared dependencies.
+     * Constructs the handler with its shared dependencies.
      *
-     * @apiNote
-     * Called once during
-     * {@link SocketStream} setup;
-     * embedders do not construct it directly.
+     * <p>Invoked once during {@link SocketStream} setup; the dependencies are
+     * retained as fields for the lifetime of the handler.
      *
-     * @param whatsapp   the {@link WhatsAppClient}
-     * @param wamService the {@link WamService}
-     * @param ackSender  the {@link AckSender}
+     * @param whatsapp   the client providing store and metadata access
+     * @param wamService the service that commits the {@code GroupJoinC} event
+     * @param ackSender  the sender used to acknowledge processed notifications
      */
     public NotificationGroupStreamHandler(WhatsAppClient whatsapp, WamService wamService, AckSender ackSender) {
         this.whatsapp = whatsapp;
@@ -98,15 +92,14 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Validates the stanza shape, delegates to
-     * {@link #handleNotification(Node)}, and always sends the
-     * protocol-level ACK.
+     * Validates the stanza shape, processes the notification, and always sends
+     * the protocol-level acknowledgement.
      *
-     * @apiNote
-     * Invoked by the parent {@code NotificationStreamHandler}. Stanzas
-     * whose description is not {@code notification} or whose type is
-     * not {@code w:gp2} are silently dropped; valid stanzas always get
-     * an ACK even when the handler throws.
+     * <p>Stanzas whose description is not {@code notification} or whose type is
+     * not {@code w:gp2} are dropped without further work. For matching stanzas
+     * the notification is processed by {@link #handleNotification(Node)};
+     * any throwable raised during processing is logged and swallowed, and the
+     * acknowledgement is sent in all cases.
      *
      * @param node the incoming stanza
      */
@@ -129,23 +122,21 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Resolves or creates the target chat, iterates every action child
-     * inline, then refreshes metadata for every related group JID.
+     * Resolves or creates the target chat, applies every action child inline,
+     * then refreshes metadata for every related group JID.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleGroupNotification.x(notification)} which
-     * short-circuits to
-     * {@code handleGroupsDirtyNotificationJob} when the first child is
-     * {@code groups_dirty}, then falls through to the parsed-action
-     * dispatch loop.
+     * <p>Processing aborts when the {@code from} attribute is absent or does
+     * not name a group or community. A {@code groups_dirty} child
+     * short-circuits to a metadata refresh of the target group and skips the
+     * action loop. Otherwise the chat is resolved (creating a new one when
+     * absent), the action children are applied in order, and every group JID
+     * accumulated across the actions is refreshed.
      *
      * @implNote
-     * This implementation bumps the chat's {@code conversationTimestamp}
-     * and {@code lastMsgTimestamp} from the stanza's top-level {@code t}
-     * attribute when present, matching WA Web's
-     * {@code WAWebHandleGroupNotificationAction.handleAction} side
-     * effect for actions that synthesise system messages.
+     * This implementation bumps the chat's {@code conversationTimestamp} and
+     * {@code lastMsgTimestamp} from the stanza's top-level {@code t} attribute
+     * when present, matching the WA Web side effect for actions that
+     * synthesise system messages.
      *
      * @param node the {@code <notification>} stanza
      */
@@ -181,17 +172,17 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Selects the per-action branch based on the action node's
-     * description.
+     * Selects the per-action branch based on the action node's description.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleGroupNotificationConst.GROUP_NOTIFICATION_TAG}
-     * tag set. Actions WA Web handles via synthesised system messages
-     * ({@code invite}, {@code revoke}, membership requests, subgroup
-     * suggestions, {@code change_number}, missing-participant) are
-     * routed through a conservative metadata-refresh path here because
-     * Cobalt's message generation runs from a different stream.
+     * <p>The action's group and community JID references are first collected
+     * into {@code relatedGroups}, then the action is dispatched on its
+     * description to the matching mutation. Actions that WA Web handles by
+     * synthesising system messages ({@code invite}, {@code revoke}, membership
+     * requests, subgroup suggestions, {@code change_number}, missing
+     * participant) are not mutated inline here; they are logged and reconciled
+     * by the post-loop metadata refresh because Cobalt's message generation
+     * runs from a different stream. Unrecognised descriptions are logged and
+     * ignored.
      *
      * @param notification  the parent {@code <notification>} stanza
      * @param chat          the local chat for the group
@@ -256,27 +247,25 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <create>} action by extracting every field from
-     * the nested {@code <group>} element and writing it to both the
-     * chat and the metadata.
+     * Applies a {@code <create>} action by extracting every field from the
+     * nested {@code <group>} element and writing it to both the chat and the
+     * metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebHandleGroupNotification.T(t, action, notificationAuthor)}
-     * which builds the full {@code groupInfo} record from the
-     * {@code <group>} child, including subject, description, creator,
-     * boolean settings, ephemeral configuration, and the initial
-     * participant list. Commits the {@code GroupJoinC} WAM event when
-     * the local account did not author the create (i.e., the user was
-     * added to a group they did not create).
+     * <p>The full group record is rebuilt from the {@code <group>} child:
+     * subject, creation time, creator, description, support and subgroup
+     * flags, archive and suspension state, ephemeral configuration, and the
+     * initial participant list. The {@code GroupJoinC} WAM event is committed
+     * when the local account did not author the create, that is, when the user
+     * was added to a group they did not create. Community-only fields
+     * ({@code allow_non_admin_sub_group_creation},
+     * {@code default_membership_approval_mode}) are applied only on the
+     * community variant.
      *
      * @implNote
      * This implementation handles both {@link GroupMetadata} and
-     * {@link CommunityMetadata} variants for community-only fields
-     * ({@code allow_non_admin_sub_group_creation},
-     * {@code default_membership_approval_mode}) because Cobalt models
-     * groups and communities as distinct metadata types whereas WA
-     * Web shares one schema with discriminator fields.
+     * {@link CommunityMetadata} variants because Cobalt models groups and
+     * communities as distinct metadata types whereas WA Web shares one schema
+     * with discriminator fields.
      *
      * @param notification the parent {@code <notification>} stanza
      * @param chat         the local chat for the created group
@@ -392,12 +381,13 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code memberLinkMode} content string ({@code "admin_link"}
-     * or {@code "all_member_link"}) to the metadata.
+     * Applies a {@code member_link_mode} content string to the metadata.
      *
-     * @apiNote
-     * Internal helper called from {@link #applyCreate(Node, Chat, Jid, Node)}.
-     * Unrecognised values leave the field unchanged.
+     * <p>Maps {@code "admin_link"} to an admins-only link policy and
+     * {@code "all_member_link"} to an any-member link policy, choosing the
+     * field appropriate to the {@link GroupMetadata} or {@link CommunityMetadata}
+     * variant. A {@code null} content and any unrecognised value leave the
+     * field unchanged.
      *
      * @param metadata the metadata being updated
      * @param content  the {@code <member_link_mode>} text content, or {@code null}
@@ -424,14 +414,15 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     /**
      * Writes the {@code limit_sharing_enabled} flag onto the metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebLimitSharingGatingUtils.isOpusEnabled() ? false : d.hasChild("limit_sharing_enabled")}.
-     * Cobalt does not gate the read on the Opus AB-prop because
-     * Cobalt has no equivalent client-side kill switch.
+     * <p>Sets whether link and media sharing is restricted to admins on either
+     * the {@link GroupMetadata} or {@link CommunityMetadata} variant.
+     *
+     * @implNote
+     * This implementation does not gate the read on the Opus AB-prop that WA
+     * Web consults because Cobalt has no equivalent client-side kill switch.
      *
      * @param metadata the metadata being updated
-     * @param value    whether link/media sharing is restricted to admins
+     * @param value    whether link and media sharing is restricted to admins
      */
     private void applyLimitSharingEnabled(ChatMetadata metadata, boolean value) {
         if (metadata instanceof GroupMetadata groupMetadata) {
@@ -442,13 +433,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Writes the {@code generalChatAutoAddDisabled} flag directly onto
-     * the metadata.
+     * Writes the {@code generalChatAutoAddDisabled} flag directly onto the
+     * metadata.
      *
-     * @apiNote
-     * Shared between the top-level {@code auto_add_disabled} action and
-     * the create-flow read which sources the same value from the
-     * notification (not the nested {@code <group>}).
+     * <p>Shared between the top-level {@code auto_add_disabled} action and the
+     * create flow, which sources the same value from the notification rather
+     * than the nested {@code <group>} element.
      *
      * @param metadata the metadata being updated
      * @param value    whether auto-add to the general chat is disabled
@@ -462,14 +452,13 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <subject>} action by writing the new name to both
-     * the chat and the metadata along with the change timestamp and
-     * author.
+     * Applies a {@code <subject>} action by writing the new name to both the
+     * chat and the metadata along with the change timestamp and author.
      *
-     * @apiNote
-     * Reads {@code s_t} (subject change time) and {@code s_o}
-     * (subject owner) from the action node, falling back to the
-     * notification's {@code participant} when {@code s_o} is absent.
+     * <p>Does nothing when the {@code subject} attribute is absent. The change
+     * time is read from {@code s_t} (falling back to {@code t}) and the author
+     * from {@code s_o}, falling back to the notification's {@code participant}
+     * attribute when {@code s_o} is absent.
      *
      * @param notification the parent {@code <notification>} stanza
      * @param chat         the local chat
@@ -491,15 +480,13 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <description>} action by writing the new body
-     * and identifier to both the chat and the metadata; a nested
-     * {@code <delete/>} clears the body while preserving the id.
+     * Applies a {@code <description>} action by writing the new body and
+     * identifier to both the chat and the metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.DESC_ADD}/{@code DESC_REMOVE}
-     * branches. The author is taken from the action's
-     * {@code participant} attribute first, then the notification's
+     * <p>A nested {@code <delete/>} clears the body while preserving the id.
+     * The change time is read from the action's {@code t} attribute, falling
+     * back to the notification's {@code t}. The author is taken from the
+     * action's {@code participant} attribute first, then the notification's
      * {@code participant} attribute.
      *
      * @param notification the parent {@code <notification>} stanza
@@ -525,11 +512,11 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code <locked>}/{@code <unlocked>} toggle to the
-     * metadata.
+     * Applies the {@code <locked>} or {@code <unlocked>} toggle to the
+     * metadata, driving whether editing group info is restricted to admins.
      *
-     * @apiNote
-     * Drives the "only admins can edit group info" affordance.
+     * <p>Resolves the current metadata and, when present, delegates to
+     * {@link #applyRestrict(ChatMetadata, boolean)}.
      *
      * @param groupJid   the group JID
      * @param restricted {@code true} for {@code <locked>}, {@code false} for {@code <unlocked>}
@@ -542,14 +529,13 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code restrict} value directly to a metadata
-     * instance.
+     * Applies the {@code restrict} value directly to a metadata instance.
      *
-     * @apiNote
-     * Internal helper shared by the per-JID
-     * {@link #applyRestrict(Jid, boolean)} entry-point and the
-     * create-flow which reads the value from the nested
-     * {@code <group locked=.../>} child.
+     * <p>Shared by the per-JID {@link #applyRestrict(Jid, boolean)} entry point
+     * and the create flow, which reads the value from the nested
+     * {@code <group locked=.../>} child. Maps the flag through
+     * {@link ChatPolicy#of(boolean)} for the {@link GroupMetadata} variant and
+     * writes the raw boolean for {@link CommunityMetadata}.
      *
      * @param metadata   the metadata being updated
      * @param restricted whether metadata editing is restricted to admins
@@ -563,11 +549,11 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code <announcement>}/{@code <not_announcement>}
-     * toggle to the metadata.
+     * Applies the {@code <announcement>} or {@code <not_announcement>} toggle
+     * to the metadata, driving whether only admins can send messages.
      *
-     * @apiNote
-     * Drives the "only admins can send messages" affordance.
+     * <p>Resolves the current metadata and, when present, delegates to
+     * {@link #applyAnnounce(ChatMetadata, boolean)}.
      *
      * @param groupJid         the group JID
      * @param announcementOnly {@code true} for {@code <announcement>}, {@code false} for {@code <not_announcement>}
@@ -580,13 +566,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code announce} value directly to a metadata
-     * instance.
+     * Applies the {@code announce} value directly to a metadata instance.
      *
-     * @apiNote
-     * Internal helper shared by the per-JID
-     * {@link #applyAnnounce(Jid, boolean)} entry-point and the
-     * create-flow.
+     * <p>Shared by the per-JID {@link #applyAnnounce(Jid, boolean)} entry point
+     * and the create flow. Maps the flag through {@link ChatPolicy#of(boolean)}
+     * for the {@link GroupMetadata} variant and writes the raw boolean for
+     * {@link CommunityMetadata}.
      *
      * @param metadata         the metadata being updated
      * @param announcementOnly whether only admins can send messages
@@ -600,11 +585,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code <no_frequently_forwarded>}/
-     * {@code <frequently_forwarded_ok>} toggle to the metadata.
+     * Applies the {@code <no_frequently_forwarded>} or
+     * {@code <frequently_forwarded_ok>} toggle to the metadata, driving whether
+     * frequently forwarded messages are blocked.
      *
-     * @apiNote
-     * Drives the "frequently forwarded messages are blocked" affordance.
+     * <p>Resolves the current metadata and, when present, delegates to
+     * {@link #applyNoFrequentlyForwarded(ChatMetadata, boolean)}.
      *
      * @param groupJid the group JID
      * @param value    whether frequently forwarded messages are blocked
@@ -617,13 +603,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code noFrequentlyForwarded} value directly to a
-     * metadata instance.
+     * Applies the {@code noFrequentlyForwarded} value directly to a metadata
+     * instance.
      *
-     * @apiNote
-     * Internal helper shared by the per-JID
-     * {@link #applyNoFrequentlyForwarded(Jid, boolean)} entry-point and
-     * the create-flow.
+     * <p>Shared by the per-JID {@link #applyNoFrequentlyForwarded(Jid, boolean)}
+     * entry point and the create flow, writing the flag onto either the
+     * {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
      * @param metadata the metadata being updated
      * @param value    whether frequently forwarded messages are blocked
@@ -637,15 +622,15 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies an {@code <ephemeral>} action by writing the expiration
-     * duration and setting timestamp to both the chat and the metadata.
+     * Applies an {@code <ephemeral>} action by writing the expiration duration
+     * and setting timestamp to both the chat and the metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.EPHEMERAL} which reads the
-     * {@code expiration} attribute from either the action node or its
-     * nested {@code <ephemeral>} child (the create flow uses the
-     * nested form).
+     * <p>Reads the {@code expiration} attribute from either the action node or
+     * its nested {@code <ephemeral>} child (the create flow uses the nested
+     * form) and converts it through {@link ChatEphemeralTimer#of(Integer)}.
+     * Does nothing when no expiration is present. The setting time is read from
+     * the action's {@code t} attribute, falling back to the notification's
+     * {@code t}, and is applied to the chat only when present.
      *
      * @param notification the parent {@code <notification>} stanza or {@code <group>} container
      * @param chat         the local chat
@@ -684,13 +669,8 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <not_ephemeral>} action by clearing the ephemeral
-     * timer on both the chat and the metadata.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.EPHEMERAL} with
-     * {@code duration: 0}.
+     * Applies a {@code <not_ephemeral>} action by clearing the ephemeral timer
+     * on both the chat and the metadata.
      *
      * @param chat     the local chat
      * @param groupJid the group JID
@@ -704,13 +684,13 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <growth_locked>} action by writing the
-     * expiration timestamp and lock type onto the metadata.
+     * Applies a {@code <growth_locked>} action by writing the expiration
+     * timestamp and lock type onto the metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.GROWTH_LOCKED} which gates
-     * new members joining the group until the lock expires.
+     * <p>The growth lock gates new members joining the group until the lock
+     * expires. The expiration is read from the action's {@code expiration}
+     * attribute and the lock type from its {@code type} attribute, written onto
+     * either the {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
      * @param groupJid the group JID
      * @param action   the {@code <growth_locked>} action node
@@ -729,12 +709,8 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <growth_unlocked>} action by clearing the growth
-     * lock fields on the metadata.
-     *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.GROWTH_UNLOCKED}.
+     * Applies a {@code <growth_unlocked>} action by clearing the growth lock
+     * fields on the metadata.
      *
      * @param groupJid the group JID
      */
@@ -750,15 +726,14 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <link link_type="parent_group">} action by
-     * writing the parent community JID onto the group metadata.
+     * Applies a {@code <link link_type="parent_group">} action by writing the
+     * parent community JID onto the group metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.PARENT_GROUP_LINK} branch.
-     * Other link types ({@code sub_group}, {@code sibling_group})
-     * have no direct field on Cobalt's metadata and are reconciled
-     * by the post-loop metadata refresh.
+     * <p>Only the {@code parent_group} link type maps to a metadata field; the
+     * first nested {@code <group>} child whose {@code jid} names a group or
+     * community is used. Other link types ({@code sub_group},
+     * {@code sibling_group}) have no direct field on Cobalt's metadata and are
+     * reconciled by the post-loop metadata refresh.
      *
      * @param groupJid the group JID
      * @param action   the {@code <link>} action node
@@ -776,12 +751,11 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies an {@code <unlink unlink_type="parent_group">} action by
-     * clearing the parent community JID on the group metadata.
+     * Applies an {@code <unlink unlink_type="parent_group">} action by clearing
+     * the parent community JID on the group metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.PARENT_GROUP_UNLINK} branch.
+     * <p>Only the {@code parent_group} unlink type is acted upon; other unlink
+     * types leave the metadata unchanged.
      *
      * @param groupJid the group JID
      * @param action   the {@code <unlink>} action node
@@ -795,14 +769,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <membership_approval_mode>} action by reading
-     * the {@code state} attribute of the nested {@code <group_join>}
-     * child.
+     * Applies a {@code <membership_approval_mode>} action by reading the
+     * {@code state} attribute of the nested {@code <group_join>} child.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.MEMBERSHIP_APPROVAL_MODE}
-     * branch.
+     * <p>Treats a {@code state} of {@code "on"} as approval-required and
+     * delegates to {@link #applyMembershipApproval(ChatMetadata, boolean)} when
+     * the metadata is present.
      *
      * @param action   the {@code <membership_approval_mode>} action node
      * @param groupJid the group JID
@@ -822,10 +794,10 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Applies the membership-approval-mode value directly to a metadata
      * instance.
      *
-     * @apiNote
-     * Internal helper shared by the per-JID
-     * {@link #applyMembershipApproval(Node, Jid)} entry-point and the
-     * create-flow.
+     * <p>Shared by the per-JID {@link #applyMembershipApproval(Node, Jid)}
+     * entry point and the create flow. Maps the flag through
+     * {@link ChatPolicy#of(boolean)} for the {@link GroupMetadata} variant and
+     * writes the raw boolean for {@link CommunityMetadata}.
      *
      * @param metadata the metadata being updated
      * @param enabled  whether membership approval is required
@@ -839,11 +811,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code <allow_admin_reports>}/
-     * {@code <not_allow_admin_reports>} toggle to the metadata.
+     * Applies the {@code <allow_admin_reports>} or
+     * {@code <not_allow_admin_reports>} toggle to the metadata, driving the
+     * report-to-admin feature.
      *
-     * @apiNote
-     * Drives the report-to-admin feature for groups.
+     * <p>Writes the flag onto either the {@link GroupMetadata} or
+     * {@link CommunityMetadata} variant.
      *
      * @param groupJid the group JID
      * @param value    whether reporting to admin is enabled
@@ -858,12 +831,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code <allow_non_admin_sub_group_creation>}/
-     * {@code <not_allow_non_admin_sub_group_creation>} toggle on a
-     * community metadata; ignored on plain group metadata.
+     * Applies the {@code <allow_non_admin_sub_group_creation>} or
+     * {@code <not_allow_non_admin_sub_group_creation>} toggle to a community
+     * metadata.
      *
-     * @apiNote
-     * Community-only action. Plain groups have no sub-group concept.
+     * <p>This is a community-only action; plain {@link GroupMetadata} has no
+     * sub-group concept and is left unchanged.
      *
      * @param groupJid the community JID
      * @param value    whether non-admin sub-group creation is allowed
@@ -876,12 +849,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies a {@code <member_add_mode>} action by reading the text
-     * content and checking for {@code "admin_add"}.
+     * Applies a {@code <member_add_mode>} action by reading the text content
+     * and checking for {@code "admin_add"}.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.MEMBER_ADD_MODE} branch.
+     * <p>Treats {@code "admin_add"} as admins-only and delegates to
+     * {@link #applyMemberAddMode(ChatMetadata, boolean)} when the metadata is
+     * present.
      *
      * @param groupJid the group JID
      * @param action   the {@code <member_add_mode>} action node
@@ -895,13 +868,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the member-add-mode value directly to a metadata
-     * instance.
+     * Applies the member-add-mode value directly to a metadata instance.
      *
-     * @apiNote
-     * Internal helper shared by the per-JID
-     * {@link #applyMemberAddMode(Jid, Node)} entry-point and the
-     * create-flow.
+     * <p>Shared by the per-JID {@link #applyMemberAddMode(Jid, Node)} entry
+     * point and the create flow. Maps the flag through
+     * {@link ChatPolicy#of(boolean)} for the {@link GroupMetadata} variant and
+     * writes the raw boolean for {@link CommunityMetadata}.
      *
      * @param metadata  the metadata being updated
      * @param adminOnly whether only admins can add members
@@ -918,9 +890,8 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Applies the {@code <auto_add_disabled>} action by writing the
      * {@code generalChatAutoAddDisabled} flag.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.GENERAL_CHAT_AUTO_ADD_DISABLED}.
+     * <p>Resolves the current metadata and, when present, delegates to
+     * {@link #applyGeneralChatAutoAddDisabled(ChatMetadata, boolean)}.
      *
      * @param groupJid the group JID
      * @param value    whether auto-add to the general chat is disabled
@@ -936,9 +907,8 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Applies the {@code <group_safety_check>} action by writing the
      * safety-check flag on the metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.GROUP_SAFETY_CHECK}.
+     * <p>Writes the flag onto either the {@link GroupMetadata} or
+     * {@link CommunityMetadata} variant.
      *
      * @param groupJid the group JID
      * @param value    whether the group safety check is set
@@ -953,12 +923,11 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Applies the {@code <suspended>}/{@code <unsuspended>} toggle by
+     * Applies the {@code <suspended>} or {@code <unsuspended>} toggle by
      * updating both the chat's suspended flag and the metadata.
      *
-     * @apiNote
-     * Mirrors WA Web's
-     * {@code WAWebGroupType.GROUP_ACTIONS.SUSPEND}.
+     * <p>Writes the flag onto the chat and onto either the {@link GroupMetadata}
+     * or {@link CommunityMetadata} variant.
      *
      * @param chat     the local chat
      * @param groupJid the group JID
@@ -975,14 +944,14 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Parses {@code <participant>} children and applies the requested
-     * mutation to the metadata's participant set.
+     * Parses {@code <participant>} children and applies the requested mutation
+     * to the metadata's participant set.
      *
-     * @apiNote
-     * The mutation determines whether the participant is added, removed,
-     * or rebuilt with a new role; for {@code ADD}, {@code MODIFY},
-     * {@code PROMOTE}, and {@code DEMOTE} the participant is first
-     * removed (to clear the old role) before being re-added.
+     * <p>Does nothing when no metadata is present. For {@code ADD} and
+     * {@code MODIFY} the participant is first removed to clear any prior role,
+     * then re-added. For {@code REMOVE} the participant is removed by JID. For
+     * {@code PROMOTE} and {@code DEMOTE} the participant is removed and re-added
+     * with the forced role produced by {@link #parseParticipants(Node, GroupParticipantMutation)}.
      *
      * @param groupJid the group JID
      * @param action   the action node carrying {@code <participant>} children
@@ -1011,15 +980,15 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
 
     /**
      * Parses {@code <participant>} children into a set of
-     * {@link GroupParticipant} records with roles derived from the
-     * mutation and the {@code type} attribute.
+     * {@link GroupParticipant} records with roles derived from the mutation and
+     * the {@code type} attribute.
      *
-     * @apiNote
-     * Mirrors WA Web's {@code y(jid, action, tag)} helper.
-     * {@code PROMOTE} always yields {@link GroupPartipantRole#ADMIN};
-     * {@code DEMOTE} always yields {@link GroupPartipantRole#USER};
-     * other mutations derive the role from the participant's
-     * {@code type} attribute.
+     * <p>Participant nodes without a {@code jid} attribute are skipped.
+     * {@code PROMOTE} always yields {@link GroupPartipantRole#ADMIN} and
+     * {@code DEMOTE} always yields {@link GroupPartipantRole#USER}; every other
+     * mutation derives the role from the participant's {@code type} attribute
+     * via {@link #parseRole(String)}. Each JID is normalised through its user
+     * form before being stored.
      *
      * @param action   the action node carrying participant children
      * @param mutation the mutation type
@@ -1049,13 +1018,11 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
 
     /**
      * Parses a participant {@code type} string into a
-     * {@link GroupPartipantRole}, defaulting to
-     * {@link GroupPartipantRole#USER} for unknown or absent values.
+     * {@link GroupPartipantRole}.
      *
-     * @apiNote
-     * Mirrors WA Web's enum fallback inside
-     * {@code y(jid, action, tag)} which defaults the role to
-     * {@code "participant"} when the attribute is missing.
+     * <p>Returns {@link GroupPartipantRole#USER} for a blank or absent value,
+     * and falls back to {@link GroupPartipantRole#USER} when
+     * {@link GroupPartipantRole#of(String)} rejects the value.
      *
      * @param type the {@code type} attribute value, or {@code null}
      * @return the resolved role
@@ -1073,15 +1040,16 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Collects every group/community JID referenced by the action
-     * (inline {@code <group>}/{@code <sub_group_suggestion>} children
-     * and {@code context_group_jid}/{@code parent_group_jid} attributes)
-     * into the related-groups accumulator.
+     * Collects every group or community JID referenced by the action into the
+     * related-groups accumulator.
      *
-     * @apiNote
-     * The accumulated set drives the post-loop metadata refresh so
-     * cross-group actions (links, subgroup suggestions, parent-group
-     * changes) reach a consistent final state.
+     * <p>Scans the action's inline {@code <group>} and
+     * {@code <sub_group_suggestion>} children as well as its
+     * {@code context_group_jid} and {@code parent_group_jid} attributes,
+     * adding each JID that names a group or community. The accumulated set
+     * drives the post-loop metadata refresh so cross-group actions (links,
+     * subgroup suggestions, parent-group changes) reach a consistent final
+     * state.
      *
      * @param action        the action node being scanned
      * @param relatedGroups the accumulator set
@@ -1106,15 +1074,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Returns the current metadata record for the group, or {@code null}
-     * when not in the store.
+     * Returns the current metadata record for the group, or {@code null} when
+     * it is not in the store.
      *
-     * @apiNote
-     * Internal helper used by every action branch. WA Web's
-     * {@code WAWebGroupMetadataCollection.get} provides the equivalent
-     * lookup with eager population semantics; Cobalt's metadata is
-     * populated lazily so the caller may receive {@code null} on the
-     * first reference to a freshly observed group.
+     * <p>Used by every action branch. Cobalt populates metadata lazily, so the
+     * caller may receive {@code null} on the first reference to a freshly
+     * observed group; the post-loop refresh repopulates it.
      *
      * @param groupJid the group JID
      * @return the matching metadata, or {@code null}
@@ -1126,9 +1091,9 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     /**
      * Writes a new subject onto the metadata when the value is non-null.
      *
-     * @apiNote
-     * Internal helper shared by {@link #applySubject(Node, Chat, Jid, Node)}
-     * and the create-flow.
+     * <p>Shared by {@link #applySubject(Node, Chat, Jid, Node)} and the create
+     * flow, writing onto either the {@link GroupMetadata} or
+     * {@link CommunityMetadata} variant. A {@code null} subject is ignored.
      *
      * @param metadata the metadata being updated
      * @param subject  the new subject, or {@code null} to skip
@@ -1148,9 +1113,9 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     /**
      * Writes the subject change timestamp and author onto the metadata.
      *
-     * @apiNote
-     * Internal helper shared by {@link #applySubject(Node, Chat, Jid, Node)}
-     * with the resolved {@code s_t}/{@code s_o} pair.
+     * <p>Shared by {@link #applySubject(Node, Chat, Jid, Node)} with the
+     * resolved {@code s_t} and {@code s_o} pair, writing onto either the
+     * {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
      * @param metadata  the metadata being updated
      * @param timestamp the subject change time, or {@code null}
@@ -1167,12 +1132,12 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Writes the description, description id, timestamp, and author
-     * onto the metadata.
+     * Writes the description, description id, timestamp, and author onto the
+     * metadata.
      *
-     * @apiNote
-     * Internal helper shared by {@link #applyDescription(Node, Chat, Jid, Node)}
-     * and the create-flow.
+     * <p>Shared by {@link #applyDescription(Node, Chat, Jid, Node)} and the
+     * create flow, writing all four fields onto either the
+     * {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
      * @param metadata    the metadata being updated
      * @param description the description body, or {@code null} when cleared
@@ -1198,9 +1163,8 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Extracts the description body from the create-flow nested path
      * {@code description > body}.
      *
-     * @apiNote
-     * Internal helper used by {@link #applyCreate(Node, Chat, Jid, Node)};
-     * mirrors WA Web's {@code g()} extractor.
+     * <p>Used by {@link #applyCreate(Node, Chat, Jid, Node)} to read the
+     * initial group description.
      *
      * @param groupNode the {@code <group>} element from the create stanza
      * @return the description body, or {@code null}
@@ -1216,9 +1180,8 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Extracts the description id from the create-flow
      * {@code <description id=.../>} attribute.
      *
-     * @apiNote
-     * Internal helper used by {@link #applyCreate(Node, Chat, Jid, Node)};
-     * mirrors WA Web's {@code g()} extractor.
+     * <p>Used by {@link #applyCreate(Node, Chat, Jid, Node)} to read the
+     * initial group description revision id.
      *
      * @param groupNode the {@code <group>} element from the create stanza
      * @return the description id, or {@code null}
@@ -1233,8 +1196,7 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Extracts the description body from a non-create
      * {@code <description><body>...</body></description>} action node.
      *
-     * @apiNote
-     * Internal helper used by {@link #applyDescription(Node, Chat, Jid, Node)}.
+     * <p>Used by {@link #applyDescription(Node, Chat, Jid, Node)}.
      *
      * @param node the description action node
      * @return the body text, or {@code null}
@@ -1246,11 +1208,10 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Extracts the description id from a {@code <description id=.../>}
-     * action node.
+     * Extracts the description id from a {@code <description id=.../>} action
+     * node.
      *
-     * @apiNote
-     * Internal helper used by {@link #applyDescription(Node, Chat, Jid, Node)}.
+     * <p>Used by {@link #applyDescription(Node, Chat, Jid, Node)}.
      *
      * @param node the description action node
      * @return the description id, or {@code null}
@@ -1260,15 +1221,13 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     }
 
     /**
-     * Returns the first positive epoch-seconds attribute as an
-     * {@link Instant}, walking the supplied attribute keys in order.
+     * Returns the first positive epoch-seconds attribute as an {@link Instant},
+     * walking the supplied attribute keys in order.
      *
-     * @apiNote
-     * Internal helper used by every branch that needs a timestamp.
-     * Mirrors WA Web's
-     * {@code attrTime}-with-fallback usage where some actions name
-     * the timestamp {@code t} and others {@code s_t} or
-     * {@code expiration}.
+     * <p>Used by every branch that needs a timestamp. Some actions name the
+     * timestamp {@code t} and others {@code s_t} or {@code expiration}, so
+     * callers pass the candidate keys in priority order. Non-positive values
+     * are treated as absent.
      *
      * @param node the node to read from
      * @param keys the attribute keys to try in order
@@ -1287,10 +1246,9 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
     /**
      * Re-queries metadata for the given group from the server.
      *
-     * @apiNote
-     * Used as the post-loop reconciler for every related group JID;
-     * failures are debug-logged and suppressed so a transient
-     * network error does not abort the whole notification.
+     * <p>Acts as the post-loop reconciler for every related group JID. Any
+     * throwable raised by the query is debug-logged and suppressed so a
+     * transient network error does not abort the whole notification.
      *
      * @param groupJid the group JID to refresh
      */
@@ -1309,63 +1267,55 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
      * Enumerates the participant mutation kinds applied by
      * {@link #applyParticipants(Jid, Node, GroupParticipantMutation)}.
      *
-     * @apiNote
-     * The values correspond one-to-one with the WA Web action tags
-     * {@code add}, {@code remove}, {@code promote}, {@code demote},
-     * and {@code modify}.
+     * <p>The values correspond one-to-one with the WA Web action tags
+     * {@code add}, {@code remove}, {@code promote}, {@code demote}, and
+     * {@code modify}.
      */
     private enum GroupParticipantMutation {
         /**
-         * The participant was added to the group.
+         * Adds the participant to the group.
          *
-         * @apiNote
-         * The participant's role is derived from the
+         * <p>The participant's role is derived from the
          * {@code <participant type="..."/>} attribute.
          */
         ADD,
         /**
-         * The participant was removed from the group.
+         * Removes the participant from the group.
          *
-         * @apiNote
-         * Only the JID is read; the role is ignored because the
-         * record is being deleted.
+         * <p>Only the JID is read; the role is ignored because the record is
+         * being deleted.
          */
         REMOVE,
         /**
-         * The participant was promoted to admin.
+         * Promotes the participant to admin.
          *
-         * @apiNote
-         * Forces the role to {@link GroupPartipantRole#ADMIN}
-         * regardless of the {@code type} attribute.
+         * <p>Forces the role to {@link GroupPartipantRole#ADMIN} regardless of
+         * the {@code type} attribute.
          */
         PROMOTE,
         /**
-         * The participant was demoted from admin to plain member.
+         * Demotes the participant from admin to plain member.
          *
-         * @apiNote
-         * Forces the role to {@link GroupPartipantRole#USER}
-         * regardless of the {@code type} attribute.
+         * <p>Forces the role to {@link GroupPartipantRole#USER} regardless of
+         * the {@code type} attribute.
          */
         DEMOTE,
         /**
-         * The participant's metadata changed without role change.
+         * Updates the participant's metadata without changing the role.
          *
-         * @apiNote
-         * The role is derived from the {@code type} attribute just
-         * like {@link #ADD}.
+         * <p>The role is derived from the {@code type} attribute just like
+         * {@link #ADD}.
          */
         MODIFY
     }
 
     /**
-     * Sends the {@code <ack class="notification" type="w:gp2"/>} stanza
-     * for the processed notification.
+     * Sends the {@code <ack class="notification" type="w:gp2"/>} stanza for the
+     * processed notification.
      *
-     * @apiNote
-     * Fire-and-forget; identical attribute set to WA Web's
-     * {@code WAWebHandleGroupNotification} ack-builder which mirrors
-     * the original stanza's {@code participant} attribute back so the
-     * server can attribute the ACK to the correct action author.
+     * <p>Fire-and-forget. The original stanza's {@code participant} attribute
+     * is mirrored back so the server can attribute the acknowledgement to the
+     * correct action author.
      *
      * @param node the original {@code <notification>} stanza
      */

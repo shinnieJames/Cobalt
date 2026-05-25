@@ -15,58 +15,54 @@ import java.util.Base64;
 import java.util.Objects;
 
 /**
- * Builds the optional {@code <tctoken>} child of an outgoing
- * {@code <message>} stanza carrying the trusted-contact privacy token for
- * the recipient, and hosts Cobalt's port of the
- * {@code WAWebTrustedContactsUtils} helpers.
+ * Builds the optional {@code <tctoken>} child of an outgoing {@code <message>} stanza carrying the
+ * trusted-contact privacy token for the recipient.
  *
- * @apiNote
- * The TC token is the privacy-tier handshake that opts a contact pair
- * into receiving privacy-enhanced features (verified history, identity
- * pin). On every outgoing 1:1 message the sender can attach the most
- * recent token they hold for the recipient to demonstrate the trust
- * relationship. {@link ChatFanoutStanza} composes the {@code <tctoken>}
- * child ahead of the lower-priority {@code <cstoken>} fallback in
- * {@link CsTokenStanza}.
+ * <p>The TC token is the privacy-tier handshake that opts a contact pair into receiving
+ * privacy-enhanced features such as verified history and identity pin. On every outgoing 1:1
+ * message the sender may attach the most recent token it holds for the recipient to demonstrate the
+ * trust relationship. {@link ChatFanoutStanza} composes the {@code <tctoken>} child ahead of the
+ * lower-priority {@code <cstoken>} fallback in {@link CsTokenStanza}.
+ *
+ * <p>This class also hosts the token-lifetime helpers: {@link #getTcTokenDuration(TcTokenMode)},
+ * {@link #tokenExpirationCutoff(TcTokenMode)}, {@link #isTokenExpired(Instant, TcTokenMode)},
+ * {@link #shouldSendNewToken(Instant)}, {@link #encodeTcTokenForMex(byte[])} and {@link TcTokenMode}.
  *
  * @implNote
- * This implementation co-locates the lifetime helpers from
- * {@code WAWebTrustedContactsUtils} because that JS module is stateless
- * (it reads AB props and the system clock only) and its single Cobalt
- * caller lives in this class. The helpers ({@link #getTcTokenDuration},
- * {@link #tokenExpirationCutoff}, {@link #isTokenExpired},
- * {@link #shouldSendNewToken}, {@link #encodeTcTokenForMex},
- * {@link TcTokenMode}) are kept package-private even though they are not
- * called externally, so the relationship to the WA Web exports stays
- * obvious in the annotations.
+ * This implementation co-locates the lifetime helpers from {@code WAWebTrustedContactsUtils} because
+ * that JS module is stateless (it reads AB props and the system clock only) and its single Cobalt
+ * caller lives in this class. The helpers and {@link TcTokenMode} are kept package-private even
+ * though they are not called externally, so the relationship to the WA Web exports stays expressible
+ * through the source-provenance annotations.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 @WhatsAppWebModule(moduleName = "WAWebTrustedContactsUtils")
 public final class TcTokenStanza {
     /**
-     * The upper bound on {@code tctoken_duration} in seconds; 180 days,
-     * matching WA Web's {@code e = 15552e3} constant.
+     * Caps {@code tctoken_duration} at 180 days expressed in seconds.
+     *
+     * @implNote
+     * The value {@code 15552000} matches WA Web's {@code e = 15552e3} constant.
      */
     @WhatsAppWebExport(moduleName = "WAWebTrustedContactsUtils", exports = "getTcTokenDuration",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final int MAX_TC_TOKEN_DURATION_SECONDS = 15_552_000;
 
     /**
-     * The {@link WhatsAppStore} used to look up the recipient chat.
+     * Holds the {@link WhatsAppStore} used to look up the recipient chat.
      */
     private final WhatsAppStore store;
 
     /**
-     * The {@link ABPropsService} consulted for the token-emission gate
-     * and the lifetime parameters.
+     * Holds the {@link ABPropsService} consulted for the token-emission gate and the lifetime
+     * parameters.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Constructs a builder bound to the given store and AB-props service.
      *
-     * @apiNote
-     * Constructed once per client; the builder is otherwise stateless.
+     * <p>Constructed once per client; the builder is otherwise stateless.
      *
      * @param store          the {@link WhatsAppStore}
      * @param abPropsService the {@link ABPropsService}
@@ -80,21 +76,18 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Builds the {@code <tctoken>} child for the recipient chat, or
-     * {@code null} when emission does not apply.
+     * Builds the {@code <tctoken>} child for the recipient chat, or returns {@code null} when
+     * emission does not apply.
      *
-     * @apiNote
-     * Returns {@code null} when any of the four gates fails:
-     * {@link ABProp#PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES} is
-     * disabled, the chat is not found in the store, the chat has no
-     * recorded TC token, or the token timestamp is past the receiver-side
-     * expiry cutoff.
+     * <p>Returns {@code null} when any of the four gates fails:
+     * {@link ABProp#PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES} is disabled, the chat is not found
+     * in the store, the chat has no recorded TC token, or the token timestamp is past the
+     * receiver-side expiry cutoff.
      *
      * @implNote
-     * This implementation queries the receiver-side expiry parameters
-     * ({@link TcTokenMode#RECEIVER}); the sender-side parameters drive
-     * the separate {@link #shouldSendNewToken(Instant)} predicate used by
-     * the token rotation flow.
+     * This implementation queries the receiver-side expiry parameters ({@link TcTokenMode#RECEIVER});
+     * the sender-side parameters drive the separate {@link #shouldSendNewToken(Instant)} predicate
+     * used by the token rotation flow.
      *
      * @param chatJid the recipient chat {@link Jid}
      * @return the {@code <tctoken>} {@link Node}, or {@code null}
@@ -130,14 +123,15 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Returns the token duration in seconds for the given role, clamped
-     * to {@link #MAX_TC_TOKEN_DURATION_SECONDS}.
+     * Returns the token duration in seconds for the given role, clamped to
+     * {@link #MAX_TC_TOKEN_DURATION_SECONDS}.
      *
-     * @apiNote
-     * Returns the receiver-side prop value for
-     * {@link TcTokenMode#RECEIVER} and the sender-side prop value for
-     * {@link TcTokenMode#SENDER}; the clamp protects against AB-prop
-     * misconfigurations that would otherwise yield extreme bucket sizes.
+     * <p>Returns the receiver-side prop value for {@link TcTokenMode#RECEIVER} and the sender-side
+     * prop value for {@link TcTokenMode#SENDER}.
+     *
+     * @implNote
+     * The clamp protects against AB-prop misconfigurations that would otherwise yield extreme bucket
+     * sizes.
      *
      * @param mode the {@link TcTokenMode}
      * @return the token lifetime in seconds
@@ -153,21 +147,19 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Returns the unix-seconds cutoff below which a token timestamp is
-     * considered expired for the given role.
+     * Returns the unix-seconds cutoff below which a token timestamp is considered expired for the
+     * given role.
      *
-     * @apiNote
-     * The cutoff is computed from a rolling bucket: every token issued
-     * within the last {@code numBuckets} buckets of duration
-     * {@link #getTcTokenDuration} is still valid. The boundary instant is
-     * {@code (currentBucket - (numBuckets - 1)) * duration} where
+     * <p>The cutoff is computed from a rolling bucket: every token issued within the last
+     * {@code numBuckets} buckets of duration {@link #getTcTokenDuration(TcTokenMode)} is still valid.
+     * The boundary instant is {@code (currentBucket - (numBuckets - 1)) * duration} where
      * {@code currentBucket = floor(unixTime / duration)}.
      *
      * @implNote
-     * This implementation guards against a zero or negative duration by
-     * returning {@link Long#MAX_VALUE}, which forces every token to be
-     * considered expired; WA Web's prop default is 604800 seconds so the
-     * guard rarely fires in practice.
+     * This implementation guards against a zero or negative duration by returning
+     * {@link Long#MAX_VALUE}, which forces every token to be considered expired; the
+     * {@link ABProp#TCTOKEN_DURATION} default of 604800 seconds means the guard rarely fires in
+     * practice.
      *
      * @param mode the {@link TcTokenMode}
      * @return the cutoff in seconds since the Unix epoch
@@ -193,12 +185,10 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Returns whether the given token timestamp falls before the role's
-     * expiry cutoff.
+     * Returns whether the given token timestamp falls before the role's expiry cutoff.
      *
-     * @apiNote
-     * A token is expired when its issue timestamp is strictly less than
-     * the cutoff returned by {@link #tokenExpirationCutoff(TcTokenMode)}.
+     * <p>A token is expired when its issue timestamp is strictly less than the cutoff returned by
+     * {@link #tokenExpirationCutoff(TcTokenMode)}.
      *
      * @param tokenTimestamp the token's issue timestamp
      * @param mode           the {@link TcTokenMode}
@@ -212,22 +202,18 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Returns whether the sender should issue a fresh TC token to the
-     * recipient.
+     * Returns whether the sender should issue a fresh TC token to the recipient.
      *
-     * @apiNote
-     * A new token is required when no prior token exists or when the
-     * prior token falls into an earlier sender bucket than the current
-     * time. The sender lifetime is read from
-     * {@link ABProp#TCTOKEN_DURATION_SENDER} (uncapped, unlike the
-     * receiver-side helper).
+     * <p>A new token is required when no prior token exists or when the prior token falls into an
+     * earlier sender bucket than the current time. The sender lifetime is read from
+     * {@link ABProp#TCTOKEN_DURATION_SENDER}, uncapped unlike the receiver-side helper.
      *
      * @implNote
-     * This implementation guards against a zero or negative duration by
-     * forcing a rotation; WA Web's prop default is 604800 seconds.
+     * This implementation guards against a zero or negative duration by forcing a rotation; the
+     * {@link ABProp#TCTOKEN_DURATION_SENDER} default is 604800 seconds.
      *
-     * @param tokenTimestamp the prior sender-token timestamp, or
-     *                       {@code null} when no token has been issued
+     * @param tokenTimestamp the prior sender-token timestamp, or {@code null} when no token has been
+     *                       issued
      * @return {@code true} when a new token should be sent
      */
     @WhatsAppWebExport(moduleName = "WAWebTrustedContactsUtils", exports = "shouldSendNewToken",
@@ -246,14 +232,11 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Encodes a raw TC token as a standard base64 string suitable for
-     * inlining in a MEX (GraphQL) privacy-token argument.
+     * Encodes a raw TC token as a standard base64 string suitable for inlining in a MEX (GraphQL)
+     * privacy-token argument.
      *
-     * @apiNote
-     * Used by callers that need to pass the token through a JSON or
-     * GraphQL surface rather than a binary stanza child. The encoding is
-     * standard base64 with padding (matching WA Web's
-     * {@code WABase64.encodeB64}).
+     * <p>Used by callers that need to pass the token through a JSON or GraphQL surface rather than a
+     * binary stanza child. The encoding is standard base64 with padding.
      *
      * @param tcToken the raw token bytes
      * @return the base64-encoded token
@@ -266,29 +249,27 @@ public final class TcTokenStanza {
     }
 
     /**
-     * Identifies the role a TC token plays when its lifetime parameters
-     * are looked up.
+     * Identifies the role a TC token plays when its lifetime parameters are looked up.
      *
-     * @apiNote
-     * Each role is backed by a distinct pair of {@code tctoken_duration*}
-     * and {@code tctoken_num_buckets*} AB props, so the same token bytes
-     * have different validity windows depending on whether the local
-     * device is the sender or the receiver of the token. Mirrors WA Web's
-     * {@code TcTokenMode} enum.
+     * <p>Each role is backed by a distinct pair of {@code tctoken_duration*} and
+     * {@code tctoken_num_buckets*} AB props, so the same token bytes have different validity windows
+     * depending on whether the local device is the sender or the receiver of the token.
      */
     @WhatsAppWebExport(moduleName = "WAWebTrustedContactsUtils", exports = "TcTokenMode",
             adaptation = WhatsAppAdaptation.DIRECT)
     private enum TcTokenMode {
         /**
-         * The current device is the token's sender; lifetime parameters
-         * are read from {@link ABProp#TCTOKEN_DURATION_SENDER} and
+         * Denotes that the current device is the token's sender.
+         *
+         * <p>Lifetime parameters are read from {@link ABProp#TCTOKEN_DURATION_SENDER} and
          * {@link ABProp#TCTOKEN_NUM_BUCKETS_SENDER}.
          */
         SENDER,
 
         /**
-         * The current device is the token's receiver; lifetime parameters
-         * are read from {@link ABProp#TCTOKEN_DURATION} and
+         * Denotes that the current device is the token's receiver.
+         *
+         * <p>Lifetime parameters are read from {@link ABProp#TCTOKEN_DURATION} and
          * {@link ABProp#TCTOKEN_NUM_BUCKETS}.
          */
         RECEIVER

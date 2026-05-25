@@ -19,79 +19,63 @@ import java.util.LinkedHashMap;
 import java.util.Objects;
 
 /**
- * Builds the optional {@code <cstoken>} child of an outgoing
- * {@code <message>} stanza carrying the non-contact-token (NCT) HMAC tag.
+ * Builds the optional {@code <cstoken>} child of an outgoing {@code <message>} stanza carrying the non-contact-token
+ * (NCT) HMAC tag.
+ * <p>
+ * The NCT tag lets the server flag an outgoing message as sent to a non-contact recipient without revealing whom; it is
+ * keyed by the server-issued NCT salt and the recipient's account LID. The tag is emitted only when the
+ * {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} prop is on, the recipient is a regular user (not bot, not group, not
+ * broadcast), the store holds an NCT salt, and the chat carries an {@code accountLid} for the recipient. Composed by
+ * {@link ChatFanoutStanza} after the more authoritative {@code <tctoken>} fallback in {@link TcTokenStanza}.
  *
- * @apiNote
- * The NCT tag lets the server flag an outgoing message as sent to a
- * non-contact recipient without revealing whom; it is keyed by the
- * server-issued NCT salt and the recipient's account LID. The tag is
- * emitted only when (a) the {@code wa_nct_token_send_enabled} AB prop is
- * on, (b) the recipient is a regular user (not bot, not group, not
- * broadcast), (c) the store holds an NCT salt, and (d) the chat carries an
- * {@code accountLid} for the recipient. Composed by {@link ChatFanoutStanza}
- * after the more authoritative {@code <tctoken>} fallback in
- * {@link TcTokenStanza}.
- *
- * @implNote
- * This implementation caches up to {@value #MAX_CACHE_SIZE} HMAC results
- * per salt: the salt is cached alongside its results and the cache is
- * cleared whenever the salt changes. The cache is intentionally small;
- * regenerating an HMAC-SHA-256 is cheap, but caching avoids the per-send
- * cost in steady state.
+ * @implNote This implementation caches up to {@value #MAX_CACHE_SIZE} HMAC results per salt: the salt is cached
+ * alongside its results and the cache is cleared whenever the salt changes. The cache is intentionally small;
+ * regenerating an HMAC-SHA-256 is cheap, but caching avoids the per-send cost in steady state.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 public final class CsTokenStanza {
     /**
-     * The {@link System.Logger} for missing-salt and HMAC failures.
+     * Logs missing-salt and HMAC failures.
      */
     private static final System.Logger LOGGER = System.getLogger(CsTokenStanza.class.getName());
 
     /**
-     * The maximum number of cached HMAC results per salt; matches WA Web's
-     * inline {@code T = 5} cap.
+     * Caps the number of cached HMAC results per salt.
      */
     private static final int MAX_CACHE_SIZE = 5;
 
     /**
-     * The HMAC algorithm name used for NCT token derivation.
+     * Names the HMAC algorithm used for NCT token derivation.
      */
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     /**
-     * The {@link WhatsAppStore} consulted for the NCT salt and the chat's
-     * {@code accountLid}.
+     * Holds the store consulted for the NCT salt and the chat's {@code accountLid}.
      */
     private final WhatsAppStore store;
 
     /**
-     * The {@link ABPropsService} that gates token emission via the
-     * {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} prop.
+     * Gates token emission via the {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} prop.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * The salt bytes currently bound to {@link #hmacCache}; the cache is
-     * cleared whenever this reference moves.
+     * Holds the salt bytes currently bound to {@link #hmacCache}; the cache is cleared whenever this reference moves.
      */
     private byte[] cachedSalt;
 
     /**
-     * The HMAC result cache keyed by the recipient LID's string form.
+     * Caches HMAC results keyed by the recipient LID's string form.
      */
     private final LinkedHashMap<String, byte[]> hmacCache;
 
     /**
      * Constructs a builder bound to a store and AB-props service.
+     * <p>
+     * The per-salt HMAC cache lives on this instance, so reusing the builder across sends amortises the HMAC cost.
      *
-     * @apiNote
-     * Constructed once per client; the per-salt HMAC cache lives on this
-     * instance so reusing the builder across sends amortises the HMAC cost.
-     *
-     * @param store          the {@link WhatsAppStore} used to retrieve the
-     *                       NCT salt and chat account LID
-     * @param abPropsService the {@link ABPropsService} used to gate token
-     *                       emission
+     * @param store          the {@link WhatsAppStore} used to retrieve the NCT salt and chat account LID
+     * @param abPropsService the {@link ABPropsService} used to gate token emission
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "genCsTokenBody",
@@ -103,28 +87,17 @@ public final class CsTokenStanza {
     }
 
     /**
-     * Builds the {@code <cstoken>} node for the recipient chat, or
-     * {@code null} when emission is gated off.
+     * Builds the {@code <cstoken>} node for the recipient chat, or {@code null} when emission is gated off.
+     * <p>
+     * Returns {@code null} when any of the four gates fails: {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} is disabled, the
+     * recipient is not a regular user, the store has no NCT salt, or the chat has no {@code accountLid}. The returned
+     * node carries the raw HMAC-SHA-256 bytes as its content with no attributes.
      *
-     * @apiNote
-     * Returns {@code null} when any of the four gates fails:
-     * {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} is disabled, the recipient
-     * is not a regular user, the store has no NCT salt, or the chat has no
-     * {@code accountLid}. The returned node carries the raw HMAC-SHA-256
-     * bytes as its content (no attributes).
-     *
-     * @implNote
-     * This implementation computes
-     * {@code HMAC-SHA-256(salt, accountLid.toString())}; the WA Web
-     * counterpart in {@code WAWebSendMsgCreateFanoutStanza.genCsTokenBody}
-     * reads the salt from {@code WAWebUserPrefsIndexedDBStorage} under
-     * {@code "WAWebNctSalt"} after base64 decoding it once. Cobalt stores
-     * the decoded salt directly in the store so no decode step is needed
-     * inside {@code build}.
+     * @implNote This implementation computes {@code HMAC-SHA-256(salt, accountLid.toString())} over the salt held in the
+     * store, which is already decoded so no base64 decode step is needed inside {@code build}.
      *
      * @param chatJid the recipient chat {@link Jid}
-     * @return the {@code <cstoken>} {@link Node}, or {@code null} when not
-     *         applicable
+     * @return the {@code <cstoken>} {@link Node}, or {@code null} when not applicable
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "genCsTokenBody",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -190,19 +163,13 @@ public final class CsTokenStanza {
     }
 
     /**
-     * Returns whether the given {@link Jid} identifies a regular human user
-     * eligible for NCT tagging.
+     * Returns whether the given {@link Jid} identifies a regular human user eligible for NCT tagging.
+     * <p>
+     * Bots, groups, broadcasts, newsletters, and PSAs are all excluded. Hosted-business JIDs ({@code @hosted},
+     * {@code @hosted.lid}) are also excluded because they do not satisfy {@link Jid#hasUserServer()} or
+     * {@link Jid#hasLidServer()}.
      *
-     * @apiNote
-     * Bots, groups, broadcasts, newsletters, and PSAs are all excluded.
-     * Hosted-business JIDs ({@code @hosted}, {@code @hosted.lid}) are also
-     * excluded because they do not satisfy
-     * {@link Jid#hasUserServer()}/{@link Jid#hasLidServer()}.
-     *
-     * @implNote
-     * This implementation mirrors WA Web's
-     * {@code Wid.prototype.isRegularUser}: a regular user is a user JID
-     * that is neither a PSA nor a bot.
+     * @implNote This implementation treats a regular user as a user or LID JID that is not a bot.
      *
      * @param jid the {@link Jid} to test
      * @return {@code true} when the JID is a regular user

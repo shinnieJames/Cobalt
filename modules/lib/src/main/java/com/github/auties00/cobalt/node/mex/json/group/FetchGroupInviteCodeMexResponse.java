@@ -14,40 +14,34 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Inbound parsed response of the {@link FetchGroupInviteCodeMexRequest}
- * query, exposing the current invite code scalar and the echoed group
- * identifier.
+ * Inbound parsed response of the {@link FetchGroupInviteCodeMexRequest} query, exposing the current
+ * invite code scalar and the echoed group identifier.
  *
- * @apiNote Consumed by callers mirroring WA Web's
- * {@code WAWebGroupInviteAction} pipeline, which uses the code to compose
- * the shareable {@code chat.whatsapp.com/<code>} URL and cache it on the
- * in-memory group descriptor.
+ * <p>The invite code is the opaque suffix of the shareable {@code chat.whatsapp.com/<code>} URL.
  *
- * @implNote This implementation surfaces a {@code null} invite code as an
- * empty {@link Optional} on {@link #inviteCode()} rather than throwing, in
- * contrast to WA Web's {@code mexFetchGroupInviteCode} which raises a MEX
- * error when the relay omits the field. The caller decides how to react to
- * the missing-code case.
+ * @implNote This implementation surfaces a {@code null} invite code as an empty {@link Optional} on
+ * {@link #inviteCode()} rather than throwing, in contrast to WA Web which raises a MEX error when the
+ * relay omits the field; the caller decides how to react to the missing-code case, in line with
+ * Cobalt's configurable error model.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchGroupInviteCodeJob")
 public final class FetchGroupInviteCodeMexResponse implements MexOperation.Response.Json {
     /**
-     * The current invite code scalar projected from
+     * Current invite code scalar projected from
      * {@code data.xwa2_group_query_by_id.invite_code}.
      */
     private final String inviteCode;
 
     /**
-     * The group identifier scalar projected from
-     * {@code data.xwa2_group_query_by_id.id}, echoed back by the relay.
+     * Group identifier scalar projected from {@code data.xwa2_group_query_by_id.id}, echoed back by
+     * the relay.
      */
     private final String id;
 
     /**
      * Constructs a new response wrapping the parsed scalar fields.
      *
-     * @apiNote Package-private; instances are produced by the
-     * {@link #of(Node)} parser.
+     * <p>Instances are produced by the {@link #of(Node)} parser.
      *
      * @param inviteCode the current invite code, or {@code null} if absent
      * @param id         the echoed group identifier, or {@code null} if absent
@@ -60,14 +54,13 @@ public final class FetchGroupInviteCodeMexResponse implements MexOperation.Respo
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @apiNote Entry point for receivers handling the IQ reply of
-     * {@link FetchGroupInviteCodeMexRequest}. The returned value is
-     * {@link Optional#empty()} when the reply lacks a {@code <result>}
-     * child or its JSON body cannot be parsed into the expected envelope.
+     * <p>This is the entry point for receivers handling the IQ reply of
+     * {@link FetchGroupInviteCodeMexRequest}. The returned value is {@link Optional#empty()} when the
+     * reply lacks a {@code <result>} child or its JSON body cannot be parsed into the expected
+     * envelope.
      *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the
-     *         expected JSON shape is absent
+     * @return the parsed response, or {@link Optional#empty()} if the expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInviteCodeJob", exports = "fetchMexGroupInviteCode",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -80,9 +73,9 @@ public final class FetchGroupInviteCodeMexResponse implements MexOperation.Respo
     /**
      * Returns the current invite code scalar.
      *
-     * @apiNote The opaque suffix of the shareable
-     * {@code chat.whatsapp.com/<code>} URL; absent when the relay omitted
-     * the field (e.g. the group has not yet been issued an invite code).
+     * <p>The value is the opaque suffix of the shareable {@code chat.whatsapp.com/<code>} URL; it is
+     * absent when the relay omitted the field, for example because the group has not yet been issued
+     * an invite code.
      *
      * @return an {@link Optional} containing the value, or empty if absent
      */
@@ -93,9 +86,8 @@ public final class FetchGroupInviteCodeMexResponse implements MexOperation.Respo
     /**
      * Returns the echoed group identifier scalar.
      *
-     * @apiNote Mirrors the {@code id} variable sent in
-     * {@link FetchGroupInviteCodeMexRequest}; useful when correlating the
-     * reply against a batched dispatch.
+     * <p>This mirrors the {@code id} variable sent in {@link FetchGroupInviteCodeMexRequest}; it is
+     * useful when correlating the reply against a batched dispatch.
      *
      * @return an {@link Optional} containing the value, or empty if absent
      */
@@ -107,15 +99,12 @@ public final class FetchGroupInviteCodeMexResponse implements MexOperation.Respo
      * Parses the JSON payload carried by the {@code <result>} child into a
      * {@link FetchGroupInviteCodeMexResponse}.
      *
-     * @implNote This implementation walks the
-     * {@code data.xwa2_group_query_by_id} envelope and returns
-     * {@link Optional#empty()} when any intermediate object is missing,
-     * mirroring the WA Web optional-chain
-     * {@code (t = n.xwa2_group_query_by_id) == null ? void 0 : t.invite_code}.
+     * <p>The {@code data.xwa2_group_query_by_id} envelope is walked, returning
+     * {@link Optional#empty()} when any intermediate object is missing.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the {@code data.xwa2_group_query_by_id} envelope is absent
+     * @return an {@link Optional} containing the parsed response, or empty if the
+     *         {@code data.xwa2_group_query_by_id} envelope is absent
      */
     private static Optional<FetchGroupInviteCodeMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

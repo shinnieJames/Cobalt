@@ -28,27 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link PrivateProcessingSettingHandler} against the
- * protobuf-only {@code "private_processing_setting"} action shape.
- *
- * @apiNote
- * Verifies the Cobalt forward-looking implementation: WA Web ships
- * the protobuf in {@code WAWebProtobufSyncAction.pb} (action index
- * 74) but no {@code WAWebPrivateProcessingSettingSync} handler
- * module exists. The Cobalt handler accepts only
- * {@link SyncdOperation#SET}
- * with a non-empty
- * {@link PrivateProcessingSettingAction#privateProcessingStatus()}
- * enum, persists it via
- * {@link WhatsAppStore#setPrivateProcessingStatus}, and rejects a
- * wrong-typed value or an empty enum as
- * {@link SyncActionState#MALFORMED}.
- *
- * @implNote
- * This implementation drives the handler directly through
- * {@link PrivateProcessingSettingHandler#applyMutation} with
- * hand-built {@link DecryptedMutation.Trusted} mutations because no
- * public outgoing-mutation factory exists for this action.
+ * Covers {@link PrivateProcessingSettingHandler}, which accepts only
+ * {@link SyncdOperation#SET} with a non-empty
+ * {@link PrivateProcessingSettingAction#privateProcessingStatus()} enum, persists it via
+ * {@link WhatsAppStore#setPrivateProcessingStatus}, rejects a wrong-typed value or an
+ * empty enum as {@link SyncActionState#MALFORMED}, reports
+ * {@link SyncActionState#UNSUPPORTED} for {@link SyncdOperation#REMOVE}, and resolves
+ * conflicts by timestamp. Mutations are hand-built as {@link DecryptedMutation.Trusted}.
  */
 @DisplayName("PrivateProcessingSettingHandler")
 class PrivateProcessingSettingHandlerTest {

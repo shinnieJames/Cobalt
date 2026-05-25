@@ -27,67 +27,52 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * Drives the three-step Android FCM registration handshake against
- * Google's HTTP endpoints, mutating an {@link FcmSession} in place
- * with the credentials it acquires.
+ * Drives the three-step Android FCM registration handshake against Google's HTTP endpoints, mutating an
+ * {@link FcmSession} in place with the credentials it acquires.
  *
- * <p>The handshake is the standard sequence a real Android client
- * performs the first time it boots a Firebase-backed app:
+ * <p>The handshake is the standard sequence a real Android client performs the first time it boots a Firebase-backed
+ * app:
  * <ol>
- *   <li>{@code POST android.clients.google.com/checkin} sends a
- *       gzipped AndroidCheckin protobuf and returns
- *       {@code (androidId, securityToken)} used as the MCS login
- *       credentials.</li>
- *   <li>{@code POST firebaseinstallations.googleapis.com/.../installations}
- *       runs only when {@link FcmConfig#useFis()} is {@code true} and
- *       returns a {@code fid} plus FIS auth token used as headers on
- *       the next call.</li>
- *   <li>{@code POST android.clients.google.com/c2dm/register3}
- *       returns the FCM push token surfaced via
+ *   <li>{@code POST android.clients.google.com/checkin} sends a gzipped AndroidCheckin protobuf and returns
+ *       {@code (androidId, securityToken)} used as the MCS login credentials.</li>
+ *   <li>{@code POST firebaseinstallations.googleapis.com/.../installations} runs only when {@link FcmConfig#useFis()}
+ *       is {@code true} and returns a {@code fid} plus FIS auth token used as headers on the next call.</li>
+ *   <li>{@code POST android.clients.google.com/c2dm/register3} returns the FCM push token surfaced via
  *       {@link FcmClient#getPushToken()}.</li>
  * </ol>
  *
- * <p>Each step is skipped when the corresponding session field is
- * already populated, so {@link #ensureCredentials(FcmSession)} is
- * effectively a one-shot bootstrap on a fresh session and a no-op (or
- * a FIS-only refresh) on a session restored from
- * {@link FcmClient#loadSession(FcmSession)}.
+ * <p>Each step is skipped when the corresponding session field is already populated, so
+ * {@link #ensureCredentials(FcmSession)} is effectively a one-shot bootstrap on a fresh session and a no-op (or a
+ * FIS-only refresh) on a session restored from {@link FcmClient#loadSession(FcmSession)}.
  */
 final class FcmRegistration {
     /**
      * Logger shared with the rest of the FCM client.
      *
-     * @apiNote
-     * Same logger name {@code cobalt.fcm} as {@link FcmMcsConnection}
-     * so consumers can configure verbosity for the whole subsystem in
-     * one place.
+     * <p>Uses the same logger name {@code cobalt.fcm} as {@link FcmMcsConnection} so consumers can configure verbosity
+     * for the whole subsystem in one place.
      */
     private static final Logger LOG = System.getLogger("cobalt.fcm");
 
     /**
      * Endpoint for the first registration step.
      *
-     * @apiNote
-     * Returns the server-assigned {@code androidId} and
-     * {@code securityToken} pair used as the MCS login credentials.
+     * <p>Returns the server-assigned {@code androidId} and {@code securityToken} pair used as the MCS login
+     * credentials.
      */
     private static final String CHECKIN_URL = "https://android.clients.google.com/checkin";
 
     /**
      * Endpoint for the third registration step.
      *
-     * @apiNote
-     * Returns the FCM token the WhatsApp registration server pushes
-     * verification codes to.
+     * <p>Returns the FCM token the WhatsApp registration server pushes verification codes to.
      */
     private static final String REGISTER_URL = "https://android.clients.google.com/c2dm/register3";
 
     /**
      * Template for the Firebase Installations endpoint.
      *
-     * @apiNote
-     * The single {@code %s} placeholder is the Firebase project id
-     * from {@link FcmConfig#projectId()}.
+     * <p>The single {@code %s} placeholder is the Firebase project id from {@link FcmConfig#projectId()}.
      */
     private static final String FIS_URL_TEMPLATE = "https://firebaseinstallations.googleapis.com/v1/projects/%s/installations";
 
@@ -99,49 +84,40 @@ final class FcmRegistration {
     /**
      * Number of random bytes used to seed a Firebase Installation Id.
      *
-     * @apiNote
-     * The FIS spec mandates 17 bytes so the URL-safe base64 encoding
-     * fits in 22 characters after the leading nibble is fixed to
-     * {@code 0b0111}.
+     * @implNote
+     * This implementation uses 17 bytes because the FIS spec mandates that width so the URL-safe base64 encoding fits
+     * in 22 characters after the leading nibble is fixed to {@code 0b0111}.
      */
     private static final int FID_BYTES = 17;
 
     /**
-     * Length of the truncated, URL-safe base64 FID surfaced to the
-     * Firebase backend.
+     * Length of the truncated, URL-safe base64 FID surfaced to the Firebase backend.
      */
     private static final int FID_TRUNCATED_LENGTH = 22;
 
     /**
      * Underlying HTTP client.
      *
-     * @apiNote
-     * Built once with the configured proxy and reused across every
-     * step; all three handshake calls share connection pools and TLS
-     * sessions through this instance.
+     * <p>Built once with the configured proxy and reused across every step; all three handshake calls share connection
+     * pools and TLS sessions through this instance.
      */
     private final HttpClient http;
 
     /**
-     * Source of randomness for the per-checkin {@code logging_id}
-     * field and the FID material.
+     * Source of randomness for the per-checkin {@code logging_id} field and the FID material.
      *
-     * @apiNote
-     * {@link SecureRandom} avoids leaking machine-identifying patterns
-     * the server could fingerprint as a non-real device.
+     * @implNote
+     * This implementation uses {@link SecureRandom} to avoid leaking machine-identifying patterns the server could
+     * fingerprint as a non-real device.
      */
     private final SecureRandom random;
 
     /**
      * Constructs a registration helper bound to the given proxy.
      *
-     * @apiNote
-     * Package-private; instances are owned by {@link FcmClient} and
-     * built in its constructor.
+     * <p>Instances are owned by {@link FcmClient} and built in its constructor.
      *
-     * @param proxy proxy URI ({@code http(s)://...},
-     *              {@code socks://...}), or {@code null} to dial
-     *              Google directly
+     * @param proxy proxy URI ({@code http(s)://...}, {@code socks://...}), or {@code null} to dial Google directly
      */
     FcmRegistration(URI proxy) {
         this.http = newHttpClient(proxy);
@@ -149,17 +125,12 @@ final class FcmRegistration {
     }
 
     /**
-     * Runs only the registration steps that have not already produced
-     * the values they would produce, mutating {@code session} in
-     * place.
+     * Runs only the registration steps that have not already produced the values they would produce, mutating
+     * {@code session} in place.
      *
-     * @apiNote
-     * Idempotent: a second call on a fully-populated session is a
-     * no-op (FIS may still refresh near expiry). Drives all three
-     * steps on a fresh session built by
-     * {@link FcmSession#newSession(FcmConfig)}; on a session restored
-     * via {@link FcmClient#loadSession(FcmSession)} only the FIS
-     * refresh may run.
+     * <p>Idempotent: a second call on a fully-populated session is a no-op, though FIS may still refresh near expiry.
+     * Drives all three steps on a fresh session built by {@link FcmSession#newSession(FcmConfig)}; on a session
+     * restored via {@link FcmClient#loadSession(FcmSession)} only the FIS refresh may run.
      *
      * @param session the session whose credentials are filled in
      * @throws IOException on any HTTP or protocol failure
@@ -185,19 +156,15 @@ final class FcmRegistration {
     }
 
     /**
-     * Sends the gzipped AndroidCheckin protobuf and stores the
-     * returned {@code androidId} and {@code securityToken} on
+     * Sends the gzipped AndroidCheckin protobuf and stores the returned {@code androidId} and {@code securityToken} on
      * {@code session}.
      *
-     * @apiNote
-     * Impersonates a Nexus 7 ({@code "google/razor/flo:5.0.1/..."})
-     * running SDK 30; the synthetic device profile is deliberately
-     * stable so the server fingerprint stays consistent across
-     * embedders.
+     * @implNote
+     * This implementation impersonates a Nexus 7 ({@code "google/razor/flo:5.0.1/..."}) running SDK 30; the synthetic
+     * device profile is deliberately stable so the server fingerprint stays consistent across embedders.
      *
      * @param session the session to mutate
-     * @throws IOException if the HTTP call fails or the response
-     *                     omits the credentials
+     * @throws IOException if the HTTP call fails or the response omits the credentials
      */
     private void performCheckin(FcmSession session) throws IOException {
         var build = new FcmCheckinRequestBuildBuilder()
@@ -255,19 +222,15 @@ final class FcmRegistration {
     }
 
     /**
-     * Calls the Firebase Installations endpoint to obtain (or refresh)
-     * a {@code fid} plus FIS auth token, storing both plus the refresh
-     * token and the absolute expiry on {@code session}.
+     * Calls the Firebase Installations endpoint to obtain (or refresh) a {@code fid} plus FIS auth token, storing both
+     * plus the refresh token and the absolute expiry on {@code session}.
      *
-     * @apiNote
-     * Generates a fresh FID via {@link #generateFid()} only when the
-     * session does not already carry one; FIS allows the server to
-     * confirm or override the candidate id, so both outcomes are
-     * stored back via {@link FcmSession#setFid(String)}.
+     * <p>Generates a fresh FID via {@link #generateFid()} only when the session does not already carry one; FIS allows
+     * the server to confirm or override the candidate id, so whichever value the response carries is stored back via
+     * {@link FcmSession#setFid(String)}.
      *
      * @param session the session to mutate
-     * @throws IOException if the HTTP call fails or the JSON cannot
-     *                     be parsed
+     * @throws IOException if the HTTP call fails or the JSON cannot be parsed
      */
     private void firebaseInstall(FcmSession session) throws IOException {
         var fid = session.fid().isEmpty() ? generateFid() : session.fid();
@@ -309,19 +272,14 @@ final class FcmRegistration {
     }
 
     /**
-     * Calls {@code c2dm/register3} and parses the {@code token=...}
-     * line out of the {@code key=value\n} form-encoded response,
-     * storing the FCM token on {@code session}.
+     * Calls {@code c2dm/register3} and parses the {@code token=...} line out of the {@code key=value\n} form-encoded
+     * response, storing the FCM token on {@code session}.
      *
-     * @apiNote
-     * Authenticates via the {@code AidLogin} scheme using the
-     * {@code androidId:securityToken} pair from the previous checkin
-     * step; without those credentials register3 returns
-     * {@code Error=AUTHENTICATION_FAILED}.
+     * <p>Authenticates via the {@code AidLogin} scheme using the {@code androidId:securityToken} pair from the previous
+     * checkin step; without those credentials register3 returns {@code Error=AUTHENTICATION_FAILED}.
      *
      * @param session the session to mutate
-     * @throws IOException if the HTTP call fails or the response does
-     *                     not contain a {@code token} entry
+     * @throws IOException if the HTTP call fails or the response does not contain a {@code token} entry
      */
     private void gcmRegister(FcmSession session) throws IOException {
         var cfg = session.config();
@@ -377,20 +335,15 @@ final class FcmRegistration {
     }
 
     /**
-     * Sends {@code request} synchronously and returns the raw response
-     * body bytes on a {@code 2xx} status.
+     * Sends {@code request} synchronously and returns the raw response body bytes on a {@code 2xx} status.
      *
-     * @apiNote
-     * Rewrites non-2xx responses (and interruptions) into
-     * {@link IOException}s tagged with the step name for log
-     * readability; the interrupt flag is restored before the
-     * {@link IOException} is thrown.
+     * <p>Non-2xx responses and interruptions are rewritten into {@link IOException}s tagged with the step name for log
+     * readability; the interrupt flag is restored before the {@link IOException} is thrown.
      *
      * @param request  the prepared HTTP request
      * @param stepName a short label folded into error messages
      * @return the raw response body bytes
-     * @throws IOException on any non-2xx status, transport failure or
-     *                     interruption during the call
+     * @throws IOException on any non-2xx status, transport failure or interruption during the call
      */
     private byte[] sendBytes(HttpRequest request, String stepName) throws IOException {
         try {
@@ -407,8 +360,8 @@ final class FcmRegistration {
     }
 
     /**
-     * Builds the FIS endpoint URL by interpolating the project id
-     * from {@code session.config()} into {@link #FIS_URL_TEMPLATE}.
+     * Builds the FIS endpoint URL by interpolating the project id from {@code session.config()} into
+     * {@link #FIS_URL_TEMPLATE}.
      *
      * @param session the session whose config carries the project id
      * @return the fully-qualified FIS install URL
@@ -420,11 +373,11 @@ final class FcmRegistration {
     /**
      * Generates a fresh Firebase Installation Id.
      *
-     * @apiNote
-     * Produces 17 random bytes with the leading nibble forced to
-     * {@code 0b0111} (per the FIS spec) then URL-safe base64 encoded
-     * and truncated to 22 characters. Each call produces a fresh
-     * candidate id; the FIS server may confirm or replace it.
+     * <p>Each call produces a fresh candidate id; the FIS server may confirm or replace it.
+     *
+     * @implNote
+     * This implementation produces {@link #FID_BYTES} random bytes with the leading nibble forced to {@code 0b0111}
+     * (per the FIS spec) then URL-safe base64 encodes them and truncates to {@link #FID_TRUNCATED_LENGTH} characters.
      *
      * @return a new candidate FID
      */
@@ -436,15 +389,12 @@ final class FcmRegistration {
     }
 
     /**
-     * Parses a Google duration string like {@code "604800s"} into the
-     * underlying integer seconds.
+     * Parses a Google duration string like {@code "604800s"} into the underlying integer seconds.
      *
-     * @apiNote
-     * Returns {@code 0} for missing or malformed input rather than
-     * throwing, because the caller folds the value straight into a
-     * clock comparison and zero is a safe "expired" sentinel that
-     * triggers a refresh on the next
-     * {@link #ensureCredentials(FcmSession)} call.
+     * @implNote
+     * This implementation returns {@code 0} for missing or malformed input rather than throwing, because the caller
+     * folds the value straight into a clock comparison and zero is a safe expired sentinel that triggers a refresh on
+     * the next {@link #ensureCredentials(FcmSession)} call.
      *
      * @param raw the duration string, e.g. {@code "604800s"}
      * @return the parsed seconds, or {@code 0} if unparseable
@@ -460,15 +410,12 @@ final class FcmRegistration {
     }
 
     /**
-     * URL-encodes a key/value map into the
-     * {@code application/x-www-form-urlencoded} wire format expected
-     * by {@code register3}, preserving insertion order.
+     * URL-encodes a key/value map into the {@code application/x-www-form-urlencoded} wire format expected by
+     * {@code register3}, preserving insertion order.
      *
-     * @apiNote
-     * Insertion order is load-bearing because the native client emits
-     * the same fields in the same sequence; using a
-     * {@link LinkedHashMap} on the call side keeps the wire bytes
-     * stable and predictable.
+     * @implNote
+     * Insertion order is load-bearing because the native client emits the same fields in the same sequence; the caller
+     * supplies a {@link LinkedHashMap} so the wire bytes stay stable and predictable.
      *
      * @param form the key/value entries to encode
      * @return the encoded form body
@@ -485,14 +432,12 @@ final class FcmRegistration {
     }
 
     /**
-     * Gzip-compresses the given bytes for use as the
-     * {@code Content-Encoding: gzip} body of the checkin POST.
+     * Gzip-compresses the given bytes for use as the {@code Content-Encoding: gzip} body of the checkin POST.
      *
      * @param data the raw protobuf bytes
      * @return the gzipped bytes
-     * @throws IOException if the {@link GZIPOutputStream} writer fails
-     *                     (in practice impossible for an in-memory
-     *                     byte sink)
+     * @throws IOException if the {@link GZIPOutputStream} writer fails, which in practice is impossible for an
+     *                     in-memory byte sink
      */
     private static byte[] gzip(byte[] data) throws IOException {
         var out = new ByteArrayOutputStream(data.length);
@@ -503,17 +448,13 @@ final class FcmRegistration {
     }
 
     /**
-     * Tries to gunzip {@code data}, falling back to the input
-     * verbatim when the bytes are not a valid gzip stream.
+     * Tries to gunzip {@code data}, falling back to the input verbatim when the bytes are not a valid gzip stream.
      *
-     * @apiNote
-     * The checkin server may reply with either form depending on the
-     * {@code Accept-Encoding} negotiation; this fallback keeps the
-     * decoder agnostic to the negotiated encoding.
+     * <p>The checkin server may reply with either form depending on the {@code Accept-Encoding} negotiation; this
+     * fallback keeps the decoder agnostic to the negotiated encoding.
      *
      * @param data the raw response bytes
-     * @return the decompressed bytes, or the input unchanged if it
-     *         was not gzipped
+     * @return the decompressed bytes, or the input unchanged if it was not gzipped
      */
     private static byte[] decodeMaybeGzipped(byte[] data) {
         try (var gz = new GZIPInputStream(new ByteArrayInputStream(data))) {
@@ -524,14 +465,12 @@ final class FcmRegistration {
     }
 
     /**
-     * Builds an {@link HttpClient} configured with
-     * {@link #HTTP_TIMEOUT} and the optional caller-supplied proxy.
+     * Builds an {@link HttpClient} configured with {@link #HTTP_TIMEOUT} and the optional caller-supplied proxy.
      *
-     * @apiNote
-     * The default proxy port falls back to {@code 8080} when
-     * {@code proxy.getPort()} returns {@code -1}; redirects are
-     * followed in {@code NORMAL} mode so cross-scheme HTTPS-to-HTTPS
-     * redirects work but downgrades do not.
+     * @implNote
+     * This implementation falls back to proxy port {@code 8080} when {@code proxy.getPort()} returns {@code -1}, and
+     * follows redirects in {@link HttpClient.Redirect#NORMAL} mode so cross-scheme HTTPS-to-HTTPS redirects work but
+     * downgrades do not.
      *
      * @param proxy proxy URI, or {@code null} for direct
      * @return a configured HTTP client

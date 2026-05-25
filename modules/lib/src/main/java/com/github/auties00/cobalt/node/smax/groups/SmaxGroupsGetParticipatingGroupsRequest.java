@@ -14,11 +14,10 @@ import java.util.Optional;
 
 /**
  * The outbound {@code <iq xmlns="w:g2" type="get" to="g.us">} stanza that lists every group the caller participates in.
- *
- * @apiNote Drives the {@code WAWebGroupQueryJob.queryGroups} bulk-loader fired after the admin-ship cache is cleared,
- * for example on login or on group-server-side cache invalidation. The two flags toggle the per-group projection:
- * {@link #includeParticipants()} asks the relay to inline each group's participant list, {@link #includeDescription()}
- * asks for the per-group description body.
+ * <p>
+ * The two flags toggle the per-group projection: {@link #includeParticipants()} asks the relay to inline each group's
+ * participant list and {@link #includeDescription()} asks for the per-group description body. Replies are parsed
+ * through {@link SmaxGroupsGetParticipatingGroupsResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetParticipatingGroupsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetServerMixin")
@@ -35,9 +34,8 @@ public final class SmaxGroupsGetParticipatingGroupsRequest implements SmaxOperat
 
     /**
      * Constructs a request with explicit projection flags.
-     *
-     * @apiNote Passing {@code includeParticipants=true} and {@code includeDescription=true} matches the WA Web bulk
-     * loader's default; passing both as {@code false} retrieves only the minimal {@code <group jid .../>} envelope.
+     * <p>
+     * Passing both flags as {@code false} retrieves only the minimal {@code <group jid .../>} envelope per group.
      *
      * @param includeParticipants {@code true} to inline per-group participant lists
      * @param includeDescription  {@code true} to inline per-group description bodies
@@ -67,8 +65,8 @@ public final class SmaxGroupsGetParticipatingGroupsRequest implements SmaxOperat
 
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
-     *
-     * @apiNote The resulting envelope is
+     * <p>
+     * The {@code to} attribute is bound to {@link JidServer#groupOrCommunity()}. The resulting envelope is
      * {@snippet :
      *     <iq xmlns="w:g2" to="g.us" type="get">
      *         <participating>

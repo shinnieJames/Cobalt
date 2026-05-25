@@ -90,30 +90,15 @@ import java.util.*;
 import java.util.function.Function;
 
 /**
- * In-memory {@link WhatsAppClient} implementation for tests.
- *
- * <p>Every method on the {@link WhatsAppClient} contract is implemented
- * here; methods that no test currently needs throw
- * {@link UnsupportedOperationException} with a self-describing message so
- * a test that accidentally relies on them fails loudly with the actual
- * method name in the stack trace.
- *
- * <p>The four methods used by the device-package orchestrators are wired
- * to fluent state held on this class:
- * <ul>
- *   <li>{@link #store()} returns whatever {@link #withStore(WhatsAppStore)}
- *       was last given;</li>
- *   <li>{@link #sendNode(NodeBuilder)} delegates to a caller-supplied
- *       {@link Function} so tests can return canned IQ responses;</li>
- *   <li>{@link #handleFailure(WhatsAppException)}
- *       records the exception into a list observable via
- *       {@link #failures()};</li>
- *   <li>{@link #queryChatMetadata(JidProvider)} returns from a map of
- *       presets installed via
- *       {@link #withChatMetadata(JidProvider, ChatMetadata)}.</li>
- * </ul>
- *
- * <p>Add more wired overrides here when a new test needs them.
+ * In-memory {@link WhatsAppClient} test double whose behaviour is configured through {@code with*}
+ * builder methods. Only a handful of overrides are wired to caller-installed state; every other
+ * contract method throws {@link UnsupportedOperationException} naming itself, so a test that leans
+ * on an unstubbed call fails loudly rather than silently. The wired overrides are {@link #store()}
+ * ({@link #withStore(WhatsAppStore)}), {@link #sendNode(NodeBuilder)} (a caller-supplied
+ * {@link Function} returning canned responses), {@link #handleFailure(WhatsAppException)} (records
+ * into {@link #failures()}), {@link #queryChatMetadata(JidProvider)} (a preset map from
+ * {@link #withChatMetadata(JidProvider, ChatMetadata)}), and {@link #isConnected()}
+ * ({@link #withIsConnected(boolean)}).
  */
 public final class TestWhatsAppClient implements WhatsAppClient {
     private WhatsAppStore store;
@@ -155,12 +140,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     /**
-     * Pins the value returned by {@link #isConnected()}. When unset
-     * (the default), the method throws to surface tests that depend
-     * on connectivity without declaring it.
-     *
-     * @param connected the value to report
-     * @return this client, for chaining
+     * Pins the value returned by {@link #isConnected()}; left unset, that method throws.
      */
     public TestWhatsAppClient withIsConnected(boolean connected) {
         this.isConnected = connected;
@@ -178,14 +158,9 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     /**
-     * Returns the AB-props service installed via {@link #withAbPropsService}.
-     *
-     * <p>Kept as a public method on the test harness so tests can grab the
-     * service and pass it explicitly to constructor-DI consumers. Not part
-     * of the {@link WhatsAppClient} interface; production code always
-     * receives the AB-props service via constructor injection.
-     *
-     * @return the installed AB-props service
+     * Returns the {@link ABPropsService} installed via {@link #withAbPropsService}, throwing if none
+     * was installed. Not part of {@link WhatsAppClient}; tests use it to hand the service to
+     * constructor-DI consumers.
      */
     public ABPropsService abPropsService() {
         if (abPropsService == null) {

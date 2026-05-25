@@ -18,13 +18,11 @@ import java.util.Objects;
  * Single entry point for every inbound {@code <message>} stanza, routing each one to
  * the receiver matching the stanza's address class.
  *
- * @apiNote
- * Embedders normally interact with this service indirectly through
- * {@link com.github.auties00.cobalt.client.WhatsAppClient}; direct use is meant for
- * unit tests and for custom dispatchers that bypass the socket layer. The router
- * picks {@link NewsletterMessageReceiver} when the {@code from} JID lives on the
- * {@code @newsletter} server (Channels) and {@link ChatMessageReceiver} for every
- * other address class (1:1, group, broadcast, status, peer).
+ * <p>The router picks {@link NewsletterMessageReceiver} when the {@code from} JID lives
+ * on the {@code @newsletter} server (Channels) and {@link ChatMessageReceiver} for
+ * every other address class (1:1, group, broadcast, status, peer). The
+ * {@link com.github.auties00.cobalt.client.WhatsAppClient} drives this service from the
+ * socket layer; direct use is reserved for unit tests and for custom dispatchers.
  *
  * @implNote
  * This implementation mirrors WhatsApp Web's
@@ -45,38 +43,36 @@ public final class MessageReceivingService {
     /**
      * Receiver invoked for every non-newsletter inbound stanza.
      *
-     * @apiNote
-     * Holds the full Signal-protocol decryption pipeline.
+     * <p>Holds the full Signal-protocol decryption pipeline.
      */
     private final ChatMessageReceiver chatReceiver;
 
     /**
      * Receiver invoked for every {@code @newsletter}-server inbound stanza.
      *
-     * @apiNote
-     * Reads the {@code <plaintext>} child directly; no Signal decryption is involved.
+     * <p>Reads the {@code <plaintext>} child directly; no Signal decryption is involved.
      */
     private final NewsletterMessageReceiver newsletterReceiver;
 
     /**
      * In-flight dedup cache keyed by {@code fromJid:id}.
      *
-     * @apiNote
-     * Guards against the same E2E message being processed twice when the server
-     * fanout duplicates a delivery during an offline-to-online transition; entries
-     * are short-lived and removed in the {@code finally} block of
-     * {@link #process(Node)}.
+     * <p>Guards against the same E2E message being processed twice when the server
+     * fanout duplicates a delivery during an offline-to-online transition; entries are
+     * short-lived and removed in the {@code finally} block of {@link #process(Node)}.
      */
     private final MessageDedup dedup;
 
     /**
      * Constructs the receiving service and assembles the internal receiver graph.
      *
-     * @apiNote
-     * Constructor injection is intentional; Cobalt does not expose a stateful
-     * service-locator accessor for either receiver, both of which are
-     * package-private. Pass the same {@link WhatsAppStore} used by the rest of the
-     * client so the receivers see consistent self-JID and Signal-session state.
+     * <p>The same {@link WhatsAppStore} used by the rest of the client must be passed so
+     * the receivers see consistent self-JID and Signal-session state.
+     *
+     * @implNote
+     * This implementation injects both receivers through the constructor and exposes no
+     * service-locator accessor for them; both are package-private and owned solely by
+     * this service.
      *
      * @param store      the central session store, shared with the rest of the client
      * @param decryption the Signal-protocol decryption service (PKMSG/MSG/SKMSG) plus
@@ -97,8 +93,7 @@ public final class MessageReceivingService {
      * Routes and processes an incoming {@code <message>} stanza into the appropriate
      * {@link MessageInfo} subtype.
      *
-     * @apiNote
-     * Returns a {@link NewsletterMessageInfo} for Channels posts and a
+     * <p>Returns a {@link NewsletterMessageInfo} for Channels posts and a
      * {@link ChatMessageInfo} for every other message class. Returns {@code null} for
      * unavailable fanout placeholders that should be silently acknowledged and for
      * duplicate deliveries already in flight; callers must treat both as no-ops.
@@ -148,11 +143,8 @@ public final class MessageReceivingService {
     /**
      * Clears the pending-message dedup cache.
      *
-     * @apiNote
-     * Invoked when the offline-delivery phase ends so messages re-delivered in a new
-     * session are not mistakenly flagged as duplicates; mirrors WhatsApp Web's
-     * {@code WAWebMessageDedupUtils.maybeClearPendingMessages}, which is called when
-     * the in-flight count drops to zero on stream resume.
+     * <p>Called when the offline-delivery phase ends so messages re-delivered in a new
+     * session are not mistakenly flagged as duplicates.
      */
     @WhatsAppWebExport(moduleName = "WAWebMessageDedupUtils", exports = "maybeClearPendingMessages",
             adaptation = WhatsAppAdaptation.ADAPTED)

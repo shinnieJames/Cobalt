@@ -14,46 +14,54 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that refreshes a buyer-side cart against a merchant catalog.
+ * The typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that refreshes a buyer-side cart against a
+ * merchant catalog.
  *
- * @apiNote
- * Use this request to revalidate a cart against the merchant's live catalog before checkout; the matching {@link IqBizRefreshCartResponse} echoes the canonical price for each line plus the cart-wide totals, lets the UI flag entries that have changed price, gone out of stock or been removed, and surfaces the per-line {@code max_available} cap the buyer must respect.
+ * <p>The request revalidates a cart against the merchant's live catalog before checkout; the matching
+ * {@link IqBizRefreshCartResponse} echoes the canonical price for each line plus the cart-wide totals, flags entries
+ * that have changed price, gone out of stock or been removed, and surfaces the per-line cap the buyer must respect.
  *
  * @implNote
- * This implementation targets the deprecated WAP path. WA Web's modern {@code WAWebBizRefreshCartJob.refreshCart} entry routes through {@code WAWebBizGraphQLRefreshCartJob}; Cobalt ships only the WAP envelope shape carried by {@code op="refresh"} cart stanzas.
+ * This implementation targets the deprecated WAP path; the WA Web job's modern entry routes through a GraphQL
+ * refresh-cart job. Cobalt ships only the WAP envelope shape carried by {@code op="refresh"} cart stanzas.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizRefreshCartJob")
 public final class IqBizRefreshCartRequest implements IqOperation.Request {
     /**
-     * The merchant catalog JID that the cart is being refreshed against, emitted as the {@code biz_jid} attribute of the {@code <cart/>} envelope.
+     * The merchant catalog JID that the cart is being refreshed against, emitted as the {@code biz_jid} attribute of
+     * the {@code <cart/>} envelope.
      */
     private final Jid businessJid;
 
     /**
-     * The cart line product identifiers, emitted as {@code <product><id/></product>} children of the {@code <cart/>} envelope.
+     * The cart line product identifiers, emitted as {@code <product><id/></product>} children of the {@code <cart/>}
+     * envelope.
      */
     private final List<String> productIds;
 
     /**
-     * The requested thumbnail width in pixels emitted as the {@code <width/>} child content of {@code <image_dimensions/>}.
+     * The requested thumbnail width in pixels emitted as the {@code <width/>} child content of
+     * {@code <image_dimensions/>}.
      */
     private final int width;
 
     /**
-     * The requested thumbnail height in pixels emitted as the {@code <height/>} child content of {@code <image_dimensions/>}.
+     * The requested thumbnail height in pixels emitted as the {@code <height/>} child content of
+     * {@code <image_dimensions/>}.
      */
     private final int height;
 
     /**
-     * The optional direct-connection encrypted info blob emitted as the {@code <direct_connection_encrypted_info/>} child content.
+     * The optional direct-connection encrypted info blob emitted as the {@code <direct_connection_encrypted_info/>}
+     * child content.
      */
     private final String directConnectionEncryptedInfo;
 
     /**
-     * Constructs a typed request.
+     * Constructs a typed request from a merchant target and the cart line identifiers.
      *
-     * @apiNote
-     * Call this constructor with the cart's merchant target and the line identifiers; the list must contain at least one entry because the relay rejects empty cart refreshes. Pass {@code null} for {@code directConnectionEncryptedInfo} when the direct-merchant routing path is not in use.
+     * <p>The list must contain at least one entry because the relay rejects empty cart refreshes. Pass {@code null} for
+     * {@code directConnectionEncryptedInfo} when the direct-merchant routing path is not in use.
      *
      * @param businessJid                   the merchant catalog {@link Jid}; never {@code null}
      * @param productIds                    the cart line identifiers; never {@code null} and must be non-empty
@@ -80,10 +88,7 @@ public final class IqBizRefreshCartRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the merchant catalog {@link Jid}.
-     *
-     * @apiNote
-     * Use this getter to read back the catalog target that the cart refresh names; the value is the merchant business JID derived through {@code WAWebLidMigrationUtils.toPn} before dispatch.
+     * Returns the merchant catalog {@link Jid} that the cart refresh names.
      *
      * @return the {@link Jid}; never {@code null}
      */
@@ -92,10 +97,9 @@ public final class IqBizRefreshCartRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the cart line product identifiers.
+     * Returns the cart line product identifiers that the cart names.
      *
-     * @apiNote
-     * Use this getter to read back the catalog-product ids that the cart names; the list is non-empty and ordered as supplied to the constructor.
+     * <p>The list is non-empty and ordered as supplied to the constructor.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -104,10 +108,7 @@ public final class IqBizRefreshCartRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the requested thumbnail width.
-     *
-     * @apiNote
-     * Use this getter to read back the pixel width that the relay will use when sizing per-line thumbnails carried in the success reply.
+     * Returns the requested thumbnail width that the relay uses when sizing per-line thumbnails in the success reply.
      *
      * @return the width in pixels
      */
@@ -116,10 +117,7 @@ public final class IqBizRefreshCartRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the requested thumbnail height.
-     *
-     * @apiNote
-     * Use this getter to read back the pixel height that the relay will use when sizing per-line thumbnails carried in the success reply.
+     * Returns the requested thumbnail height that the relay uses when sizing per-line thumbnails in the success reply.
      *
      * @return the height in pixels
      */
@@ -130,8 +128,8 @@ public final class IqBizRefreshCartRequest implements IqOperation.Request {
     /**
      * Returns the optional direct-connection routing blob.
      *
-     * @apiNote
-     * Use this getter to read back the encrypted routing payload that lets the relay forward the refresh directly to the merchant when direct-connection routing is enabled; the value is absent when classical relay routing applies.
+     * <p>The blob lets the relay forward the refresh directly to the merchant when direct-connection routing is enabled;
+     * the value is absent when classical relay routing applies.
      *
      * @return an {@link Optional} carrying the blob
      */
@@ -143,7 +141,9 @@ public final class IqBizRefreshCartRequest implements IqOperation.Request {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation materialises the WAP envelope inferred from the GraphQL request shape produced by {@code WAWebBizGraphQLRefreshCartJob.RefreshCart}: the {@code <cart op="refresh" biz_jid/>} wrapper carries the {@code <product><id/></product>} entries, the {@code <image_dimensions>} pair and, when supplied, the {@code <direct_connection_encrypted_info/>} child.
+     * This implementation emits a {@code <cart op="refresh" biz_jid/>} wrapper carrying the
+     * {@code <product><id/></product>} entries, the {@code <image_dimensions>} pair and, when supplied, the
+     * {@code <direct_connection_encrypted_info/>} child.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBizRefreshCartJob",

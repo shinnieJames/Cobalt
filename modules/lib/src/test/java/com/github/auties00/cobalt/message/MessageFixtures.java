@@ -25,43 +25,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Loads message-package fixtures captured from a live WhatsApp Web session and
- * exposes them to JUnit tests.
- *
- * @apiNote The fixtures come in two flavours: JSONL stanza captures written
- * by the MCP tool {@code web_live_stanza_dump_to_file} (re-hydrated into
- * Cobalt {@link Node} instances by {@link #loadEvents(String)} and
- * {@link #buildNodeFromEvent(JSONObject)}), and {@code .expected.json}
- * oracle outputs written by {@code web_live_debug_eval_to_file} (returned as
- * raw {@link JSONObject} so individual tests can pull only the fields they
- * care about). Both live under {@code src/test/resources/fixtures/message/}.
- *
- * @implNote This implementation mirrors {@code DeviceFixtures} from the
- * sibling device package; the only difference is {@link #FIXTURE_ROOT}.
+ * Test helper that loads message-package fixtures captured from a live WhatsApp Web session
+ * and exposes them to JUnit tests. The fixtures come in two flavours, both rooted under
+ * {@code src/test/resources/fixtures/message/}: JSONL stanza captures re-hydrated into Cobalt
+ * {@link Node} instances by {@link #loadEvents(String)} and {@link #buildNodeFromEvent(JSONObject)},
+ * and {@code .expected.json} oracle outputs returned as raw {@link JSONObject} so individual
+ * tests can pull only the fields they care about. The class also builds in-memory temporary
+ * stores via {@link #temporaryStore(Jid, Jid)} for any message-package class that needs a
+ * {@link WhatsAppStore}.
  */
 public final class MessageFixtures {
-    /**
-     * Classpath prefix every message-package fixture path is rooted at.
-     */
     private static final String FIXTURE_ROOT = "fixtures/message";
 
-    /**
-     * Hidden constructor; this is a static-helper class.
-     *
-     * @throws AssertionError always
-     */
     private MessageFixtures() {
         throw new AssertionError("MessageFixtures is not instantiable");
     }
 
     /**
-     * Returns every captured stanza event in the given JSONL fixture in
-     * capture order.
-     *
-     * @apiNote Reads the {@code <topic>.jsonl} file from the classpath under
-     * {@link #FIXTURE_ROOT}; each line is parsed as a JSON record and the
-     * {@code event} sub-object is extracted. Use as the entry point for any
-     * test that wants to replay every captured stanza in order.
+     * Returns every captured stanza event in the given JSONL fixture in capture order. Reads
+     * the {@code <topic>.jsonl} file from the classpath, parses each line as a JSON record, and
+     * extracts its {@code event} sub-object.
      *
      * @param topic the fixture topic (for example
      *              {@code "send/stanza/chat-fanout-self-lid"}), without the
@@ -94,11 +77,8 @@ public final class MessageFixtures {
     }
 
     /**
-     * Returns the first event in the given fixture whose {@code tag} matches
-     * and whose attributes contain every key/value pair in {@code attrs}.
-     *
-     * @apiNote Use to pluck a single named stanza out of a multi-stanza
-     * fixture without re-walking the JSONL by hand.
+     * Returns the first event in the given fixture whose {@code tag} matches and whose
+     * attributes contain every key/value pair in {@code attrs}.
      *
      * @param topic the fixture topic
      * @param tag   the required stanza tag, or {@code null} to accept any
@@ -129,13 +109,10 @@ public final class MessageFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a
-     * captured event.
-     *
-     * @apiNote The node tree is the recursive plain-JSON shape emitted by
-     * the MCP stanza-logger script; binary leaves are {@code {"kind":
-     * "binary", "base64": "..."}} objects and child arrays are arrays of the
-     * same shape.
+     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a captured event.
+     * The node tree is the recursive plain-JSON shape emitted by the MCP stanza-logger script:
+     * binary leaves are {@code {"kind": "binary", "base64": "..."}} objects and child arrays
+     * are arrays of the same shape.
      *
      * @param event the event object from {@link #loadEvents(String)}
      * @return the reconstructed {@link Node}
@@ -152,11 +129,8 @@ public final class MessageFixtures {
     }
 
     /**
-     * Recursively reconstructs a {@link Node} from a captured plain-JSON
-     * tree.
-     *
-     * @apiNote Use when the caller already holds the {@code {tag, attrs,
-     * content}} sub-object directly rather than the outer event wrapper.
+     * Reconstructs a {@link Node} from a captured plain-JSON {@code {tag, attrs, content}}
+     * sub-object held directly, rather than from the outer event wrapper.
      *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed node
@@ -167,13 +141,8 @@ public final class MessageFixtures {
     }
 
     /**
-     * Returns the expected-output JSON document paired with the given
-     * fixture topic.
-     *
-     * @apiNote Loads {@code <topic>.expected.json} alongside the JSONL
-     * capture. Use for oracle-style assertions where the test compares
-     * Cobalt's output against the bytes captured from a live WhatsApp Web
-     * session.
+     * Returns the expected-output JSON document paired with the given fixture topic, loaded
+     * from {@code <topic>.expected.json} alongside the JSONL capture.
      *
      * @param topic the fixture topic
      * @return the parsed expected document
@@ -191,18 +160,15 @@ public final class MessageFixtures {
     }
 
     /**
-     * Returns the live-runtime result payload for an eval-style oracle
-     * fixture, unwrapping the {@code result.value} field and re-parsing it
-     * as JSON.
-     *
-     * @apiNote The {@code web_live_debug_eval_to_file} MCP capture wraps the
-     * evaluation outcome as
+     * Returns the live-runtime result payload for an eval-style oracle fixture, unwrapping the
+     * {@code result.value} field and re-parsing it as JSON. The {@code web_live_debug_eval_to_file}
+     * MCP capture wraps the evaluation outcome as
      * {@snippet :
      *     // {"schema": ..., "expression": ..., "result": {"resultType": "string", "value": "<json-string>"}}
      * }
-     * The vast majority of oracle invocations stringify their result before
-     * returning so the live runtime can deliver it through CDP without
-     * structured-clone hazards; this helper undoes that stringification.
+     * The oracle invocations stringify their result before returning so the live runtime can
+     * deliver it through CDP without structured-clone hazards; this helper undoes that
+     * stringification.
      *
      * @param topic the fixture topic
      * @return the parsed inner result document
@@ -224,11 +190,8 @@ public final class MessageFixtures {
     }
 
     /**
-     * Returns whether the given fixture topic exists on the classpath.
-     *
-     * @apiNote Lets tests skip cleanly when a corpus has not yet been
-     * captured, instead of hard-failing on {@code getResourceAsStream}
-     * returning {@code null}.
+     * Returns whether the given fixture topic exists on the classpath, letting tests skip
+     * cleanly when a corpus has not yet been captured.
      *
      * @param topic the fixture topic
      * @return {@code true} when {@code <topic>.jsonl} is on the classpath
@@ -238,12 +201,9 @@ public final class MessageFixtures {
     }
 
     /**
-     * Returns the parsed expected document for the given topic if it
-     * exists.
-     *
-     * @apiNote Use as a soft variant of {@link #loadExpected(String)} when
-     * the caller wants to fall back to a default rather than abort the test
-     * on a missing oracle.
+     * Returns the parsed expected document for the given topic if it exists, as a soft variant
+     * of {@link #loadExpected(String)} that lets the caller fall back to a default rather than
+     * abort on a missing oracle.
      *
      * @param topic the fixture topic
      * @return the document, or {@link Optional#empty()} when no expected
@@ -260,16 +220,12 @@ public final class MessageFixtures {
     }
 
     /**
-     * Creates an in-memory temporary store seeded with the given self-PN and
-     * self-LID and a stub signed-device-identity.
-     *
-     * @apiNote Use as the {@code store} dependency for any message-package
-     * class that takes a {@link WhatsAppStore}. The store is preconfigured
-     * with {@code OfflineResumeState.COMPLETE} so tests that block on
-     * {@code waitForOfflineDeliveryEnd()} do not stall on the 5-minute
-     * latch, and with a stub {@code ADVSignedDeviceIdentity} so PKMSG-bearing
-     * fanouts ship a {@code <device-identity>} child node (signature bytes
-     * are dummies because tests only assert presence/shape).
+     * Creates an in-memory temporary store seeded with the given self-PN and self-LID and a
+     * stub signed-device-identity, for use as the {@link WhatsAppStore} dependency of any
+     * message-package class. The store is preconfigured with offline-resume state COMPLETE so
+     * tests that block on offline-delivery-end do not stall on the 5-minute latch, and with a
+     * stub signed device identity so PKMSG-bearing fanouts ship a {@code <device-identity>}
+     * child node; the signature bytes are dummies because tests only assert presence and shape.
      *
      * @param selfPn  the local user's PN-form bare JID
      * @param selfLid the local user's LID-form bare JID, or {@code null} for
@@ -319,10 +275,8 @@ public final class MessageFixtures {
 
     /**
      * Flattens a captured attribute value into the string form Cobalt's
-     * {@link NodeBuilder#attribute(String, String)} expects.
-     *
-     * @apiNote The MCP stanza logger captures WAWap's internal Jid wrappers
-     * in two shapes:
+     * {@link NodeBuilder#attribute(String, String)} expects. The MCP stanza logger captures
+     * WAP's internal Jid wrappers in two shapes:
      * <ul>
      *   <li>Server JID:
      *       {@code {"$1": {"type": &lt;int&gt;, "user": &lt;string|null&gt;, "server": &lt;string&gt;}}},
