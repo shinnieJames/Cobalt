@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.message.signal.SignalMessageEncoder;
 import com.github.auties00.cobalt.message.rcat.MessageRcatEncoder;
 import com.github.auties00.cobalt.device.hash.DevicePhashEncoder;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.media.MediaConnection;
 import com.github.auties00.cobalt.model.auth.SignedDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.chat.ChatParticipant;
 import com.github.auties00.cobalt.model.chat.ChatRole;
@@ -13,6 +14,7 @@ import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
+import com.github.auties00.cobalt.model.media.TextMessageLinkPreviewMediaProvider;
 import com.github.auties00.cobalt.model.message.model.MessageContainer;
 import com.github.auties00.cobalt.model.message.server.DeviceSentMessage;
 import com.github.auties00.cobalt.model.message.server.DeviceSentMessageBuilder;
@@ -71,6 +73,8 @@ public final class MessageSenderService {
         Objects.requireNonNull(info.parentJid(), "message recipient cannot be null");
         Objects.requireNonNull(info.message(), "message content cannot be null");
 
+        enrichTextLinkPreview(info);
+
         var recipientJid = info.parentJid();
         if (isGroupJid(recipientJid)) {
             sendGroupMessage(info, attributes);
@@ -89,6 +93,33 @@ public final class MessageSenderService {
      * @param jid the JID to check
      * @return true if the JID is a group JID
      */
+    private void enrichTextLinkPreview(MessageInfo info) {
+        var content = info.message().content();
+        if (!(content instanceof TextMessage textMessage)) {
+            return;
+        }
+
+        if (textMessage.thumbnail().isEmpty()
+                || textMessage.thumbnailDirectPath().isPresent()
+                || textMessage.mediaKey().isPresent()
+                || textMessage.thumbnailSha256().isPresent()
+                || textMessage.thumbnailEncSha256().isPresent()) {
+            return;
+        }
+
+        store.mediaConnection()
+                .ifPresent(mediaConnection -> uploadTextLinkPreview(mediaConnection, textMessage));
+    }
+
+    private void uploadTextLinkPreview(MediaConnection mediaConnection, TextMessage textMessage) {
+        try (var inputStream = new java.io.ByteArrayInputStream(textMessage.thumbnail().orElseThrow())) {
+            var provider = new TextMessageLinkPreviewMediaProvider(textMessage);
+            mediaConnection.upload(provider, inputStream);
+        } catch (Throwable ignored) {
+            // Fall back to inline preview fields only.
+        }
+    }
+
     public static boolean isGroupJid(Jid jid) {
         return jid != null && jid.server().type() == JidServer.Type.GROUP_OR_COMMUNITY;
     }

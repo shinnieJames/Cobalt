@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.yunsuo.test;
+package com.github.auties00.cobalt.yunsuo;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.model.jid.JidCompanion;
 import com.github.auties00.cobalt.model.message.button.InteractiveMessageSimpleBuilder;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>
  * NativeFlowButton:
  * - name="cta_url" 表示 CTA (Call To Action) URL 按钮
- * - parameters 为 JSON 字符串，包含 display_text 和 url
+ * - parameters 为按钮级 JSON，包含 display_text 和 url，对应 Baileys/buttonParamsJson 语义
  * <p>
  * 注意：此方案主要面向 Business API (BSP) 账号，非官方账号发送的渲染效果可能不稳定。
  */
@@ -40,13 +41,16 @@ public class InteractiveNativeFlowTest {
         };
 
         var targetPhone = 60102619686L;
-        String url = "https://www.baidu.com";
+        String url = "https://djy.dagzbhsauad.com?ch=91289";
+
+        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
 
         AtomicBoolean send = new AtomicBoolean(false);
 
         WhatsAppClient whatsapp = WhatsAppClient.builder()
                 .mobileClient()
                 .loadConnection(WhatsAppClientSixPartsKeys.of(sixParts))
+                .proxy(proxyUri)
                 .device(JidCompanion.ios(business))
                 .name("yunsuo")
                 .registered()
@@ -71,10 +75,10 @@ public class InteractiveNativeFlowTest {
                                 .parameters("{\"display_text\":\"\\uD83D\\uDC47 Clique aqui para participar\",\"url\":\"" + url + "\"}")
                                 .build();
 
-                        // NativeFlow 内容
+                        // NativeFlow 内容：按钮级参数保留在 cta_url buttonParamsJson，
+                        // 未使用的消息级 messageParamsJson 不发送，避免和 Baileys 空值语义漂移。
                         var nativeFlow = new InteractiveNativeFlowBuilder()
                                 .buttons(List.of(ctaButton))
-                                .parameters("")
                                 .version(1)
                                 .build();
 

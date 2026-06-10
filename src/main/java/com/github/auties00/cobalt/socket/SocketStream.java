@@ -23,6 +23,7 @@ import java.util.*;
 
 public final class SocketStream {
     private final Map<String, SequencedCollection<Handler>> handlers;
+    private final IqStreamNodeHandler iqStreamNodeHandler;
 
     public SocketStream(WhatsAppClient whatsapp, DeviceService deviceService, MessageReceiverService messageReceiverService, LidMigrationService lidMigrationService, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
         SocketPhonePairing pairingCode = null;
@@ -34,6 +35,7 @@ public final class SocketStream {
         }
 
         var result = new HashMap<String, SequencedCollection<Handler>>();
+        var iqStreamNodeHandler = new IqStreamNodeHandler(whatsapp, webVerificationHandler, pairingCode);
 
         // Common handlers
         addHandler(result, new CallStreamNodeHandler(whatsapp));
@@ -41,7 +43,7 @@ public final class SocketStream {
         addHandler(result, new ErrorStreamNodeHandler(whatsapp));
         addHandler(result, new FailureStreamNodeHandler(whatsapp));
         addHandler(result, new IbStreamNodeHandler(whatsapp));
-        addHandler(result, new IqStreamNodeHandler(whatsapp, webVerificationHandler, pairingCode));
+        addHandler(result, iqStreamNodeHandler);
         addHandler(result, new MessageStreamNodeHandler(whatsapp, messageReceiverService, lidMigrationService));
         addHandler(result, new MessageAckStreamNodeHandler(whatsapp));
         addHandler(result, new MessageReceiptStreamNodeHandler(whatsapp, deviceService));
@@ -73,6 +75,7 @@ public final class SocketStream {
         }
 
         this.handlers = Collections.unmodifiableMap(result);
+        this.iqStreamNodeHandler = iqStreamNodeHandler;
     }
 
     private void addHandler(Map<String, SequencedCollection<Handler>> result, Handler handler) {
@@ -88,6 +91,10 @@ public final class SocketStream {
                 Thread.startVirtualThread(() -> handler.handle(node));
             }
         }
+    }
+
+    public void startKeepAlive() {
+        iqStreamNodeHandler.startKeepAlive();
     }
 
     public void reset() {

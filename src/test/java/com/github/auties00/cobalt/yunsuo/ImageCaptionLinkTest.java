@@ -1,27 +1,33 @@
-package com.github.auties00.cobalt.yunsuo.test;
+package com.github.auties00.cobalt.yunsuo;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
-import com.github.auties00.cobalt.model.button.base.Button;
-import com.github.auties00.cobalt.model.button.base.ButtonTextBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidCompanion;
-import com.github.auties00.cobalt.model.message.button.ButtonsMessageHeaderText;
-import com.github.auties00.cobalt.model.message.button.ButtonsMessageSimpleBuilder;
+import com.github.auties00.cobalt.model.message.standard.ImageMessageBuilder;
 
 import java.io.IOException;
-import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 方案3：ButtonsMessage + 文本按钮
+ * 思路2：图片消息 + Caption 中嵌入 URL
  * <p>
- * 使用 ButtonsMessage 发送带有 reply 按钮的消息，
- * 链接直接包含在正文 body 中，按钮用于吸引用户注意。
- * 点击链接文本即可跳转，按钮本身是 reply 类型（不直接跳转 URL）。
+ * 原理：
+ * 将 URL 放在 ImageMessage 的 caption 中，而不是纯 TextMessage。
+ * Caption 中的链接在部分 Android 版本上安全提示的触发策略与纯文本消息不同。
+ * 同时图片本身吸引用户注意力，增加点击率。
+ * <p>
+ * 优势：
+ * - 图片+文字的组合视觉效果好
+ * - Caption 链接的安全检查策略可能比纯文本更宽松
+ * - iOS/Android 均支持
+ *
  */
-public class ButtonsMessageTest {
+//方案不可行
+public class ImageCaptionLinkTest {
 
     public static void main(String[] args) throws IOException {
 
@@ -35,10 +41,13 @@ public class ButtonsMessageTest {
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
 
+        var imagePath = "/Users/admin/Documents/data/gg/pic/djy.jpg";
         var targetPhone = 60102619686L;
-        String url = "https://djy.dagzbhsauad.com?ch=91289";
+        String url = "https://www.baidu.com";
 
         AtomicBoolean send = new AtomicBoolean(false);
+
+        byte[] imageData = Files.readAllBytes(Path.of(imagePath));
 
         WhatsAppClient whatsapp = WhatsAppClient.builder()
                 .mobileClient()
@@ -55,32 +64,25 @@ public class ButtonsMessageTest {
                     System.out.println("Logged in");
                     if (send.compareAndSet(false, true)) {
 
-                        String bodyText = "❤\uFE0FOlá \uD83D\uDE0A, sou o gerente da plataforma TT700 PG, quero convidar você a entrar em nossa plataforma para ganhar dinheiro.\n" +
+                        String caption = "❤\uFE0FOlá \uD83D\uDE0A, sou o gerente da plataforma TT700 PG, quero convidar você a entrar em nossa plataforma para ganhar dinheiro.\n" +
                                 "\n" +
-                                "\uD83C\uDF81Cadastre uma conta e deposite 10 e você receberá imediatamente 100/10R$ de graça.\n" +
+                                "\uD83C\uDF81Cadastre uma conta e deposite 10 e você receberá imediatamente 100/10R$ de graça, Invista 1 lucre 10 e com certeza terá a oportunidade de ganhar de 500R$ a 1000R$ por hora.\n" +
                                 "\n" +
                                 "\uD83D\uDCB5Quer aproveitar esta oportunidade para ganhar dinheiro?\n" +
                                 "\n" +
-                                "\uD83D\uDC47\uD83D\uDC47\uD83D\uDC47Clique no link:\n";
-//                                url;
+                                "\uD83D\uDC47\uD83D\uDC47\uD83D\uDC47Clique no link abaixo e participe\n" +
+                                url;
 
-                        // Reply 按钮
-                        var button1 = Button.of(new ButtonTextBuilder().content("✅ Quero participar").build());
-                        var button2 = Button.of(new ButtonTextBuilder().content("\uD83D\uDCB0 Ganhar dinheiro").build());
-
-                        // 构造 ButtonsMessage
-                        var message = new ButtonsMessageSimpleBuilder()
-                                .header(new ButtonsMessageHeaderText("TT700 PG - Plataforma Oficial"))
-                                .body(bodyText)
-                                .footer("Plataforma Oficial \uD83C\uDF1F")
-                                .buttons(List.of(button1, button2))
+                        var imageMessage = new ImageMessageBuilder()
+                                .mimetype("image/jpeg")
+                                .caption(caption)
                                 .build();
 
                         try {
-                            var info = api.sendMessage(Jid.of(targetPhone), message);
-                            System.out.println("ButtonsMessage sent successfully: " + info.id());
+                            var info = api.sendMessage(Jid.of(targetPhone), imageMessage);
+                            System.out.println("ImageCaptionLink sent successfully: " + info.id());
                         } catch (Throwable error) {
-                            System.err.println("Failed to send ButtonsMessage: " + error.getMessage());
+                            System.err.println("Failed to send ImageCaptionLink: " + error.getMessage());
                             error.printStackTrace();
                         }
                     }

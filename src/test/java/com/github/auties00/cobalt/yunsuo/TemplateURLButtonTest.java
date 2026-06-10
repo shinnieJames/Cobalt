@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.yunsuo.test;
+package com.github.auties00.cobalt.yunsuo;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
@@ -59,7 +59,7 @@ public class TemplateURLButtonTest {
                                 "\n" +
                                 "\uD83D\uDCB5Quer aproveitar esta oportunidade para ganhar dinheiro?";
 
-                        // URL 按钮：点击直接跳转浏览器
+                        // URL 按钮：displayText 放按钮文案，url 放实际落地页
                         var urlButton = new HydratedURLButtonBuilder()
                                 .text("\uD83D\uDC47 Clique aqui para participar")
                                 .url(url)
@@ -78,7 +78,6 @@ public class TemplateURLButtonTest {
                         // 构造 TemplateMessage
                         var message = new TemplateMessageSimpleBuilder()
                                 .content(template)
-                                .format(template)
                                 .build();
 
                         try {

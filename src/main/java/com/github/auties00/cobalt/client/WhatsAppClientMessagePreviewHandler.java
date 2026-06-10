@@ -57,16 +57,24 @@ public interface WhatsAppClientMessagePreviewHandler {
                 return;
             }
 
+            if (textMessage.matchedText().isPresent()
+                    || textMessage.title().isPresent()
+                    || textMessage.description().isPresent()
+                    || textMessage.thumbnail().isPresent()) {
+                return;
+            }
+
             var preview = LinkPreview.createPreview(textMessage.text());
             preview.ifPresent(match -> {
-                var uri = match.result().toString();
+                var uri = match.result().uri().toString();
                 if (allowInference && !Objects.equals(match.text(), uri)) {
                     textMessage.setText(textMessage.text().replace(match.text(), uri));
                 }
-                textMessage.setMatchedText(uri);
+                textMessage.setMatchedText(match.text());
 
                 textMessage.setTitle(match.result().title());
                 textMessage.setDescription(match.result().siteDescription());
+                textMessage.setPreviewType(TextMessage.PreviewType.NONE);
 
                 match.result()
                         .images()
@@ -78,26 +86,13 @@ public interface WhatsAppClientMessagePreviewHandler {
                             } catch (Throwable ignored) {
 
                             }
-                            textMessage.setThumbnailWidth(media.width());
-                            textMessage.setThumbnailHeight(media.height());
+                            if (media.width() > 0) {
+                                textMessage.setThumbnailWidth(media.width());
+                            }
+                            if (media.height() > 0) {
+                                textMessage.setThumbnailHeight(media.height());
+                            }
                         });
-
-                match.result()
-                        .videos()
-                        .stream()
-                        .reduce((first, second) -> first.width() * first.height() > second.width() * second.height() ? first : second)
-                        .ifPresentOrElse(
-                                media -> {
-                                    textMessage.setCanonicalUrl(media.uri().toString());
-                                    textMessage.setThumbnailWidth(media.width());
-                                    textMessage.setThumbnailHeight(media.height());
-                                    textMessage.setPreviewType(TextMessage.PreviewType.VIDEO);
-                                },
-                                () -> {
-                                    textMessage.setCanonicalUrl(match.result().uri().toString());
-                                    textMessage.setPreviewType(TextMessage.PreviewType.NONE);
-                                }
-                        );
             });
         };
     }

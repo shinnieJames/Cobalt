@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.model.call.CallBuilder;
 import com.github.auties00.cobalt.model.call.CallStatus;
 import com.github.auties00.cobalt.model.chat.*;
 import com.github.auties00.cobalt.model.contact.Contact;
+import com.github.auties00.cobalt.model.contact.ContactBuilder;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.info.*;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -30,6 +31,7 @@ import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntryBuilder;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
+import com.github.auties00.cobalt.model.setting.GlobalSettings;
 import com.github.auties00.cobalt.model.setting.Setting;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.RecordSync.Operation;
@@ -375,6 +377,166 @@ public final class WhatsAppClient {
         }
     }
 
+    public void completeLogin(Node node) {
+        if (store.clientType() == WhatsAppClientType.MOBILE) {
+            saveMobileCompanion(node);
+        }
+
+        if(!store.registered()) {
+            store.setRegistered(true);
+            store.serialize();
+        }
+
+        socketStream.startKeepAlive();
+        if (store.clientType() == WhatsAppClientType.MOBILE) {
+            runMobilePostLoginBootstrap();
+        }
+
+        for(var listener : store.listeners()) {
+            Thread.startVirtualThread(() -> listener.onLoggedIn(this));
+        }
+    }
+
+    private void runMobilePostLoginBootstrap() {
+        changePresence(true);
+        refreshBlockList();
+        refreshPrivacySettings();
+        refreshDisappearingMode();
+        auditPreKeysAfterLogin();
+    }
+
+    private void saveMobileCompanion(Node node) {
+        var jid = node.getAttributeAsJid("jid")
+                .or(() -> node.getChild("device").flatMap(device -> device.getAttributeAsJid("jid")))
+                .or(() -> store.phoneNumber().stream().mapToObj(Jid::of).findFirst())
+                .orElse(null);
+        if (jid != null) {
+            store.setJid(jid);
+            store.setPhoneNumber(Long.parseUnsignedLong(jid.user()));
+            if (store.findContactByJid(jid).isEmpty()) {
+                var contact = new ContactBuilder()
+                        .jid(jid)
+                        .chosenName(store.name())
+                        .lastKnownPresence(ContactStatus.AVAILABLE)
+                        .lastSeenSeconds(Clock.nowSeconds())
+                        .blocked(false)
+                        .build();
+                store.addContact(contact);
+            }
+        }
+
+        node.getAttributeAsJid("lid")
+                .or(() -> node.getChild("device").flatMap(device -> device.getAttributeAsJid("lid")))
+                .ifPresent(store::setLid);
+    }
+
+    public void refreshBlockList() {
+        for (var jid : queryBlockList()) {
+            store.findContactByJid(jid)
+                    .orElseGet(() -> {
+                        var newContact = store.addNewContact(jid);
+                        for(var listener : store.listeners()) {
+                            Thread.startVirtualThread(() -> listener.onNewContact(this, newContact));
+                        }
+                        return newContact;
+                    })
+                    .setBlocked(true);
+        }
+    }
+
+    public void refreshPrivacySettings() {
+        var queryRequestBody = new NodeBuilder()
+                .description("privacy")
+                .build();
+        var queryRequest = new NodeBuilder()
+                .description("iq")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
+                .attribute("xmlns", "privacy")
+                .content(queryRequestBody);
+        var result = sendNode(queryRequest);
+        result.streamChildren("privacy")
+                .flatMap(Node::streamChildren)
+                .forEach(this::addPrivacySetting);
+    }
+
+    private void addPrivacySetting(Node entry) {
+        var privacyType = entry.getAttributeAsString("name")
+                .flatMap(PrivacySettingType::of);
+        if(privacyType.isEmpty()) {
+            return;
+        }
+
+        var privacyValue = entry.getAttributeAsString("value")
+                .flatMap(PrivacySettingValue::of);
+        if(privacyValue.isEmpty()) {
+            return;
+        }
+
+        var excluded = queryPrivacyExcludedContacts(privacyType.get(), privacyValue.get());
+        var newEntry = new PrivacySettingEntryBuilder()
+                .type(privacyType.get())
+                .value(privacyValue.get())
+                .excluded(excluded)
+                .build();
+        store.addPrivacySetting(newEntry);
+    }
+
+    private List<Jid> queryPrivacyExcludedContacts(PrivacySettingType type, PrivacySettingValue value) {
+        if (value != PrivacySettingValue.CONTACTS_EXCEPT) {
+            return List.of();
+        }
+
+        var queryRequestBodyContent = new NodeBuilder()
+                .description("list")
+                .attribute("name", type.data())
+                .attribute("value", value.data())
+                .build();
+        var queryRequestBody = new NodeBuilder()
+                .description("privacy")
+                .content(queryRequestBodyContent)
+                .build();
+        var queryRequest = new NodeBuilder()
+                .description("iq")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
+                .attribute("xmlns", "privacy")
+                .content(queryRequestBody);
+        return sendNode(queryRequest)
+                .streamChild("privacy")
+                .flatMap(queryNode -> queryNode.streamChild("list"))
+                .flatMap(queryNode -> queryNode.streamChildren("user"))
+                .flatMap(user -> user.streamAttributeAsJid("jid"))
+                .toList();
+    }
+
+    public void refreshDisappearingMode() {
+        var queryRequest = new NodeBuilder()
+                .description("iq")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
+                .attribute("xmlns", "disappearing_mode");
+        sendNode(queryRequest)
+                .getChild("disappearing_mode")
+                .ifPresent(this::updateDisappearingMode);
+    }
+
+    private void updateDisappearingMode(Node child) {
+        var duration = Math.toIntExact(child.getRequiredAttributeAsLong("duration"));
+        var timer = ChatEphemeralTimer.of(duration);
+        store.setNewChatsEphemeralTimer(timer);
+    }
+
+    public void auditPreKeysAfterLogin() {
+        if (store.preKeys().size() >= MIN_PRE_KEYS_COUNT) {
+            return;
+        }
+
+        var missingKeys = Math.max(MIN_PRE_KEYS_COUNT - store.preKeys().size(), MIN_PRE_KEYS_COUNT);
+        sendPreKeys(missingKeys);
+        store.serialize();
+    }
+
     public void resolvePendingRequest(Node node) {
         var id = node.getAttribute("id")
                 .map(NodeAttribute::toString)
@@ -408,15 +570,20 @@ public final class WhatsAppClient {
         var outgoing = node.build();
         var outgoingId = outgoing.getRequiredAttribute("id")
                 .toString();
-        socketSession.sendNode(outgoing);
-
-        for (var listener : store.listeners()) {
-            Thread.startVirtualThread(() -> listener.onNodeSent(this, outgoing));
-        }
-
         var request = new SocketRequest(outgoing, filter);
         pendingSocketRequests.put(outgoingId, request);
-        return request.waitForResponse();
+        try {
+            socketSession.sendNode(outgoing);
+
+            for (var listener : store.listeners()) {
+                Thread.startVirtualThread(() -> listener.onNodeSent(this, outgoing));
+            }
+
+            return request.waitForResponse();
+        } catch (Throwable throwable) {
+            pendingSocketRequests.remove(outgoingId, request);
+            throw throwable;
+        }
     }
 
     /**
@@ -1615,6 +1782,7 @@ public final class WhatsAppClient {
         if (recipient.toJid().hasServer(JidServer.newsletter())) {
             throw new IllegalArgumentException("Use sendNewsletterMessage to send a message in a newsletter");
         }
+        messagePreviewHandler.attribute(message.content());
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
         var timestamp = Clock.nowSeconds();

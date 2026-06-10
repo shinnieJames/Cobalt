@@ -11,15 +11,6 @@ public final class WebOnInitialInfoStreamNodeHandler extends SocketStream.Handle
 
     @Override
     public void handle(Node node) {
-        if(!whatsapp.store().registered()) {
-            whatsapp.store()
-                    .setRegistered(true);
-            whatsapp.store()
-                    .serialize();
-        }
-
-        for(var listener : whatsapp.store().listeners()) {
-            Thread.startVirtualThread(() -> listener.onLoggedIn(whatsapp));
-        }
+        whatsapp.completeLogin(node);
     }
 }

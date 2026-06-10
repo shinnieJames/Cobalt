@@ -2289,6 +2289,10 @@ public final class WhatsAppStore implements SignalProtocolStore {
     }
 
 
+    public Optional<MediaConnection> mediaConnection() {
+        return Optional.ofNullable(mediaConnection);
+    }
+
     public MediaConnection waitForMediaConnection() throws InterruptedException {
         if(mediaConnection == null) {
             synchronized (mediaConnectionLock) {

@@ -10,7 +10,7 @@ public final class DelayedSchedulerUtils {
     }
 
     public static CompletableFuture<Void> scheduleDelayed(Duration delay, Runnable task) {
-        var delayedExecutor = CompletableFuture.delayedExecutor(delay.toNanos(), TimeUnit.MILLISECONDS, Thread::startVirtualThread);
+        var delayedExecutor = CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS, Thread::startVirtualThread);
         return CompletableFuture.runAsync(task, delayedExecutor);
     }
 }

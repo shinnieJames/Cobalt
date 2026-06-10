@@ -1,26 +1,28 @@
-package com.github.auties00.cobalt.yunsuo.test;
+package com.github.auties00.cobalt.yunsuo;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
+import com.github.auties00.cobalt.model.button.base.Button;
+import com.github.auties00.cobalt.model.button.base.ButtonTextBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidCompanion;
-import com.github.auties00.cobalt.model.message.standard.TextMessageBuilder;
+import com.github.auties00.cobalt.model.message.button.ButtonsMessageHeaderText;
+import com.github.auties00.cobalt.model.message.button.ButtonsMessageSimpleBuilder;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 方案1：纯文本消息 + 自动链接预览
+ * 方案3：ButtonsMessage + 文本按钮
  * <p>
- * 不手动设置任何预览字段（canonicalUrl/matchedText/title/thumbnail 等），
- * 让框架的 LinkPreview.createPreviewAsync 自动从网页抓取真实预览数据。
- * 这与用户在 WhatsApp 中手动发送链接的行为完全一致，Android 不会有任何提示。
- * <p>
- * 注意：TextPreviewSetting 保持默认值 ENABLED_WITH_INFERENCE，不要禁用。
- * 框架会自动从 URL 网页中抓取 title、description、thumbnail，生成合法的链接预览。
+ * 使用 ButtonsMessage 发送带有 reply 按钮的消息，
+ * 链接直接包含在正文 body 中，按钮用于吸引用户注意。
+ * 点击链接文本即可跳转，按钮本身是 reply 类型（不直接跳转 URL）。
  */
-public class AutoLinkPreviewTest {
+public class ButtonsMessageTest {
 
     public static void main(String[] args) throws IOException {
 
@@ -37,13 +39,15 @@ public class AutoLinkPreviewTest {
         var targetPhone = 60102619686L;
         String url = "https://djy.dagzbhsauad.com?ch=91289";
 
+        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
+
         AtomicBoolean send = new AtomicBoolean(false);
 
         WhatsAppClient whatsapp = WhatsAppClient.builder()
                 .mobileClient()
                 .loadConnection(WhatsAppClientSixPartsKeys.of(sixParts))
+                .proxy(proxyUri)
                 .device(JidCompanion.ios(business))
-                .name("yunsuo")
                 .registered()
                 .orElseThrow();
 
@@ -51,32 +55,35 @@ public class AutoLinkPreviewTest {
                 .addNodeSentListener((ignored, outgoing) -> System.out.printf("Sent node %s%n", outgoing))
                 .addDisconnectedListener((ignored, reason) -> System.out.println("Disconnected: " + reason))
                 .addLoggedInListener(api -> {
-                    // 不禁用自动预览！保持默认 ENABLED_WITH_INFERENCE
                     System.out.println("Logged in");
                     if (send.compareAndSet(false, true)) {
 
-                        // URL 放在文本末尾，框架会自动检测并抓取预览
-                        String text = "❤\uFE0FOlá \uD83D\uDE0A, sou o gerente da plataforma TT700 PG, quero convidar você a entrar em nossa plataforma para ganhar dinheiro.\n" +
+                        String bodyText = "❤\uFE0FOlá \uD83D\uDE0A, sou o gerente da plataforma TT700 PG, quero convidar você a entrar em nossa plataforma para ganhar dinheiro.\n" +
                                 "\n" +
-                                "\uD83C\uDF81Cadastre uma conta e deposite 10 e você receberá imediatamente 100/10R$ de graça, Invista 1 lucre 10 e com certeza terá a oportunidade de ganhar de 500R$ a 1000R$ por hora.\n" +
-                                "\n" +
-                                "\uD83D\uDC8BMelhore sua experiência com tempos de pagamento de jogos Tigre, Coelho, Dragão, Vaca,... com uma taxa de vitória de até 99%.\n" +
+                                "\uD83C\uDF81Cadastre uma conta e deposite 10 e você receberá imediatamente 100/10R$ de graça.\n" +
                                 "\n" +
                                 "\uD83D\uDCB5Quer aproveitar esta oportunidade para ganhar dinheiro?\n" +
                                 "\n" +
-                                "\uD83D\uDC47\uD83D\uDC47\uD83D\uDC47Clique no link abaixo e participe\n" +
-                                url;
+                                "\uD83D\uDC47\uD83D\uDC47\uD83D\uDC47Clique no link:\n";
+//                                url;
 
-                        // 只设置 text，其他字段全部由框架自动填充
-                        var message = new TextMessageBuilder()
-                                .text(text)
+                        // Reply 按钮
+                        var button1 = Button.of(new ButtonTextBuilder().content("✅ Quero participar").build());
+                        var button2 = Button.of(new ButtonTextBuilder().content("\uD83D\uDCB0 Ganhar dinheiro").build());
+
+                        // 构造 ButtonsMessage
+                        var message = new ButtonsMessageSimpleBuilder()
+                                .header(new ButtonsMessageHeaderText("TT700 PG - Plataforma Oficial"))
+                                .body(bodyText)
+                                .footer("Plataforma Oficial \uD83C\uDF1F")
+                                .buttons(List.of(button1, button2))
                                 .build();
 
                         try {
                             var info = api.sendMessage(Jid.of(targetPhone), message);
-                            System.out.println("AutoLinkPreview sent successfully: " + info.id());
+                            System.out.println("ButtonsMessage sent successfully: " + info.id());
                         } catch (Throwable error) {
-                            System.err.println("Failed to send AutoLinkPreview: " + error.getMessage());
+                            System.err.println("Failed to send ButtonsMessage: " + error.getMessage());
                             error.printStackTrace();
                         }
                     }

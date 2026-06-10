@@ -20,29 +20,40 @@ import com.github.auties00.cobalt.socket.SocketPhonePairing;
 import com.github.auties00.cobalt.socket.SocketStream;
 import com.github.auties00.cobalt.device.adv.DeviceADVValidator;
 import com.github.auties00.cobalt.util.Clock;
+import com.github.auties00.cobalt.util.DelayedSchedulerUtils;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.NoSuchElementException;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.auties00.cobalt.client.WhatsAppClientErrorHandler.Location.AUTH;
 
 public final class IqStreamNodeHandler extends SocketStream.Handler {
     private static final int PING_INTERVAL = 30;
+    private static final Duration PING_INTERVAL_DURATION = Duration.ofSeconds(PING_INTERVAL);
 
     private final WhatsAppClientVerificationHandler.Web webVerificationHandler;
     private final SocketPhonePairing pairingCode;
-    private final Executor pingExecutor;
+    private final AtomicLong keepAliveGeneration;
     public IqStreamNodeHandler(WhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler, SocketPhonePairing pairingCode) {
         super(whatsapp, "iq");
         this.webVerificationHandler = webVerificationHandler;
         this.pairingCode = pairingCode;
-        this.pingExecutor = CompletableFuture.delayedExecutor(PING_INTERVAL, TimeUnit.SECONDS);
+        this.keepAliveGeneration = new AtomicLong();
+    }
+
+    public void startKeepAlive() {
+        var generation = keepAliveGeneration.incrementAndGet();
+        schedulePing(generation);
+    }
+
+    @Override
+    public void reset() {
+        keepAliveGeneration.incrementAndGet();
     }
 
     @Override
@@ -84,11 +95,9 @@ public final class IqStreamNodeHandler extends SocketStream.Handler {
             case WhatsAppClientVerificationHandler.Web.QrCode qrHandler -> {
                 printQrCode(qrHandler, container);
                 sendConfirmNode(node, null);
-                schedulePing();
             }
             case WhatsAppClientVerificationHandler.Web.PairingCode codeHandler -> {
                 askPairingCode(codeHandler);
-                schedulePing();
             }
             default -> throw new IllegalArgumentException("Cannot verify account: unknown verification method");
         }
@@ -123,15 +132,21 @@ public final class IqStreamNodeHandler extends SocketStream.Handler {
         whatsapp.sendNodeWithNoResponse(request);
     }
 
-    private void schedulePing() {
-        var result = sendPing();
-        if(result == null) {
-            whatsapp.disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
-        }else {
-            var store = whatsapp.store();
-            store.serialize();
-        }
-        pingExecutor.execute(this::schedulePing);
+    private void schedulePing(long generation) {
+        DelayedSchedulerUtils.scheduleDelayed(PING_INTERVAL_DURATION, () -> {
+            if (keepAliveGeneration.get() != generation || !whatsapp.isConnected()) {
+                return;
+            }
+
+            var result = sendPing();
+            if (result == null) {
+                whatsapp.disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
+                return;
+            }
+
+            whatsapp.store().serialize();
+            schedulePing(generation);
+        });
     }
 
     private Node sendPing() {

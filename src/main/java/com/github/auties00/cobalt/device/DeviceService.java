@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.device;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.adv.DeviceADVValidator;
+import com.github.auties00.cobalt.exception.NodeTimeoutException;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.node.Node;
@@ -14,7 +15,11 @@ import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 import com.github.auties00.libsignal.protocol.SignalSenderKeyDistributionMessage;
 import com.github.auties00.libsignal.state.SignalPreKeyBundleBuilder;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -43,8 +48,25 @@ public final class DeviceService {
             return Set.of();
         }
 
-        // Get all devices for the given JIDs
-        var devices = queryDevicesForJids(jids);
+        var normalizedJids = jids.stream()
+                .filter(Objects::nonNull)
+                .flatMap(this::expandIdentityCandidates)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalizedJids.isEmpty()) {
+            return Set.of();
+        }
+
+        var cachedDevices = getCachedDevices(normalizedJids);
+        var missingJids = normalizedJids.stream()
+                .filter(jid -> client.store().findDeviceList(jid.toUserJid()).isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        var freshDevices = missingJids.isEmpty()
+                ? Set.<Jid>of()
+                : queryDevicesForJids(missingJids);
+
+        var devices = new LinkedHashSet<Jid>();
+        devices.addAll(cachedDevices);
+        devices.addAll(freshDevices);
         if (devices.isEmpty()) {
             return Set.of();
         }
@@ -60,6 +82,23 @@ public final class DeviceService {
         }
 
         return devices;
+    }
+
+    private Stream<Jid> expandIdentityCandidates(Jid jid) {
+        var normalized = jid.toUserJid();
+        if (normalized.hasServer(JidServer.lid())) {
+            var phone = client.store().findPhoneByLid(normalized);
+            return phone.<Stream<Jid>>map(mappedPhone -> Stream.of(normalized, mappedPhone.toUserJid()))
+                    .orElseGet(() -> Stream.of(normalized));
+        }
+
+        if (normalized.hasServer(JidServer.user()) || normalized.hasServer(JidServer.legacyUser())) {
+            var lid = client.store().findLidByPhone(normalized);
+            return lid.<Stream<Jid>>map(mappedLid -> Stream.of(normalized, mappedLid.toUserJid()))
+                    .orElseGet(() -> Stream.of(normalized));
+        }
+
+        return Stream.of(normalized);
     }
 
     private Set<? extends Jid> queryDevicesForJids(Collection<? extends Jid> jids) {
@@ -99,13 +138,36 @@ public final class DeviceService {
                 .attribute("type", "get")
                 .content(syncNode);
 
-        var response = client.sendNode(iqNode);
+        try {
+            var response = client.sendNode(iqNode);
+            var devices = response.streamChildren("usync")
+                    .flatMap(node -> node.streamChild("list"))
+                    .flatMap(node -> node.streamChildren("user"))
+                    .flatMap(this::parseDevice)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            cacheDevices(devices);
+            return devices;
+        } catch (NodeTimeoutException exception) {
+            var cachedDevices = getCachedDevices(jids);
+            if (!cachedDevices.isEmpty()) {
+                return cachedDevices;
+            }
+            throw exception;
+        }
+    }
 
-        return response.streamChildren("usync")
-                .flatMap(node -> node.streamChild("list"))
-                .flatMap(node -> node.streamChildren("user"))
-                .flatMap(this::parseDevice)
-                .collect(Collectors.toUnmodifiableSet());
+    private void cacheDevices(Collection<? extends Jid> devices) {
+        devices.stream()
+                .collect(Collectors.groupingBy(Jid::toUserJid, LinkedHashMap::new, Collectors.toCollection(ArrayList::new)))
+                .forEach((userJid, userDevices) -> client.store().addDeviceList(userJid, new ArrayList<>(userDevices)));
+    }
+
+    private Set<? extends Jid> getCachedDevices(Collection<? extends Jid> jids) {
+        return jids.stream()
+                .map(Jid::toUserJid)
+                .map(client.store()::findDeviceList)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private Stream<Jid> parseDevice(Node user) {

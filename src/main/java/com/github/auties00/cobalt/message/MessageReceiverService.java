@@ -218,6 +218,9 @@ public final class MessageReceiverService {
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
 
         ChatMessageKey chatMessageKey = null;
+        Jid directSenderPn = null;
+        boolean shouldAckMessage = true;
+        boolean shouldSendReceipt = true;
         try {
             var pushName = infoNode.getAttributeAsString("notify", null);
             var timestamp = infoNode.getAttributeAsLong("t", 0);
@@ -228,15 +231,22 @@ public final class MessageReceiverService {
             var keyBuilder = new ChatMessageKeyBuilder()
                     .id(id);
             if (from.hasServer(JidServer.user()) || from.hasServer(JidServer.legacyUser()) || from.hasServer(JidServer.lid())) {
+                var senderPn = infoNode.getAttributeAsJid("sender_pn").orElse(null);
+                directSenderPn = senderPn;
+                if (senderPn != null && from.hasServer(JidServer.lid())) {
+                    whatsapp.store().registerLidMapping(senderPn, from);
+                }
+
                 var recipient = infoNode
                         .getAttributeAsJid("recipient_pn")
                         .or(() -> infoNode.getAttributeAsJid("recipient"))
                         .orElse(from);
+                var resolvedSender = resolveDirectMessageSender(from, senderPn);
                 keyBuilder.chatJid(recipient);
-                keyBuilder.senderJid(from);
+                keyBuilder.senderJid(resolvedSender);
                 var fromMe = Objects.equals(from.withoutData(), localJid.withoutData());
                 keyBuilder.fromMe(fromMe);
-                messageBuilder.senderJid(from);
+                messageBuilder.senderJid(resolvedSender);
             }else if(from.hasServer(JidServer.bot())) {
                 var meta = infoNode.getChild("meta")
                         .orElseThrow();
@@ -269,7 +279,12 @@ public final class MessageReceiverService {
                 return Stream.empty();
             }
 
-            var container = decodeChatMessageContainer(chatMessageKey, messageNode);
+                var container = decodeChatMessageContainer(chatMessageKey, messageNode, from, directSenderPn);
+                if (container == null) {
+                    shouldAckMessage = true;
+                    shouldSendReceipt = false;
+                    return Stream.empty();
+                }
             var info = messageBuilder.key(chatMessageKey)
                     .broadcast(chatMessageKey.chatJid().hasServer(JidServer.broadcast()))
                     .pushName(pushName)
@@ -287,8 +302,10 @@ public final class MessageReceiverService {
             whatsapp.handleFailure(MESSAGE, throwable);
             return Stream.empty();
         }finally {
-            whatsapp.sendAck(infoNode);
-            if(chatMessageKey != null) {
+            if (shouldAckMessage) {
+                whatsapp.sendAck(infoNode);
+            }
+            if(shouldSendReceipt && chatMessageKey != null) {
                 whatsapp.sendReceipt(
                         chatMessageKey.id(),
                         chatMessageKey.chatJid(),
@@ -299,7 +316,27 @@ public final class MessageReceiverService {
         }
     }
 
-    private MessageContainer decodeChatMessageContainer(ChatMessageKey messageKey, Node messageNode) {
+    private Jid resolveDirectMessageSender(Jid from, Jid senderPn) {
+        if (!from.hasServer(JidServer.lid())) {
+            return from;
+        }
+
+        if (clientHasSessionFor(from)) {
+            return from;
+        }
+
+        if (senderPn != null && clientHasSessionFor(senderPn)) {
+            return senderPn;
+        }
+
+        return from;
+    }
+
+    private boolean clientHasSessionFor(Jid jid) {
+        return whatsapp.store().findSessionByAddress(jid.toSignalAddress()).isPresent();
+    }
+
+    private MessageContainer decodeChatMessageContainer(ChatMessageKey messageKey, Node messageNode, Jid from, Jid senderPn) {
         if (messageNode == null) {
             return MessageContainer.empty();
         }
@@ -312,9 +349,48 @@ public final class MessageReceiverService {
 
         try {
             return signalMessageDecoder.decode(messageKey, type, encodedMessage.get());
-        }catch (Throwable throwable) {
+        } catch (Throwable throwable) {
+            if (isMissingSessionFailure(throwable) && tryRecoverDirectSession(messageKey, from, senderPn)) {
+                var recoveredSender = resolveDirectMessageSender(from, senderPn);
+                messageKey.setSenderJid(recoveredSender);
+                try {
+                    return signalMessageDecoder.decode(messageKey, type, encodedMessage.get());
+                } catch (Throwable retryThrowable) {
+                    whatsapp.handleFailure(MESSAGE, retryThrowable);
+                    return null;
+                }
+            }
+
+            if (isMissingSessionFailure(throwable)) {
+                return null;
+            }
+
             whatsapp.handleFailure(MESSAGE, throwable);
             return MessageContainer.empty();
+        }
+    }
+
+    private boolean isMissingSessionFailure(Throwable throwable) {
+        return throwable != null && throwable.getClass().getSimpleName().equals("SignalMissingSessionException");
+    }
+
+    private boolean tryRecoverDirectSession(ChatMessageKey messageKey, Jid from, Jid senderPn) {
+        if (!messageKey.chatJid().hasUserServer() && !messageKey.chatJid().hasLidServer()) {
+            return false;
+        }
+
+        var queryTarget = senderPn != null ? senderPn.toUserJid() : from.toUserJid();
+        if (queryTarget == null) {
+            return false;
+        }
+
+        try {
+            deviceService.queryDevices(List.of(queryTarget));
+            var recoveredSender = resolveDirectMessageSender(from, senderPn);
+            return whatsapp.store().findSessionByAddress(recoveredSender.toSignalAddress()).isPresent();
+        } catch (Throwable throwable) {
+            whatsapp.handleFailure(MESSAGE, throwable);
+            return false;
         }
     }
 

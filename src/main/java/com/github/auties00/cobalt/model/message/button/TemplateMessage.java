@@ -6,14 +6,11 @@ import com.github.auties00.cobalt.model.button.template.hydrated.HydratedFourRow
 import com.github.auties00.cobalt.model.info.ContextInfo;
 import com.github.auties00.cobalt.model.message.model.ButtonMessage;
 import com.github.auties00.cobalt.model.message.model.ContextualMessage;
-import com.github.auties00.cobalt.util.SecureBytes;
 import it.auties.protobuf.annotation.ProtobufBuilder;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
-import java.util.HexFormat;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -23,7 +20,7 @@ import java.util.Optional;
 @ProtobufMessage(name = "Message.TemplateMessage")
 public final class TemplateMessage implements ContextualMessage, ButtonMessage {
     @ProtobufProperty(index = 9, type = ProtobufType.STRING)
-    final String id;
+    final String templateId;
 
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
     final HydratedFourRowTemplate content;
@@ -40,8 +37,8 @@ public final class TemplateMessage implements ContextualMessage, ButtonMessage {
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
     ContextInfo contextInfo;
 
-    public TemplateMessage(String id, HydratedFourRowTemplate content, HighlyStructuredFourRowTemplate highlyStructuredFourRowTemplateFormat, HydratedFourRowTemplate hydratedFourRowTemplateFormat, InteractiveMessage interactiveMessageFormat, ContextInfo contextInfo) {
-        this.id = id;
+    public TemplateMessage(String templateId, HydratedFourRowTemplate content, HighlyStructuredFourRowTemplate highlyStructuredFourRowTemplateFormat, HydratedFourRowTemplate hydratedFourRowTemplateFormat, InteractiveMessage interactiveMessageFormat, ContextInfo contextInfo) {
+        this.templateId = templateId;
         this.content = content;
         this.highlyStructuredFourRowTemplateFormat = highlyStructuredFourRowTemplateFormat;
         this.hydratedFourRowTemplateFormat = hydratedFourRowTemplateFormat;
@@ -50,9 +47,9 @@ public final class TemplateMessage implements ContextualMessage, ButtonMessage {
     }
 
     @ProtobufBuilder(className = "TemplateMessageSimpleBuilder")
-    static TemplateMessage customBuilder(String id, HydratedFourRowTemplate content, TemplateFormatter format, ContextInfo contextInfo) {
+    static TemplateMessage customBuilder(String templateId, HydratedFourRowTemplate content, TemplateFormatter format, ContextInfo contextInfo) {
         var builder = new TemplateMessageBuilder()
-                .id(Objects.requireNonNullElseGet(id, () -> HexFormat.of().formatHex(SecureBytes.random(6))))
+                .templateId(resolveTemplateId(templateId, content, format))
                 .content(content)
                 .contextInfo(contextInfo);
         switch (format) {
@@ -64,6 +61,24 @@ public final class TemplateMessage implements ContextualMessage, ButtonMessage {
             case null -> {}
         }
         return builder.build();
+    }
+
+    private static String resolveTemplateId(String templateId, HydratedFourRowTemplate content, TemplateFormatter format) {
+        if (templateId != null && !templateId.isBlank()) {
+            return templateId;
+        }
+
+        if (content != null && content.templateId() != null && !content.templateId().isBlank()) {
+            return content.templateId();
+        }
+
+        if (format instanceof HydratedFourRowTemplate hydratedFourRowTemplate
+                && hydratedFourRowTemplate.templateId() != null
+                && !hydratedFourRowTemplate.templateId().isBlank()) {
+            return hydratedFourRowTemplate.templateId();
+        }
+
+        return null;
     }
 
     /**
@@ -99,7 +114,11 @@ public final class TemplateMessage implements ContextualMessage, ButtonMessage {
     }
 
     public String id() {
-        return id;
+        return templateId;
+    }
+
+    public String templateId() {
+        return templateId;
     }
 
     public HydratedFourRowTemplate content() {
@@ -131,7 +150,7 @@ public final class TemplateMessage implements ContextualMessage, ButtonMessage {
     @Override
     public String toString() {
         return "TemplateMessage[" +
-                "id=" + id + ", " +
+                "templateId=" + templateId + ", " +
                 "content=" + content + ", " +
                 "highlyStructuredFourRowTemplateFormat=" + highlyStructuredFourRowTemplateFormat + ", " +
                 "hydratedFourRowTemplateFormat=" + hydratedFourRowTemplateFormat + ", " +
