@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.stream.newsletter;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.listener.linked.LinkedNewMessageListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.listener.NewMessageListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -219,7 +219,7 @@ public final class NewsletterStatusStreamHandler extends SocketStreamHandler.Con
      */
     private void notifyNewMessage(MessageInfo info) {
         for (var listener : whatsapp.store().listeners()) {
-            if (listener instanceof LinkedNewMessageListener typed) {
+            if (listener instanceof NewMessageListener typed) {
                 Thread.startVirtualThread(() -> typed.onNewMessage(whatsapp, info));
             }
         }

@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.socket.tunnel;
 
-import com.github.auties00.cobalt.client.WhatsAppProxy;
-import com.github.auties00.cobalt.client.WhatsAppProxyAuthenticator;
+import com.github.auties00.cobalt.client.WhatsAppClientProxy;
+import com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator;
 import com.github.auties00.cobalt.util.DataUtils;
 
 import java.io.IOException;
@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
  * Establishes a TCP tunnel through a SOCKS proxy on an already-connected {@link Socket}.
  *
  * <p>This is the transport-layer hop used when a WhatsApp connection must traverse a
- * {@link WhatsAppProxy.Socks} proxy. It supports SOCKS4 (local DNS, IPv4 only), SOCKS4a (remote DNS
+ * {@link WhatsAppClientProxy.Socks} proxy. It supports SOCKS4 (local DNS, IPv4 only), SOCKS4a (remote DNS
  * via the {@code 0.0.0.x} sentinel IP), SOCKS5 with local DNS resolution (RFC 1928) and SOCKS5h
  * with remote DNS resolution; SOCKS5 authentication uses the RFC 1929 username and password
  * sub-negotiation. The tunnel runs entirely on the supplied socket's
@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
  * reply, ready for the next protocol layer.
  *
  * @implNote
- * This implementation relies on the {@link WhatsAppProxy.Socks} variant to decide whether the
+ * This implementation relies on the {@link WhatsAppClientProxy.Socks} variant to decide whether the
  * destination address is resolved locally and sent as raw bytes (V4 or V5 Local) or passed to the
  * proxy as a domain name for remote resolution (V4a or V5h Remote); the sealed-class shape carries
  * that choice rather than a separate flag.
@@ -213,17 +213,17 @@ public final class SocksTunnel {
      * @throws IOException if any phase of the handshake fails or the proxy rejects the request
      */
     public static Socket tunnel(Socket raw, String targetHost, int targetPort,
-                                WhatsAppProxy.Socks proxy) throws IOException {
+                                WhatsAppClientProxy.Socks proxy) throws IOException {
         var in = raw.getInputStream();
         var out = raw.getOutputStream();
         switch (proxy) {
-            case WhatsAppProxy.Socks.V4.Local v4 ->
+            case WhatsAppClientProxy.Socks.V4.Local v4 ->
                     performSocks4Handshake(in, out, v4, targetHost, targetPort);
-            case WhatsAppProxy.Socks.V4.Remote v4a ->
+            case WhatsAppClientProxy.Socks.V4.Remote v4a ->
                     performSocks4aHandshake(in, out, v4a, targetHost, targetPort);
-            case WhatsAppProxy.Socks.V5.Local v5 ->
+            case WhatsAppClientProxy.Socks.V5.Local v5 ->
                     performSocks5Handshake(in, out, v5, targetHost, targetPort);
-            case WhatsAppProxy.Socks.V5.Remote v5h ->
+            case WhatsAppClientProxy.Socks.V5.Remote v5h ->
                     performSocks5Handshake(in, out, v5h, targetHost, targetPort);
         }
         return raw;
@@ -235,7 +235,7 @@ public final class SocksTunnel {
      *
      * <p>The host is resolved through {@link InetAddress#getByName(String)} and the request is
      * rejected unless the result is an {@link Inet4Address}, since SOCKS4 carries only IPv4
-     * destinations. The optional user id from the {@link WhatsAppProxy.Socks.V4} authenticator is
+     * destinations. The optional user id from the {@link WhatsAppClientProxy.Socks.V4} authenticator is
      * ISO 8859-1 encoded and appended before the null terminator.
      *
      * @param in   the proxy input stream
@@ -247,7 +247,7 @@ public final class SocksTunnel {
      *         request
      */
     private static void performSocks4Handshake(InputStream in, OutputStream out,
-                                               WhatsAppProxy.Socks.V4.Local v4,
+                                               WhatsAppClientProxy.Socks.V4.Local v4,
                                                String host, int port) throws IOException {
         var address = InetAddress.getByName(host);
         if (!(address instanceof Inet4Address)) {
@@ -281,7 +281,7 @@ public final class SocksTunnel {
      *
      * <p>The request carries {@link #SOCKS4A_SENTINEL_IP} in place of an IPv4 address, instructing
      * the proxy to resolve the trailing null-terminated domain name itself. The optional user id
-     * from the {@link WhatsAppProxy.Socks.V4} authenticator is ISO 8859-1 encoded and inserted
+     * from the {@link WhatsAppClientProxy.Socks.V4} authenticator is ISO 8859-1 encoded and inserted
      * between the sentinel IP and the domain name.
      *
      * @param in   the proxy input stream
@@ -292,7 +292,7 @@ public final class SocksTunnel {
      * @throws IOException if the proxy rejects the request
      */
     private static void performSocks4aHandshake(InputStream in, OutputStream out,
-                                                WhatsAppProxy.Socks.V4.Remote v4a,
+                                                WhatsAppClientProxy.Socks.V4.Remote v4a,
                                                 String host, int port) throws IOException {
         var userIdBytes = v4a.authenticator()
                 .map(auth -> auth.userId().getBytes(StandardCharsets.ISO_8859_1))
@@ -369,8 +369,8 @@ public final class SocksTunnel {
      * authenticator's method id. If the proxy selects a method other than "no authentication" the
      * configured credentials must be present and match the selected method, after which the
      * username and password sub-negotiation runs. The destination is then encoded for the
-     * {@code CONNECT} request: for {@link WhatsAppProxy.Socks.V5.Local} the host is resolved locally
-     * and sent as an IPv4 or IPv6 address, while for {@link WhatsAppProxy.Socks.V5.Remote} the
+     * {@code CONNECT} request: for {@link WhatsAppClientProxy.Socks.V5.Local} the host is resolved locally
+     * and sent as an IPv4 or IPv6 address, while for {@link WhatsAppClientProxy.Socks.V5.Remote} the
      * domain name is sent for remote resolution by the proxy.
      *
      * @param in    the proxy input stream
@@ -381,7 +381,7 @@ public final class SocksTunnel {
      * @throws IOException if negotiation, authentication, or the {@code CONNECT} request fails
      */
     private static void performSocks5Handshake(InputStream in, OutputStream out,
-                                               WhatsAppProxy.Socks.V5 socks,
+                                               WhatsAppClientProxy.Socks.V5 socks,
                                                String host, int port) throws IOException {
         var authenticatorOpt = socks.authenticator();
         var greeting = authenticatorOpt.isPresent()
@@ -409,7 +409,7 @@ public final class SocksTunnel {
                 throw new IOException("Proxy selected unsupported authentication method: " + chosenMethod);
             }
             switch (authenticator) {
-                case WhatsAppProxyAuthenticator.Socks.V5.UserPassword credentials -> {
+                case WhatsAppClientProxyAuthenticator.Socks.V5.UserPassword credentials -> {
                     var userBytes = credentials.username().getBytes(StandardCharsets.ISO_8859_1);
                     var passBytes = credentials.password().getBytes(StandardCharsets.ISO_8859_1);
 
@@ -437,8 +437,8 @@ public final class SocksTunnel {
         }
 
         var connRequest = switch (socks) {
-            case WhatsAppProxy.Socks.V5.Local _ -> buildResolvedConnectRequest(host, port);
-            case WhatsAppProxy.Socks.V5.Remote _ -> buildDomainConnectRequest(host, port);
+            case WhatsAppClientProxy.Socks.V5.Local _ -> buildResolvedConnectRequest(host, port);
+            case WhatsAppClientProxy.Socks.V5.Remote _ -> buildDomainConnectRequest(host, port);
         };
         out.write(connRequest);
         out.flush();

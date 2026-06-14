@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.wam.privatestats;
 
 import com.alibaba.fastjson2.JSON;
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppException;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;

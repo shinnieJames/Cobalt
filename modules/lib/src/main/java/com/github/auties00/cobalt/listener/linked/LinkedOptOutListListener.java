@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
 
 import java.util.List;
@@ -17,7 +17,7 @@ import java.util.List;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedOptOutListListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedOptOutListListener extends LinkedListener {
     /**
      * Notifies the listener that the marketing-message opt-out list
      * for one category was refreshed against the server.

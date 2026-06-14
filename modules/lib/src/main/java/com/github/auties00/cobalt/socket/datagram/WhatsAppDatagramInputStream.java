@@ -20,7 +20,11 @@ import java.util.Objects;
  * cipher is re-initialised with a fresh nonce at every datagram boundary, the ciphertext bytes are fed through
  * {@link Cipher#update}, and {@link Cipher#doFinal} verifies the authentication tag at the end of each datagram.
  * Datagram boundaries are invisible to the consumer: {@link #read()} yields plaintext bytes continuously across
- * datagram boundaries and only signals {@code -1} on a clean end of the underlying stream.
+ * datagram boundaries and signals {@code -1} when the underlying stream ends, whether at an exact datagram boundary
+ * or partway through a datagram whose declared length is never fully delivered. A datagram left incomplete by an end
+ * of stream is discarded rather than reported as an error, mirroring the way WA Web's {@code WAFrameSocket} abandons
+ * a buffered partial frame when the transport closes; the WhatsApp server routinely ends a stream by starting a final
+ * datagram it never finishes and then closing the socket.
  *
  * <p>This continuous mode is the natural fit for the post-handshake reader thread, which decodes one
  * {@link com.github.auties00.cobalt.node.Node} per datagram via {@link com.github.auties00.cobalt.node.binary.NodeReader}:
@@ -229,7 +233,8 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
      * {@value #GCM_TAG_BYTE_SIZE}-byte GCM tag in post-handshake mode. {@link #read()} yields exactly that many
      * plaintext bytes for the current datagram before the next call advances to the next one.
      *
-     * @return the plaintext length of the next datagram, or {@code -1} on clean end-of-stream at the datagram boundary
+     * @return the plaintext length of the next datagram, or {@code -1} on end-of-stream at the datagram boundary or
+     *         inside an incomplete trailing length prefix
      * @throws IllegalStateException if a previous {@code read} call left the stream mid-datagram
      * @throws IOException           if the underlying read fails, the declared length is invalid, or the cipher cannot
      *                               be initialised
@@ -316,14 +321,24 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
      *
      * <p>Starts a new datagram if needed, then either pumps one chunk of ciphertext through {@link Cipher#update} or
      * finalises the current datagram with {@link Cipher#doFinal}, in both cases appending the resulting plaintext to
-     * {@link #plaintextChunk}.
+     * {@link #plaintextChunk}. If the underlying stream ends while the current datagram is still expecting ciphertext,
+     * the incomplete datagram is discarded and a clean end-of-stream is reported rather than failing.
      *
      * @implNote
      * This implementation may return {@code true} with the chunk still empty: BouncyCastle's {@code update} can hold
      * back the tail of a partial AES block until the next call, and the {@code read} loop handles this by re-invoking
      * until the chunk is non-empty or end-of-stream is observed.
      *
-     * @return {@code true} if the cipher state machine advanced one step, {@code false} on clean end-of-stream
+     * <p>Discarding a trailing datagram whose declared length is never fully delivered mirrors WA Web's
+     * {@code WAFrameSocket.convertBufferedToFrames}, which only emits a frame once its full {@code int24}-declared
+     * length is buffered ({@code length <= buffer.size()}) and otherwise leaves the bytes queued as a "partial frame"
+     * that is silently abandoned when the socket closes. The WhatsApp server ends a WebSocket stream by sending a
+     * final short binary frame that begins a datagram it never finishes and then closing the transport; treating that
+     * never-completed tail as a framing error would turn every orderly server-initiated close into a spurious failure
+     * and reconnect.
+     *
+     * @return {@code true} if the cipher state machine advanced one step, {@code false} on clean or mid-datagram
+     *         end-of-stream
      * @throws IOException if the underlying read fails, the cipher rejects the tag, or the datagram length is out of
      *                     bounds
      */
@@ -340,8 +355,9 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
             var toRead = Math.min(textRemaining, ibuffer.length);
             var n = in.read(ibuffer, 0, toRead);
             if (n < 0) {
-                throw new IOException("Unexpected end of stream mid-datagram (expected "
-                        + textRemaining + " more byte(s))");
+                textRemaining = NO_ACTIVE_DATAGRAM;
+                endOfStream = true;
+                return false;
             }
             textRemaining -= n;
             decryptChunk(n);
@@ -356,11 +372,14 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
      * Reads the next {@code int24} length prefix from the underlying stream and returns the wire byte count.
      *
      * <p>The returned wire byte count is ciphertext plus GCM tag in post-handshake mode and plaintext length in
-     * pre-handshake mode; the caller is responsible for converting to plaintext length when needed.
+     * pre-handshake mode; the caller is responsible for converting to plaintext length when needed. An end of stream
+     * reached anywhere inside the three-byte prefix discards the partial prefix and is reported as the same
+     * {@code -1} as an end of stream observed exactly at the datagram boundary, because a length prefix that is
+     * started but never completed is a trailing partial frame the server abandoned by closing the transport.
      *
-     * @return the next datagram wire length, or {@code -1} if the underlying stream is cleanly exhausted at the
-     *         datagram boundary
-     * @throws IOException if the underlying read fails before the full three-byte prefix has been consumed
+     * @return the next datagram wire length, or {@code -1} if the underlying stream is exhausted at or inside the
+     *         length prefix
+     * @throws IOException if the underlying read fails
      */
     private int readWireLength() throws IOException {
         var b0 = in.read();
@@ -370,7 +389,7 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
         var b1 = in.read();
         var b2 = in.read();
         if (b1 < 0 || b2 < 0) {
-            throw new IOException("Unexpected end of stream while reading datagram length prefix");
+            return -1;
         }
         return (b0 << 16) | (b1 << 8) | b2;
     }

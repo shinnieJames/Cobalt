@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.store;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.client.info.WhatsAppClientInfo;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.info.LinkedWhatsAppClientInfo;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
@@ -63,7 +63,7 @@ public final class ProtobufAccountStore implements AccountStore {
      * The flavour of WhatsApp client this store was initialised for.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.ENUM)
-    private final WhatsAppClientType clientType;
+    private final LinkedWhatsAppClientType clientType;
 
     /**
      * The wall-clock timestamp at which this store was first created.
@@ -75,7 +75,7 @@ public final class ProtobufAccountStore implements AccountStore {
      * The device descriptor advertised during pairing and bundled into every client payload.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.MESSAGE)
-    private WhatsAppClientDevice device;
+    private LinkedWhatsAppClientDevice device;
 
     /**
      * The release channel advertised to the server during connection.
@@ -200,7 +200,7 @@ public final class ProtobufAccountStore implements AccountStore {
     /**
      * The platform of the linked primary device, captured at pair-success.
      *
-     * <p>Drives {@link AccountStore#isBusinessAccount()}.
+     * <p>Exposed through {@link AccountStore#primaryPlatform()}.
      */
     @ProtobufProperty(index = 26, type = ProtobufType.ENUM)
     private LinkedPrimaryPlatform primaryPlatform;
@@ -251,7 +251,7 @@ public final class ProtobufAccountStore implements AccountStore {
      * @param lastAdvCheckTime        the last ADV check time, or {@code null}
      * @param primaryPlatform         the linked-primary platform, or {@code null}
      */
-    ProtobufAccountStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, WhatsAppClientDevice device, ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, boolean registered, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, LinkedPrimaryPlatform primaryPlatform) {
+    ProtobufAccountStore(UUID uuid, Long phoneNumber, LinkedWhatsAppClientType clientType, Instant initializationTimeStamp, LinkedWhatsAppClientDevice device, ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, boolean registered, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, LinkedPrimaryPlatform primaryPlatform) {
         this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
         this.phoneNumber = phoneNumber;
         this.clientType = Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -298,7 +298,7 @@ public final class ProtobufAccountStore implements AccountStore {
     }
 
     @Override
-    public WhatsAppClientType clientType() {
+    public LinkedWhatsAppClientType clientType() {
         return clientType;
     }
 
@@ -308,12 +308,12 @@ public final class ProtobufAccountStore implements AccountStore {
     }
 
     @Override
-    public WhatsAppClientDevice device() {
+    public LinkedWhatsAppClientDevice device() {
         return device;
     }
 
     @Override
-    public AccountStore setDevice(WhatsAppClientDevice device) {
+    public AccountStore setDevice(LinkedWhatsAppClientDevice device) {
         this.device = Objects.requireNonNull(device, "device cannot be null");
         return this;
     }
@@ -529,7 +529,7 @@ public final class ProtobufAccountStore implements AccountStore {
         if (clientVersion == null) {
             synchronized (clientVersionLock) {
                 if (clientVersion == null) {
-                    clientVersion = WhatsAppClientInfo.of(device.platform()).version();
+                    clientVersion = LinkedWhatsAppClientInfo.of(device.platform()).version();
                 }
             }
         }

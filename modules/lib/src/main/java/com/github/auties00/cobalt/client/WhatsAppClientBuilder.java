@@ -1,12 +1,17 @@
 package com.github.auties00.cobalt.client;
 
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientBuilder;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientBuilder;
+
 /**
  * Root builder that branches into the two {@link WhatsAppClient} flavours.
  *
- * <p>This is the single entry point reachable through {@link WhatsAppClient#builder()}. It exposes
- * {@link #linked()} for the socket-based Web/Mobile clients and {@link #cloud()} for the Cloud API
- * client; each returns a flavour-specific sub-builder that guides the caller through the steps that
- * apply to that transport.
+ * <p>This is the entry point reachable through {@link WhatsAppClient#builder()}. It exposes
+ * {@link #linkedApi()} for the socket-based Web/Mobile clients and {@link #cloudApi()} for the Cloud
+ * API client; each returns a flavour-specific sub-builder that guides the caller through the steps
+ * that apply to that transport.
  *
  * @see WhatsAppClient
  * @see LinkedWhatsAppClientBuilder
@@ -31,10 +36,10 @@ public final class WhatsAppClientBuilder {
      * <p>The returned builder offers the web companion linking flow, the mobile registration flow,
      * and a low-level custom-store flow.
      *
-     * @return the Linked client builder
+     * @return a fresh Linked client builder
      */
-    public LinkedWhatsAppClientBuilder linked() {
-        return LinkedWhatsAppClientBuilder.INSTANCE;
+    public LinkedWhatsAppClientBuilder linkedApi() {
+        return LinkedWhatsAppClient.builder();
     }
 
     /**
@@ -45,7 +50,7 @@ public final class WhatsAppClientBuilder {
      *
      * @return a fresh Cloud client builder
      */
-    public CloudWhatsAppClientBuilder cloud() {
-        return new CloudWhatsAppClientBuilder();
+    public CloudWhatsAppClientBuilder cloudApi() {
+        return CloudWhatsAppClient.builder();
     }
 }

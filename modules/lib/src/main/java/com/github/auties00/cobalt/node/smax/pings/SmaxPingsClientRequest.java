@@ -24,7 +24,7 @@ public final class SmaxPingsClientRequest implements SmaxOperation.Request {
      *
      * <p>Takes no parameters because every keep-alive ping carries the same envelope; the only
      * varying attribute is the {@code id} stamped at dispatch time by
-     * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#sendNode(NodeBuilder)}.
+     * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#sendNode(NodeBuilder)}.
      */
     public SmaxPingsClientRequest() {
     }
@@ -38,7 +38,7 @@ public final class SmaxPingsClientRequest implements SmaxOperation.Request {
      *
      * @implNote
      * This implementation leaves the {@code id} attribute unset on the returned builder; the
-     * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#sendNode(NodeBuilder)} dispatch path
+     * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#sendNode(NodeBuilder)} dispatch path
      * stamps a fresh id on every outbound stanza, so pre-stamping here would be wasted work.
      *
      * @return a {@link NodeBuilder} carrying the empty

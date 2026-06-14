@@ -26,7 +26,7 @@ import java.lang.invoke.MethodType;
  * constructor so the loader lookup resolves the symbols.
  *
  * @implNote This is genuinely event-driven: it does not poll. The callback is a
- * {@link Linker#upcallStub(MethodHandle, FunctionDescriptor, Arena) upcall stub}
+ * {@link Linker#upcallStub(MethodHandle, FunctionDescriptor, Arena, Linker.Option...) upcall stub}
  * allocated in the event thread's confined arena and is only ever invoked by the
  * run loop on that same thread, so the simulated flags read needs no extra
  * synchronisation beyond what {@link AbstractNativeConnectivityMonitor#setOnline(boolean)}
@@ -105,7 +105,7 @@ final class MacosNetworkConnectivityMonitor extends AbstractNativeConnectivityMo
      * Constructs the monitor, loading the required frameworks and eagerly
      * resolving the downcall handles.
      *
-     * @throws Throwable if a framework or symbol cannot be resolved on this host
+     * @throws UnsatisfiedLinkError if a framework or symbol cannot be resolved on this host
      */
     MacosNetworkConnectivityMonitor() {
         super("cobalt-connectivity-macos");

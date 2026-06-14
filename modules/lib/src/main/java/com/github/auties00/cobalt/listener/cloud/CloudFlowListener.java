@@ -1,26 +1,24 @@
 package com.github.auties00.cobalt.listener.cloud;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClientListener;
-
-import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.client.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientListener;
+import com.github.auties00.cobalt.model.cloud.CloudFlowStatusUpdate;
 
 /**
  * A functional interface for the {@link CloudWhatsAppClientListener#onFlowStatus onFlowStatus} event.
  *
  * <p>{@link CloudWhatsAppClientListener} extends this interface and supplies an empty default
- * implementation, so the event can also be observed in isolation as a lambda. The event delivers the
- * {@code flows} webhook change value (a Flow status transition).
+ * implementation, so the event can also be observed in isolation as a lambda. The event is raised for each webhook delivery whose change field is {@code flows}.
  *
  * @see CloudWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface CloudFlowListener extends WhatsAppCloudListener {
+public non-sealed interface CloudFlowListener extends CloudListener {
     /**
-     * Notifies the listener of a Flow status update.
+     * Notifies the listener that a Flow changed status or reported an endpoint health alert.
      *
      * @param whatsapp the client emitting the event
-     * @param value    the raw {@code flows} change value
+     * @param update   the flow event
      */
-    void onFlowStatus(CloudWhatsAppClient whatsapp, JSONObject value);
+    void onFlowStatus(CloudWhatsAppClient whatsapp, CloudFlowStatusUpdate update);
 }

@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.socket;
 
-import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.client.WhatsAppClientDeviceBuilder;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDeviceBuilder;
 import com.github.auties00.cobalt.exception.WhatsAppException;
 import com.github.auties00.cobalt.ProxyServer;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
@@ -287,7 +287,7 @@ class WhatsAppSocketTest {
     private static LinkedWhatsAppStore createMobileStore() {
         try {
             return WhatsAppStoreFactory.temporary()
-                    .create(WhatsAppClientType.MOBILE, 15551234567L);
+                    .create(LinkedWhatsAppClientType.MOBILE, 15551234567L);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -296,12 +296,12 @@ class WhatsAppSocketTest {
     private static LinkedWhatsAppStore createWebStore() {
         try {
             var store = WhatsAppStoreFactory.temporary()
-                    .create(WhatsAppClientType.WEB, UUID.randomUUID());
-            store.accountStore().setDevice(new WhatsAppClientDeviceBuilder()
+                    .create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
+            store.accountStore().setDevice(new LinkedWhatsAppClientDeviceBuilder()
                     .model("Surface Pro 4")
                     .manufacturer("Microsoft")
                     .platform(ClientPlatformType.WEB)
-                    .clientType(WhatsAppClientType.WEB)
+                    .clientType(LinkedWhatsAppClientType.WEB)
                     .build());
             return store;
         } catch (IOException e) {
@@ -312,13 +312,13 @@ class WhatsAppSocketTest {
     private static LinkedWhatsAppStore createDesktopStore() {
         try {
             var store = WhatsAppStoreFactory.temporary()
-                    .create(WhatsAppClientType.WEB, UUID.randomUUID());
-            store.accountStore().setDevice(new WhatsAppClientDeviceBuilder()
+                    .create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
+            store.accountStore().setDevice(new LinkedWhatsAppClientDeviceBuilder()
                     .model("MacBook Pro")
                     .manufacturer("Apple")
                     .platform(ClientPlatformType.MACOS)
                     .osDeviceAppVersion(ClientAppVersion.of("14.5"))
-                    .clientType(WhatsAppClientType.WEB)
+                    .clientType(LinkedWhatsAppClientType.WEB)
                     .build());
             return store;
         } catch (IOException e) {

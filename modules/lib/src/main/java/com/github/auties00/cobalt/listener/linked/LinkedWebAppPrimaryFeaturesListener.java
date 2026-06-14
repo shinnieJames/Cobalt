@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 import java.util.List;
 
@@ -16,7 +16,7 @@ import java.util.List;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedWebAppPrimaryFeaturesListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedWebAppPrimaryFeaturesListener extends LinkedListener {
     /**
      * Notifies the listener that the primary feature flags have been
      * received from WhatsApp Web.

@@ -5,10 +5,10 @@ import com.github.auties00.cobalt.sync.LiveWebHistorySyncService;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.ack.NackReason;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedMessageReplyListener;
-import com.github.auties00.cobalt.listener.linked.LinkedMessageStatusListener;
-import com.github.auties00.cobalt.listener.linked.LinkedNewMessageListener;
+import com.github.auties00.cobalt.listener.MessageStatusListener;
+import com.github.auties00.cobalt.listener.NewMessageListener;
 import com.github.auties00.cobalt.listener.linked.LinkedNewStatusListener;
 import com.github.auties00.cobalt.util.BufferedProtobufInputStream;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
@@ -1658,7 +1658,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
     private void notifyMessageReceived(MessageInfo info, Optional<? extends MessageInfo> quotedMessage) {
         var statusMessage = isStatusMessage(info);
         for (var listener : whatsapp.store().listeners()) {
-            if (listener instanceof LinkedNewMessageListener typed) {
+            if (listener instanceof NewMessageListener typed) {
                 Thread.startVirtualThread(() -> typed.onNewMessage(whatsapp, info));
             }
             if (statusMessage && info instanceof ChatMessageInfo chatMessageInfo
@@ -1800,7 +1800,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
 
         chatMessageInfo.setPaymentInfo(paymentInfo);
         for (var listener : whatsapp.store().listeners()) {
-            if (listener instanceof LinkedMessageStatusListener typed) {
+            if (listener instanceof MessageStatusListener typed) {
                 Thread.startVirtualThread(() -> typed.onMessageStatus(whatsapp, chatMessageInfo));
             }
         }

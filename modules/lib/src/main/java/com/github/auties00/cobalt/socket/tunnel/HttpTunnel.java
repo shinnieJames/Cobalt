@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.socket.tunnel;
 
-import com.github.auties00.cobalt.client.WhatsAppProxy;
-import com.github.auties00.cobalt.client.WhatsAppProxyAuthenticator;
+import com.github.auties00.cobalt.client.WhatsAppClientProxy;
+import com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator;
 import com.github.auties00.cobalt.socket.WhatsAppSslContextFactory;
 
 import javax.net.ssl.SSLSocket;
@@ -14,12 +14,12 @@ import java.nio.charset.StandardCharsets;
  * {@link Socket}.
  *
  * <p>This is the transport-layer hop used when a WhatsApp connection must traverse a
- * {@link WhatsAppProxy.Http} proxy. The two proxy flavours are handled in one entry point:
- * {@link WhatsAppProxy.Http.Plain} sends the {@code CONNECT} on the raw socket in cleartext, while
- * {@link WhatsAppProxy.Http.Secure} wraps the raw socket in an {@link SSLSocket} obtained from the
+ * {@link WhatsAppClientProxy.Http} proxy. The two proxy flavours are handled in one entry point:
+ * {@link WhatsAppClientProxy.Http.Plain} sends the {@code CONNECT} on the raw socket in cleartext, while
+ * {@link WhatsAppClientProxy.Http.Secure} wraps the raw socket in an {@link SSLSocket} obtained from the
  * supplied {@link WhatsAppSslContextFactory}, drives the TLS handshake, and sends the
  * {@code CONNECT} inside the TLS tunnel. When the proxy carries a
- * {@link WhatsAppProxyAuthenticator.Http} the matching {@code Proxy-Authorization} header is added
+ * {@link WhatsAppClientProxyAuthenticator.Http} the matching {@code Proxy-Authorization} header is added
  * to the request. On successful return the socket's input stream is positioned past the response
  * header block, ready for the next protocol layer (typically the end-to-end TLS handshake to the
  * target).
@@ -34,7 +34,7 @@ import java.nio.charset.StandardCharsets;
  * Header blocks larger than the read buffer are accepted by recycling the buffer in place, and any
  * bytes received after {@code CRLF CRLF} are rejected because the raw socket
  * {@link java.io.InputStream} provides no push-back to the next protocol layer. No {@code 407}
- * retry is attempted; authentication is preemptive when a {@link WhatsAppProxyAuthenticator.Http}
+ * retry is attempted; authentication is preemptive when a {@link WhatsAppClientProxyAuthenticator.Http}
  * is supplied and the call fails if the proxy rejects the first attempt. Hosts containing a colon
  * are bracketed as IPv6 literals in both the request-target and the {@code Host} header. On a
  * malformed status line the buffered response is embedded verbatim in the thrown
@@ -75,11 +75,11 @@ public final class HttpTunnel {
      * Establishes an HTTP {@code CONNECT} tunnel through {@code proxy} and returns the socket
      * positioned for the target's protocol layer.
      *
-     * <p>For {@link WhatsAppProxy.Http.Secure} the raw socket is TLS-wrapped first using
+     * <p>For {@link WhatsAppClientProxy.Http.Secure} the raw socket is TLS-wrapped first using
      * {@code ssl} (with SNI set to {@code proxy.host()}), the TLS handshake is driven, and the
      * {@code CONNECT} is sent inside the TLS tunnel; the returned socket is the {@link SSLSocket}
      * layer and the underlying raw socket auto-closes when that SSL socket is closed. For
-     * {@link WhatsAppProxy.Http.Plain} the {@code CONNECT} is sent on the raw socket in cleartext
+     * {@link WhatsAppClientProxy.Http.Plain} the {@code CONNECT} is sent on the raw socket in cleartext
      * and {@code raw} itself is returned. If TLS wrapping fails the raw socket is closed before the
      * failure propagates.
      *
@@ -88,16 +88,16 @@ public final class HttpTunnel {
      * @param targetPort the port the tunnel is meant to reach
      * @param proxy      the proxy configuration
      * @param ssl        the SSL context factory used to TLS-wrap the proxy hop when {@code proxy}
-     *                   is {@link WhatsAppProxy.Http.Secure}
-     * @return the connected socket; {@code raw} itself for {@link WhatsAppProxy.Http.Plain}, or the
-     *         {@link SSLSocket} wrapping {@code raw} for {@link WhatsAppProxy.Http.Secure}
+     *                   is {@link WhatsAppClientProxy.Http.Secure}
+     * @return the connected socket; {@code raw} itself for {@link WhatsAppClientProxy.Http.Plain}, or the
+     *         {@link SSLSocket} wrapping {@code raw} for {@link WhatsAppClientProxy.Http.Secure}
      * @throws IOException if the TLS handshake, the {@code CONNECT} request, or the response parsing
      *         fails
      */
     public static Socket tunnel(Socket raw, String targetHost, int targetPort,
-                                WhatsAppProxy.Http proxy, WhatsAppSslContextFactory ssl) throws IOException {
+                                WhatsAppClientProxy.Http proxy, WhatsAppSslContextFactory ssl) throws IOException {
         var transport = raw;
-        if (proxy instanceof WhatsAppProxy.Http.Secure) {
+        if (proxy instanceof WhatsAppClientProxy.Http.Secure) {
             try {
                 var sslSocket = (SSLSocket) ssl.sslContext().getSocketFactory()
                         .createSocket(raw, proxy.host(), proxy.port(), true);
@@ -124,7 +124,7 @@ public final class HttpTunnel {
      *
      * <p>The request line and the {@code Host} header both carry the target authority produced by
      * {@link #appendAuthority(StringBuilder, String, int)}. When {@code auth} is non-null its
-     * {@link WhatsAppProxyAuthenticator.Http#authorization()} value is emitted as a
+     * {@link WhatsAppClientProxyAuthenticator.Http#authorization()} value is emitted as a
      * {@code Proxy-Authorization} header. The assembled request is encoded as US-ASCII and flushed.
      *
      * @param socket     the proxy socket
@@ -134,7 +134,7 @@ public final class HttpTunnel {
      * @throws IOException if the underlying write fails
      */
     private static void sendConnect(Socket socket, String targetHost, int targetPort,
-                                    WhatsAppProxyAuthenticator.Http auth) throws IOException {
+                                    WhatsAppClientProxyAuthenticator.Http auth) throws IOException {
         var request = new StringBuilder(160).append("CONNECT ");
         appendAuthority(request, targetHost, targetPort).append(" HTTP/1.1\r\nHost: ");
         appendAuthority(request, targetHost, targetPort).append("\r\n");

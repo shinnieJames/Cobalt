@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.registration.push.apns;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
-import com.github.auties00.cobalt.client.WhatsAppClientDevicePushClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevicePushClient;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Receives WhatsApp's silent verification push over Apple Push Notification Service while
  * impersonating the {@code net.whatsapp.WhatsApp} (or {@code net.whatsapp.WhatsAppSMB}) iOS app.
  *
- * <p>The public-facing {@link WhatsAppClientDevicePushClient} implementation for iOS. It owns three
+ * <p>The public-facing {@link LinkedWhatsAppClientDevicePushClient} implementation for iOS. It owns three
  * single-responsibility collaborators and orchestrates the lifecycle around them:
  * <ul>
  *   <li>{@link ApnsActivation} runs the FairPlay-signed activation handshake against
@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   }
  * }</pre>
  */
-public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoCloseable {
+public final class ApnsClient implements LinkedWhatsAppClientDevicePushClient, AutoCloseable {
     /**
      * Holds the cached, unmodifiable set of platforms this client can authenticate against.
      *
@@ -61,7 +61,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * Enumerates the lifecycle states of the client.
      *
      * <p>Transitions are: {@link #UNAUTHENTICATED} to {@link #AUTHENTICATING} on
-     * {@link #authenticate(WhatsAppClientDevice)}; {@link #AUTHENTICATING} to {@link #AUTHENTICATED} on
+     * {@link #authenticate(LinkedWhatsAppClientDevice)}; {@link #AUTHENTICATING} to {@link #AUTHENTICATED} on
      * success or back to {@link #UNAUTHENTICATED} on error; and any state to {@link #CLOSED} on
      * {@link #close()}.
      */
@@ -69,11 +69,11 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
         /**
          * Indicates no session is bound.
          *
-         * <p>Only {@link #authenticate(WhatsAppClientDevice)} and {@link #close()} are valid in this state.
+         * <p>Only {@link #authenticate(LinkedWhatsAppClientDevice)} and {@link #close()} are valid in this state.
          */
         UNAUTHENTICATED,
         /**
-         * Indicates {@link #authenticate(WhatsAppClientDevice)} is currently running on another thread.
+         * Indicates {@link #authenticate(LinkedWhatsAppClientDevice)} is currently running on another thread.
          *
          * <p>Concurrent callers observing this state throw {@link IllegalStateException}.
          */
@@ -97,7 +97,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * Holds the pre-built activation helper bound to the configured proxy.
      *
      * <p>Stateless beyond its dependencies, so a single instance is reused across
-     * {@link #authenticate(WhatsAppClientDevice)} retries.
+     * {@link #authenticate(LinkedWhatsAppClientDevice)} retries.
      */
     private final ApnsActivation activation;
 
@@ -122,12 +122,12 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * Holds the lifecycle state.
      *
      * <p>Transitioned via {@link AtomicReference#compareAndSet} so concurrent
-     * {@link #authenticate(WhatsAppClientDevice)} callers see a consistent view and only one wins the race.
+     * {@link #authenticate(LinkedWhatsAppClientDevice)} callers see a consistent view and only one wins the race.
      */
     private final AtomicReference<State> state;
 
     /**
-     * Holds the session bound during {@link #authenticate(WhatsAppClientDevice)} or
+     * Holds the session bound during {@link #authenticate(LinkedWhatsAppClientDevice)} or
      * {@link #loadSession(ApnsSession, URI)}.
      *
      * <p>{@code null} until authentication succeeds; reset to {@code null} on auth failure so a retry
@@ -160,7 +160,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
     /**
      * Creates a fresh, unauthenticated client.
      *
-     * <p>The caller must call {@link #authenticate(WhatsAppClientDevice)} before any of the read-only
+     * <p>The caller must call {@link #authenticate(LinkedWhatsAppClientDevice)} before any of the read-only
      * accessors become usable.
      *
      * @return a new unauthenticated client
@@ -186,7 +186,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      *
      * <p>Skips the activation handshake (the device certificate persists for roughly three years) and
      * immediately starts the courier connection. The returned client is already in
-     * {@code AUTHENTICATED} state, so {@link #authenticate(WhatsAppClientDevice)} would throw.
+     * {@code AUTHENTICATED} state, so {@link #authenticate(LinkedWhatsAppClientDevice)} would throw.
      *
      * @param session the session previously obtained from {@link #getSession()}
      * @return a restored, listening client
@@ -239,7 +239,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * call when the session is already populated), and starts the courier connection. After this call
      * returns successfully {@link #isAuthenticated()} reports {@code true} and the read-only accessors
      * become usable. Unlike the idempotent contract declared by
-     * {@link WhatsAppClientDevicePushClient#authenticate(WhatsAppClientDevice)}, a call made while the client is
+     * {@link LinkedWhatsAppClientDevicePushClient#authenticate(LinkedWhatsAppClientDevice)}, a call made while the client is
      * already authenticating, authenticated, or closed throws {@link IllegalStateException} rather
      * than acting as a no-op.
      *
@@ -258,7 +258,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * @throws UncheckedIOException     wrapping any HTTP, TLS, or protocol failure
      */
     @Override
-    public void authenticate(WhatsAppClientDevice device) {
+    public void authenticate(LinkedWhatsAppClientDevice device) {
         Objects.requireNonNull(device, "device");
         var platform = device.platform();
         var config = switch (platform) {
@@ -286,7 +286,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
     }
 
     /**
-     * Wipes the partial state left by a failed {@link #authenticate(WhatsAppClientDevice)} attempt.
+     * Wipes the partial state left by a failed {@link #authenticate(LinkedWhatsAppClientDevice)} attempt.
      *
      * <p>Reverts the lifecycle back to {@code UNAUTHENTICATED} so the caller may retry, and clears
      * {@link #session} and {@link #connection} so a subsequent attempt sees a clean slate.
@@ -301,7 +301,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * {@inheritDoc}
      *
      * <p>Returns {@code true} exactly when the client is in {@code AUTHENTICATED} state, that is when
-     * {@link #authenticate(WhatsAppClientDevice)} or {@link #loadSession(ApnsSession)} has completed and the
+     * {@link #authenticate(LinkedWhatsAppClientDevice)} or {@link #loadSession(ApnsSession)} has completed and the
      * courier is running.
      */
     @Override
@@ -358,7 +358,7 @@ public final class ApnsClient implements WhatsAppClientDevicePushClient, AutoClo
      * thread until either the notification arrives or {@link #close()} is invoked. Safe to call from
      * multiple threads concurrently; every caller observes the same delivered code because the
      * WhatsApp registration flow only ever sends one per session. Unlike the empty-string contract
-     * declared by {@link WhatsAppClientDevicePushClient#getPushCode()}, this implementation blocks for a
+     * declared by {@link LinkedWhatsAppClientDevicePushClient#getPushCode()}, this implementation blocks for a
      * code rather than returning the empty string when no push is in flight, and throws on close.
      *
      * @implNote This implementation translates the {@link InterruptedException} thrown by

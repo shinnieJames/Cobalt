@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.socket;
 
-import com.github.auties00.cobalt.client.WhatsAppProxy;
-import com.github.auties00.cobalt.client.WhatsAppProxyAuthenticator;
+import com.github.auties00.cobalt.client.WhatsAppClientProxy;
+import com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -30,7 +30,7 @@ import java.nio.charset.StandardCharsets;
  * socket {@link java.io.InputStream} provides no push-back to the
  * next protocol layer. No {@code 407} retry is attempted;
  * authentication is preemptive when a
- * {@link WhatsAppProxyAuthenticator.Http.Basic} is supplied and the
+ * {@link WhatsAppClientProxyAuthenticator.Http.Basic} is supplied and the
  * call fails if the proxy rejects the first attempt. Hosts containing
  * a colon are bracketed as IPv6 literals in both the request-target
  * and the {@code Host} header. On a malformed status line the
@@ -72,7 +72,7 @@ final class HttpConnectTunnel {
      * <p>The {@code socket} parameter is typed as {@link Socket} so the same
      * method covers both a plain socket (Mobile path) and an
      * {@link javax.net.ssl.SSLSocket} already wrapping a connection to a
-     * {@link WhatsAppProxy.Http.Secure} proxy. On success the socket's input
+     * {@link WhatsAppClientProxy.Http.Secure} proxy. On success the socket's input
      * stream is positioned past the response header block and ready for the
      * next protocol layer.
      *
@@ -87,7 +87,7 @@ final class HttpConnectTunnel {
      *         other I/O failure occurs
      */
     static void tunnel(Socket socket, String targetHost, int targetPort,
-                       WhatsAppProxyAuthenticator.Http auth) throws IOException {
+                       WhatsAppClientProxyAuthenticator.Http auth) throws IOException {
         sendConnect(socket, targetHost, targetPort, auth);
         readConnectResponse(socket);
     }
@@ -103,7 +103,7 @@ final class HttpConnectTunnel {
      * @throws IOException if the underlying write fails
      */
     private static void sendConnect(Socket socket, String targetHost, int targetPort,
-                                    WhatsAppProxyAuthenticator.Http auth) throws IOException {
+                                    WhatsAppClientProxyAuthenticator.Http auth) throws IOException {
         var request = new StringBuilder(160).append("CONNECT ");
         appendAuthority(request, targetHost, targetPort).append(" HTTP/1.1\r\nHost: ");
         appendAuthority(request, targetHost, targetPort).append("\r\n");

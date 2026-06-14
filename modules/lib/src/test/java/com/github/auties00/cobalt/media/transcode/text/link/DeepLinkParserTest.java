@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.media.transcode.text.link;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.media.transcode.text.link.DeepLinkParser.DeepLink;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import org.junit.jupiter.api.DisplayName;

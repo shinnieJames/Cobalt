@@ -26,7 +26,7 @@ import com.github.auties00.cobalt.node.NodeBuilder;
  * a static {@code of(Node)} factory.
  *
  * <p>Concrete requests reach the relay through
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#sendNode(Request)},
+ * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#sendNode(Request)},
  * and concrete responses are returned through those same call sites; the
  * sealed hierarchy exists so that every SMAX handle can be statically
  * classified as either outbound ({@link Request}) or inbound

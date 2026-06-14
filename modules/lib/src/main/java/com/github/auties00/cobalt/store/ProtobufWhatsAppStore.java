@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.listener.WhatsAppListener;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.client.WhatsAppProxy;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
+import com.github.auties00.cobalt.client.WhatsAppClientProxy;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.mixin.PathMixin;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
@@ -153,7 +153,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
     /**
      * The optional HTTP/SOCKS proxy configuration; not persisted.
      */
-    private WhatsAppProxy proxy;
+    private WhatsAppClientProxy proxy;
 
     /**
      * The logger instance for this store; not persisted.
@@ -163,7 +163,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
     /**
      * The offline-resume state; not persisted.
      */
-    private volatile WhatsAppClientOfflineResumeState offlineResumeState;
+    private volatile LinkedWhatsAppClientOfflineResumeState offlineResumeState;
 
     /**
      * The latch coordinating offline-delivery completion; not persisted.
@@ -250,7 +250,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
         this.contactStore.bindAccount(accountStore);
         this.listeners = ConcurrentHashMap.newKeySet();
         this.logger = System.getLogger(this.getClass().getName());
-        this.offlineResumeState = WhatsAppClientOfflineResumeState.INIT;
+        this.offlineResumeState = LinkedWhatsAppClientOfflineResumeState.INIT;
         this.offlineDeliveryLatch = new CountDownLatch(1);
         this.pendingMessageRecipients = new ConcurrentHashMap<>();
     }
@@ -328,27 +328,27 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
     }
 
     @Override
-    public Optional<WhatsAppProxy> proxy() {
+    public Optional<WhatsAppClientProxy> proxy() {
         return Optional.ofNullable(proxy);
     }
 
     @Override
-    public LinkedWhatsAppStore setProxy(WhatsAppProxy proxy) {
+    public LinkedWhatsAppStore setProxy(WhatsAppClientProxy proxy) {
         this.proxy = proxy;
         return this;
     }
 
     @Override
-    public WhatsAppClientOfflineResumeState offlineResumeState() {
+    public LinkedWhatsAppClientOfflineResumeState offlineResumeState() {
         return offlineResumeState;
     }
 
     @Override
-    public LinkedWhatsAppStore setOfflineResumeState(WhatsAppClientOfflineResumeState state) {
+    public LinkedWhatsAppStore setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState state) {
         this.offlineResumeState = Objects.requireNonNull(state, "state cannot be null");
-        if (state == WhatsAppClientOfflineResumeState.COMPLETE) {
+        if (state == LinkedWhatsAppClientOfflineResumeState.COMPLETE) {
             offlineDeliveryLatch.countDown();
-        } else if (state == WhatsAppClientOfflineResumeState.INIT) {
+        } else if (state == LinkedWhatsAppClientOfflineResumeState.INIT) {
             offlineDeliveryLatch = new CountDownLatch(1);
         }
         return this;
@@ -356,13 +356,13 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
 
     @Override
     public boolean isResumeFromRestartComplete() {
-        return offlineResumeState != WhatsAppClientOfflineResumeState.INIT
-               && offlineResumeState != WhatsAppClientOfflineResumeState.RESUME_ON_RESTART;
+        return offlineResumeState != LinkedWhatsAppClientOfflineResumeState.INIT
+               && offlineResumeState != LinkedWhatsAppClientOfflineResumeState.RESUME_ON_RESTART;
     }
 
     @Override
     public void waitForOfflineDeliveryEnd() {
-        if (offlineResumeState == WhatsAppClientOfflineResumeState.COMPLETE) {
+        if (offlineResumeState == LinkedWhatsAppClientOfflineResumeState.COMPLETE) {
             return;
         }
         try {
@@ -646,7 +646,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
      * @return the resolved home directory, guaranteed to exist
      * @throws IOException if the directory cannot be created
      */
-    public static Path getHomeDirectory(WhatsAppClientType type, Path baseDirectory) throws IOException {
+    public static Path getHomeDirectory(LinkedWhatsAppClientType type, Path baseDirectory) throws IOException {
         var id = switch (type) {
             case WEB -> "web";
             case MOBILE -> "mobile";
@@ -665,7 +665,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
      * @return the resolved session directory, guaranteed to exist
      * @throws IOException if the directory cannot be created
      */
-    public static Path getSessionDirectory(WhatsAppClientType clientType, Path baseDirectory, String path) throws IOException {
+    public static Path getSessionDirectory(LinkedWhatsAppClientType clientType, Path baseDirectory, String path) throws IOException {
         var result = getHomeDirectory(clientType, baseDirectory)
                 .resolve(path);
         Files.createDirectories(result);
@@ -682,7 +682,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
      * @return the resolved path
      * @throws IOException if the parent directories cannot be created
      */
-    public static Path getSessionFile(WhatsAppClientType clientType, Path baseDirectory, String uuid, String fileName) throws IOException {
+    public static Path getSessionFile(LinkedWhatsAppClientType clientType, Path baseDirectory, String uuid, String fileName) throws IOException {
         return getSessionDirectory(clientType, baseDirectory, uuid)
                 .resolve(fileName);
     }

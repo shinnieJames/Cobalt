@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.stream.iq;
 
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.graphql.web.auth.CanonicalNonceDecryptor;
 import com.github.auties00.cobalt.graphql.web.auth.WhatsAppWebGraphQlBootstrapClient;
@@ -114,7 +114,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * The verification handler that receives QR-payload strings during the QR
      * pairing branch.
      */
-    private final WhatsAppClientVerificationHandler.Web webVerificationHandler;
+    private final LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler;
 
     /**
      * The service consulted for ADV identity validation and local-identity
@@ -196,7 +196,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      */
     public IqStreamHandler(
             LinkedWhatsAppClient whatsapp,
-            WhatsAppClientVerificationHandler.Web webVerificationHandler,
+            LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler,
             DeviceService deviceService,
             SnapshotRecoveryService snapshotRecoveryService,
             LidMigrationService lidMigrationService,
@@ -466,7 +466,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * <p>The ref is combined with the noise, identity, and ADV keys into the
      * comma-separated payload encoded into the QR image. A {@code null} or
      * blank ref is ignored, and the publish is suppressed unless the
-     * verification handler is a {@link WhatsAppClientVerificationHandler.Web.QrCode}.
+     * verification handler is a {@link LinkedWhatsAppClientVerificationHandler.Web.QrCode}.
      * This path runs only on the QR branch; the pairing-code branch runs
      * through {@link CompanionPairingService}, which feeds the handler a
      * client-generated code derived from its own random bytes.
@@ -478,7 +478,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
             return;
         }
 
-        if (!(webVerificationHandler instanceof WhatsAppClientVerificationHandler.Web.QrCode)) {
+        if (!(webVerificationHandler instanceof LinkedWhatsAppClientVerificationHandler.Web.QrCode)) {
             return;
         }
         webVerificationHandler.handle(buildQrPayload(ref));

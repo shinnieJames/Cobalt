@@ -42,9 +42,9 @@ import java.util.stream.Collectors;
  *   index list published by the primary device.</li>
  * </ul>
  *
- * <p>Instances are immutable; the mutating convenience methods
- * {@link #merge(DeviceList)} and {@link #mismatch(DeviceList)} return new
- * values rather than updating the receiver in place.
+ * <p>Instances are immutable; {@link #withUserJid(Jid)} returns a new value
+ * rather than updating the receiver in place, and {@link #mismatch(DeviceList)}
+ * reports differences without mutating either operand.
  */
 @ProtobufMessage
 public final class DeviceList {

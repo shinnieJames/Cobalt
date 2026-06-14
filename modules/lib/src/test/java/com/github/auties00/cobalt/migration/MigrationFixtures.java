@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.migration;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -224,7 +224,7 @@ public final class MigrationFixtures {
     /**
      * Creates an in-memory temporary {@link LinkedWhatsAppStore} configured with the given self-PN and optional
      * self-LID, the standard {@code store} dependency for any migration-package test that builds a
-     * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient} harness. The store is pre-advanced past the
+     * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient} harness. The store is pre-advanced past the
      * offline-delivery gate so {@link LidMigrationService#executeMigration()} proceeds immediately;
      * production code drives that gate through the connection lifecycle.
      *
@@ -239,12 +239,12 @@ public final class MigrationFixtures {
         Objects.requireNonNull(selfPn, "selfPn");
         try {
             var store = WhatsAppStoreFactory.temporary()
-                    .create(WhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
+                    .create(LinkedWhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
             store.accountStore().setJid(selfPn);
             if (selfLid != null) {
                 store.accountStore().setLid(selfLid);
             }
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.COMPLETE);
             return store;
         } catch (IOException e) {
             throw new UncheckedIOException("failed to create temporary store", e);

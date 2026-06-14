@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.sync.key;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKeyBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;

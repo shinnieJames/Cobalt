@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.call.session;
 
-import com.github.auties00.cobalt.call.internal.video.VideoCodec;
-import com.github.auties00.cobalt.call.internal.video.VideoPipelineOptions;
+import com.github.auties00.cobalt.call.video.VideoCodec;
+import com.github.auties00.cobalt.call.video.VideoPipelineOptions;
 
 import java.util.Objects;
 
@@ -15,7 +15,7 @@ import java.util.Objects;
  * stamps {@code localVideoSsrc} onto outbound packets and the receiver accepts only
  * {@code remoteVideoSsrc} from the peer; the two SSRCs must differ. A track is added to an existing
  * voice session through
- * {@link com.github.auties00.cobalt.call.internal.session.VoiceCallSession#startVideoTrack(VideoTrackOptions)},
+ * {@link com.github.auties00.cobalt.call.session.VoiceCallSession#startVideoTrack(VideoTrackOptions)},
  * which may run a camera track and a screen-share track simultaneously, each on its own SSRC and
  * payload type.
  *

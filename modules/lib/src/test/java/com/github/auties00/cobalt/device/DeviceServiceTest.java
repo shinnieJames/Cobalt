@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.sync.LiveWebAppStateService;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
 import com.alibaba.fastjson2.JSON;
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.fanout.DevicePhashCalculator;
 import com.github.auties00.cobalt.device.fanout.DevicePhashVersion;
 import com.github.auties00.cobalt.migration.LidMigrationService;

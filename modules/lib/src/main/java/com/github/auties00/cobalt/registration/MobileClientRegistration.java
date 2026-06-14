@@ -2,10 +2,10 @@ package com.github.auties00.cobalt.registration;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
-import com.github.auties00.cobalt.client.WhatsAppClientDevicePushClient;
-import com.github.auties00.cobalt.client.info.WhatsAppMobileClientInfo;
-import com.github.auties00.cobalt.client.WhatsAppClientDeviceAttestor;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevicePushClient;
+import com.github.auties00.cobalt.client.linked.info.WhatsAppMobileClientInfo;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDeviceAttestor;
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
 import com.github.auties00.cobalt.model.business.*;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
@@ -59,8 +59,8 @@ import java.util.*;
  * Base64-URL encoded and wrapped in an {@code ENC=...} form field.
  *
  * <p>An instance is obtained through {@link #newRegistration(LinkedWhatsAppStore,
- * WhatsAppClientVerificationHandler.Mobile, WhatsAppClientDeviceAttestor,
- * WhatsAppClientDevicePushClient)}, which selects
+ * LinkedWhatsAppClientVerificationHandler.Mobile, LinkedWhatsAppClientDeviceAttestor,
+ * LinkedWhatsAppClientDevicePushClient)}, which selects
  * {@link AndroidClientRegistration} or {@link IosClientRegistration}
  * based on the configured platform; {@link #register} then runs the
  * whole ceremony once. The class lets Cobalt take the role of a native
@@ -139,7 +139,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *
      * <p>Supplied at construction time and never {@code null}.
      */
-    protected final WhatsAppClientVerificationHandler.Mobile verification;
+    protected final LinkedWhatsAppClientVerificationHandler.Mobile verification;
 
     /**
      * One-based count of {@code /v2/code} attempts driven by the
@@ -222,8 +222,8 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *
      * <p>Invoked only from the concrete subclasses, which are
      * themselves created by {@link #newRegistration(LinkedWhatsAppStore,
-     * WhatsAppClientVerificationHandler.Mobile,
-     * WhatsAppClientDeviceAttestor, WhatsAppClientDevicePushClient)}. Both
+     * LinkedWhatsAppClientVerificationHandler.Mobile,
+     * LinkedWhatsAppClientDeviceAttestor, LinkedWhatsAppClientDevicePushClient)}. Both
      * arguments are validated as non-{@code null} and the shared
      * {@link #httpClient} is built with redirect following enabled.
      *
@@ -234,7 +234,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *                     {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
-    protected MobileClientRegistration(LinkedWhatsAppStore store, WhatsAppClientVerificationHandler.Mobile verification) {
+    protected MobileClientRegistration(LinkedWhatsAppStore store, LinkedWhatsAppClientVerificationHandler.Mobile verification) {
         Objects.requireNonNull(store, "store cannot be null");
         Objects.requireNonNull(verification, "verification cannot be null");
         this.store = store;
@@ -253,10 +253,10 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      * {@link com.github.auties00.cobalt.store.AccountStore#device}'s
      * {@link ClientPlatformType platform}. A {@code null} attestor
      * falls back to the platform's
-     * {@link WhatsAppClientDeviceAttestor.Android#NONE} or
-     * {@link WhatsAppClientDeviceAttestor.Ios#NONE} low-trust default, and a
+     * {@link LinkedWhatsAppClientDeviceAttestor.Android#NONE} or
+     * {@link LinkedWhatsAppClientDeviceAttestor.Ios#NONE} low-trust default, and a
      * {@code null} push client falls back to
-     * {@link WhatsAppClientDevicePushClient#noop()}. A non-{@code null}
+     * {@link LinkedWhatsAppClientDevicePushClient#noop()}. A non-{@code null}
      * attestor whose platform does not match the device platform is
      * rejected.
      *
@@ -275,7 +275,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *                     {@code NONE} attestor
      * @param pushClient   the device push client, or {@code null} to
      *                     fall back to
-     *                     {@link WhatsAppClientDevicePushClient#noop()}
+     *                     {@link LinkedWhatsAppClientDevicePushClient#noop()}
      * @return a concrete {@code MobileClientRegistration}
      * @throws IllegalArgumentException if the store's device platform
      *                                  is not a supported mobile
@@ -285,16 +285,16 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      */
     public static MobileClientRegistration newRegistration(
             LinkedWhatsAppStore store,
-            WhatsAppClientVerificationHandler.Mobile verification,
-            WhatsAppClientDeviceAttestor attestor,
-            WhatsAppClientDevicePushClient pushClient) {
+            LinkedWhatsAppClientVerificationHandler.Mobile verification,
+            LinkedWhatsAppClientDeviceAttestor attestor,
+            LinkedWhatsAppClientDevicePushClient pushClient) {
         var platform = store.accountStore().device().platform();
         return switch (platform) {
             case ANDROID, ANDROID_BUSINESS -> {
                 var androidAttestor = switch (attestor) {
                     case null -> null;
-                    case WhatsAppClientDeviceAttestor.Android a -> a;
-                    case WhatsAppClientDeviceAttestor.Ios ignored -> throw new IllegalArgumentException(
+                    case LinkedWhatsAppClientDeviceAttestor.Android a -> a;
+                    case LinkedWhatsAppClientDeviceAttestor.Ios ignored -> throw new IllegalArgumentException(
                             "Android device requires an Android attestor, got: " + attestor.getClass().getName());
                 };
                 yield new AndroidClientRegistration(store, verification, androidAttestor, pushClient);
@@ -302,8 +302,8 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             case IOS, IOS_BUSINESS -> {
                 var iosAttestor = switch (attestor) {
                     case null -> null;
-                    case WhatsAppClientDeviceAttestor.Ios i -> i;
-                    case WhatsAppClientDeviceAttestor.Android ignored -> throw new IllegalArgumentException(
+                    case LinkedWhatsAppClientDeviceAttestor.Ios i -> i;
+                    case LinkedWhatsAppClientDeviceAttestor.Android ignored -> throw new IllegalArgumentException(
                             "iOS device requires an iOS attestor, got: " + attestor.getClass().getName());
                 };
                 yield new IosClientRegistration(store, verification, iosAttestor, pushClient);
@@ -359,9 +359,9 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      * <p>Android returns the Play Integrity sextuple ({@code gpia},
      * {@code _gg}, {@code _gi}, {@code _gp}, {@code _ge},
      * {@code _ga}) produced by the configured
-     * {@link WhatsAppClientDeviceAttestor.Android} plus the FCM
+     * {@link LinkedWhatsAppClientDeviceAttestor.Android} plus the FCM
      * {@code push_token} produced by the configured
-     * {@link WhatsAppClientDevicePushClient}. iOS returns just the APNS
+     * {@link LinkedWhatsAppClientDevicePushClient}. iOS returns just the APNS
      * {@code push_token}, because its App Attest payloads ride outside
      * the encrypted body (in the {@code H=} suffix and the
      * {@code Authorization} header) rather than inside it. The funnel
@@ -566,7 +566,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      * request a code through and, if any, calls {@code /code}.
      *
      * <p>A handler that returns an empty optional from
-     * {@link WhatsAppClientVerificationHandler.Mobile#requestMethod}
+     * {@link LinkedWhatsAppClientVerificationHandler.Mobile#requestMethod}
      * is taken to mean that a code has already been requested outside
      * Cobalt (for example through another device), so this step is
      * skipped and the flow proceeds directly to
@@ -833,7 +833,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      * them, and submits the answer to {@code /v2/challenge}.
      *
      * <p>A handler that returns an empty optional from
-     * {@link WhatsAppClientVerificationHandler.Mobile#solveCaptcha}
+     * {@link LinkedWhatsAppClientVerificationHandler.Mobile#solveCaptcha}
      * aborts the registration with a
      * {@link WhatsAppRegistrationException}.
      *
@@ -895,7 +895,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      * {@code /v2/security}.
      *
      * <p>A handler that returns an empty optional from
-     * {@link WhatsAppClientVerificationHandler.Mobile#twoFactorPin}
+     * {@link LinkedWhatsAppClientVerificationHandler.Mobile#twoFactorPin}
      * aborts the registration.
      *
      * @throws IOException                   if the HTTP call fails

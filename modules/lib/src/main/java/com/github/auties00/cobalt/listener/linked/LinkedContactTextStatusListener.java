@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
 
@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedContactTextStatusListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedContactTextStatusListener extends LinkedListener {
     /**
      * Notifies the listener that a contact's text status metadata has
      * changed.

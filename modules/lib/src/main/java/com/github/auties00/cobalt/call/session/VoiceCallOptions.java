@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.call.session;
 
-import com.github.auties00.cobalt.call.internal.audio.AudioPipelineOptions;
+import com.github.auties00.cobalt.call.audio.AudioPipelineOptions;
 
 import java.security.SecureRandom;
 import java.util.Objects;

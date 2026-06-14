@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.migration;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingBuilder;
@@ -221,7 +221,7 @@ class LidMigrationServiceExecuteMigrationTest {
         // We run executeMigration on a virtual thread and assert it remains stuck until we flip the state.
         var h = build(defaultProps());
         h.client.store().setOfflineResumeState(
-                WhatsAppClientOfflineResumeState.INIT);
+                LinkedWhatsAppClientOfflineResumeState.INIT);
 
         h.service.initialize();
         h.service.enableMigration();
@@ -242,7 +242,7 @@ class LidMigrationServiceExecuteMigrationTest {
 
         // Flip the gate; the worker proceeds and completes.
         h.client.store().setOfflineResumeState(
-                WhatsAppClientOfflineResumeState.COMPLETE);
+                LinkedWhatsAppClientOfflineResumeState.COMPLETE);
 
         var deadline = System.currentTimeMillis() + 5_000;
         while (!done.get() && System.currentTimeMillis() < deadline) {

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.exception;
 
-import com.github.auties00.cobalt.call.internal.video.vpx.bindings.LibVpx;
+import com.github.auties00.cobalt.call.video.vpx.bindings.LibVpx;
 
 import java.lang.foreign.MemorySegment;
 
@@ -151,7 +151,7 @@ public sealed abstract class WhatsAppCallException
          */
         private static String opusErrString(int errCode) {
             try {
-                var ptr = com.github.auties00.cobalt.call.internal.audio.opus.bindings.Opus.opus_strerror(errCode);
+                var ptr = com.github.auties00.cobalt.call.audio.opus.bindings.Opus.opus_strerror(errCode);
                 if (ptr.equals(MemorySegment.NULL)) {
                     return "unknown";
                 }

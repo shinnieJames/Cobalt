@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.registration.push.fcm;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -138,7 +138,7 @@ public final class FcmSession {
      * Creates an empty session bound to {@code config}.
      *
      * <p>Every credential field is zero or empty; used by
-     * {@link FcmClient#authenticate(WhatsAppClientDevice)} before
+     * {@link FcmClient#authenticate(LinkedWhatsAppClientDevice)} before
      * {@link FcmRegistration#ensureCredentials(FcmSession)} runs the three-step handshake.
      *
      * @param config the configuration to bind

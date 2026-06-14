@@ -13,19 +13,13 @@
  * - {@code window.__WA_CAPTURED_WASM_URLS__}: every wasm URL passed to
  *   {@link WebAssembly.instantiateStreaming}, {@link WebAssembly.compileStreaming},
  *   or {@link fetch} (including service-worker cache hits).
- * - {@code window.__WA_REGISTERED_MODULES__}: every module name passed to
- *   {@code __d(name, ...)} since the bootloader assigned that global.
- * - {@code window.__WA_WASM_MODULES__}: Emscripten module objects keyed by the
- *   wasm URL they loaded.
  */
 
 /**
- * Installs hooks BEFORE WA's bundle runs:
- *  - Wraps {@link WebAssembly.instantiateStreaming}/{@link WebAssembly.compileStreaming}
- *    and {@link fetch} to capture every wasm URL the page requests.
- *  - Installs a property descriptor on {@code window.__d} so every module
- *    registration passes through a wrapper that appends the module name to
- *    {@code window.__WA_REGISTERED_MODULES__}.
+ * Installs hooks BEFORE WA's bundle runs, wrapping
+ * {@link WebAssembly.instantiateStreaming}/{@link WebAssembly.compileStreaming}
+ * and {@link fetch} to capture every wasm URL the page requests into
+ * {@code window.__WA_CAPTURED_WASM_URLS__}.
  *
  * @remarks
  * Run via {@link import("playwright").BrowserContext.addInitScript} so this
@@ -34,14 +28,9 @@
 export function installCaptureHooks(): void {
     const w = window as Window & {
         __WA_CAPTURED_WASM_URLS__?: string[];
-        __WA_REGISTERED_MODULES__?: string[];
-        __WA_WASM_MODULES__?: Record<string, { HEAPU8?: Uint8Array }>;
-        __d?: unknown;
     };
     if (!w.__WA_CAPTURED_WASM_URLS__) w.__WA_CAPTURED_WASM_URLS__ = [];
-    if (!w.__WA_REGISTERED_MODULES__) w.__WA_REGISTERED_MODULES__ = [];
     const captured = w.__WA_CAPTURED_WASM_URLS__;
-    const registered = w.__WA_REGISTERED_MODULES__;
 
     const trackUrl = (src: unknown): void => {
         try {
@@ -81,27 +70,6 @@ export function installCaptureHooks(): void {
             return originalFetch.call(this, input as RequestInfo, init);
         } as typeof fetch;
     }
-
-    let realD: Function | undefined;
-    let wrappedD: Function | undefined;
-    Object.defineProperty(w, "__d", {
-        configurable: true,
-        get() { return wrappedD; },
-        set(value: unknown) {
-            if (typeof value === "function") {
-                realD = value as Function;
-                wrappedD = function (this: unknown, name: unknown, ...rest: unknown[]) {
-                    if (typeof name === "string") {
-                        try { registered.push(name); } catch { /* ignore */ }
-                    }
-                    return (realD as Function).call(this, name, ...rest);
-                };
-            } else {
-                realD = undefined;
-                wrappedD = undefined;
-            }
-        },
-    });
 }
 
 /**
@@ -112,9 +80,8 @@ export function installCaptureHooks(): void {
  * @remarks
  * WA's bootloader exposes its full chunk registry as
  * {@code require("Bootloader").__debug.revMap}. Iterating those hashes and
- * calling {@code loadResources(batch)} triggers each chunk's network fetch,
- * which in turn causes every {@code __d} registration in that chunk to fire.
- * The wrapper installed by {@link installCaptureHooks} records the names.
+ * calling {@code loadResources(batch)} triggers each chunk's network fetch, so
+ * the orchestrator's network route observes every chunk URL for download.
  */
 export async function forceLoadAllChunks(batchSize: number): Promise<void> {
     const req = (globalThis as { require?: Function }).require;
@@ -136,100 +103,79 @@ export async function forceLoadAllChunks(batchSize: number): Promise<void> {
     } catch { /* ignore */ }
 }
 
-/** Summary of one wasm-loader probe pass. */
-export interface ProbeWasmLoadersResult {
-    /** Number of registered modules matching the {@code /wasm/i} filter. */
-    readonly probed: number;
-    /** Number of probes that returned an Emscripten module. */
-    readonly loaded: number;
-}
-
-/**
- * Iterates every registered module whose name matches {@code /wasm/i},
- * requires it, and invokes every exported function. Any return value with a
- * {@code HEAPU8} property is recognised as an Emscripten module and stashed
- * in {@code window.__WA_WASM_MODULES__}, keyed by the most recently captured
- * wasm URL (the URL that this loader most likely fetched).
- *
- * @param timeoutMs - per-call timeout. Individual loader functions that hang
- *                    are abandoned after this many milliseconds; the iteration
- *                    continues with the next function.
- * @returns the probe summary.
- */
-export async function probeWasmLoaders(timeoutMs: number): Promise<ProbeWasmLoadersResult> {
-    const w = window as Window & {
-        __WA_REGISTERED_MODULES__?: string[];
-        __WA_CAPTURED_WASM_URLS__?: string[];
-        __WA_WASM_MODULES__?: Record<string, { HEAPU8?: Uint8Array }>;
-    };
-    const req = (globalThis as { require?: Function }).require;
-    if (typeof req !== "function") return { probed: 0, loaded: 0 };
-
-    const registered = w.__WA_REGISTERED_MODULES__ ?? [];
-    const uniqueNames = Array.from(new Set(registered.filter((n) => /wasm/i.test(n))));
-    w.__WA_WASM_MODULES__ = w.__WA_WASM_MODULES__ ?? {};
-    let loaded = 0;
-
-    const withTimeout = <T,>(p: Promise<T>): Promise<T | undefined> =>
-        Promise.race([
-            p,
-            new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
-        ]);
-
-    for (const name of uniqueNames) {
-        let mod: Record<string, unknown> | undefined;
-        try { mod = req(name) as Record<string, unknown>; } catch { continue; }
-        if (!mod || typeof mod !== "object") continue;
-        for (const key of Object.keys(mod)) {
-            const fn = mod[key];
-            if (typeof fn !== "function") continue;
-            let result: unknown;
-            try {
-                result = await withTimeout(Promise.resolve((fn as () => unknown)()));
-            } catch { continue; }
-            if (result && typeof result === "object" && (result as { HEAPU8?: unknown }).HEAPU8 instanceof Uint8Array) {
-                const urls = w.__WA_CAPTURED_WASM_URLS__ ?? [];
-                const urlKey = urls[urls.length - 1] ?? `${name}:${key}`;
-                w.__WA_WASM_MODULES__[urlKey] = result as { HEAPU8: Uint8Array };
-                loaded++;
-            }
-        }
-    }
-    return { probed: uniqueNames.length, loaded };
-}
-
 /** Returns the list of wasm URLs surfaced via {@link installCaptureHooks}. */
 export function readCapturedWasmUrls(): string[] {
     const w = window as Window & { __WA_CAPTURED_WASM_URLS__?: string[] };
     return w.__WA_CAPTURED_WASM_URLS__ ?? [];
 }
 
-/** Returns the keys (wasm URLs) of {@code window.__WA_WASM_MODULES__}. */
-export function listStashedWasmModuleKeys(): string[] {
-    const w = window as Window & { __WA_WASM_MODULES__?: Record<string, { HEAPU8?: Uint8Array }> };
-    return Object.keys(w.__WA_WASM_MODULES__ ?? {});
-}
-
 /**
- * Returns a base64-encoded snapshot of the {@code HEAPU8} of the stashed
- * Emscripten module identified by {@code key}, or {@code null} if no module
- * is stored under that key.
+ * Captures the {@code .wasm} URL of each lazy/call-gated wasm-loader module
+ * without a call and without instantiating anything. Loading a voip-style
+ * Emscripten loader and running its module factory makes it {@code fetch} its
+ * wasm as the first step of instantiation; this temporarily wraps {@code fetch}
+ * to record that URL and reject it, and neuters {@code WebAssembly.instantiate*}
+ * and the {@code Worker} constructor, so the fetch fires (URL captured) but the
+ * compile, the 2 GB shared memory, and the pthread pool never materialise. That
+ * keeps the renderer safe while surfacing URLs that never appear on the network
+ * from an idle session.
  *
- * @param key - the wasm URL the loader fetched.
- * @returns the base64-encoded heap, or {@code null}.
- *
- * @remarks
- * {@link btoa} requires Latin-1 input; the heap is encoded in 32 KiB chunks
- * to avoid the {@code apply()} argument-count cap on large arrays.
+ * @param loaderModules - the lazy wasm-loader modules to drive.
+ * @returns the distinct captured {@code .wasm} URLs.
  */
-export function snapshotHeap(key: string): string | null {
-    const w = window as Window & { __WA_WASM_MODULES__?: Record<string, { HEAPU8?: Uint8Array }> };
-    const heap = w.__WA_WASM_MODULES__?.[key]?.HEAPU8;
-    if (!heap) return null;
-    let s = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < heap.length; i += chunk) {
-        s += String.fromCharCode.apply(null, Array.from(heap.subarray(i, i + chunk)));
+export async function captureLazyWasmUrls(loaderModules: readonly string[]): Promise<string[]> {
+    const g = globalThis as typeof globalThis & { require?: (name: string) => unknown; fetch: typeof fetch; Worker: typeof Worker };
+    const req = g.require;
+    if (typeof req !== "function") return [];
+
+    const captured = new Set<string>();
+    const urlOf = (input: unknown): string | null => {
+        try {
+            if (typeof input === "string") return input;
+            if (input instanceof URL) return input.toString();
+            if (input && typeof (input as { url?: unknown }).url === "string") return (input as { url: string }).url;
+        } catch { /* ignore */ }
+        return null;
+    };
+
+    const originalFetch = g.fetch;
+    const originalInstantiate = WebAssembly.instantiate;
+    const originalInstantiateStreaming = WebAssembly.instantiateStreaming;
+
+    g.fetch = function (this: unknown, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+        const url = urlOf(input);
+        if (url && /\.wasm(\?|$)/.test(url)) {
+            captured.add(url);
+            return Promise.reject(new Error("captured"));
+        }
+        return originalFetch.call(this, input as RequestInfo, init);
+    } as typeof fetch;
+    WebAssembly.instantiate = (() => Promise.reject(new Error("blocked"))) as unknown as typeof WebAssembly.instantiate;
+    WebAssembly.instantiateStreaming = (() => Promise.reject(new Error("blocked"))) as typeof WebAssembly.instantiateStreaming;
+
+    try {
+        const jsResource = req("JSResourceForInteraction") as ((name: string) => { load(): Promise<unknown> }) | undefined;
+        for (const module of loaderModules) {
+            let factory: unknown;
+            try {
+                const loaded = typeof jsResource === "function" ? await jsResource(module).load() : undefined;
+                factory = typeof loaded === "function" ? loaded : req(module);
+            } catch {
+                continue;
+            }
+            if (typeof factory !== "function") continue;
+            try {
+                const instance = (factory as (config: unknown) => unknown)({});
+                if (instance && typeof (instance as { then?: unknown }).then === "function") {
+                    (instance as Promise<unknown>).then(() => undefined, () => undefined);
+                }
+            } catch { /* the wasm fetch fires before any instantiation failure */ }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+    } finally {
+        g.fetch = originalFetch;
+        WebAssembly.instantiate = originalInstantiate;
+        WebAssembly.instantiateStreaming = originalInstantiateStreaming;
     }
-    return btoa(s);
+    return [...captured];
 }

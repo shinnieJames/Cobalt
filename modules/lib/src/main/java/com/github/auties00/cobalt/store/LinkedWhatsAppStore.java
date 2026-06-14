@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.listener.WhatsAppListener;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
-import com.github.auties00.cobalt.client.WhatsAppProxy;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.WhatsAppClientProxy;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
 import com.github.auties00.cobalt.wam.model.WamChannel;
@@ -164,7 +164,7 @@ public non-sealed interface LinkedWhatsAppStore extends WhatsAppStore {
      *
      * @return the proxy, or empty if none is configured
      */
-    Optional<WhatsAppProxy> proxy();
+    Optional<WhatsAppClientProxy> proxy();
 
     /**
      * Sets the proxy.
@@ -172,14 +172,14 @@ public non-sealed interface LinkedWhatsAppStore extends WhatsAppStore {
      * @param proxy the proxy, or {@code null} to clear
      * @return this store instance for method chaining
      */
-    LinkedWhatsAppStore setProxy(WhatsAppProxy proxy);
+    LinkedWhatsAppStore setProxy(WhatsAppClientProxy proxy);
 
     /**
      * Returns the offline-resume state.
      *
      * @return the offline-resume state, never {@code null}
      */
-    WhatsAppClientOfflineResumeState offlineResumeState();
+    LinkedWhatsAppClientOfflineResumeState offlineResumeState();
 
     /**
      * Sets the offline-resume state, driving the offline-delivery latch accordingly.
@@ -187,7 +187,7 @@ public non-sealed interface LinkedWhatsAppStore extends WhatsAppStore {
      * @param state the state, never {@code null}
      * @return this store instance for method chaining
      */
-    LinkedWhatsAppStore setOfflineResumeState(WhatsAppClientOfflineResumeState state);
+    LinkedWhatsAppStore setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState state);
 
     /**
      * Returns whether resume-from-restart has progressed past the initial phase.

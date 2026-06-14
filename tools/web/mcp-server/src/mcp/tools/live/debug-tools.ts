@@ -162,30 +162,76 @@ export function registerLiveDebugTools(server: McpServer, context: LiveToolsCont
   );
 
   server.tool(
-    "web_live_debug_set_wasm_breakpoint",
-    "Sets a breakpoint inside a WASM script at an absolute module byte offset (lineNumber 0, columnNumber = byte offset). Compute byteOffset as codeOffset (from web_live_debug_list_scripts) + the function's bodyOffset (from get_native_module_metadata) + the instruction offset.",
+    "web_live_debug_set_wasm_breakpoints",
+    "Sets a breakpoint at EACH byteOffset in `byteOffsets` (pass a single-element array for one breakpoint), all bound by module URL across the page + the whole pthread worker pool (now and respawned later). byteOffset is MODULE-ABSOLUTE: the function's bodyOffset from get_native_module_metadata used DIRECTLY (do NOT add codeOffset) plus any intra-function instruction offset. With a `logExpression` the breakpoint becomes a non-suspending LOGPOINT: the registry wraps the expression in a condition that console.logs its value (tagged by breakpointId) and returns false, so execution never stalls - even when the expression reads `$stack`, the wasm operand stack (e.g. '$stack[$stack.length-1]' reads a call_indirect's dispatched table index). Retrieve buffered values via web_live_debug_get_logpoint_captures (each tagged by breakpointId; map back to a site via the returned {byteOffset, breakpointId}). Without a logExpression each breakpoint suspends on hit. Remove via web_live_debug_remove_breakpoint per breakpointId.",
     {
       sessionId: sessionIdSchema,
-      scriptId: z.string().describe("The WASM script id (scriptLanguage 'WebAssembly')."),
-      byteOffset: z.number().describe("Absolute byte offset into the WASM module."),
-      condition: z.string().optional(),
+      url: z.string().describe("The WASM module URL (the 'url' field from web_live_debug_list_scripts)."),
+      byteOffsets: z.array(z.number()).describe("Module-absolute byte offsets; one breakpoint is set per offset."),
+      logExpression: z
+        .string()
+        .optional()
+        .describe("If set, evaluated on each hit and its value buffered (non-suspending). May read $stack."),
     },
     async ({
       sessionId,
-      scriptId,
-      byteOffset,
-      condition,
+      url,
+      byteOffsets,
+      logExpression,
     }: {
       sessionId: string;
-      scriptId: string;
-      byteOffset: number;
-      condition?: string;
+      url: string;
+      byteOffsets: number[];
+      logExpression?: string;
     }) => {
       requireReady();
-      log.info(`web_live_debug_set_wasm_breakpoint: id=${sessionId} scriptId="${scriptId}" byteOffset=${byteOffset}`);
+      log.info(`web_live_debug_set_wasm_breakpoints: id=${sessionId} url="${url}" count=${byteOffsets.length}`);
       try {
         const session = requireSession(sessionId);
-        const result = await session.setWasmBreakpoint(scriptId, byteOffset, condition);
+        const breakpoints: Array<{ byteOffset: number; breakpointId?: string; error?: string }> = [];
+        let ok = 0;
+        for (const byteOffset of byteOffsets) {
+          try {
+            const result = await session.setWasmBreakpoint(url, byteOffset, logExpression);
+            breakpoints.push({ byteOffset, breakpointId: result.breakpointId });
+            ok++;
+          } catch (e) {
+            breakpoints.push({ byteOffset, error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ count: breakpoints.length, ok, breakpoints }, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "web_live_debug_get_logpoint_captures",
+    "Returns the buffered values captured by non-suspending logpoints (set via web_live_debug_set_wasm_breakpoints with a logExpression). Each entry is { id, ts, value } where id is the breakpointId that produced it. Pass id to filter to one breakpoint, and clear:true to drain the returned entries.",
+    {
+      sessionId: sessionIdSchema,
+      id: z.string().optional().describe("Restrict to captures from this breakpointId."),
+      clear: z.boolean().optional().default(false),
+    },
+    async ({
+      sessionId,
+      id,
+      clear,
+    }: {
+      sessionId: string;
+      id?: string;
+      clear: boolean;
+    }) => {
+      requireReady();
+      try {
+        const session = requireSession(sessionId);
+        const result = session.getLogpointCaptures({ id, clear });
         return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {

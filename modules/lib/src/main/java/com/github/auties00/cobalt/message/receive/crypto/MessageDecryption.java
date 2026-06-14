@@ -217,25 +217,8 @@ public final class MessageDecryption {
                     var message = SignalPreKeyMessage.ofSerialized(ciphertext);
                     var paddedPlaintext = sessionCipher.decrypt(address, message);
                     yield removePadding(paddedPlaintext);
-                } catch (ProtobufDeserializationException e) {
-                    throw new WhatsAppMessageException.Receive.InvalidMessage(
-                            "Invalid PreKeySignalMessage format from: " + senderJid, e);
-                } catch (SignalMissingSessionException e) {
-                    throw new WhatsAppMessageException.Receive.NoSession(
-                            "No session for PreKeyMessage from: " + senderJid, false, e);
-                } catch (SignalUninitializedSessionException e) {
-                    throw new WhatsAppMessageException.Receive.NoSession(
-                            "Session not initialized for: " + senderJid, false, e);
-                } catch (SignalUntrustedIdentityException e) {
-                    throw new WhatsAppMessageException.Receive.InvalidSignature(
-                            "Identity key changed for: " + senderJid, e);
-                } catch (SignalDecryptException e) {
-                    if (isDuplicateCounterError(e)) {
-                        throw new WhatsAppMessageException.Receive.DuplicateMessage(
-                                "Decryption failed for PreKeyMessage from: " + senderJid, e);
-                    }
-                    throw new WhatsAppMessageException.Receive.Unknown(
-                            "Decryption failed for PreKeyMessage from: " + senderJid, e);
+                } catch (SignalException e) {
+                    throw mapSessionError(e, senderJid, "PreKeyMessage");
                 } catch (SecurityException e) {
                     throw new WhatsAppMessageException.Receive.InvalidMessage(
                             "Security verification failed for message from: " + senderJid, e);
@@ -246,25 +229,8 @@ public final class MessageDecryption {
                     var message = SignalMessage.ofSerialized(ciphertext);
                     var paddedPlaintext = sessionCipher.decrypt(address, message);
                     yield removePadding(paddedPlaintext);
-                } catch (ProtobufDeserializationException e) {
-                    throw new WhatsAppMessageException.Receive.InvalidMessage(
-                            "Invalid SignalMessage format from: " + senderJid, e);
-                } catch (SignalMissingSessionException e) {
-                    throw new WhatsAppMessageException.Receive.NoSession(
-                            "No session exists for MSG from: " + senderJid, false, e);
-                } catch (SignalUninitializedSessionException e) {
-                    throw new WhatsAppMessageException.Receive.NoSession(
-                            "Session not initialized for: " + senderJid, false, e);
-                } catch (SignalUntrustedIdentityException e) {
-                    throw new WhatsAppMessageException.Receive.InvalidSignature(
-                            "Identity key changed for: " + senderJid, e);
-                } catch (SignalDecryptException e) {
-                    if (isDuplicateCounterError(e)) {
-                        throw new WhatsAppMessageException.Receive.DuplicateMessage(
-                                "Decryption failed for MSG from: " + senderJid, e);
-                    }
-                    throw new WhatsAppMessageException.Receive.Unknown(
-                            "Decryption failed for MSG from: " + senderJid, e);
+                } catch (SignalException e) {
+                    throw mapSessionError(e, senderJid, "SignalMessage");
                 } catch (SecurityException e) {
                     throw new WhatsAppMessageException.Receive.InvalidMessage(
                             "Security verification failed for message from: " + senderJid, e);
@@ -276,33 +242,145 @@ public final class MessageDecryption {
     }
 
     /**
-     * Returns whether the given libsignal {@link SignalDecryptException} indicates a
-     * duplicate-counter or old-counter condition.
+     * Maps a libsignal {@link SignalException} raised by the per-device
+     * {@link SignalSessionCipher} onto the matching sealed
+     * {@link WhatsAppMessageException.Receive} subtype.
      *
-     * <p>Inspected by both the per-device and group branches so a duplicate is mapped
-     * onto {@link WhatsAppMessageException.Receive.DuplicateMessage} for dedup routing
-     * rather than a generic {@link WhatsAppMessageException.Receive.Unknown} error.
+     * <p>The {@code kind} label distinguishes the two callers in the resulting
+     * message text ({@code "PreKeyMessage"} for a {@code pkmsg},
+     * {@code "SignalMessage"} for a {@code msg}). The mapping is:
+     * <ul>
+     *   <li>{@link SignalMalformedMessageException} (raised by
+     *       {@code ofSerialized}) becomes
+     *       {@link WhatsAppMessageException.Receive.InvalidMessage}.</li>
+     *   <li>{@link SignalMissingSessionException} and
+     *       {@link SignalUninitializedSessionException} become
+     *       {@link WhatsAppMessageException.Receive.NoSession}.</li>
+     *   <li>{@link SignalUntrustedIdentityException} and
+     *       {@link SignalInvalidSignatureException} become
+     *       {@link WhatsAppMessageException.Receive.InvalidSignature}.</li>
+     *   <li>{@link SignalMissingPreKeyException} becomes
+     *       {@link WhatsAppMessageException.Receive.InvalidOneTimeKey} and
+     *       {@link SignalMissingSignedPreKeyException} becomes
+     *       {@link WhatsAppMessageException.Receive.InvalidSignedPreKey}, both
+     *       carrying the offending key id; these are the
+     *       session-establishment failures a {@code pkmsg} hits when the
+     *       referenced prekey is no longer held locally.</li>
+     *   <li>{@link SignalDuplicateMessageException} becomes
+     *       {@link WhatsAppMessageException.Receive.DuplicateMessage}.</li>
+     *   <li>{@link SignalMissingReceiverChainException} and every other
+     *       {@link SignalException} (including {@link SignalDecryptException})
+     *       become {@link WhatsAppMessageException.Receive.Unknown}.</li>
+     * </ul>
+     * Every mapped subtype except {@link WhatsAppMessageException.Receive.DuplicateMessage}
+     * reports {@link WhatsAppMessageException.Receive#shouldSendRetryReceipt()}
+     * as {@code true}, so a missing prekey now drives a retry receipt rather
+     * than a terminal NACK.
      *
      * @implNote
-     * This implementation inspects the exception message text because libsignal does
-     * not expose a dedicated duplicate-counter subtype; mirrors WhatsApp Web's
-     * {@code WAWebMsgProcessingDecryptionHandler} string-match
-     * ({@code e.message==="errDuplicateMsg"}) and the
-     * {@code WAWebSendRetryReceiptJob} branches that examine the literal Signal error
-     * messages.
+     * This implementation pattern-matches the concrete libsignal subtype rather
+     * than the message text the previous build had to scrape, because libsignal
+     * now exposes a dedicated exception per failure. The {@code default} arm
+     * folds any unmapped {@link SignalException} onto
+     * {@link WhatsAppMessageException.Receive.Unknown}, matching WhatsApp Web's
+     * {@code WAWebSendRetryReceiptJob.getRetryReasonFromError} catch-all.
      *
-     * @param e the libsignal decrypt exception to inspect
-     * @return {@code true} when the underlying message matches a duplicate-counter
-     *         pattern
+     * @param e         the libsignal failure to translate
+     * @param senderJid the sender's device JID
+     * @param kind      the human-readable message kind for the detail text
+     * @return the receive exception to throw
      */
-    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = {"decryptSignalProto", "decryptGroupSignalProto"},
+    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "decryptSignalProto",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private boolean isDuplicateCounterError(SignalDecryptException e) {
-        var message = e.getMessage();
-        return message != null && (
-                message.contains("old counter") ||
-                message.contains("Received message with old counter")
-        );
+    private WhatsAppMessageException.Receive mapSessionError(SignalException e, Jid senderJid, String kind) {
+        return switch (e) {
+            case SignalMalformedMessageException malformed ->
+                    new WhatsAppMessageException.Receive.InvalidMessage(
+                            "Invalid " + kind + " format from: " + senderJid, malformed);
+            case SignalMissingSessionException missing ->
+                    new WhatsAppMessageException.Receive.NoSession(
+                            "No session for " + kind + " from: " + senderJid, false, missing);
+            case SignalUninitializedSessionException uninitialized ->
+                    new WhatsAppMessageException.Receive.NoSession(
+                            "Session not initialized for " + kind + " from: " + senderJid, false, uninitialized);
+            case SignalUntrustedIdentityException identity ->
+                    new WhatsAppMessageException.Receive.InvalidSignature(
+                            "Identity key changed for: " + senderJid, identity);
+            case SignalInvalidSignatureException signature ->
+                    new WhatsAppMessageException.Receive.InvalidSignature(
+                            "Signature verification failed for " + kind + " from: " + senderJid, signature);
+            case SignalMissingPreKeyException preKey ->
+                    new WhatsAppMessageException.Receive.InvalidOneTimeKey(
+                            "One-time prekey " + preKey.id() + " missing for " + kind + " from: " + senderJid, preKey);
+            case SignalMissingSignedPreKeyException signedPreKey ->
+                    new WhatsAppMessageException.Receive.InvalidSignedPreKey(
+                            "Signed prekey " + signedPreKey.id() + " missing for " + kind + " from: " + senderJid, signedPreKey);
+            case SignalDuplicateMessageException duplicate ->
+                    new WhatsAppMessageException.Receive.DuplicateMessage(
+                            "Duplicate " + kind + " from: " + senderJid, duplicate);
+            case SignalMissingReceiverChainException chain ->
+                    new WhatsAppMessageException.Receive.Unknown(
+                            "No matching receiver chain for " + kind + " from: " + senderJid, chain);
+            default ->
+                    new WhatsAppMessageException.Receive.Unknown(
+                            "Decryption failed for " + kind + " from: " + senderJid, e);
+        };
+    }
+
+    /**
+     * Maps a libsignal {@link SignalException} raised by the
+     * {@link SignalGroupCipher} onto the matching sealed
+     * {@link WhatsAppMessageException.Receive} subtype.
+     *
+     * <p>The mapping is:
+     * <ul>
+     *   <li>{@link SignalMissingSenderKeyException} becomes
+     *       {@link WhatsAppMessageException.Receive.NoSenderKey}.</li>
+     *   <li>{@link SignalMissingSenderKeyStateException} becomes
+     *       {@link WhatsAppMessageException.Receive.InvalidSenderKey}, carrying
+     *       the unresolved sender-key state id.</li>
+     *   <li>{@link SignalDuplicateMessageException} becomes
+     *       {@link WhatsAppMessageException.Receive.DuplicateMessage}.</li>
+     *   <li>{@link SignalMalformedMessageException} (raised when parsing the
+     *       {@code SenderKeyMessage}) becomes
+     *       {@link WhatsAppMessageException.Receive.InvalidMessage}.</li>
+     *   <li>every other {@link SignalException} (including
+     *       {@link SignalDecryptException}) becomes
+     *       {@link WhatsAppMessageException.Receive.Unknown}.</li>
+     * </ul>
+     *
+     * @implNote
+     * This implementation pattern-matches the concrete libsignal subtype; the
+     * group cipher now raises a dedicated {@link SignalDuplicateMessageException}
+     * for an old-counter replay instead of the message-text marker the previous
+     * build matched.
+     *
+     * @param e         the libsignal failure to translate
+     * @param groupJid  the group, community, or broadcast JID
+     * @param senderJid the sender's device JID
+     * @return the receive exception to throw
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "decryptGroupSignalProto",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private WhatsAppMessageException.Receive mapGroupError(SignalException e, Jid groupJid, Jid senderJid) {
+        return switch (e) {
+            case SignalMissingSenderKeyException missing ->
+                    new WhatsAppMessageException.Receive.NoSenderKey(
+                            "No sender key exists for group: " + groupJid + " sender: " + senderJid, missing);
+            case SignalMissingSenderKeyStateException state ->
+                    new WhatsAppMessageException.Receive.InvalidSenderKey(
+                            "Sender key state not found for ID " + state.id().orElse(-1) +
+                                    " in group: " + groupJid + " sender: " + senderJid, state);
+            case SignalDuplicateMessageException duplicate ->
+                    new WhatsAppMessageException.Receive.DuplicateMessage(
+                            "Duplicate group message from: " + senderJid + " in group: " + groupJid, duplicate);
+            case SignalMalformedMessageException malformed ->
+                    new WhatsAppMessageException.Receive.InvalidMessage(
+                            "Invalid SenderKeyMessage format from: " + senderJid + " in group: " + groupJid, malformed);
+            default ->
+                    new WhatsAppMessageException.Receive.Unknown(
+                            "Group decryption failed for message from: " + senderJid + " in group: " + groupJid, e);
+        };
     }
 
     /**
@@ -317,20 +395,10 @@ public final class MessageDecryption {
      * {@link SignalCryptoLocks#withSenderKey}, shared with the
      * {@link #processSenderKeyDistribution(Jid, Jid, SignalSenderKeyDistributionMessage)} import and the outbound
      * {@link MessageEncryption}, so concurrent decrypts and a distribution import never ratchet the same chain at once;
-     * WhatsApp Web never races them since its JavaScript runs single-threaded. It maps the libsignal exception subtypes
-     * onto the sealed {@link WhatsAppMessageException.Receive} hierarchy:
-     * <ul>
-     *   <li>a missing sender-key record becomes
-     *       {@link WhatsAppMessageException.Receive.NoSenderKey}.</li>
-     *   <li>a missing sender-key state for the message-key id becomes
-     *       {@link WhatsAppMessageException.Receive.InvalidSenderKey}.</li>
-     *   <li>a {@link SignalDecryptException} becomes either
-     *       {@link WhatsAppMessageException.Receive.DuplicateMessage} (when
-     *       {@link #isDuplicateCounterError(SignalDecryptException)} matches) or
-     *       {@link WhatsAppMessageException.Receive.Unknown}.</li>
-     *   <li>a {@link SecurityException} becomes
-     *       {@link WhatsAppMessageException.Receive.InvalidSenderKey}.</li>
-     * </ul>
+     * WhatsApp Web never races them since its JavaScript runs single-threaded. It folds every libsignal
+     * {@link SignalException} subtype onto the sealed {@link WhatsAppMessageException.Receive} hierarchy through
+     * {@link #mapGroupError(SignalException, Jid, Jid)}, and additionally maps a {@link SecurityException} from the
+     * sender-key signature check onto {@link WhatsAppMessageException.Receive.InvalidSenderKey}.
      *
      * @param ciphertext the encrypted message bytes
      * @param groupJid   the group, community, or broadcast JID
@@ -360,26 +428,11 @@ public final class MessageDecryption {
             try {
                 var paddedPlaintext = groupCipher.decrypt(senderKeyName, ciphertext);
                 return removePadding(paddedPlaintext);
-            } catch (SignalMissingSenderKeyException e) {
-                throw new WhatsAppMessageException.Receive.NoSenderKey(
-                        "No sender key exists for group: " + groupJid + " sender: " + senderJid, e);
-            } catch (SignalMissingSenderKeyStateException e) {
-                throw new WhatsAppMessageException.Receive.InvalidSenderKey(
-                        "Sender key state not found for ID " + e.id().orElse(-1) +
-                                " in group: " + groupJid + " sender: " + senderJid, e);
-            } catch (SignalDecryptException e) {
-                if (isDuplicateCounterError(e)) {
-                    throw new WhatsAppMessageException.Receive.DuplicateMessage(
-                            "Group decryption failed for message from: " + senderJid + " in group: " + groupJid, e);
-                }
-                throw new WhatsAppMessageException.Receive.Unknown(
-                        "Group decryption failed for message from: " + senderJid + " in group: " + groupJid, e);
+            } catch (SignalException e) {
+                throw mapGroupError(e, groupJid, senderJid);
             } catch (SecurityException e) {
                 throw new WhatsAppMessageException.Receive.InvalidSenderKey(
                         "Sender key signature verification failed from: " + senderJid + " in group: " + groupJid, e);
-            } catch (ProtobufDeserializationException e) {
-                throw new WhatsAppMessageException.Receive.InvalidMessage(
-                        "Invalid SenderKeyMessage format from: " + senderJid + " in group: " + groupJid, e);
             }
         });
     }

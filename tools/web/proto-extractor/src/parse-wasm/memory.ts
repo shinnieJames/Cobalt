@@ -1,4 +1,4 @@
-/** A single active wasm data segment, placed at a fixed linear-memory address. */
+/** A single wasm data segment materialised at a fixed linear-memory address. */
 export interface DataSegment {
     /** The linear-memory address this segment occupies. */
     readonly address: number;
@@ -7,9 +7,16 @@ export interface DataSegment {
 }
 
 const WASM_MAGIC = 0x6d736100; /* "\0asm" little-endian */
+const SECTION_CODE = 10;
 const SECTION_DATA = 11;
 const OPCODE_I32_CONST = 0x41;
+const OPCODE_GLOBAL_GET = 0x23;
 const OPCODE_END = 0x0b;
+const OPCODE_PREFIX_FC = 0xfc;
+const FC_MEMORY_INIT = 0x08;
+
+/** Largest coalesced data image to materialise, guarding against an outlier segment address. */
+const MAX_DATA_SPAN = 256 * 1024 * 1024;
 
 /**
  * Decodes one unsigned LEB128 integer.
@@ -40,7 +47,9 @@ function readVarInt(buf: Uint8Array, offset: number): [number, number] {
     let bytes = 0;
     let byte = 0;
     while (true) {
-        byte = buf[offset + bytes]!;
+        const cur = buf[offset + bytes];
+        if (cur === undefined) throw new Error("LEB128 EOF");
+        byte = cur;
         bytes++;
         result |= (byte & 0x7f) << shift;
         shift += 7;
@@ -109,13 +118,33 @@ export class WasmMemory {
     }
 }
 
+/** One DATA-section segment before passive destinations are resolved from the code. */
+interface RawSegment {
+    /** {@code true} for a passive (mode 1) segment, whose address is set later from {@code memory.init}. */
+    readonly passive: boolean;
+    /** The active segment's address, or {@code null} for passive segments and unresolvable offset expressions. */
+    readonly address: number | null;
+    /** The segment's raw bytes. */
+    readonly data: Uint8Array;
+}
+
 /**
- * Parses every active data segment out of a wasm binary and returns them in a
- * {@link WasmMemory}. Passive segments and segments with non-constant offsets
- * are skipped.
+ * Parses every data segment out of a wasm binary and returns them in a
+ * {@link WasmMemory}, resolving passive segments to the addresses their
+ * {@code memory.init} instructions write them to.
+ *
+ * <p>Shared-memory / pthread Emscripten builds (e.g. the WhatsApp voip module)
+ * emit their static data as passive segments materialised at runtime by a
+ * synthetic {@code __wasm_init_memory} function rather than as active segments
+ * with inline offsets. For a non-relocatable module that function writes each
+ * segment with a constant destination, so the destination is recovered
+ * statically by scanning the code section for the {@code i32.const dest;
+ * i32.const src; i32.const len; memory.init seg} idiom. The resolved segments are
+ * coalesced into a single contiguous image so reads that span adjacent segments
+ * (a descriptor's field array, a string table) succeed.
  *
  * @param binary - the wasm module bytes.
- * @returns a {@link WasmMemory} of the active data segments.
+ * @returns a {@link WasmMemory} of the materialised data segments.
  * @throws Error if {@code binary} is not a well-formed wasm module header.
  */
 export function parseWasmDataSegments(binary: Uint8Array): WasmMemory {
@@ -124,59 +153,175 @@ export function parseWasmDataSegments(binary: Uint8Array): WasmMemory {
         throw new Error("Not a wasm module");
     }
 
-    const segments: DataSegment[] = [];
-    let off = 8; /* skip 4-byte magic + 4-byte version */
+    let codeStart = -1;
+    let codeEnd = -1;
+    let rawSegments: RawSegment[] = [];
 
+    let off = 8; /* skip 4-byte magic + 4-byte version */
     while (off < binary.length) {
         const sectionId = binary[off++]!;
         const [sectionSize, sectionSizeBytes] = readVarUint(binary, off);
         off += sectionSizeBytes;
         const sectionEnd = off + sectionSize;
 
-        if (sectionId !== SECTION_DATA) {
-            off = sectionEnd;
-            continue;
+        if (sectionId === SECTION_CODE) {
+            codeStart = off;
+            codeEnd = sectionEnd;
+        } else if (sectionId === SECTION_DATA) {
+            rawSegments = parseDataSection(binary, off, sectionEnd);
         }
-
-        const [count, countBytes] = readVarUint(binary, off);
-        off += countBytes;
-        for (let i = 0; i < count; i++) {
-            const [mode, modeBytes] = readVarUint(binary, off);
-            off += modeBytes;
-
-            if (mode === 0 || mode === 2) {
-                if (mode === 2) {
-                    const [, memidxBytes] = readVarUint(binary, off);
-                    off += memidxBytes;
-                }
-                if (binary[off] !== OPCODE_I32_CONST) {
-                    throw new Error(`Unsupported data offset opcode 0x${binary[off]!.toString(16)}`);
-                }
-                off++;
-                const [addr, addrBytes] = readVarInt(binary, off);
-                off += addrBytes;
-                if (binary[off] !== OPCODE_END) {
-                    throw new Error(`Expected end opcode, got 0x${binary[off]!.toString(16)}`);
-                }
-                off++;
-                const [dataLen, dataLenBytes] = readVarUint(binary, off);
-                off += dataLenBytes;
-                segments.push({
-                    address: addr >>> 0,
-                    data: binary.subarray(off, off + dataLen),
-                });
-                off += dataLen;
-            } else if (mode === 1) {
-                const [dataLen, dataLenBytes] = readVarUint(binary, off);
-                off += dataLenBytes;
-                off += dataLen;
-            } else {
-                throw new Error(`Unknown data segment mode ${mode}`);
-            }
-        }
-
         off = sectionEnd;
     }
 
-    return new WasmMemory(segments);
+    const passiveDestinations = codeStart >= 0
+        ? scanPassiveDestinations(binary, codeStart, codeEnd)
+        : new Map<number, number>();
+
+    const placed: DataSegment[] = [];
+    for (let index = 0; index < rawSegments.length; index++) {
+        const seg = rawSegments[index]!;
+        const address = seg.passive ? passiveDestinations.get(index) : seg.address;
+        if (address != null) placed.push({ address, data: seg.data });
+    }
+
+    return new WasmMemory(coalesce(placed));
+}
+
+/**
+ * Parses the DATA section's segments, preserving their order so each segment's
+ * index matches the index a {@code memory.init} instruction refers to.
+ */
+function parseDataSection(binary: Uint8Array, start: number, end: number): RawSegment[] {
+    const segments: RawSegment[] = [];
+    let off = start;
+    const [count, countBytes] = readVarUint(binary, off);
+    off += countBytes;
+
+    for (let i = 0; i < count && off < end; i++) {
+        const [mode, modeBytes] = readVarUint(binary, off);
+        off += modeBytes;
+
+        if (mode === 1) {
+            const [dataLen, dataLenBytes] = readVarUint(binary, off);
+            off += dataLenBytes;
+            segments.push({ passive: true, address: null, data: binary.subarray(off, off + dataLen) });
+            off += dataLen;
+            continue;
+        }
+
+        if (mode === 2) {
+            const [, memidxBytes] = readVarUint(binary, off);
+            off += memidxBytes;
+        }
+        const offsetExpr = parseInitExprAddress(binary, off);
+        off = offsetExpr.end;
+        const [dataLen, dataLenBytes] = readVarUint(binary, off);
+        off += dataLenBytes;
+        segments.push({ passive: false, address: offsetExpr.address, data: binary.subarray(off, off + dataLen) });
+        off += dataLen;
+    }
+    return segments;
+}
+
+/**
+ * Parses an active segment's constant offset expression. Recognises the
+ * {@code i32.const N end} form; any other form (e.g. a relocatable
+ * {@code global.get __memory_base} base) yields a {@code null} address.
+ */
+function parseInitExprAddress(binary: Uint8Array, off: number): { address: number | null; end: number } {
+    const opcode = binary[off];
+    if (opcode === OPCODE_I32_CONST) {
+        const [addr, addrBytes] = readVarInt(binary, off + 1);
+        return { address: addr >>> 0, end: skipToExprEnd(binary, off + 1 + addrBytes) };
+    }
+    if (opcode === OPCODE_GLOBAL_GET) {
+        const [, idxBytes] = readVarUint(binary, off + 1);
+        return { address: null, end: skipToExprEnd(binary, off + 1 + idxBytes) };
+    }
+    return { address: null, end: skipToExprEnd(binary, off + 1) };
+}
+
+/** Advances past the trailing {@code end} opcode of a constant expression. */
+function skipToExprEnd(binary: Uint8Array, off: number): number {
+    let p = off;
+    while (p < binary.length && binary[p] !== OPCODE_END) p++;
+    return p + 1;
+}
+
+/**
+ * Scans the code section for {@code memory.init} instructions and returns a map
+ * from data-segment index to the constant destination address each is copied to.
+ *
+ * <p>Matches the linker-emitted idiom {@code i32.const dest; i32.const src;
+ * i32.const len; memory.init seg}. The scan is byte-pattern based, so a stray
+ * {@code 0x41} byte inside an unrelated instruction may begin a candidate match;
+ * those fail to complete and are skipped. The first destination seen for a
+ * segment wins.
+ */
+function scanPassiveDestinations(binary: Uint8Array, start: number, end: number): Map<number, number> {
+    const destinations = new Map<number, number>();
+    for (let i = start; i < end; i++) {
+        if (binary[i] !== OPCODE_I32_CONST) continue;
+        let match: { segment: number; destination: number } | null;
+        try {
+            match = matchMemoryInit(binary, i, end);
+        } catch {
+            continue;
+        }
+        if (match && !destinations.has(match.segment)) {
+            destinations.set(match.segment, match.destination);
+        }
+    }
+    return destinations;
+}
+
+/**
+ * Attempts to match the {@code i32.const dest; i32.const src; i32.const len;
+ * memory.init seg} sequence starting at {@code pos}.
+ *
+ * @returns the segment index and its destination address, or {@code null} if the
+ *          bytes at {@code pos} are not that sequence.
+ * @throws Error if a LEB128 value is malformed (a false-positive start byte).
+ */
+function matchMemoryInit(binary: Uint8Array, pos: number, end: number): { segment: number; destination: number } | null {
+    let off = pos;
+    if (binary[off] !== OPCODE_I32_CONST) return null;
+    const [destination, destBytes] = readVarInt(binary, off + 1);
+    off += 1 + destBytes;
+
+    for (let operand = 0; operand < 2; operand++) {
+        if (binary[off] !== OPCODE_I32_CONST) return null;
+        const [, operandBytes] = readVarInt(binary, off + 1);
+        off += 1 + operandBytes;
+    }
+
+    if (off + 1 >= end || binary[off] !== OPCODE_PREFIX_FC || binary[off + 1] !== FC_MEMORY_INIT) return null;
+    off += 2;
+    const [segment, segBytes] = readVarUint(binary, off);
+    off += segBytes;
+    if (off > end) return null;
+    return { segment, destination: destination >>> 0 };
+}
+
+/**
+ * Merges placed segments into a single contiguous image spanning their address
+ * range, zero-filling gaps so cross-segment reads succeed. Falls back to the
+ * sparse segments when the span is empty or implausibly large.
+ */
+function coalesce(segments: DataSegment[]): DataSegment[] {
+    if (segments.length === 0) return [];
+
+    let min = Infinity;
+    let max = -Infinity;
+    for (const seg of segments) {
+        min = Math.min(min, seg.address);
+        max = Math.max(max, seg.address + seg.data.length);
+    }
+
+    const span = max - min;
+    if (span <= 0 || span > MAX_DATA_SPAN) return segments;
+
+    const data = new Uint8Array(span);
+    for (const seg of segments) data.set(seg.data, seg.address - min);
+    return [{ address: min, data }];
 }

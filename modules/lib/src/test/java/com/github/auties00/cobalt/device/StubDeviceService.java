@@ -229,7 +229,7 @@ public final class StubDeviceService implements DeviceService {
     }
 
     @Override
-    public int ensureSessions(Collection<Jid> deviceJids) {
+    public int ensureSessions(Collection<Jid> deviceJids, boolean force) {
         if (ensureSessions == null) {
             return 0;
         }

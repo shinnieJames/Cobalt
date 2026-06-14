@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.pairing;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -32,7 +32,7 @@ import java.util.Objects;
  *
  * <p>One instance is created per {@link LinkedWhatsAppClient} when the client
  * is configured with a
- * {@link WhatsAppClientVerificationHandler.Web.PairingCode} handler and
+ * {@link LinkedWhatsAppClientVerificationHandler.Web.PairingCode} handler and
  * a phone number is set on the store. The service is shared between the
  * IQ stream handler that triggers {@code companion_hello} and the
  * notification stream handler that consumes the resulting
@@ -48,7 +48,7 @@ import java.util.Objects;
  * <ol>
  *   <li>{@link #start} generates the code, ships
  *       {@code companion_hello}, and delivers the code to
- *       {@link WhatsAppClientVerificationHandler.Web#handle(String)}.</li>
+ *       {@link LinkedWhatsAppClientVerificationHandler.Web#handle(String)}.</li>
  *   <li>The user types the code on their primary device.</li>
  *   <li>{@link #handlePrimaryHello} runs the {@code companion_finish}
  *       algorithm, ships the IQ, and persists the derived ADV master
@@ -237,11 +237,11 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      * after {@code companion_hello} returns.
      *
      * <p>Only the
-     * {@link WhatsAppClientVerificationHandler.Web.PairingCode}
+     * {@link LinkedWhatsAppClientVerificationHandler.Web.PairingCode}
      * sub-type triggers this service; QR handlers leave the field
      * present but {@link #isEnabled} returns {@code false}.
      */
-    private final WhatsAppClientVerificationHandler.Web webVerificationHandler;
+    private final LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler;
 
     /**
      * Holds the mutex serialising every transition of {@link #stage}
@@ -341,7 +341,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      *                               delivery
      * @throws NullPointerException if {@code whatsapp} is {@code null}
      */
-    public LiveCompanionPairingService(LinkedWhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
+    public LiveCompanionPairingService(LinkedWhatsAppClient whatsapp, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler) {
         this.whatsapp = Objects.requireNonNull(whatsapp, "whatsapp must not be null");
         this.webVerificationHandler = webVerificationHandler;
         this.lock = new Object();
@@ -363,7 +363,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      */
     @Override
     public boolean isEnabled() {
-        return webVerificationHandler instanceof WhatsAppClientVerificationHandler.Web.PairingCode
+        return webVerificationHandler instanceof LinkedWhatsAppClientVerificationHandler.Web.PairingCode
                 && whatsapp.store().accountStore().phoneNumber().isPresent();
     }
 

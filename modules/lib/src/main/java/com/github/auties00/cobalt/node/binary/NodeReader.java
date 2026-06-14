@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 import com.github.auties00.cobalt.util.DataUtils;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.foreign.MemorySegment;
@@ -223,7 +224,11 @@ public abstract class NodeReader implements AutoCloseable {
      * @param source the input stream of encoded stanza bytes
      * @return an inflating decoder when the compression flag is set, a direct
      *         decoder otherwise
-     * @throws IOException if reading the flags byte fails
+     * @throws EOFException if the stream is already at end-of-stream so no
+     *         flags byte can be read; this is the clean frame-boundary
+     *         end-of-stream a caller decoding a continuous stanza stream uses
+     *         to detect an orderly close as distinct from a malformed frame
+     * @throws IOException if reading the flags byte otherwise fails
      */
     public static NodeReader fromStream(InputStream source) throws IOException {
         return fromStream(source, DEFAULT_BUFFER_SIZE, false);
@@ -245,7 +250,9 @@ public abstract class NodeReader implements AutoCloseable {
      *                   at least four for primitive reads
      * @return an inflating decoder when the compression flag is set, a direct
      *         decoder otherwise
-     * @throws IOException if reading the flags byte fails
+     * @throws EOFException if the stream is already at end-of-stream so no
+     *         flags byte can be read
+     * @throws IOException if reading the flags byte otherwise fails
      * @throws IllegalArgumentException if {@code bufferSize} is less than four
      */
     public static NodeReader fromStream(InputStream source, int bufferSize) throws IOException {
@@ -284,7 +291,9 @@ public abstract class NodeReader implements AutoCloseable {
      * @param owned      whether the returned decoder owns {@code source} and
      *                   must close it on {@link #close()}
      * @return the decoder for the leading flags byte
-     * @throws IOException if reading the flags byte fails
+     * @throws EOFException if the stream is already at end-of-stream so no
+     *         flags byte can be read
+     * @throws IOException if reading the flags byte otherwise fails
      * @throws IllegalArgumentException if {@code bufferSize} is less than four
      */
     private static NodeReader fromStream(InputStream source, int bufferSize, boolean owned) throws IOException {
@@ -295,7 +304,7 @@ public abstract class NodeReader implements AutoCloseable {
         var buffer = new byte[bufferSize];
         var prefilledBytes = source.read(buffer);
         if (prefilledBytes <= 0) {
-            throw new IOException("Unexpected end of stream while reading flags byte");
+            throw new EOFException("Unexpected end of stream while reading flags byte");
         }
         var flags = buffer[0] & 0xFF;
         if ((flags & COMPRESSION_FLAG) != 0) {

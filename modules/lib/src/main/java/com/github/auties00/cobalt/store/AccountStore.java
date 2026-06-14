@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.store;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
@@ -68,7 +68,7 @@ public interface AccountStore {
      *
      * @return the client type, never {@code null}
      */
-    WhatsAppClientType clientType();
+    LinkedWhatsAppClientType clientType();
 
     /**
      * Returns the wall-clock timestamp at which this store was first created.
@@ -82,7 +82,7 @@ public interface AccountStore {
      *
      * @return the device descriptor, never {@code null}
      */
-    WhatsAppClientDevice device();
+    LinkedWhatsAppClientDevice device();
 
     /**
      * Sets the device descriptor.
@@ -90,7 +90,7 @@ public interface AccountStore {
      * @param device the device descriptor, never {@code null}
      * @return this store instance for method chaining
      */
-    AccountStore setDevice(WhatsAppClientDevice device);
+    AccountStore setDevice(LinkedWhatsAppClientDevice device);
 
     /**
      * Returns the release channel advertised to the server during connection.

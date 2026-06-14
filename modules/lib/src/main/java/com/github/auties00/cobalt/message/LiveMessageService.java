@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.message;
 import com.github.auties00.cobalt.ack.AckParser;
 import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.ack.CallAck;
-import com.github.auties00.cobalt.call.internal.signaling.CallStanza;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.call.signaling.CallStanza;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.media.transcode.MediaTranscoderService;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
@@ -29,7 +29,6 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -204,13 +203,18 @@ public final class LiveMessageService implements MessageService {
         var container = new MessageContainerBuilder().call(callOffer).build();
         var plaintext = MessageContainerSpec.encode(container);
 
-        // Resolve the per-call <privacy> payload. WA Web embeds the peer's server-issued
-        // trusted-contact token (delivered out-of-band via <notification type="privacy_token">)
-        // verbatim; the receiver's voip wasm validates the bytes against the token it issued and
-        // rejects with status 70019 when they do not match. When no token is cached yet, vouch
-        // for the peer (which triggers the server to deliver the reciprocal token) and wait
-        // briefly for the privacy-token notification to land.
-        var privacyBytes = resolvePeerTcToken(resolvedPeer);
+        // Resolve the per-call <privacy> payload: the peer's trusted-contact token, which the receiver's
+        // voip wasm validates against the token it issued (rejecting with status 70019 on a mismatch).
+        // Mirrors WAWebVoipStartCall reading getTcToken; an empty result sends the offer with no
+        // <privacy>, which the peer still accepts.
+        var privacyBytes = client.queryTrustedContactToken(resolvedPeer).orElse(null);
+
+        // Hand the local user's own trusted-contact token to the peer (when due) so it keeps a current
+        // token to validate our future offers across identity rotations, matching WAWebVoipStartCall
+        // which does this on every call placement. Fire-and-forget on a virtual thread: the reciprocal
+        // token is not needed here and the offer must not block on it.
+        var tokenPeer = resolvedPeer;
+        Thread.ofVirtual().name("tc-token-" + callId).start(() -> client.issueTrustedContactToken(tokenPeer));
 
         // Sync the peer's device list in the resolved addressing mode.
         var deviceLists = deviceService.syncAndGetDeviceList(List.of(resolvedPeer));
@@ -220,37 +224,51 @@ public final class LiveMessageService implements MessageService {
                 peerDeviceJids.add(list.userJid().withDevice(device.id()));
             }
         }
+        // A peer whose cached device record is a deleted tombstone yields no devices; fall back to the
+        // primary device so the offer still addresses the peer, matching WA Web's getFanOutList primary
+        // fallback. Without this the offer would carry no <destination> and the peer would never ring.
+        if (peerDeviceJids.isEmpty()) {
+            peerDeviceJids.add(resolvedPeer.toUserJid().withDevice(0));
+        }
 
-        // TEMP EXPERIMENT: force fresh Signal sessions (PKMSG) for every peer device to test whether a
-        // stale/one-sided session on the recipient's primary causes it to silently reject the call.
+        // Establish a Signal session only for peer devices that lack one, reusing existing sessions
+        // exactly as WA Web's fanOutOffer does (ensureE2ESessions with no force). Re-establishing a
+        // session for a device that already has a healthy one would send it a pkmsg it cannot decrypt;
+        // the recipient's primary device in particular must receive a msg over its existing session or
+        // the phone silently drops the offer and never rings.
+        // DIAGNOSTIC: the peer holds a one-sided session (Cobalt sends pkmsg to every device because it
+        // has no persisted session, and the desktop rejects a pkmsg for a device it already has a session
+        // with). Force a fresh prekey fetch + session so the desktop accepts a clean pkmsg and rings.
+        deviceService.ensureSessions(peerDeviceJids, true);
+
+        // Encrypt the plaintext per peer device. WA Web treats the per-device fanout as all-or-nothing:
+        // if encryption fails for any device, every <enc> is stripped and each device is addressed with
+        // a bare <to jid/> so the call still rings, rather than aborting the whole offer.
+        var destinationPayloads = new ArrayList<MessageEncryptedPayload>(peerDeviceJids.size());
+        var encryptionFailed = false;
         for (var deviceJid : peerDeviceJids) {
             try {
-                store.signalStore().removeSession(deviceJid.toSignalAddress());
+                destinationPayloads.add(encryption.encryptForDevice(deviceJid, plaintext));
             } catch (RuntimeException _) {
+                encryptionFailed = true;
             }
         }
-
-        // Ensure a Signal session exists for every peer device before per-device encryption.
-        deviceService.ensureSessions(peerDeviceJids);
-
-        // Encrypt the plaintext per peer device.
-        var destinationPayloads = new ArrayList<MessageEncryptedPayload>(peerDeviceJids.size());
-        for (var deviceJid : peerDeviceJids) {
-            destinationPayloads.add(encryption.encryptForDevice(deviceJid, plaintext));
+        if (encryptionFailed) {
+            destinationPayloads.clear();
+            for (var deviceJid : peerDeviceJids) {
+                destinationPayloads.add(MessageEncryptedPayload.bareDestination(deviceJid));
+            }
         }
-        System.out.println("[CALL-FANOUT] resolvedPeer=" + resolvedPeer
-                + " selfDevice=" + selfJid.device()
-                + " peerDevices=" + peerDeviceJids
-                + " encTypes=" + destinationPayloads.stream()
-                        .map(p -> p.recipientJid() + "=" + p.type() + "/" + p.ciphertext().length).toList());
 
         var deviceIdentity = store.signalStore().signedDeviceIdentity()
                 .map(ADVSignedDeviceIdentitySpec::encode)
                 .orElse(new byte[0]);
 
+        // caller_pn is the caller's phone-number JID (with device); the receiver's web companion renders
+        // the incoming call from it. The creator is sent in LID form, so pass the PN self JID separately.
         var ackNode = client.sendNode(CallStanza.offer(
                 resolvedPeer, resolvedSelf, callId, video,
-                privacyBytes, null, destinationPayloads, deviceIdentity, null, null));
+                privacyBytes, null, destinationPayloads, deviceIdentity, null, null, selfJid));
         var parsed = AckParser.parse(ackNode);
         if (parsed instanceof CallAck callAck) {
             return callAck;
@@ -351,69 +369,4 @@ public final class LiveMessageService implements MessageService {
         return decryption.decryptFromDevice(ciphertext, senderJid, encType);
     }
 
-    /**
-     * Time the call-offer path waits for a reciprocal {@code <notification type="privacy_token">}
-     * to land after issuing our own trusted-contact token.
-     */
-    private static final Duration TC_TOKEN_AWAIT_TIMEOUT = Duration.ofSeconds(5);
-
-    /**
-     * Resolves the peer's trusted-contact token bytes that go into the offer's {@code <privacy>}
-     * child, vouching for the peer and waiting briefly when no token is cached yet.
-     *
-     * @param peer the peer JID, already mapped to the call's canonical addressing mode
-     * @return the TC token bytes; never {@code null}
-     * @throws com.github.auties00.cobalt.exception.WhatsAppCallSetupException if no token is
-     *                                                                        available after vouching
-     */
-    private byte[] resolvePeerTcToken(Jid peer) {
-        var peerUser = peer.toUserJid();
-        var cached = readChatTcToken(peerUser);
-        if (cached != null) {
-            return cached;
-        }
-
-        try {
-            client.issueTrustedContactToken(peerUser);
-        } catch (RuntimeException _) {
-            // Best-effort: even when vouching fails, the chat may already have a recent token.
-        }
-
-        try {
-            var awaited = client.awaitTrustedContactToken(peerUser, null, TC_TOKEN_AWAIT_TIMEOUT);
-            if (awaited.isPresent()) {
-                return awaited.get();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        var afterIssue = readChatTcToken(peerUser);
-        if (afterIssue != null) {
-            return afterIssue;
-        }
-
-        throw new IllegalStateException(
-                "No trusted-contact token available for peer " + peer
-                        + "; the receiver will reject the call offer with status 70019.");
-    }
-
-    /**
-     * Returns the chat-cached TC token for the given peer, looking up by both the raw JID and its
-     * LID-mapped form, or {@code null} when no chat or token exists yet.
-     *
-     * @param peer the peer user JID
-     * @return the cached token bytes, or {@code null}
-     */
-    private byte[] readChatTcToken(Jid peer) {
-        var chatStore = client.store().chatStore();
-        var chat = chatStore.findChatByJid(peer).orElse(null);
-        if (chat == null) {
-            var lid = lidMigrationService.toLid(peer);
-            if (lid != null) {
-                chat = chatStore.findChatByJid(lid).orElse(null);
-            }
-        }
-        return chat == null ? null : chat.tcToken().orElse(null);
-    }
 }

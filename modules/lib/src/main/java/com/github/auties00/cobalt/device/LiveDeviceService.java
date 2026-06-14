@@ -2,10 +2,10 @@ package com.github.auties00.cobalt.device;
 
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedAccountTypeChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedDeviceIdentityChangedListener;
-import com.github.auties00.cobalt.listener.linked.LinkedNewMessageListener;
+import com.github.auties00.cobalt.listener.NewMessageListener;
 import com.github.auties00.cobalt.device.adv.DeviceADVChecker;
 import com.github.auties00.cobalt.device.adv.DeviceADVValidator;
 import com.github.auties00.cobalt.device.adv.ValidatedKeyIndexListResult;
@@ -18,7 +18,7 @@ import com.github.auties00.cobalt.device.icdc.IcdcResult;
 import com.github.auties00.cobalt.device.key.DevicePreKeyHandler;
 import com.github.auties00.cobalt.device.stanza.DeviceUSyncQueryBuilder;
 import com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParser;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.node.usync.UsyncContext;
 import com.github.auties00.cobalt.device.timestamp.DeviceExpectedTsUtils;
 import com.github.auties00.cobalt.exception.WhatsAppAdvValidationException;
@@ -1325,7 +1325,7 @@ public final class LiveDeviceService implements DeviceService {
         chat.addMessage(message);
 
         for (var listener : client.store().listeners()) {
-            if (listener instanceof LinkedNewMessageListener typed) {
+            if (listener instanceof NewMessageListener typed) {
                 Thread.startVirtualThread(() -> typed.onNewMessage(client, message));
             }
         }
@@ -2081,33 +2081,25 @@ public final class LiveDeviceService implements DeviceService {
     }
 
     /**
-     * Ensures every device JID in {@code deviceJids} has an established Signal session,
-     * fetching pre-key bundles for the ones that do not.
+     * {@inheritDoc}
      *
-     * <p>Callers (the chat-message sender, the retry-receipt handler, the broadcast sender) invoke
-     * this before the encrypt step so the {@link SignalSessionCipher} does not error out on a
-     * missing session. Devices that already have a session are skipped, so the call is cheap on a
-     * warm address book.
+     * <p>Callers (the chat-message sender, the retry-receipt handler, the broadcast sender, the call
+     * sender) invoke this before the encrypt step so the {@link SignalSessionCipher} does not error out
+     * on a missing session.
      *
-     * @implNote
-     * This implementation delegates to {@link DevicePreKeyHandler#ensureSessions(Collection)};
-     * non-user JIDs and PSA broadcast JIDs are filtered out, the {@code 406} server status
-     * for a non-existent companion device is swallowed (the affected device is reported
-     * back as {@code deletedDevices} in WA Web; Cobalt currently only surfaces the
-     * depleted-pre-key count via the returned int).
-     *
-     * @param deviceJids the device JIDs to ensure sessions for
-     * @return the number of devices whose server response carried no {@code <key>}
-     *         element (a depleted one-time pre-key pool); callers should commit this
-     *         count to a
-     *         {@link com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder}
-     *         to mirror {@code WAWebPostPrekeysDepletionMetric.maybePostPrekeysDepletionMetric}
+     * @implNote This implementation delegates to {@link DevicePreKeyHandler#ensureSessions(Collection, boolean)};
+     * non-user JIDs and PSA broadcast JIDs are filtered out, and the {@code 406} server status for a
+     * non-existent companion device is swallowed (the affected device is reported back as
+     * {@code deletedDevices} in WA Web; Cobalt currently only surfaces the depleted-pre-key count via
+     * the returned int). The forced mode drops each device's cached session before fetching so the call
+     * path always establishes a fresh, decryptable session.
      */
+    @Override
     @WhatsAppWebExport(moduleName = "WAWebManageE2ESessionsJob",
             exports = "ensureE2ESessions",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public int ensureSessions(Collection<Jid> deviceJids) {
-        return preKeyHandler.ensureSessions(deviceJids);
+    public int ensureSessions(Collection<Jid> deviceJids, boolean force) {
+        return preKeyHandler.ensureSessions(deviceJids, force);
     }
 
     /**

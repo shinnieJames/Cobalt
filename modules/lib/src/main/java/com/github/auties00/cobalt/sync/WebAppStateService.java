@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.sync;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.sync.key.SyncKeyRotationService;
 

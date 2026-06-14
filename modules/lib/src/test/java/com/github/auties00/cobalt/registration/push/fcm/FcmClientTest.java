@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.registration.push.fcm;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
 import com.github.auties00.cobalt.Faker;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
@@ -36,7 +36,7 @@ class FcmClientTest {
     public void deliversPushCodeViaRegistration() throws Throwable {
         var maxAttempts = 5;
         var perAttemptTimeout = Duration.ofMinutes(2);
-        var device = WhatsAppClientDevice.ios(false);
+        var device = LinkedWhatsAppClientDevice.ios(false);
         Throwable lastFailure = null;
         for (var attempt = 1; attempt <= maxAttempts; attempt++) {
             var phoneNumber = Faker.randomItalianMobile();
@@ -44,10 +44,10 @@ class FcmClientTest {
                 pushClient.authenticate(device);
 
                 var store = WhatsAppStoreFactory.temporary()
-                        .create(WhatsAppClientType.MOBILE, phoneNumber);
+                        .create(LinkedWhatsAppClientType.MOBILE, phoneNumber);
                 store.accountStore().setDevice(device);
 
-                var verification = WhatsAppClientVerificationHandler.Mobile
+                var verification = LinkedWhatsAppClientVerificationHandler.Mobile
                         .whatsapp(pushClient::getPushCode);
 
                 var registrationFailure = new AtomicReference<Throwable>();
@@ -137,9 +137,9 @@ class FcmClientTest {
     void rejectsNonAndroidDevice() {
         try (var client = FcmClient.newSession()) {
             assertThrows(IllegalArgumentException.class,
-                    () -> client.authenticate(WhatsAppClientDevice.ios(false)));
+                    () -> client.authenticate(LinkedWhatsAppClientDevice.ios(false)));
             assertThrows(IllegalArgumentException.class,
-                    () -> client.authenticate(WhatsAppClientDevice.web()));
+                    () -> client.authenticate(LinkedWhatsAppClientDevice.web()));
             assertFalse(client.isAuthenticated());
         }
     }
@@ -147,7 +147,7 @@ class FcmClientTest {
     @Test
     void authenticatesPersonalAndProducesPushToken() {
         try (var client = FcmClient.newSession()) {
-            client.authenticate(WhatsAppClientDevice.android(false));
+            client.authenticate(LinkedWhatsAppClientDevice.android(false));
             assertTrue(client.isAuthenticated());
             var token = client.getPushToken();
             assertNotNull(token);
@@ -159,7 +159,7 @@ class FcmClientTest {
     @Test
     void authenticatesBusinessAndProducesPushToken() {
         try (var client = FcmClient.newSession()) {
-            client.authenticate(WhatsAppClientDevice.android(true));
+            client.authenticate(LinkedWhatsAppClientDevice.android(true));
             assertTrue(client.isAuthenticated());
             assertFalse(client.getPushToken().isBlank());
         }
@@ -168,9 +168,9 @@ class FcmClientTest {
     @Test
     void rejectsDoubleAuthenticate() {
         try (var client = FcmClient.newSession()) {
-            client.authenticate(WhatsAppClientDevice.android(false));
+            client.authenticate(LinkedWhatsAppClientDevice.android(false));
             assertThrows(IllegalStateException.class,
-                    () -> client.authenticate(WhatsAppClientDevice.android(false)));
+                    () -> client.authenticate(LinkedWhatsAppClientDevice.android(false)));
         }
     }
 
@@ -179,7 +179,7 @@ class FcmClientTest {
         FcmSession saved;
         String firstToken;
         try (var client = FcmClient.newSession()) {
-            client.authenticate(WhatsAppClientDevice.android(false));
+            client.authenticate(LinkedWhatsAppClientDevice.android(false));
             firstToken = client.getPushToken();
             saved = client.getSession();
             assertNotEquals(0L, saved.androidId());

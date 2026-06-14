@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.internal.signaling.CallPeerState;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.CallPeerState;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 /**
@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallPeerStateChangedListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallPeerStateChangedListener extends LinkedListener {
     /**
      * Notifies the listener that a peer-state update was received during a
      * call.

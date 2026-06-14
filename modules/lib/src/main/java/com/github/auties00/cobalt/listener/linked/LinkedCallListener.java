@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.IncomingCall;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.IncomingCall;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 /**
  * A functional interface for the {@link LinkedWhatsAppClientListener#onCall onCall} event.
@@ -15,14 +15,14 @@ import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallListener extends LinkedListener {
     /**
      * Notifies the listener that an inbound call offer has arrived.
      *
      * <p>The listener must respond by calling
-     * {@link LinkedWhatsAppClient#acceptCall(IncomingCall, com.github.auties00.cobalt.call.CallOptions)}
+     * {@link LinkedWhatsAppClient#acceptCall(IncomingCall, com.github.auties00.cobalt.call.stream.AudioOutputStream, com.github.auties00.cobalt.call.stream.AudioInputStream)}
      * or
-     * {@link LinkedWhatsAppClient#rejectCall(IncomingCall, com.github.auties00.cobalt.call.CallEndReason)}
+     * {@link LinkedWhatsAppClient#rejectCall(IncomingCall, com.github.auties00.cobalt.model.call.CallEndReason)}
      * with the supplied offer within the WhatsApp-imposed offer timeout
      * (about 30 seconds); otherwise the offer expires. The listener is
      * invoked from the call layer's signaling thread, so long-running

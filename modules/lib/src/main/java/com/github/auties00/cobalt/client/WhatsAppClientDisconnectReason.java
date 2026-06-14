@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.client;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
 /**
  * Names the reason a {@link LinkedWhatsAppClient} session was torn down.

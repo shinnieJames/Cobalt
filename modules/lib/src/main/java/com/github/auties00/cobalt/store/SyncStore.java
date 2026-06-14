@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.store;
 
-import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
+import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;

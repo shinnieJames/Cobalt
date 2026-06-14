@@ -33,9 +33,11 @@ export interface EvaluateResult {
 
 export interface RuntimeRemoteObject {
   type?: string;
+  subtype?: string;
   value?: unknown;
   description?: string;
   unserializableValue?: string;
+  objectId?: string;
 }
 
 export interface RuntimeExceptionDetails {
@@ -115,4 +117,88 @@ export interface PausedState {
   reason: string;
   callFrames: PausedCallFrame[];
   ts: string;
+}
+
+/** A CDP protocol frame on the multiplexed browser WebSocket (command reply or event). */
+export interface CdpMessage {
+  id?: number;
+  method?: string;
+  params?: Record<string, unknown>;
+  result?: unknown;
+  error?: { code?: number; message?: string };
+  sessionId?: string;
+}
+
+/** A CDP scope entry in a paused frame's scopeChain. */
+export interface CdpScope {
+  type: string;
+  name?: string;
+  object?: { objectId?: string };
+}
+
+/** A resolved breakpoint location (CDP Debugger.Location). */
+export interface BreakpointLocation {
+  scriptId: string;
+  lineNumber: number;
+  columnNumber: number;
+}
+
+/** CDP Target.TargetInfo (subset used). */
+export interface TargetInfo {
+  targetId?: string;
+  type?: string;
+  title?: string;
+  url?: string;
+}
+
+/** A target this mux has an attached session for. */
+export interface SessionTarget {
+  type: string;
+  url: string;
+  targetId: string;
+}
+
+/** An entry from the browser's /json target list (Chrome reports the target id as `id`). */
+export interface BrowserTargetInfo {
+  id?: string;
+  targetId?: string;
+  type?: string;
+  title?: string;
+  url?: string;
+  webSocketDebuggerUrl?: string;
+}
+
+/** The browser's /json/version response (subset used). */
+export interface BrowserVersionInfo {
+  webSocketDebuggerUrl?: string;
+  Browser?: string;
+  "Protocol-Version"?: string;
+}
+
+/** A property descriptor from Runtime.getProperties. */
+export interface RuntimePropertyDescriptor {
+  name: string;
+  value?: RuntimeRemoteObject;
+}
+
+/** The Runtime.getProperties response (subset used). */
+export interface RuntimeGetPropertiesResponse {
+  result?: RuntimePropertyDescriptor[];
+}
+
+/** A single buffered logpoint capture (one hit of a non-suspending logpoint). */
+export interface LogpointCapture {
+  id: string;
+  ts: string;
+  value: unknown;
+}
+
+/** A url-bound wasm breakpoint/logpoint spec. With a logExpression the registry installs a
+ *  non-suspending capture (a $stack expression takes the suspending read path; see the registry). */
+export interface UrlBreakpointSpec {
+  url: string;
+  byteOffset: number;
+  condition?: string;
+  logExpression?: string;
+  block?: boolean;
 }

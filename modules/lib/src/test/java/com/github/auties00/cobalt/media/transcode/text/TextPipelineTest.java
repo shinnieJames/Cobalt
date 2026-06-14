@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.media.transcode.text;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;

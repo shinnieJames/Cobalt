@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.sync.key;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKeyBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Pins the early-return gates of {@link MissingSyncKeyRequestService} that decide whether a
  * request reaches the peer-message dispatch path: empty input, the
- * {@link WhatsAppClientOfflineResumeState#COMPLETE} resume guard, all-ids-already-tracked,
+ * {@link LinkedWhatsAppClientOfflineResumeState#COMPLETE} resume guard, all-ids-already-tracked,
  * and {@code null}-id filtering.
  *
  * <p>Each test wires both {@link MissingSyncKeyRequestService} and
@@ -75,7 +75,7 @@ class MissingSyncKeyRequestServiceTest {
         @Test
         @DisplayName("empty collection is a no-op (no scheduler/store side effect)")
         void emptyIsNoOp() {
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.COMPLETE);
             assertDoesNotThrow(() -> requestService.requestMissingKeys(List.of()));
             assertTrue(store.syncStore().missingSyncKeys().isEmpty(),
                     "empty input must not track anything in the missing-key store");
@@ -95,7 +95,7 @@ class MissingSyncKeyRequestServiceTest {
         @Test
         @DisplayName("every id already tracked -> handleMissingKeys returns before sending")
         void allAlreadyTrackedShortCircuits() {
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.COMPLETE);
             var keyId = new byte[]{1, 2, 3, 4, 5, 6};
             store.syncStore().addMissingSyncKey(new MissingDeviceSyncKeyBuilder()
                     .keyId(keyId)

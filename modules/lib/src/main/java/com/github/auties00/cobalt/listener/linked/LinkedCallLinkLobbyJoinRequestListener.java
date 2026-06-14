@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.CallLink;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.JoinableCallLink;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 /**
@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallLinkLobbyJoinRequestListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallLinkLobbyJoinRequestListener extends LinkedListener {
     /**
      * Notifies the listener that someone has clicked a call-link the
      * local user owns and is now waiting in the lobby for the host to
@@ -29,5 +29,5 @@ public non-sealed interface LinkedCallLinkLobbyJoinRequestListener extends Whats
      * @param link     the link the joiner is waiting on
      * @param peer     the JID of the joiner waiting in the lobby
      */
-    void onCallLinkLobbyJoinRequest(LinkedWhatsAppClient whatsapp, CallLink link, Jid peer);
+    void onCallLinkLobbyJoinRequest(LinkedWhatsAppClient whatsapp, JoinableCallLink link, Jid peer);
 }

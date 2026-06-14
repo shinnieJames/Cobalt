@@ -1,4 +1,5 @@
 package com.github.auties00.cobalt.client;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 import com.github.auties00.cobalt.exception.WhatsAppABPropTypeMismatchException;
 import com.github.auties00.cobalt.exception.WhatsAppAdvCheckException;
@@ -216,137 +217,38 @@ public interface WhatsAppClientErrorHandler {
                     .jid()
                     .map(Jid::user)
                     .orElse("UNKNOWN");
-
-            if (exception instanceof WhatsAppReconnectionException) {
-                logger.log(WARNING, "[{0}] Cannot reconnect: retrying on next timeout", jid);
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
+            return switch (exception) {
+                case WhatsAppSessionException.Reconnect reconnect -> Result.RECONNECT;
+                case WhatsAppReconnectionException whatsAppReconnectionException -> {
+                    logger.log(WARNING, "[{0}] Cannot reconnect: retrying on next timeout", jid);
+                    if (printer != null) {
+                        printer.accept(whatsapp, exception);
+                    }
+                    yield Result.DISCARD;
                 }
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppSessionException.Banned) {
-                logger.log(ERROR, "[{0}] Session banned by server", jid);
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
+                case WhatsAppSessionException.Banned banned -> {
+                    logger.log(ERROR, "[{0}] Session banned by server", jid);
+                    if (printer != null) {
+                        printer.accept(whatsapp, exception);
+                    }
+                    yield Result.BAN;
                 }
-                return Result.BAN;
-            }
-
-            if (exception instanceof WhatsAppSessionException.LoggedOut) {
-                logger.log(WARNING, "[{0}] Session logged out by server", jid);
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
+                case WhatsAppSessionException.LoggedOut loggedOut -> {
+                    logger.log(WARNING, "[{0}] Session logged out by server", jid);
+                    if (printer != null) {
+                        printer.accept(whatsapp, exception);
+                    }
+                    yield Result.LOG_OUT;
                 }
-                return Result.LOG_OUT;
-            }
-
-            if (exception instanceof WhatsAppSessionException.Reconnect) {
-                return Result.RECONNECT;
-            }
-
-            if (exception instanceof WhatsAppSessionException.Conflict) {
-                logger.log(WARNING, "[{0}] Session replaced by another active session", jid);
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
+                default -> {
+                    var fatal = exception.isFatal();
+                    logger.log(ERROR, "[{0}] An error occurred", jid, exception);
+                    if (printer != null) {
+                        printer.accept(whatsapp, exception);
+                    }
+                    yield fatal ? Result.DISCONNECT : Result.DISCARD;
                 }
-                return Result.DISCONNECT;
-            }
-
-            if (exception instanceof WhatsAppSessionException
-                    || exception instanceof WhatsAppStreamException) {
-                logger.log(ERROR, "[{0}] Session/stream failure ({1}): reconnecting",
-                        jid, exception.getClass().getSimpleName());
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
-                }
-                return Result.RECONNECT;
-            }
-
-            if (exception instanceof WhatsAppLidMigrationException) {
-                logger.log(WARNING, "[{0}] LID migration failed: {1}", jid, exception.getMessage());
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
-                }
-                return Result.LOG_OUT;
-            }
-
-            if (exception instanceof WhatsAppOwnDeviceListExpiredException) {
-                logger.log(WARNING, "[{0}] Own device list expired: logging out", jid);
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
-                }
-                return Result.LOG_OUT;
-            }
-
-            if (exception instanceof WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices) {
-                logger.log(ERROR, "[{0}] Sync key missing on all devices: {1}",
-                        jid, exception.getMessage());
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
-                }
-                return Result.LOG_OUT;
-            }
-
-            if (exception instanceof WhatsAppWebAppStateSyncException) {
-                logger.log(WARNING, "[{0}] App state sync failure ({1}): resyncing collection",
-                        jid, exception.getClass().getSimpleName());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppMessageException) {
-                logger.log(WARNING, "[{0}] Message failure: {1}", jid, exception.getMessage());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppMediaException) {
-                logger.log(WARNING, "[{0}] Media operation failed: {1}", jid, exception.getMessage());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppAdvValidationException
-                    || exception instanceof WhatsAppAdvCheckException) {
-                logger.log(WARNING, "[{0}] ADV failure ({1}): {2}",
-                        jid, exception.getClass().getSimpleName(), exception.getMessage());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppDeviceSyncException) {
-                logger.log(WARNING, "[{0}] USync failure: {1}", jid, exception.getMessage());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppHistorySyncException) {
-                logger.log(WARNING, "[{0}] History sync failure: {1}", jid, exception.getMessage());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppMalformedJidException
-                    || exception instanceof WhatsAppABPropTypeMismatchException
-                    || exception instanceof WhatsAppServerRuntimeException) {
-                logger.log(WARNING, "[{0}] {1}: {2}",
-                        jid, exception.getClass().getSimpleName(), exception.getMessage());
-                return Result.DISCARD;
-            }
-
-            if (exception instanceof WhatsAppConnectionException
-                    || exception instanceof WhatsAppCorruptedStoreException
-                    || exception instanceof WhatsAppRegistrationException) {
-                logger.log(ERROR, "[{0}] Fatal failure ({1}): {2}",
-                        jid, exception.getClass().getSimpleName(), exception.getMessage());
-                if (printer != null) {
-                    printer.accept(whatsapp, exception);
-                }
-                return Result.DISCONNECT;
-            }
-
-            var fatal = exception.isFatal();
-            logger.log(ERROR, "[{0}] Unhandled {1} ({2})",
-                    jid, exception.getClass().getSimpleName(), fatal ? "fatal" : "ignored");
-            if (printer != null) {
-                printer.accept(whatsapp, exception);
-            }
-            return fatal ? Result.DISCONNECT : Result.DISCARD;
+            };
         };
     }
 

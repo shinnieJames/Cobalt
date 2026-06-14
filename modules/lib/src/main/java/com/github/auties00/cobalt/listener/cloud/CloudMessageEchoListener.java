@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.cloud;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClientListener;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 
 /**
@@ -17,7 +17,7 @@ import com.github.auties00.cobalt.model.message.MessageInfo;
  * @see CloudWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface CloudMessageEchoListener extends WhatsAppCloudListener {
+public non-sealed interface CloudMessageEchoListener extends CloudListener {
     /**
      * Notifies the listener that the business sent a message from the WhatsApp app.
      *

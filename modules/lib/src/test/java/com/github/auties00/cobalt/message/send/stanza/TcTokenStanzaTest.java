@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.message.send.stanza;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.props.ABProp;
+import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,12 +26,14 @@ class TcTokenStanzaTest {
     private static final Jid CHAT = Jid.of("19254863482@s.whatsapp.net");
 
     @Test
-    @DisplayName("constructor: null store / null abPropsService both throw NullPointerException")
+    @DisplayName("constructor: null store / null abPropsService / null trustedContactTokenService all throw NullPointerException")
     void nullArgsThrow() {
         var ab = TestABPropsService.builder().build();
         var store = MessageFixtures.temporaryStore(SELF, null);
-        assertThrows(NullPointerException.class, () -> new TcTokenStanza(null, ab));
-        assertThrows(NullPointerException.class, () -> new TcTokenStanza(store, null));
+        var tokenService = new LiveTrustedContactTokenService(ab);
+        assertThrows(NullPointerException.class, () -> new TcTokenStanza(null, ab, tokenService));
+        assertThrows(NullPointerException.class, () -> new TcTokenStanza(store, null, tokenService));
+        assertThrows(NullPointerException.class, () -> new TcTokenStanza(store, ab, null));
     }
 
     @Test
@@ -40,7 +43,7 @@ class TcTokenStanzaTest {
         var ab = TestABPropsService.builder()
                 .with(ABProp.PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES, false)
                 .build();
-        var stanza = new TcTokenStanza(store, ab);
+        var stanza = new TcTokenStanza(store, ab, new LiveTrustedContactTokenService(ab));
         assertNull(stanza.build(CHAT),
                 "AB-prop off must suppress <tctoken> emission unconditionally");
     }
@@ -52,7 +55,7 @@ class TcTokenStanzaTest {
         var ab = TestABPropsService.builder()
                 .with(ABProp.PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES, true)
                 .build();
-        var stanza = new TcTokenStanza(store, ab);
+        var stanza = new TcTokenStanza(store, ab, new LiveTrustedContactTokenService(ab));
         assertNull(stanza.build(CHAT),
                 "missing chat must produce no <tctoken>");
     }

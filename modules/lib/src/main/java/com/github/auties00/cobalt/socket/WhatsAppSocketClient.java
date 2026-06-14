@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.socket;
 
-import com.github.auties00.cobalt.client.WhatsAppProxy;
-import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
+import com.github.auties00.cobalt.client.WhatsAppClientProxy;
+import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.exception.WhatsAppConnectionException;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
@@ -41,6 +41,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.SSLSocket;
 import javax.security.auth.DestroyFailedException;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -107,7 +108,7 @@ import java.util.Objects;
  *
  * <p>HTTP {@code CONNECT} and SOCKS4/4a/5/5h proxies are supported
  * on every form factor through {@link HttpTunnel} and
- * {@link SocksTunnel}; {@link WhatsAppProxy.Http.Secure}
+ * {@link SocksTunnel}; {@link WhatsAppClientProxy.Http.Secure}
  * additionally TLS-wraps the proxy hop before sending
  * {@code CONNECT}.
  */
@@ -580,6 +581,14 @@ public sealed abstract class WhatsAppSocketClient {
      * {@code store.accountStore().device().platform()} via {@link #webSubPlatform()}.
      *
      * @return the client payload
+     * @implNote The reconnection payload sets {@code lidDbMigrated = true}, exactly as a live
+     * WhatsApp Web companion does. This flag tells the server the companion stores and addresses
+     * by Linked Identity (LID); without it the server stamps the companion's outbound stanzas with
+     * a phone-number device {@code from} (a {@code user:device@s.whatsapp.net} PhoneNumberDeviceJid).
+     * The recipient's VoIP layer ({@code voipBridgeJidToDeviceJID}) rejects a companion caller in
+     * that form and silently drops the call before it rings, whereas a primary (device {@code 0})
+     * phone-number caller is accepted. It is independent of the account-wide 1:1 LID migration AB
+     * prop, which gates per-chat addressing rather than the companion's own device identity.
      */
     private ClientPayload webClientPayload() {
         var agent = webUserAgent();
@@ -597,6 +606,7 @@ public sealed abstract class WhatsAppSocketClient {
                     .passive(true)
                     .pull(true)
                     .device(jid.get().device())
+                    .lidDbMigrated(true)
                     .build();
         }
         return new ClientPayloadBuilder()
@@ -629,7 +639,7 @@ public sealed abstract class WhatsAppSocketClient {
         var mnc = "000";
         var devicePlatform = store.accountStore().device().platform();
         if (devicePlatform == ClientPlatformType.WINDOWS
-                && appVersion.quaternary().isPresent()) {
+            && appVersion.quaternary().isPresent()) {
             var buildStr = Integer.toString(appVersion.quaternary().getAsInt());
             if (buildStr.length() == 6) {
                 mcc = buildStr.substring(0, 3);
@@ -1057,15 +1067,25 @@ public sealed abstract class WhatsAppSocketClient {
      * until the server signals end-of-stream, the transport is closed,
      * or a fatal error is observed.
      *
-     * <p>A {@code <xmlstreamend>} stanza is the terminal stanza of a clean
-     * server-initiated close (after a {@code <stream:error>}, a logout, or a
-     * conflict): the server emits it as the last frame and then closes the
-     * connection. The loop dispatches it like any other stanza and then stops,
-     * because attempting to read the next frame would race the server's
-     * teardown and observe either a clean end-of-stream or a truncated final
-     * datagram, both of which {@link NodeReader#fromStream(InputStream)} reports
-     * as an {@link IOException} that would otherwise surface as a spurious
-     * {@link WhatsAppStreamException.MalformedNode}.
+     * <p>A {@code <xmlstreamend>} stanza is dispatched like any other stanza and
+     * the loop keeps reading: WhatsApp ends a logical XML stream with
+     * {@code <xmlstreamend>} without necessarily closing the transport. During a
+     * clean server-initiated teardown (after a {@code <stream:error>}, a logout,
+     * or a conflict) the server closes the socket right after, so the next
+     * {@link NodeReader#fromStream(InputStream)} observes a frame-boundary
+     * end-of-stream and throws {@link EOFException}, which this loop treats as an
+     * orderly close (it stops without surfacing an error). The server may trail a
+     * few bytes that never form a whole datagram before closing; the datagram
+     * layer drops such a partial tail and reports the same clean end-of-stream,
+     * so a server-initiated close never surfaces as a framing error. During the
+     * unregistered pairing phase the server instead ends one stream segment and
+     * immediately pushes a fresh {@code <pair-device>} on the same socket to
+     * rotate the QR refs or refresh the pairing code; treating
+     * {@code <xmlstreamend>} as terminal here would tear down the socket, force a
+     * full reconnect that regenerates the code, and trip the pairing
+     * rate-limiter. Keeping the read loop alive mirrors WA Web's
+     * {@code WAWebCommsHandleLoggedInStanza}, which logs {@code <xmlstreamend>}
+     * and lets the underlying frame socket close drive the lifecycle.
      *
      * <p>A bad MAC tears down the connection through
      * {@link WhatsAppSessionException.BadMac}; any other failure surfaces as
@@ -1088,10 +1108,11 @@ public sealed abstract class WhatsAppSocketClient {
                     node = decoder.decode();
                 }
                 listener.onNode(node);
-                if (node.hasDescription("xmlstreamend")) {
-                    break;
-                }
             }
+        } catch (EOFException e) {
+            // Frame-boundary end-of-stream: an orderly server close (typically right after a
+            // terminal <xmlstreamend>). Not a malformed frame, so fall through to onClose without
+            // surfacing an error.
         } catch (WhatsAppSessionException.BadMac e) {
             if (!closed) {
                 listener.onError(e);
@@ -1121,7 +1142,7 @@ public sealed abstract class WhatsAppSocketClient {
      *
      * @return the proxy or {@code null} if none is configured
      */
-    final WhatsAppProxy proxy() {
+    final WhatsAppClientProxy proxy() {
         return store.proxy().orElse(null);
     }
 
@@ -1133,16 +1154,16 @@ public sealed abstract class WhatsAppSocketClient {
      *
      * <p>Three proxy shapes are supported:
      * <ul>
-     *   <li>{@link WhatsAppProxy.Http.Plain} or
-     *       {@link WhatsAppProxy.Http.Secure}, handled by
+     *   <li>{@link WhatsAppClientProxy.Http.Plain} or
+     *       {@link WhatsAppClientProxy.Http.Secure}, handled by
      *       {@link HttpTunnel}, which internally TLS-wraps the proxy
      *       hop for the secure variant before sending
      *       {@code CONNECT}.</li>
-     *   <li>{@link WhatsAppProxy.Socks} (V4, V4a, V5 or V5h),
+     *   <li>{@link WhatsAppClientProxy.Socks} (V4, V4a, V5 or V5h),
      *       handled by {@link SocksTunnel} which runs the
      *       protocol-specific handshake on the raw socket.</li>
      * </ul>
-     * For a {@link WhatsAppProxy.Http.Secure} proxy the returned socket is
+     * For a {@link WhatsAppClientProxy.Http.Secure} proxy the returned socket is
      * the TLS-wrapped {@link SSLSocket}; in all other cases the raw socket is
      * returned.
      *
@@ -1167,9 +1188,9 @@ public sealed abstract class WhatsAppSocketClient {
 
         try {
             return switch (proxy) {
-                case WhatsAppProxy.Http http -> HttpTunnel.tunnel(raw,
+                case WhatsAppClientProxy.Http http -> HttpTunnel.tunnel(raw,
                         target.getHostString(), target.getPort(), http, sslContextFactory);
-                case WhatsAppProxy.Socks socks -> SocksTunnel.tunnel(raw,
+                case WhatsAppClientProxy.Socks socks -> SocksTunnel.tunnel(raw,
                         target.getHostString(), target.getPort(), socks);
             };
         } catch (IOException e) {
@@ -1211,7 +1232,7 @@ public sealed abstract class WhatsAppSocketClient {
          * Constructs a plain-TCP socket client.
          *
          * <p>The {@code sslContextFactory} is only consulted when a
-         * {@link WhatsAppProxy.Http.Secure} proxy is configured; the
+         * {@link WhatsAppClientProxy.Http.Secure} proxy is configured; the
          * end-to-end TCP hop does not use TLS so the factory is otherwise
          * unused.
          *

@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.cloud;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClientListener;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 
 /**
  * A functional interface for the {@link CloudWhatsAppClientListener#onError onError} event.
@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.client.CloudWhatsAppClient;
  * @see CloudWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface CloudErrorListener extends WhatsAppCloudListener {
+public non-sealed interface CloudErrorListener extends CloudListener {
     /**
      * Notifies the listener of a processing failure.
      *

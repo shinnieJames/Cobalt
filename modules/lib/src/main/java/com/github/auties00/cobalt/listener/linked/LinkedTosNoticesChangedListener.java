@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 import java.util.Set;
 
@@ -16,7 +16,7 @@ import java.util.Set;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedTosNoticesChangedListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedTosNoticesChangedListener extends LinkedListener {
     /**
      * Notifies the listener that the set of Terms-of-Service notice
      * identifiers recorded for the account has changed.

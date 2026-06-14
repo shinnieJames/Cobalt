@@ -52,13 +52,11 @@ async function main(): Promise<void> {
     for (const wasm of wasmBinaries) {
         const filename = wasm.url.split("/").pop()?.split("?")[0] ?? wasm.url;
         const label = `wasm:${filename.replace(/\.wasm$/, "")}`;
-        const parsed = parseProtobufCFromWasm(wasm.data, label, wasm.memorySnapshot);
+        const parsed = parseProtobufCFromWasm(wasm.data, label);
         const totalEntities = Object.values(parsed.modulesInfo)
             .flatMap((m) => Object.values(m.identifiers)).length;
         if (totalEntities > 0) {
-            const topLevel = countTopLevel(parsed);
-            const source = wasm.memorySnapshot ? "heap" : "data";
-            console.log(`  ${filename}: ${totalEntities} entities (${topLevel} top-level) [${source}]`);
+            console.log(`  ${filename}: ${totalEntities} entities (${countTopLevel(parsed)} top-level)`);
             wasmParts.push(parsed);
         }
     }

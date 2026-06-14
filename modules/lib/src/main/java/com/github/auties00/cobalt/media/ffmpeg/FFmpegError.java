@@ -95,9 +95,9 @@ public final class FFmpegError {
      *
      * <p>The comparison is against {@code AVERROR_EOF}. Callers use this to map a codec or
      * demuxer drain to the end-of-stream signal expected by the
-     * {@link com.github.auties00.cobalt.call.frame.audio.AudioSource} and
-     * {@link com.github.auties00.cobalt.call.frame.video.VideoSource} contracts, which expect
-     * {@code null} to mark the end of a frame stream.
+     * {@link com.github.auties00.cobalt.call.stream.capture.FileAudioOutputStream} and
+     * {@link com.github.auties00.cobalt.call.stream.capture.FileVideoOutputStream} contracts, which
+     * expect {@code null} to mark the end of a frame stream.
      *
      * @param code the libav* return code
      * @return {@code true} if {@code code} equals {@code AVERROR_EOF}

@@ -42,7 +42,7 @@ public enum AckClass {
      *
      * <p>Emitted from
      * {@link com.github.auties00.cobalt.stream.receipt.MessageReceiptStreamHandler} and from
-     * {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiptReceiver} for VoIP-receipt
+     * {@link com.github.auties00.cobalt.call.signaling.CallReceiptReceiver} for VoIP-receipt
      * confirmations.
      */
     @WhatsAppWebExport(moduleName = "WAWebReceiptAck", exports = "buildReceiptAck",
@@ -64,7 +64,7 @@ public enum AckClass {
      * Acknowledges an inbound call-signalling stanza.
      *
      * <p>Emitted from
-     * {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiver} with the {@code type}
+     * {@link com.github.auties00.cobalt.call.signaling.CallReceiver} with the {@code type}
      * attribute set to the parsed VoIP payload tag rather than the inbound {@code <call>} element's
      * own {@code type}.
      */

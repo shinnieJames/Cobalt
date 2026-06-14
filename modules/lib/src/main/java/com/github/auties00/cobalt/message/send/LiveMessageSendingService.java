@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.message.send;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.dedup.MessageDedup;
@@ -25,6 +25,7 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.media.transcode.MediaTranscoderService;
+import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamMsgUtils;
 import com.github.auties00.cobalt.wam.WamService;
@@ -279,7 +280,7 @@ public final class LiveMessageSendingService implements MessageSendingService {
         var metaStanza = new MetaStanza(store);
         var reportingStanza = new ReportingStanza(abPropsService);
         var ctwaStanza = new CtwaAttributionStanza(store, abPropsService);
-        var tcTokenStanza = new TcTokenStanza(store, abPropsService);
+        var tcTokenStanza = new TcTokenStanza(store, abPropsService, new LiveTrustedContactTokenService(abPropsService));
 
         this.userSender = new UserMessageSender(client, encryption, deviceService, lidMigrationService, abPropsService,
                 botStanza, bizStanza, metaStanza, reportingStanza, ctwaStanza, tcTokenStanza, wamService);
@@ -355,6 +356,16 @@ public final class LiveMessageSendingService implements MessageSendingService {
                     parentJid, "Unsupported combination: " + messageInfo.getClass().getSimpleName()
                             + " with JID type " + parentJid.server());
             };
+            // Hand the local user's own trusted-contact token to a one-to-one peer after a non-protocol
+            // message, matching WAWebSendMsgJob, so the peer keeps a current token across identity
+            // rotations; the issue is gated to at most once per sender bucket. Fire-and-forget on a
+            // virtual thread so the send path never blocks on the reciprocal token.
+            if (messageInfo instanceof ChatMessageInfo
+                    && (parentJid.hasUserServer() || parentJid.hasLidServer())
+                    && !(messageInfo.message() != null
+                            && messageInfo.message().content() instanceof ProtocolMessage)) {
+                Thread.ofVirtual().name("tc-token-" + parentJid).start(() -> client.issueTrustedContactToken(parentJid));
+            }
             if (sendEvent != null) {
                 wamService.commit(sendEvent.stopMessageSendT().build());
             }

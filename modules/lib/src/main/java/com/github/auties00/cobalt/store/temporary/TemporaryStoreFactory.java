@@ -9,9 +9,9 @@ import com.github.auties00.cobalt.store.ProtobufWebSessionStoreBuilder;
 import com.github.auties00.cobalt.store.ProtobufWhatsAppStore;
 import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
-import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientSixPartsKeys;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
 
@@ -33,7 +33,7 @@ import java.util.UUID;
  * This implementation is stateless and exposes a singleton instance because nothing inside the
  * factory varies per session. The three {@code load} entries always return empty since there is
  * no on-disk surface to consult; the three {@code create} entries delegate to
- * {@link #newStore(WhatsAppClientType, UUID, Long, SignalIdentityKeyPair, SignalIdentityKeyPair, byte[], Jid)}
+ * {@link #newStore(LinkedWhatsAppClientType, UUID, Long, SignalIdentityKeyPair, SignalIdentityKeyPair, byte[], Jid)}
  * which builds a {@link TemporaryStore} with empty collections seeded by the supplied identity
  * scalars.
  */
@@ -65,7 +65,7 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * have no on-disk presence to load.
      */
     @Override
-    public Optional<LinkedWhatsAppStore> load(WhatsAppClientType clientType, UUID uuid) {
+    public Optional<LinkedWhatsAppStore> load(LinkedWhatsAppClientType clientType, UUID uuid) {
         return Optional.empty();
     }
 
@@ -77,7 +77,7 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * have no on-disk presence to load.
      */
     @Override
-    public Optional<LinkedWhatsAppStore> load(WhatsAppClientType clientType, long phoneNumber) {
+    public Optional<LinkedWhatsAppStore> load(LinkedWhatsAppClientType clientType, long phoneNumber) {
         return Optional.empty();
     }
 
@@ -89,7 +89,7 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * have no on-disk presence to enumerate.
      */
     @Override
-    public Optional<LinkedWhatsAppStore> loadLatest(WhatsAppClientType clientType) {
+    public Optional<LinkedWhatsAppStore> loadLatest(LinkedWhatsAppClientType clientType) {
         return Optional.empty();
     }
 
@@ -101,7 +101,7 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * to {@link #newStore} with the identity-bearing scalars all left {@code null}.
      */
     @Override
-    public LinkedWhatsAppStore create(WhatsAppClientType clientType, UUID uuid) {
+    public LinkedWhatsAppStore create(LinkedWhatsAppClientType clientType, UUID uuid) {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         return newStore(clientType, Objects.requireNonNullElseGet(uuid, UUID::randomUUID), null, null, null, null, null);
     }
@@ -114,7 +114,7 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * identity-bearing scalars left {@code null}; the phone number alone is retained.
      */
     @Override
-    public LinkedWhatsAppStore create(WhatsAppClientType clientType, long phoneNumber) {
+    public LinkedWhatsAppStore create(LinkedWhatsAppClientType clientType, long phoneNumber) {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         return newStore(clientType, UUID.randomUUID(), phoneNumber, null, null, null, null);
     }
@@ -128,7 +128,7 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * be used to bootstrap a transient session without a fresh pairing flow.
      */
     @Override
-    public LinkedWhatsAppStore create(WhatsAppClientType clientType, WhatsAppClientSixPartsKeys sixPartsKeys) {
+    public LinkedWhatsAppStore create(LinkedWhatsAppClientType clientType, LinkedWhatsAppClientSixPartsKeys sixPartsKeys) {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         Objects.requireNonNull(sixPartsKeys, "sixPartsKeys cannot be null");
         var phoneNumber = sixPartsKeys.phoneNumber();
@@ -159,10 +159,10 @@ public final class TemporaryStoreFactory implements WhatsAppStoreFactory {
      * @param jid             the user JID, or {@code null}
      * @return a freshly built store
      */
-    private static LinkedWhatsAppStore newStore(WhatsAppClientType clientType, UUID uuid, Long phoneNumber, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, byte[] identityId, Jid jid) {
+    private static LinkedWhatsAppStore newStore(LinkedWhatsAppClientType clientType, UUID uuid, Long phoneNumber, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, byte[] identityId, Jid jid) {
         var device = switch (clientType) {
-            case WEB -> WhatsAppClientDevice.desktop();
-            case MOBILE -> WhatsAppClientDevice.ios(false);
+            case WEB -> LinkedWhatsAppClientDevice.desktop();
+            case MOBILE -> LinkedWhatsAppClientDevice.ios(false);
         };
         return new TemporaryStore(
                 new ProtobufSignalStoreBuilder()

@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.cloud;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClientListener;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudCallEvent;
 
 /**
@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.model.cloud.CloudCallEvent;
  * @see CloudWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface CloudCallListener extends WhatsAppCloudListener {
+public non-sealed interface CloudCallListener extends CloudListener {
     /**
      * Notifies the listener of a Calling API event.
      *

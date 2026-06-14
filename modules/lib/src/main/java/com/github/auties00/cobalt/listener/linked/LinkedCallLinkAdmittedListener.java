@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.CallLink;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.JoinableCallLink;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 /**
  * A functional interface for the {@link LinkedWhatsAppClientListener#onCallLinkAdmitted onCallLinkAdmitted} event.
@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallLinkAdmittedListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallLinkAdmittedListener extends LinkedListener {
     /**
      * Notifies the listener that the host of a call-link they
      * clicked has admitted them out of the lobby; the call is now
@@ -25,5 +25,5 @@ public non-sealed interface LinkedCallLinkAdmittedListener extends WhatsAppLinke
      * @param whatsapp the client emitting the event
      * @param link     the link that was admitted
      */
-    void onCallLinkAdmitted(LinkedWhatsAppClient whatsapp, CallLink link);
+    void onCallLinkAdmitted(LinkedWhatsAppClient whatsapp, JoinableCallLink link);
 }

@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 
 import java.util.Collection;
@@ -17,7 +17,7 @@ import java.util.Collection;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedNewslettersListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedNewslettersListener extends LinkedListener {
     /**
      * Notifies the listener that the full newsletter list has been
      * received from WhatsApp.

@@ -9,7 +9,7 @@ import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
  * <p>This is an internal handshake intermediate that no embedder
  * observes. The {@link #linkCodePairingSecret} is surfaced to the user
  * through the
- * {@link com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler.Web.PairingCode}
+ * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler.Web.PairingCode}
  * handler, while the other two fields are cached on the
  * {@link CompanionPairingService} and consulted when a
  * {@code primary_hello} notification later arrives.

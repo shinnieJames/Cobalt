@@ -33,8 +33,7 @@ import java.util.Optional;
  * <p>Presence information such as the {@linkplain #lastKnownPresence() online
  * status} and the {@linkplain #lastSeen() last seen timestamp} is maintained
  * per contact and reflects only the state of the 1:1 conversation with that
- * contact. Group-chat presence is tracked separately on the group: use
- * {@link Chat#getPresence(JidProvider)} for that purpose. By default the
+ * contact. Group-chat presence is tracked separately, per group. By default the
  * WhatsApp server does not push presence updates for every contact; to
  * receive real-time updates for a specific contact call
  * {@code LinkedWhatsAppClient#subscribeToPresence(JidProvider)}.

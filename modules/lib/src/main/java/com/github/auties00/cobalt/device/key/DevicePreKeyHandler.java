@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.device.key;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -597,12 +597,46 @@ public final class DevicePreKeyHandler {
             exports = "ensureE2ESessions",
             adaptation = WhatsAppAdaptation.DIRECT)
     public int ensureSessions(Collection<Jid> deviceJids) {
-        var devicesNeedingSessions = findDevicesNeedingSessions(deviceJids);
-        if (devicesNeedingSessions.isEmpty()) {
+        return ensureSessions(deviceJids, false);
+    }
+
+    /**
+     * Ensures Signal sessions exist for the specified devices, optionally re-establishing a fresh
+     * session for every device even when one is already cached.
+     *
+     * <p>With {@code force} {@code false} this behaves as {@link #ensureSessions(Collection)}: only
+     * devices without a cached session are fetched. With {@code force} {@code true} the existing session
+     * for every device is dropped first, so the subsequent fetch installs a fresh pre-key session for
+     * all of them. The call path uses the forced mode: a peer that holds a stale or one-sided session
+     * silently rejects a normal {@code msg}-type offer, so re-establishing a session guarantees a
+     * decryptable {@code pkmsg}. A device whose pre-key fetch fails is left session-less, which the
+     * caller is expected to tolerate.
+     *
+     * @param deviceJids the device JIDs to ensure sessions for
+     * @param force      whether to drop and re-establish a session for every device rather than only
+     *                   for devices that lack one
+     * @return the number of devices in the response whose one-time pre-key pool was depleted (no
+     *         {@code <key>} child returned for a non-bot device); zero when no fetch was needed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebManageE2ESessionsJob",
+            exports = "ensureE2ESessions",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public int ensureSessions(Collection<Jid> deviceJids, boolean force) {
+        Collection<Jid> targets;
+        if (force) {
+            var signalStore = client.store().signalStore();
+            for (var deviceJid : deviceJids) {
+                signalStore.removeSession(deviceJid.toSignalAddress());
+            }
+            targets = deviceJids;
+        } else {
+            targets = findDevicesNeedingSessions(deviceJids);
+        }
+        if (targets.isEmpty()) {
             return 0;
         }
 
-        return fetchAndProcessPreKeyBundles(devicesNeedingSessions).depletedPrekeyCount();
+        return fetchAndProcessPreKeyBundles(targets).depletedPrekeyCount();
     }
 
     /**

@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.stream.control;
 
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedTosNoticesChangedListener;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -169,10 +169,10 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
 
     /**
      * The epoch-millis timestamp of the {@code offline_preview} bulletin that drove the current
-     * {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART} transition, or {@code 0L} when no preview has been
+     * {@link LinkedWhatsAppClientOfflineResumeState#RESUME_ON_RESTART} transition, or {@code 0L} when no preview has been
      * observed since the last completion.
      *
-     * <p>Gates repeated previews against the {@link WhatsAppClientOfflineResumeState#OFFLINE_PREVIEW_PERIOD_MS}
+     * <p>Gates repeated previews against the {@link LinkedWhatsAppClientOfflineResumeState#OFFLINE_PREVIEW_PERIOD_MS}
      * debounce window: previews inside the window are accepted as cumulative updates, previews outside the window are
      * rejected as noise.
      */
@@ -465,14 +465,14 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * <p>The {@code count} attribute is the total number of offline messages the server has delivered. The transition
      * follows three branches:
      * <ul>
-     *   <li>If the state is already {@link WhatsAppClientOfflineResumeState#COMPLETE}, the bulletin is acknowledged for
+     *   <li>If the state is already {@link LinkedWhatsAppClientOfflineResumeState#COMPLETE}, the bulletin is acknowledged for
      *       telemetry but no further work runs.</li>
-     *   <li>If the state is {@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB}, the live-tab disconnect path
+     *   <li>If the state is {@link LinkedWhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB}, the live-tab disconnect path
      *       runs the pending device sync inline and then transitions to
-     *       {@link WhatsAppClientOfflineResumeState#COMPLETE}.</li>
-     *   <li>Otherwise the post-restart path transitions to {@link WhatsAppClientOfflineResumeState#COMPLETE} immediately
+     *       {@link LinkedWhatsAppClientOfflineResumeState#COMPLETE}.</li>
+     *   <li>Otherwise the post-restart path transitions to {@link LinkedWhatsAppClientOfflineResumeState#COMPLETE} immediately
      *       and schedules the pending device sync after
-     *       {@link WhatsAppClientOfflineResumeState#OFFLINE_DEVICE_SYNC_DELAY}.</li>
+     *       {@link LinkedWhatsAppClientOfflineResumeState#OFFLINE_DEVICE_SYNC_DELAY}.</li>
      * </ul>
      *
      * @implNote This implementation always flushes the accumulated offline {@code server_sync} notification counts
@@ -502,11 +502,11 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
 
         var store = whatsapp.store();
         var current = store.offlineResumeState();
-        if (current == WhatsAppClientOfflineResumeState.COMPLETE) {
+        if (current == LinkedWhatsAppClientOfflineResumeState.COMPLETE) {
             return;
         }
 
-        if (current == WhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB) {
+        if (current == LinkedWhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB) {
             try {
                 deviceService.retryPendingSyncs();
             } catch (Throwable throwable) {
@@ -514,16 +514,16 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
                         "doPendingDeviceSync failed during open-tab resume completion: {0}",
                         throwable.getMessage());
             }
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.COMPLETE);
             firstOfflinePreviewMillis = 0L;
             return;
         }
 
-        store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+        store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.COMPLETE);
         firstOfflinePreviewMillis = 0L;
         Thread.startVirtualThread(() -> {
             try {
-                Thread.sleep(WhatsAppClientOfflineResumeState.OFFLINE_DEVICE_SYNC_DELAY);
+                Thread.sleep(LinkedWhatsAppClientOfflineResumeState.OFFLINE_DEVICE_SYNC_DELAY);
                 deviceService.retryPendingSyncs();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -542,13 +542,13 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * <p>The transition follows three branches:
      * <ul>
      *   <li>If the resume-from-restart phase is already complete (state is past
-     *       {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}), a live socket disconnect is in progress; the
-     *       state moves to {@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB}.</li>
-     *   <li>If the current state is {@link WhatsAppClientOfflineResumeState#INIT}, this is the first preview after a
-     *       cold start; the state moves to {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART} and
+     *       {@link LinkedWhatsAppClientOfflineResumeState#RESUME_ON_RESTART}), a live socket disconnect is in progress; the
+     *       state moves to {@link LinkedWhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB}.</li>
+     *   <li>If the current state is {@link LinkedWhatsAppClientOfflineResumeState#INIT}, this is the first preview after a
+     *       cold start; the state moves to {@link LinkedWhatsAppClientOfflineResumeState#RESUME_ON_RESTART} and
      *       {@link #firstOfflinePreviewMillis} is set for the debounce window.</li>
-     *   <li>Otherwise the state is already {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART} and repeated
-     *       previews are gated by {@link WhatsAppClientOfflineResumeState#OFFLINE_PREVIEW_PERIOD_MS}: previews inside
+     *   <li>Otherwise the state is already {@link LinkedWhatsAppClientOfflineResumeState#RESUME_ON_RESTART} and repeated
+     *       previews are gated by {@link LinkedWhatsAppClientOfflineResumeState#OFFLINE_PREVIEW_PERIOD_MS}: previews inside
      *       the window are accepted as cumulative updates, previews outside the window are rejected and logged.</li>
      * </ul>
      *
@@ -577,14 +577,14 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
 
         var store = whatsapp.store();
         if (store.isResumeFromRestartComplete()) {
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB);
             return;
         }
 
         var current = store.offlineResumeState();
-        if (current == WhatsAppClientOfflineResumeState.INIT) {
+        if (current == LinkedWhatsAppClientOfflineResumeState.INIT) {
             firstOfflinePreviewMillis = System.currentTimeMillis();
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.RESUME_ON_RESTART);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.RESUME_ON_RESTART);
             return;
         }
 
@@ -593,7 +593,7 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
             return;
         }
         var delay = System.currentTimeMillis() - firstMillis;
-        if (delay < WhatsAppClientOfflineResumeState.OFFLINE_PREVIEW_PERIOD_MS) {
+        if (delay < LinkedWhatsAppClientOfflineResumeState.OFFLINE_PREVIEW_PERIOD_MS) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Accept multiple offline preview ibs during offline resume, delay={0} message={1}",
                     delay, messageCount);

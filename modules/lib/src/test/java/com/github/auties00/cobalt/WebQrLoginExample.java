@@ -1,8 +1,9 @@
-import com.github.auties00.cobalt.call.CallOptions;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
-import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
+import com.github.auties00.cobalt.call.stream.AudioInputStream;
+import com.github.auties00.cobalt.call.stream.AudioOutputStream;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
@@ -14,23 +15,19 @@ import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
  * launcher protocol.
  */
 void main() throws IOException {
+    System.out.println("Hello World");
     LinkedWhatsAppClient.builder()
             .webClient(WhatsAppStoreFactory.persistent())
-            .loadLatestOrCreateConnection()
-            .device(WhatsAppClientDevice.web())
+            .createConnection()
+            .device(LinkedWhatsAppClientDevice.web())
             .historySetting(WhatsAppWebClientHistory.standard(false))
-            .unregistered(WhatsAppClientVerificationHandler.Web.QrCode.toTerminal())
-            .addLoggedInListener(api -> {
+            .unregistered(19153544650L, LinkedWhatsAppClientVerificationHandler.Web.PairingCode.toTerminal())
+            .addLoggedInListener(client -> {
+                var api = (LinkedWhatsAppClient) client;
                 System.out.printf("Connected: %s%n", api.store().settingsStore().privacySettings());
                 var peer = Jid.of("393668765864@s.whatsapp.net");
-                try(var call = api.startCall(peer, CallOptions.audio())) {
-                    System.out.println("Call started");
-                    call.awaitEnded();
-                    System.out.println("Call ended");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    e.printStackTrace();
-                }
+                var call = api.startCall(peer, AudioOutputStream.buffered(), AudioInputStream.buffered());
+                System.out.println("Call started: " + call.callId());
             })
             .addWebAppPrimaryFeaturesListener((_, features) -> System.out.printf("Received features: %s%n", features))
             .addNewMessageListener((_, message) -> System.out.println(message))

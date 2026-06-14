@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.sync;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedChatsListener;
 import com.github.auties00.cobalt.listener.linked.LinkedContactsListener;
 import com.github.auties00.cobalt.listener.linked.LinkedNewStatusListener;

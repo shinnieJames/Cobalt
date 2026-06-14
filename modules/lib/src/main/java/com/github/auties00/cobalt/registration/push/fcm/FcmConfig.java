@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.registration.push.fcm;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -12,7 +12,7 @@ import it.auties.protobuf.model.ProtobufType;
  * <p>Two pre-built constants cover the WhatsApp Android variants the registration server expects:
  * {@link #WHATSAPP_PERSONAL} for {@code com.whatsapp} and {@link #WHATSAPP_BUSINESS} for {@code com.whatsapp.w4b}. The
  * config is selected indirectly by the device-platform switch inside
- * {@link FcmClient#authenticate(WhatsAppClientDevice)} and supplies the project id, app
+ * {@link FcmClient#authenticate(LinkedWhatsAppClientDevice)} and supplies the project id, app
  * id, API key, sender id, package name and signing-certificate hash that the FIS install and register3 calls send so
  * the requests look like a real install.
  *
@@ -26,7 +26,7 @@ public final class FcmConfig {
     /**
      * Configuration impersonating the WhatsApp consumer Android app ({@code com.whatsapp}).
      *
-     * <p>Selected by {@link FcmClient#authenticate(WhatsAppClientDevice)} for
+     * <p>Selected by {@link FcmClient#authenticate(LinkedWhatsAppClientDevice)} for
      * {@link com.github.auties00.cobalt.model.device.pairing.ClientPlatformType#ANDROID}; the values mirror the
      * {@code google-services.json} bundled with the Play Store APK so the FIS and register3 calls look like a real
      * install.
@@ -43,7 +43,7 @@ public final class FcmConfig {
     /**
      * Configuration impersonating the WhatsApp Business Android app ({@code com.whatsapp.w4b}).
      *
-     * <p>Selected by {@link FcmClient#authenticate(WhatsAppClientDevice)} for
+     * <p>Selected by {@link FcmClient#authenticate(LinkedWhatsAppClientDevice)} for
      * {@link com.github.auties00.cobalt.model.device.pairing.ClientPlatformType#ANDROID_BUSINESS}; every Firebase
      * resource matches {@link #WHATSAPP_PERSONAL} (same project id, app id, API key, sender id and signing
      * certificate). Only the package name differs.

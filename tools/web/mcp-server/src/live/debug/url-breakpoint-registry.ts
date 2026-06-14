@@ -82,6 +82,11 @@ export class UrlBreakpointRegistry {
   async add(spec: UrlBreakpointSpec): Promise<{ id: string; locations: BreakpointLocation[] }> {
     const id = `wbp_${++this.nextId}`;
 
+    // A logExpression installs a non-suspending capture condition (captureCondition console.logs the value
+    // and returns false). V8 exposes locals ($var0...) inside a breakpoint condition but NOT the operand
+    // stack $stack (verified: re/calls/runtime/test-stack-condition.mjs -> hasStack=false), so a $stack
+    // expression (e.g. reading a call_indirect's dispatched table index) MUST take the suspending path and
+    // be read from the paused frame. Keep the guard.
     const nonPausing = spec.logExpression != null && !spec.logExpression.includes("$stack");
     const v8Condition = nonPausing
       ? UrlBreakpointRegistry.captureCondition(id, spec.logExpression as string)

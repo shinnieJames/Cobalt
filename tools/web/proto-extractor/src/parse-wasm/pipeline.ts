@@ -1,5 +1,5 @@
 import type { Identifier, IndentationEntry, ModuleInfo, ParsedProtos } from "../types.js";
-import { WasmMemory, parseWasmDataSegments } from "./memory.js";
+import { parseWasmDataSegments } from "./memory.js";
 import { scanDescriptors } from "./descriptors.js";
 import { groupOneofs, parseEnumValues, parseFields } from "./fields.js";
 
@@ -27,34 +27,23 @@ function emptyResult(): ParsedProtos {
  * Extracts every {@code protobuf-c}-generated message and enum schema embedded
  * in {@code binary} and returns it in Cobalt's {@link ParsedProtos} shape.
  *
- * @param binary - the wasm module bytes (used only if {@code memorySnapshot}
- *                 is omitted; the wasm is parsed for its static data section).
+ * @param binary - the wasm module bytes; parsed for its data segments, including
+ *                 passive segments resolved to their {@code memory.init}
+ *                 destinations (so pthread/shared-memory builds parse too).
  * @param moduleLabel - the synthetic module name to file the extracted
  *                      identifiers under (used as a key in
  *                      {@link ParsedProtos.modulesInfo}).
- * @param memorySnapshot - if supplied, a post-instantiation {@code HEAPU8} view
- *                         of the wasm. Used instead of the static data section.
- *                         Required for Emscripten pthread builds (e.g. the WA
- *                         Voip wasm) where data segments are passive.
  * @returns the extracted schema. Empty if no descriptors are found, so callers
  *          can merge unconditionally without first probing.
  */
-export function parseProtobufCFromWasm(
-    binary: Uint8Array,
-    moduleLabel: string,
-    memorySnapshot?: Uint8Array,
-): ParsedProtos {
-    let mem: WasmMemory;
-    if (memorySnapshot && memorySnapshot.length > 0) {
-        mem = new WasmMemory([{ address: 0, data: memorySnapshot }]);
-    } else {
-        try {
-            mem = parseWasmDataSegments(binary);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.warn(`[WARN] Skipping ${moduleLabel}: ${message}`);
-            return emptyResult();
-        }
+export function parseProtobufCFromWasm(binary: Uint8Array, moduleLabel: string): ParsedProtos {
+    let mem;
+    try {
+        mem = parseWasmDataSegments(binary);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[WARN] Skipping ${moduleLabel}: ${message}`);
+        return emptyResult();
     }
 
     const { messages, enums } = scanDescriptors(mem);

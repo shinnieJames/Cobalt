@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.sync.integration;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.sync.LiveWebHistorySyncService;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;

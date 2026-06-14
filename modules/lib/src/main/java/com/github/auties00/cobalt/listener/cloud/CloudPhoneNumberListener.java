@@ -1,27 +1,24 @@
 package com.github.auties00.cobalt.listener.cloud;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClientListener;
-
-import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.client.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientListener;
+import com.github.auties00.cobalt.model.cloud.CloudPhoneNumberUpdate;
 
 /**
- * A functional interface for the {@link CloudWhatsAppClientListener#onPhoneNumberUpdate onPhoneNumberUpdate}
- * event.
+ * A functional interface for the {@link CloudWhatsAppClientListener#onPhoneNumberUpdate onPhoneNumberUpdate} event.
  *
  * <p>{@link CloudWhatsAppClientListener} extends this interface and supplies an empty default
- * implementation, so the event can also be observed in isolation as a lambda. The event delivers the
- * {@code phone_number_name_update} and {@code phone_number_quality_update} webhook change values.
+ * implementation, so the event can also be observed in isolation as a lambda. The event is raised for each webhook delivery whose change field is {@code phone_number_name_update} or {@code phone_number_quality_update}; the concrete update kind is recovered with a pattern-match over the sealed {@link CloudPhoneNumberUpdate} hierarchy.
  *
  * @see CloudWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface CloudPhoneNumberListener extends WhatsAppCloudListener {
+public non-sealed interface CloudPhoneNumberListener extends CloudListener {
     /**
-     * Notifies the listener of a phone-number name or quality update.
+     * Notifies the listener that the phone number changed display name or quality.
      *
      * @param whatsapp the client emitting the event
-     * @param value    the raw phone-number update change value
+     * @param update   the phone-number update
      */
-    void onPhoneNumberUpdate(CloudWhatsAppClient whatsapp, JSONObject value);
+    void onPhoneNumberUpdate(CloudWhatsAppClient whatsapp, CloudPhoneNumberUpdate update);
 }

@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.registration;
 
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
-import com.github.auties00.cobalt.client.WhatsAppClientDeviceAttestor;
-import com.github.auties00.cobalt.client.WhatsAppClientDevicePushClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDeviceAttestor;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevicePushClient;
 import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
 
 import java.net.URI;
@@ -30,7 +30,7 @@ import java.util.UUID;
  *       {@code /code} endpoint expects (SIM MCC/MNC, advertising id,
  *       backup token, cellular strength, client metrics, etc.).</li>
  *   <li>{@link #attestBody(byte[])} HMAC-signs the body via the
- *       configured {@link WhatsAppClientDeviceAttestor.Android} and
+ *       configured {@link LinkedWhatsAppClientDeviceAttestor.Android} and
  *       packages the result into the {@code H=} suffix plus the
  *       {@code Authorization} certificate-chain header.</li>
  *   <li>{@link #attestationFields()} ships the Play Integrity
@@ -42,8 +42,8 @@ import java.util.UUID;
  *
  * <p>Package-private because instances are obtained through
  * {@link MobileClientRegistration#newRegistration(LinkedWhatsAppStore,
- * WhatsAppClientVerificationHandler.Mobile, WhatsAppClientDeviceAttestor,
- * WhatsAppClientDevicePushClient)} rather than constructed directly.
+ * LinkedWhatsAppClientVerificationHandler.Mobile, LinkedWhatsAppClientDeviceAttestor,
+ * LinkedWhatsAppClientDevicePushClient)} rather than constructed directly.
  *
  * @implNote
  * This implementation reproduces the exact wire shape captured from a
@@ -63,23 +63,23 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      * request.
      *
      * <p>Never {@code null}: the constructor substitutes
-     * {@link WhatsAppClientDeviceAttestor.Android#NONE} when the caller
+     * {@link LinkedWhatsAppClientDeviceAttestor.Android#NONE} when the caller
      * supplies {@code null}. The {@code NONE} fallback produces empty
      * Play Integrity and signature output, which the server tolerates
      * as a low-trust signal.
      */
-    private final WhatsAppClientDeviceAttestor.Android attestor;
+    private final LinkedWhatsAppClientDeviceAttestor.Android attestor;
 
     /**
      * The push client consulted for the FCM {@code push_token} and
      * silent-push {@code push_code} form fields.
      *
      * <p>Never {@code null}: the constructor substitutes
-     * {@link WhatsAppClientDevicePushClient#noop()} when the caller supplies
+     * {@link LinkedWhatsAppClientDevicePushClient#noop()} when the caller supplies
      * {@code null}. The {@code noop} fallback returns empty strings,
      * which the server tolerates.
      */
-    private final WhatsAppClientDevicePushClient pushClient;
+    private final LinkedWhatsAppClientDevicePushClient pushClient;
 
     /**
      * Constructs an Android registration bound to the given
@@ -87,8 +87,8 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      *
      * <p>Invoked only from
      * {@link MobileClientRegistration#newRegistration(LinkedWhatsAppStore,
-     * WhatsAppClientVerificationHandler.Mobile,
-     * WhatsAppClientDeviceAttestor, WhatsAppClientDevicePushClient)}. A
+     * LinkedWhatsAppClientVerificationHandler.Mobile,
+     * LinkedWhatsAppClientDeviceAttestor, LinkedWhatsAppClientDevicePushClient)}. A
      * {@code null} attestor or push client is replaced by the
      * respective {@code NONE} / {@code noop} fallback.
      *
@@ -98,18 +98,18 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      *                     method and the user-entered code
      * @param attestor     the Android device attestor, or {@code null}
      *                     to fall back to
-     *                     {@link WhatsAppClientDeviceAttestor.Android#NONE}
+     *                     {@link LinkedWhatsAppClientDeviceAttestor.Android#NONE}
      * @param pushClient   the push client, or {@code null} to fall back
-     *                     to {@link WhatsAppClientDevicePushClient#noop()}
+     *                     to {@link LinkedWhatsAppClientDevicePushClient#noop()}
      */
     AndroidClientRegistration(
             LinkedWhatsAppStore store,
-            WhatsAppClientVerificationHandler.Mobile verification,
-            WhatsAppClientDeviceAttestor.Android attestor,
-            WhatsAppClientDevicePushClient pushClient) {
+            LinkedWhatsAppClientVerificationHandler.Mobile verification,
+            LinkedWhatsAppClientDeviceAttestor.Android attestor,
+            LinkedWhatsAppClientDevicePushClient pushClient) {
         super(store, verification);
-        this.attestor = Objects.requireNonNullElse(attestor, WhatsAppClientDeviceAttestor.Android.NONE);
-        this.pushClient = Objects.requireNonNullElse(pushClient, WhatsAppClientDevicePushClient.noop());
+        this.attestor = Objects.requireNonNullElse(attestor, LinkedWhatsAppClientDeviceAttestor.Android.NONE);
+        this.pushClient = Objects.requireNonNullElse(pushClient, LinkedWhatsAppClientDevicePushClient.noop());
     }
 
     /**
@@ -147,7 +147,7 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      * {@inheritDoc}
      *
      * <p>On Android, hex-encodes the signature returned by
-     * {@link WhatsAppClientDeviceAttestor.Android#sign(LinkedWhatsAppStore, byte[])}
+     * {@link LinkedWhatsAppClientDeviceAttestor.Android#sign(LinkedWhatsAppStore, byte[])}
      * (lowercase, no separator, the format the server expects in the
      * {@code &H=} suffix) and URL-safe-base64-encodes the certificate
      * chain without padding (the format the server expects in the
@@ -156,7 +156,7 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      * @implNote
      * This implementation returns {@link BodyAttestation#EMPTY} when
      * the signature is empty, which signals that the
-     * {@link WhatsAppClientDeviceAttestor.Android#NONE} fallback is in
+     * {@link LinkedWhatsAppClientDeviceAttestor.Android#NONE} fallback is in
      * effect; the base class then skips both wire slots. A non-empty
      * signature with an empty chain yields a populated suffix and a
      * {@code null} {@code Authorization} header, matching the native
@@ -246,7 +246,7 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      * <p>On Android, returns the Play Integrity sextuple
      * ({@code gpia}, {@code _gg}, {@code _gi}, {@code _gp},
      * {@code _ge}, {@code _ga}) produced by the configured
-     * {@link WhatsAppClientDeviceAttestor.Android} plus the FCM
+     * {@link LinkedWhatsAppClientDeviceAttestor.Android} plus the FCM
      * {@code push_token} produced by the configured push client.
      *
      * @implNote
@@ -255,8 +255,8 @@ final class AndroidClientRegistration extends MobileClientRegistration {
      * both ship on {@code /v2/exist} (matching the native-client
      * capture for that path) and on every other attested endpoint, and
      * both are suppressed on the funnel endpoints by the base class.
-     * The {@link WhatsAppClientDeviceAttestor.Android#NONE} attestor returns
-     * six empty strings and the {@link WhatsAppClientDevicePushClient#noop()}
+     * The {@link LinkedWhatsAppClientDeviceAttestor.Android#NONE} attestor returns
+     * six empty strings and the {@link LinkedWhatsAppClientDevicePushClient#noop()}
      * push client returns an empty {@code push_token}, all of which the
      * registration server accepts as low-trust signals.
      */

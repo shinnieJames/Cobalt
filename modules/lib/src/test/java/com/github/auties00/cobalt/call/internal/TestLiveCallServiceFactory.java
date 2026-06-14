@@ -3,8 +3,9 @@ package com.github.auties00.cobalt.call.internal;
 import com.github.auties00.cobalt.ack.AckParser;
 import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.ack.CallAck;
-import com.github.auties00.cobalt.call.internal.signaling.CallStanza;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.call.LiveCallService;
+import com.github.auties00.cobalt.call.signaling.CallStanza;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
@@ -41,6 +42,17 @@ public final class TestLiveCallServiceFactory {
      */
     public static LiveCallService create(LinkedWhatsAppClient client, WamService wamService) {
         return new LiveCallService(client, wamService, new StubMessageService(client));
+    }
+
+    /**
+     * Constructs the stub {@link MessageService} used by {@link #create(LinkedWhatsAppClient, WamService)},
+     * for tests that build a {@code CallReceiver} directly and need to supply the same message service.
+     *
+     * @param client the test client
+     * @return the stub message service
+     */
+    public static MessageService messageService(LinkedWhatsAppClient client) {
+        return new StubMessageService(client);
     }
 
     /**

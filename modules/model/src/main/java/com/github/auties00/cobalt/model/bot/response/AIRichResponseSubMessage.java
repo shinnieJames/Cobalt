@@ -5,7 +5,8 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 /**
- * A single content fragment within an {@link AIRichResponseMessage}.
+ * A single content fragment within an
+ * {@link com.github.auties00.cobalt.model.message.bot.AIRichResponseMessage AIRichResponseMessage}.
  *
  * <p>Each sub-message carries exactly one content payload whose type
  * is exposed through the {@link AIRichResponseSubMessageContent}

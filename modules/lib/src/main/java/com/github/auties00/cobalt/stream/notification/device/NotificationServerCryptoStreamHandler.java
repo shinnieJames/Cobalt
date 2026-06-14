@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.stream.notification.device;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedDeviceIdentityChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedRegistrationCodeListener;
 import com.github.auties00.cobalt.listener.WhatsAppListener;
@@ -235,7 +235,8 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * When a {@code lid} attribute is present it is registered as a LID-PN mapping, and the
      * {@code display_name} attribute, when non-blank, updates the contact's chosen name. The handler
      * then marks the identity change, cleans up the Signal session, clears the sender-key
-     * distribution for the participant, marks the user for key rotation, and fires
+     * distribution for the participant, marks the user for key rotation, re-issues the local user's
+     * trusted-contact token to the peer (so its rotated identity keeps a valid token), and fires
      * {@link LinkedDeviceIdentityChangedListener#onDeviceIdentityChanged} so the embedder can drive the
      * equivalent UI.
      *
@@ -276,6 +277,12 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
         whatsapp.store().signalStore().cleanupSignalSessions(deviceJid);
         whatsapp.store().signalStore().clearSenderKeyDistributionForParticipant(deviceJid);
         whatsapp.store().signalStore().markKeyRotation(userJid);
+        // Re-hand our trusted-contact token to the peer whose device identity just changed, matching
+        // WAWebHandleIdentityChange, so the peer's rotated identity keeps a valid token to validate our
+        // future offers and messages. Fire-and-forget on a virtual thread; the reciprocal is not needed.
+        var tokenPeer = userJid;
+        Thread.ofVirtual().name("tc-token-identity-" + userJid)
+                .start(() -> whatsapp.issueTrustedContactToken(tokenPeer));
         fireListeners(LinkedDeviceIdentityChangedListener.class, listener -> listener.onDeviceIdentityChanged(whatsapp, userJid, Set.of(deviceJid)));
     }
 

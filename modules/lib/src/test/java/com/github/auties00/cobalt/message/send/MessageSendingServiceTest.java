@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.message.send;
 import com.github.auties00.cobalt.media.transcode.LiveMediaTranscoderService;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.StubDeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;

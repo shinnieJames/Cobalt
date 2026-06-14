@@ -182,33 +182,35 @@ export class LiveCdpDebugger {
     };
   }
 
+  /**
+   * Sets a wasm breakpoint/logpoint bound by module URL so it applies to every instance of the module
+   * (the page plus every pthread worker, now and respawned later). {@code byteOffset} is module-absolute.
+   * A {@code logExpression} makes it a buffered logpoint (retrieve via {@link getLogpointCaptures}); a
+   * {@code condition} that returns a falsy value logs without ever suspending. Returns a registry id
+   * ("wbp_N") standing for the breakpoint across every attached session.
+   */
   async setWasmBreakpoint(
-    scriptId: string,
+    url: string,
     byteOffset: number,
-    condition?: string
+    logExpression?: string
   ): Promise<SetBreakpointResult> {
     await this.mux.ensure();
-    const sessionId = this.mux.sessionForScript(scriptId);
-    const responseRaw = await this.mux.send(
-      "Debugger.setBreakpoint",
-      {
-        location: { scriptId, lineNumber: 0, columnNumber: Math.max(0, byteOffset) },
-        condition,
-      },
-      sessionId
-    );
-    const response = responseRaw as DebuggerSetBreakpointResponse;
-    if (sessionId) this.mux.rememberBreakpoint(response.breakpointId, sessionId);
+    // Attach every worker currently alive (including nested pthread workers the non-recursive auto-attach
+    // raced past) so the breakpoint binds to all instances now; later targets pick it up from the registry.
+    await this.mux.reconcileTargets();
+    // With a logExpression the registry installs a non-suspending capture condition (console.log + return
+    // false), so a single expression covers logging without a separate block flag; without one it is a
+    // plain suspending breakpoint.
+    const { id, locations } = await this.mux.addUrlBreakpoint({ url, byteOffset, logExpression });
+    return { breakpointId: id, locations };
+  }
 
-    const script = this.mux.listScripts().find((s) => s.scriptId === scriptId);
-    if (script?.url) {
-      const urlRegex = script.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      this.mux.addPendingUrlBreakpoint(`wasm:${urlRegex}:${byteOffset}`, urlRegex, byteOffset, condition);
-    }
-    return {
-      breakpointId: response.breakpointId,
-      locations: response.actualLocation ? [response.actualLocation] : [],
-    };
+  /**
+   * Returns buffered logpoint captures, optionally filtered to one breakpoint id and/or clearing the
+   * returned entries.
+   */
+  getLogpointCaptures(options: { id?: string; clear?: boolean } = {}) {
+    return this.mux.getLogCaptures(options);
   }
 
   async readWasmMemory(callFrameId: string, addr: number, len: number): Promise<WasmMemoryReadResult> {
@@ -266,6 +268,12 @@ export class LiveCdpDebugger {
 
   async removeBreakpoint(breakpointId: string): Promise<void> {
     await this.mux.ensure();
+    // setWasmBreakpoint returns a registry id ("wbp_N") standing for the breakpoint across every attached
+    // session; route it to the registry, which tears down the shared V8 binding when its last ref is gone.
+    if (breakpointId.startsWith("wbp_")) {
+      await this.mux.removeUrlBreakpoint(breakpointId);
+      return;
+    }
     const sessionId = this.mux.sessionForBreakpoint(breakpointId);
     await this.mux.send("Debugger.removeBreakpoint", { breakpointId }, sessionId);
   }

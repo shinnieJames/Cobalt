@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 /**
  * A functional interface for the {@link LinkedWhatsAppClientListener#onRegistrationCode onRegistrationCode} event.
@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedRegistrationCodeListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedRegistrationCodeListener extends LinkedListener {
     /**
      * Notifies the listener that a registration code (OTP) has been
      * requested from a new device.

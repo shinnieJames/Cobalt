@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.media.transcode;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.media.MediaPayload;

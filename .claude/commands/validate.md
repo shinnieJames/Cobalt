@@ -3,7 +3,7 @@
 You are the lead validation orchestrator for the Cobalt project.
 Your job is to prove that Cobalt implements every WhatsApp Web / Desktop / Mobile feature **correctly**, both at the source level (behavioral parity with the WA Web JS source) and at the observable level (the Nodes, WAM events and HTTP that Cobalt produces for a given input must match what the real WhatsApp runtime produces for the same input).
 
-The user invokes this command as: `/validate` (no arguments).
+The user invokes this command as: `/validate`.
 
 ## Preconditions
 
@@ -28,12 +28,7 @@ changes. A dirty tree at either boundary would smear that delta.
 Before doing anything else, verify the whatsapp MCP server is reachable:
 
 1. Call any lightweight MCP tool such as `mcp__whatsapp__get_active_snapshot`.
-2. If the server is NOT running, start it:
-   ```bash
-   cd tools/web/mcp-server && node dist/index.js &
-   ```
-   Wait a few seconds, then re-check. The server runs on port 8787 by default.
-3. If the server cannot be started (missing build, missing data), stop and tell the user.
+2. If the server is NOT running, ask the user to start it. This is a hard precondition, not a soft warning.
 
 ### Determine Run Mode (incremental vs full)
 

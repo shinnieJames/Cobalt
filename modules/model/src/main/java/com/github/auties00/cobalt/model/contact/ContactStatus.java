@@ -1,7 +1,6 @@
 package com.github.auties00.cobalt.model.contact;
 
 
-import com.github.auties00.cobalt.model.chat.Chat;
 import it.auties.protobuf.annotation.ProtobufEnum;
 import it.auties.protobuf.annotation.ProtobufEnumIndex;
 
@@ -17,13 +16,11 @@ import java.util.Optional;
  * default: updates arrive automatically only when a contact sends a message
  * or appears in the recent contacts list. To receive real-time presence
  * updates for a specific contact, explicitly subscribe to that contact using
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#subscribeToPresence(com.github.auties00.cobalt.model.jid.JidProvider)}.
+ * {@code LinkedWhatsAppClient#subscribeToPresence(JidProvider)}.
  *
  * <p>This enum represents presence at the individual-contact level, reflecting
- * only the 1:1 conversation state. For the presence of a participant within a
- * group chat, use
- * {@link Chat#getPresence(com.github.auties00.cobalt.model.jid.JidProvider)}
- * instead.
+ * only the 1:1 conversation state. The presence of a participant within a
+ * group chat is tracked separately, per group.
  *
  * <p>Composing and recording states reported by the server are transient and
  * are automatically cleared after a short inactivity window if no further

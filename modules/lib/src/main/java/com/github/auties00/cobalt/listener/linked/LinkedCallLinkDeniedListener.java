@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.CallLink;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.JoinableCallLink;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 /**
  * A functional interface for the {@link LinkedWhatsAppClientListener#onCallLinkDenied onCallLinkDenied} event.
@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallLinkDeniedListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallLinkDeniedListener extends LinkedListener {
     /**
      * Notifies the listener that the host of a call-link declined
      * the local user's join request; terminal for that link
@@ -24,5 +24,5 @@ public non-sealed interface LinkedCallLinkDeniedListener extends WhatsAppLinkedL
      * @param whatsapp the client emitting the event
      * @param link     the link that was denied
      */
-    void onCallLinkDenied(LinkedWhatsAppClient whatsapp, CallLink link);
+    void onCallLinkDenied(LinkedWhatsAppClient whatsapp, JoinableCallLink link);
 }

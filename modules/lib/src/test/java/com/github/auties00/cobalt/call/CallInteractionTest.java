@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call;
 
+import com.github.auties00.cobalt.model.call.CallInteraction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

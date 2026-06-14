@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.message;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentityBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
@@ -239,12 +239,12 @@ public final class MessageFixtures {
         Objects.requireNonNull(selfPn, "selfPn");
         try {
             var store = WhatsAppStoreFactory.temporary()
-                    .create(WhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
+                    .create(LinkedWhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
             store.accountStore().setJid(selfPn);
             if (selfLid != null) {
                 store.accountStore().setLid(selfLid);
             }
-            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setOfflineResumeState(LinkedWhatsAppClientOfflineResumeState.COMPLETE);
             store.signalStore().setSignedDeviceIdentity(new ADVSignedDeviceIdentityBuilder()
                     .details(new byte[]{0})
                     .accountSignatureKey(new byte[32])

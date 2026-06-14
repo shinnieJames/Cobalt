@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.CallInteraction;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.CallInteraction;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 /**
@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallInteractionListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallInteractionListener extends LinkedListener {
     /**
      * Notifies the listener that a peer broadcast an in-call
      * interaction (emoji reaction, raise/lower hand, peer-mute

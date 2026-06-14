@@ -2,11 +2,11 @@ package com.github.auties00.cobalt.stream.receipt;
 
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckSender;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.call.internal.signaling.CallReceiptReceiver;
+import com.github.auties00.cobalt.call.signaling.CallReceiptReceiver;
 import com.github.auties00.cobalt.wam.WamService;
 
 /**

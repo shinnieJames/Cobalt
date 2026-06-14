@@ -51,7 +51,7 @@ final class WindowsNetworkConnectivityMonitor extends AbstractNativeConnectivity
     /**
      * Constructs the monitor, eagerly resolving the IP Helper downcall handles.
      *
-     * @throws Throwable if {@code Iphlpapi.dll} or either entry point cannot be
+     * @throws UnsatisfiedLinkError if {@code Iphlpapi.dll} or either entry point cannot be
      *         resolved on this host
      */
     WindowsNetworkConnectivityMonitor() {

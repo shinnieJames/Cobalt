@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.store.persistent;
 
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.store.ProtobufAccountStore;
 import com.github.auties00.cobalt.store.ProtobufContactStore;
 import com.github.auties00.cobalt.store.ProtobufSettingsStore;
@@ -135,7 +135,7 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      * @return the LMDB env directory
      * @throws IOException if the parent session directory cannot be created
      */
-    static Path messagesEnvPath(WhatsAppClientType clientType, Path baseDirectory, String sessionId) throws IOException {
+    static Path messagesEnvPath(LinkedWhatsAppClientType clientType, Path baseDirectory, String sessionId) throws IOException {
         return getSessionDirectory(clientType, baseDirectory, sessionId)
                 .resolve(MESSAGES_DIRECTORY);
     }
@@ -149,7 +149,7 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      * @return the metadata file path
      * @throws IOException if the parent session directory cannot be created
      */
-    static Path storeFilePath(WhatsAppClientType clientType, Path baseDirectory, String sessionId) throws IOException {
+    static Path storeFilePath(LinkedWhatsAppClientType clientType, Path baseDirectory, String sessionId) throws IOException {
         return getSessionFile(clientType, baseDirectory, sessionId, STORE_FILE);
     }
 

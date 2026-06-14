@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.call.IncomingCall;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.model.call.IncomingCall;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
 /**
  * A functional interface for the {@link LinkedWhatsAppClientListener#onCallOfferNotice onCallOfferNotice} event.
@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallOfferNoticeListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallOfferNoticeListener extends LinkedListener {
     /**
      * Notifies the listener of an offer notice, which the server sends to
      * inform the device about a call offer that arrived while it was

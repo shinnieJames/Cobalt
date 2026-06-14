@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.registration;
 
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
-import com.github.auties00.cobalt.client.WhatsAppClientDeviceAttestor;
-import com.github.auties00.cobalt.client.WhatsAppClientDevicePushClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDeviceAttestor;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevicePushClient;
 import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
 
 import java.net.URI;
@@ -27,7 +27,7 @@ import java.util.Objects;
  *       code, cellular strength).</li>
  *   <li>{@link #attestBody(byte[])} mints an Apple App Attest
  *       assertion + attestation pair via the configured
- *       {@link WhatsAppClientDeviceAttestor.Ios} and packages it into the
+ *       {@link LinkedWhatsAppClientDeviceAttestor.Ios} and packages it into the
  *       {@code H=} body suffix plus the {@code Authorization}
  *       header.</li>
  *   <li>{@link #attestationFields()} ships just the APNS
@@ -39,8 +39,8 @@ import java.util.Objects;
  *
  * <p>Package-private because instances are obtained through
  * {@link MobileClientRegistration#newRegistration(LinkedWhatsAppStore,
- * WhatsAppClientVerificationHandler.Mobile, WhatsAppClientDeviceAttestor,
- * WhatsAppClientDevicePushClient)} rather than constructed directly.
+ * LinkedWhatsAppClientVerificationHandler.Mobile, LinkedWhatsAppClientDeviceAttestor,
+ * LinkedWhatsAppClientDevicePushClient)} rather than constructed directly.
  *
  * @implNote
  * This implementation reproduces the wire shape confirmed by Frida
@@ -66,30 +66,30 @@ final class IosClientRegistration extends MobileClientRegistration {
      * The iOS attestor consulted before each outgoing request.
      *
      * <p>Never {@code null}: the constructor substitutes
-     * {@link WhatsAppClientDeviceAttestor.Ios#NONE} when the caller supplies
+     * {@link LinkedWhatsAppClientDeviceAttestor.Ios#NONE} when the caller supplies
      * {@code null}. The {@code NONE} fallback returns empty App Attest
      * output, which the server tolerates as a low-trust downgrade
      * signal.
      */
-    private final WhatsAppClientDeviceAttestor.Ios attestor;
+    private final LinkedWhatsAppClientDeviceAttestor.Ios attestor;
 
     /**
      * The push client consulted for the APNS {@code push_token} and
      * the silent-push verification code form fields.
      *
      * <p>Never {@code null}: the constructor substitutes
-     * {@link WhatsAppClientDevicePushClient#noop()} when the caller supplies
+     * {@link LinkedWhatsAppClientDevicePushClient#noop()} when the caller supplies
      * {@code null}.
      */
-    private final WhatsAppClientDevicePushClient pushClient;
+    private final LinkedWhatsAppClientDevicePushClient pushClient;
 
     /**
      * Constructs an iOS registration bound to the given collaborators.
      *
      * <p>Invoked only from
      * {@link MobileClientRegistration#newRegistration(LinkedWhatsAppStore,
-     * WhatsAppClientVerificationHandler.Mobile,
-     * WhatsAppClientDeviceAttestor, WhatsAppClientDevicePushClient)}. A
+     * LinkedWhatsAppClientVerificationHandler.Mobile,
+     * LinkedWhatsAppClientDeviceAttestor, LinkedWhatsAppClientDevicePushClient)}. A
      * {@code null} attestor or push client is replaced by the
      * respective {@code NONE} / {@code noop} fallback.
      *
@@ -99,18 +99,18 @@ final class IosClientRegistration extends MobileClientRegistration {
      *                     method and the user-entered code
      * @param attestor     the iOS device attestor, or {@code null} to
      *                     fall back to
-     *                     {@link WhatsAppClientDeviceAttestor.Ios#NONE}
+     *                     {@link LinkedWhatsAppClientDeviceAttestor.Ios#NONE}
      * @param pushClient   the push client, or {@code null} to fall back
-     *                     to {@link WhatsAppClientDevicePushClient#noop()}
+     *                     to {@link LinkedWhatsAppClientDevicePushClient#noop()}
      */
     IosClientRegistration(
             LinkedWhatsAppStore store,
-            WhatsAppClientVerificationHandler.Mobile verification,
-            WhatsAppClientDeviceAttestor.Ios attestor,
-            WhatsAppClientDevicePushClient pushClient) {
+            LinkedWhatsAppClientVerificationHandler.Mobile verification,
+            LinkedWhatsAppClientDeviceAttestor.Ios attestor,
+            LinkedWhatsAppClientDevicePushClient pushClient) {
         super(store, verification);
-        this.attestor = Objects.requireNonNullElse(attestor, WhatsAppClientDeviceAttestor.Ios.NONE);
-        this.pushClient = Objects.requireNonNullElse(pushClient, WhatsAppClientDevicePushClient.noop());
+        this.attestor = Objects.requireNonNullElse(attestor, LinkedWhatsAppClientDeviceAttestor.Ios.NONE);
+        this.pushClient = Objects.requireNonNullElse(pushClient, LinkedWhatsAppClientDevicePushClient.noop());
     }
 
     /**
@@ -142,7 +142,7 @@ final class IosClientRegistration extends MobileClientRegistration {
      * {@inheritDoc}
      *
      * <p>On iOS, asks the configured
-     * {@link WhatsAppClientDeviceAttestor.Ios} to mint an App Attest payload
+     * {@link LinkedWhatsAppClientDeviceAttestor.Ios} to mint an App Attest payload
      * and packages it into the {@link BodyAttestation} pair:
      * <ul>
      *   <li>The {@code H=} body suffix carries
@@ -165,7 +165,7 @@ final class IosClientRegistration extends MobileClientRegistration {
      * This implementation returns {@link BodyAttestation#EMPTY}
      * whenever any of the three payload components (attestation,
      * assertion, keyId) comes back empty, signalling either the
-     * {@link WhatsAppClientDeviceAttestor.Ios#NONE} fallback or an attestor
+     * {@link LinkedWhatsAppClientDeviceAttestor.Ios#NONE} fallback or an attestor
      * that cannot mint App Attest (a simulator or a jailbroken device).
      * The JSON envelope is emitted verbatim with {@code "/"}
      * JSON-escaped to {@code "\/"} (matching the native client's
@@ -195,7 +195,7 @@ final class IosClientRegistration extends MobileClientRegistration {
      * emits on the native client: method, empty SIM MCC/MNC,
      * {@code jailbroken=0}, the APNS silent-push verification code
      * received via {@code application:didReceiveRemoteNotification:}
-     * (sourced from {@link WhatsAppClientDevicePushClient#getPushCode()}), and
+     * (sourced from {@link LinkedWhatsAppClientDevicePushClient#getPushCode()}), and
      * a cellular signal strength of {@code 1}.
      *
      * @implNote

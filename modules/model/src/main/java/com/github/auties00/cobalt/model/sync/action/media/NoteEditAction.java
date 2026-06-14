@@ -64,7 +64,7 @@ public final class NoteEditAction implements SyncAction<NoteEditActionArgs> {
 
     /**
      * The instant at which the note was created. Encoded on the wire as
-     * a 64-bit millisecond epoch via {@link InstantMillisMixin}.
+     * a 64-bit second epoch via {@link InstantSecondsMixin}.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant createdAt;

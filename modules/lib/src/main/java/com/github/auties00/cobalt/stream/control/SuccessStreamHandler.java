@@ -1,17 +1,18 @@
 package com.github.auties00.cobalt.stream.control;
 
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedChatsListener;
 import com.github.auties00.cobalt.listener.linked.LinkedContactsListener;
-import com.github.auties00.cobalt.listener.linked.LinkedLoggedInListener;
+import com.github.auties00.cobalt.listener.LoggedInListener;
 import com.github.auties00.cobalt.listener.linked.LinkedNameChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedNewslettersListener;
 import com.github.auties00.cobalt.listener.linked.LinkedStatusListener;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppFacebookGraphQlException;
 import com.github.auties00.cobalt.exception.WhatsAppServerRuntimeException;
+import com.github.auties00.cobalt.exception.WhatsAppWebGraphQlException;
 import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.model.device.pairing.LinkedPrimaryPlatform;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
@@ -49,7 +50,7 @@ import java.util.function.Supplier;
  * the parsed attributes, sync A/B props, enable or disable LID migration, start the WAM service, schedule the ADV
  * device check, resume web app-state syncing, send the {@code <iq xmlns="passive"><active/></iq>} stanza that
  * transitions the server out of passive mode, run the launch-time compliance probes and notify
- * {@link LinkedLoggedInListener#onLoggedIn(LinkedWhatsAppClient)}. A one-shot {@link AtomicBoolean} guard ensures the
+ * {@link LoggedInListener#onLoggedIn(LinkedWhatsAppClient)}. A one-shot {@link AtomicBoolean} guard ensures the
  * bootstrap runs at most once per connection; {@link #reset()} clears it on socket teardown so the next reconnect
  * repeats the bootstrap.
  *
@@ -187,7 +188,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * Drives the one-shot post-handshake bootstrap sequence: parses the {@code <success>} attributes, updates the
      * {@code me} identity, syncs A/B props, primes LID migration, starts the WAM, device and inactive-group services,
      * resumes app-state syncing, transitions the socket out of passive mode, fans out
-     * {@link LinkedLoggedInListener#onLoggedIn(LinkedWhatsAppClient)} and persists the store.
+     * {@link LoggedInListener#onLoggedIn(LinkedWhatsAppClient)} and persists the store.
      *
      * <p>Reachable only via {@link #handle(Node)} the first time a {@code <success>} stanza is observed on the current
      * connection.
@@ -293,7 +294,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         syncPrivacyDisallowedListsMex();
 
         for (var listener : store.listeners()) {
-            if (listener instanceof LinkedLoggedInListener typed) {
+            if (listener instanceof LoggedInListener typed) {
                 Thread.startVirtualThread(() -> typed.onLoggedIn(whatsapp));
             }
         }
@@ -304,8 +305,17 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
 
         bootstrapBusinessCertificate();
 
-        if (store.accountStore().clientType() == WhatsAppClientType.WEB) {
-            Thread.startVirtualThread(whatsapp::refreshWhatsAppWebGraphQlSession);
+        if (store.accountStore().clientType() == LinkedWhatsAppClientType.WEB) {
+            Thread.startVirtualThread(() -> {
+                try {
+                    whatsapp.refreshWhatsAppWebGraphQlSession();
+                } catch (WhatsAppWebGraphQlException.SessionUnseeded _) {
+
+                } catch (WhatsAppWebGraphQlException exception) {
+                    LOGGER_COMPLIANCE.log(System.Logger.Level.WARNING,
+                            "WhatsApp Web GraphQL credentials auto-refresh failed", exception);
+                }
+            });
             if (store.accountStore().primaryPlatform().filter(LinkedPrimaryPlatform::isBusiness).isPresent()
                     && store.webSessionStore().facebookGraphQlSession().isEmpty()) {
                 Thread.startVirtualThread(() -> {
@@ -398,7 +408,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * Drives the one-shot newsletter metadata fetch that backfills the newsletter collection on first login.
      *
      * <p>Gated on three conditions: this is a web client (newsletters are a web-only companion feature), the configured
-     * {@link com.github.auties00.cobalt.client.WhatsAppWebClientHistory} policy includes newsletters, and the
+     * {@link com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory} policy includes newsletters, and the
      * newsletter sync gate is still false. The {@link LinkedWhatsAppClient#refreshNewsletters()} call sets the gate and fans
      * out {@link LinkedNewslettersListener#onNewsletters(LinkedWhatsAppClient, java.util.Collection)} internally.
      *
@@ -410,7 +420,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void bootstrapNewsletterBackend() {
         var store = whatsapp.store();
-        if (store.accountStore().clientType() != WhatsAppClientType.WEB || store.syncStore().syncedNewsletters()) {
+        if (store.accountStore().clientType() != LinkedWhatsAppClientType.WEB || store.syncStore().syncedNewsletters()) {
             return;
         }
         var policy = store.syncStore().webHistoryPolicy().orElse(null);

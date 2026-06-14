@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * The persistent state backing a {@link com.github.auties00.cobalt.client.CloudWhatsAppClient}.
+ * The persistent state backing a {@link com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient}.
  *
  * <p>The Cloud transport is stateless beyond its credentials, so this store holds only the access
  * token and identifiers that address the WhatsApp Business Account assets plus the configuration of

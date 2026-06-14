@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.migration;
 
 import com.alibaba.fastjson2.JSON;
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadataBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMapping;

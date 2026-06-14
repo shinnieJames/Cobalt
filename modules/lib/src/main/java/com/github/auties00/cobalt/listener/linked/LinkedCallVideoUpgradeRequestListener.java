@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 /**
@@ -15,15 +15,15 @@ import com.github.auties00.cobalt.model.jid.Jid;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedCallVideoUpgradeRequestListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedCallVideoUpgradeRequestListener extends LinkedListener {
     /**
      * Notifies the listener that the peer is asking to upgrade an
      * audio-only call to audio plus video.
      *
      * <p>The application can call
-     * {@link com.github.auties00.cobalt.call.ActiveCall#acceptVideoUpgrade}
+     * {@link LinkedWhatsAppClient#acceptCallVideoUpgrade}
      * or
-     * {@link com.github.auties00.cobalt.call.ActiveCall#rejectVideoUpgrade}
+     * {@link LinkedWhatsAppClient#rejectCallVideoUpgrade}
      * in response. Acceptance triggers the local side to start its
      * own video track; rejection sends a denial signal back to the
      * peer.

@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 
 /**
@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedStatusPrivacyChangedListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedStatusPrivacyChangedListener extends LinkedListener {
     /**
      * Notifies the listener that the Status story privacy setting
      * was refreshed against the server.

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.migration;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatDisappearingMode;
 import com.github.auties00.cobalt.model.chat.ChatDisappearingModeBuilder;

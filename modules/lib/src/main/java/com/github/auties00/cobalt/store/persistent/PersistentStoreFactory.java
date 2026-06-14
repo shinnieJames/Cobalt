@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.store.persistent;
 
-import com.github.auties00.cobalt.client.WhatsAppClientDevice;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.store.ProtobufAccountStoreBuilder;
 import com.github.auties00.cobalt.store.ProtobufContactStoreBuilder;
 import com.github.auties00.cobalt.store.ProtobufSettingsStoreBuilder;
@@ -10,8 +10,8 @@ import com.github.auties00.cobalt.store.ProtobufWebSessionStoreBuilder;
 import com.github.auties00.cobalt.store.ProtobufWhatsAppStore;
 import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
-import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientSixPartsKeys;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.io.IOException;
@@ -135,11 +135,11 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation forwards to {@link #loadSession(WhatsAppClientType, String)} with the
+     * This implementation forwards to {@link #loadSession(LinkedWhatsAppClientType, String)} with the
      * UUID stringified.
      */
     @Override
-    public Optional<LinkedWhatsAppStore> load(WhatsAppClientType clientType, UUID uuid) throws IOException {
+    public Optional<LinkedWhatsAppStore> load(LinkedWhatsAppClientType clientType, UUID uuid) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         Objects.requireNonNull(uuid, "uuid cannot be null");
         return loadSession(clientType, uuid.toString());
@@ -149,11 +149,11 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation forwards to {@link #loadSession(WhatsAppClientType, String)} with the
+     * This implementation forwards to {@link #loadSession(LinkedWhatsAppClientType, String)} with the
      * phone number stringified.
      */
     @Override
-    public Optional<LinkedWhatsAppStore> load(WhatsAppClientType clientType, long phoneNumber) throws IOException {
+    public Optional<LinkedWhatsAppStore> load(LinkedWhatsAppClientType clientType, long phoneNumber) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         return loadSession(clientType, String.valueOf(phoneNumber));
     }
@@ -162,13 +162,13 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation resolves the {@link #readLatestSession(WhatsAppClientType) latest-session
+     * This implementation resolves the {@link #readLatestSession(LinkedWhatsAppClientType) latest-session
      * pointer} in a single read and loads that session directly; there is no directory scan. When
      * the pointer is absent, or names a session whose {@code store.proto} no longer exists, the
      * result is {@link Optional#empty()}.
      */
     @Override
-    public Optional<LinkedWhatsAppStore> loadLatest(WhatsAppClientType clientType) throws IOException {
+    public Optional<LinkedWhatsAppStore> loadLatest(LinkedWhatsAppClientType clientType) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         var pointer = readLatestSession(clientType);
         if (pointer.isEmpty()) {
@@ -190,7 +190,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      *         that session
      * @throws IOException if the metadata file cannot be read or decoded
      */
-    private Optional<LinkedWhatsAppStore> loadSession(WhatsAppClientType clientType, String sessionId) throws IOException {
+    private Optional<LinkedWhatsAppStore> loadSession(LinkedWhatsAppClientType clientType, String sessionId) throws IOException {
         var storeFile = PersistentStore.storeFilePath(clientType, directory, sessionId);
         if (Files.notExists(storeFile)) {
             return Optional.empty();
@@ -244,7 +244,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * descriptor.
      */
     @Override
-    public LinkedWhatsAppStore create(WhatsAppClientType clientType, UUID uuid) throws IOException {
+    public LinkedWhatsAppStore create(LinkedWhatsAppClientType clientType, UUID uuid) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         var resolvedUuid = Objects.requireNonNullElseGet(uuid, UUID::randomUUID);
         var sessionId = resolvedUuid.toString();
@@ -273,7 +273,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * a fresh random UUID.
      */
     @Override
-    public LinkedWhatsAppStore create(WhatsAppClientType clientType, long phoneNumber) throws IOException {
+    public LinkedWhatsAppStore create(LinkedWhatsAppClientType clientType, long phoneNumber) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         var sessionId = String.valueOf(phoneNumber);
         var store = new PersistentStore(
@@ -304,7 +304,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * previously exported six-parts key blob without a fresh QR pairing flow.
      */
     @Override
-    public LinkedWhatsAppStore create(WhatsAppClientType clientType, WhatsAppClientSixPartsKeys sixPartsKeys) throws IOException {
+    public LinkedWhatsAppStore create(LinkedWhatsAppClientType clientType, LinkedWhatsAppClientSixPartsKeys sixPartsKeys) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         Objects.requireNonNull(sixPartsKeys, "sixPartsKeys cannot be null");
         var phoneNumber = sixPartsKeys.phoneNumber();
@@ -319,7 +319,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
                         .uuid(UUID.randomUUID())
                         .phoneNumber(phoneNumber)
                         .clientType(clientType)
-                        .device(WhatsAppClientDevice.web())
+                        .device(LinkedWhatsAppClientDevice.web())
                         .registered(true)
                         .jid(Jid.of(phoneNumber))
                         .build(),
@@ -343,8 +343,8 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      *
      * @implNote
      * This implementation writes the
-     * {@link #writeLatestSession(WhatsAppClientType, String) latest-session pointer} once the env is
-     * open so a subsequent {@link #loadLatest(WhatsAppClientType)} resumes the session just created
+     * {@link #writeLatestSession(LinkedWhatsAppClientType, String) latest-session pointer} once the env is
+     * open so a subsequent {@link #loadLatest(LinkedWhatsAppClientType)} resumes the session just created
      * without scanning the home directory.
      *
      * @param store      the freshly built store
@@ -352,7 +352,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * @param sessionId  the session UUID string or phone-number string
      * @throws IOException if the env directory cannot be created or the pointer cannot be written
      */
-    private void attachFreshLmdb(PersistentStore store, WhatsAppClientType clientType, String sessionId) throws IOException {
+    private void attachFreshLmdb(PersistentStore store, LinkedWhatsAppClientType clientType, String sessionId) throws IOException {
         var envPath = PersistentStore.messagesEnvPath(clientType, directory, sessionId);
         store.attachMessageStore(PersistentMessageStore.open(envPath, mapSize));
         writeLatestSession(clientType, sessionId);
@@ -360,7 +360,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
 
     /**
      * Records {@code sessionId} as the most recently opened session for {@code clientType}, so
-     * {@link #readLatestSession(WhatsAppClientType)} can resolve it without scanning every session
+     * {@link #readLatestSession(LinkedWhatsAppClientType)} can resolve it without scanning every session
      * directory.
      *
      * @apiNote
@@ -379,7 +379,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * @param sessionId  the session identifier to record
      * @throws IOException if the pointer file cannot be written or moved
      */
-    private void writeLatestSession(WhatsAppClientType clientType, String sessionId) throws IOException {
+    private void writeLatestSession(LinkedWhatsAppClientType clientType, String sessionId) throws IOException {
         var home = ProtobufWhatsAppStore.getHomeDirectory(clientType, directory);
         var pointer = home.resolve(LATEST_SESSION_FILE);
         var temp = home.resolve(LATEST_SESSION_FILE + ".tmp");
@@ -393,11 +393,11 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
 
     /**
      * Returns the most recently opened session identifier for {@code clientType}, as recorded by
-     * {@link #writeLatestSession(WhatsAppClientType, String)}, or an empty {@link Optional} when no
+     * {@link #writeLatestSession(LinkedWhatsAppClientType, String)}, or an empty {@link Optional} when no
      * pointer has been written yet.
      *
      * <p>The identifier is not validated against the filesystem: the pointed session may since have
-     * been deleted. {@link #loadLatest(WhatsAppClientType)} treats a dangling pointer the same as a
+     * been deleted. {@link #loadLatest(LinkedWhatsAppClientType)} treats a dangling pointer the same as a
      * missing one.
      *
      * @implNote
@@ -409,7 +409,7 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * @return the recorded session identifier, or empty when the pointer is absent or blank
      * @throws IOException if the pointer file exists but cannot be read
      */
-    private Optional<String> readLatestSession(WhatsAppClientType clientType) throws IOException {
+    private Optional<String> readLatestSession(LinkedWhatsAppClientType clientType) throws IOException {
         var pointer = ProtobufWhatsAppStore.getHomeDirectory(clientType, directory)
                 .resolve(LATEST_SESSION_FILE);
         try {
@@ -425,16 +425,16 @@ public final class PersistentStoreFactory implements WhatsAppStoreFactory {
      * client type.
      *
      * @apiNote
-     * Internal helper that picks a desktop-shaped {@link WhatsAppClientDevice} for web sessions and an
+     * Internal helper that picks a desktop-shaped {@link LinkedWhatsAppClientDevice} for web sessions and an
      * iOS-shaped descriptor for mobile sessions.
      *
      * @param clientType the client type
-     * @return a fresh {@link WhatsAppClientDevice} suitable for the type
+     * @return a fresh {@link LinkedWhatsAppClientDevice} suitable for the type
      */
-    private static WhatsAppClientDevice defaultDevice(WhatsAppClientType clientType) {
+    private static LinkedWhatsAppClientDevice defaultDevice(LinkedWhatsAppClientType clientType) {
         return switch (clientType) {
-            case WEB -> WhatsAppClientDevice.desktop();
-            case MOBILE -> WhatsAppClientDevice.ios(false);
+            case WEB -> LinkedWhatsAppClientDevice.desktop();
+            case MOBILE -> LinkedWhatsAppClientDevice.ios(false);
         };
     }
 }

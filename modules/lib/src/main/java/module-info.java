@@ -1,5 +1,5 @@
 import com.github.auties00.cobalt.listener.WhatsAppListener;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
 /**
  * Defines the Cobalt library, a Java reimplementation of the WhatsApp Web, Desktop, and Mobile clients.
@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
  *
  * <p>The exported capability surface is organised as follows:
  * <ul>
- *   <li>Connection and control through {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient}, the
+ *   <li>Connection and control through {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient}, the
  *       single facade for pairing, connecting, sending and receiving traffic, and driving every other
  *       feature.</li>
  *   <li>Event delivery through {@link WhatsAppListener} and its
@@ -88,16 +88,12 @@ module com.github.auties00.cobalt {
     requires org.bouncycastle.pkix;
 
     // Calls
-    exports com.github.auties00.cobalt.call;
-    exports com.github.auties00.cobalt.call.frame.audio;
-    exports com.github.auties00.cobalt.call.frame.video;
-    exports com.github.auties00.cobalt.call.source;
-    exports com.github.auties00.cobalt.call.sink;
-    exports com.github.auties00.cobalt.call.filter;
-    exports com.github.auties00.cobalt.call.session;
+    exports com.github.auties00.cobalt.call.stream;
 
     // Client API
     exports com.github.auties00.cobalt.client;
+    exports com.github.auties00.cobalt.client.linked;
+    exports com.github.auties00.cobalt.client.cloud;
 
     // Listeners
     exports com.github.auties00.cobalt.listener;

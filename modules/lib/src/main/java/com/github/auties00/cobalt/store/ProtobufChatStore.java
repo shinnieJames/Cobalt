@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.store;
 
-import com.github.auties00.cobalt.call.IncomingCall;
+import com.github.auties00.cobalt.model.call.IncomingCall;
 import com.github.auties00.cobalt.model.call.CallLog;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;

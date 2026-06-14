@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.message.send;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.StubDeviceService;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.TestSignalSession;
@@ -20,6 +20,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
@@ -199,7 +200,7 @@ class UserMessageSenderTest {
         var meta = new MetaStanza(store);
         var reporting = new ReportingStanza(ab);
         var ctwa = new CtwaAttributionStanza(store, ab);
-        var tcToken = new TcTokenStanza(store, ab);
+        var tcToken = new TcTokenStanza(store, ab, new LiveTrustedContactTokenService(ab));
         return new UserMessageSender(client, encryption, deviceService, lidMigrationService, ab,
                 bot, biz, meta, reporting, ctwa, tcToken, wamService);
     }

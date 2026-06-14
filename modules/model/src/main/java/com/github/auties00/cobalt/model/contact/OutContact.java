@@ -27,7 +27,7 @@ import java.util.Optional;
  * <p>This class is a local model only. Modifying its fields does not send any
  * request to the WhatsApp servers; it simply reflects the locally cached
  * state. To create or remove outgoing contacts at the protocol level, use the
- * dedicated sync actions exposed by {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient}.
+ * dedicated sync actions exposed by {@code LinkedWhatsAppClient}.
  *
  * @see Contact
  */

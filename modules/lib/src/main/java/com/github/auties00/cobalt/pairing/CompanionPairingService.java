@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.pairing;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
 import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
 
@@ -11,7 +11,7 @@ import java.security.GeneralSecurityException;
  * Drives the companion side of WhatsApp's alt-device-linking (eight-character pairing-code) flow.
  *
  * <p>One instance is created per {@link LinkedWhatsAppClient} when the client is configured with a
- * {@link WhatsAppClientVerificationHandler.Web.PairingCode} handler and a phone number is set on
+ * {@link LinkedWhatsAppClientVerificationHandler.Web.PairingCode} handler and a phone number is set on
  * the store. The service is shared between the IQ stream handler that triggers
  * {@code companion_hello} and the notification stream handler that consumes the resulting
  * {@code primary_hello} and {@code refresh_code} notifications.
@@ -20,7 +20,7 @@ import java.security.GeneralSecurityException;
  * primary phone instead of scanning a QR code. The lifecycle is:
  * <ol>
  *   <li>{@link #start()} generates the code, ships {@code companion_hello}, and delivers the code
- *       to {@link WhatsAppClientVerificationHandler.Web#handle(String)}.</li>
+ *       to {@link LinkedWhatsAppClientVerificationHandler.Web#handle(String)}.</li>
  *   <li>The user types the code on their primary device.</li>
  *   <li>{@link #handlePrimaryHello(byte[], byte[], byte[])} runs the {@code companion_finish}
  *       algorithm, ships the IQ, and persists the derived ADV master secret.</li>
@@ -36,7 +36,7 @@ public interface CompanionPairingService {
      * Returns the pairing code published by the most recent {@link #start()} invocation.
      *
      * <p>This is a synchronous accessor for callers that prefer polling over the
-     * {@link WhatsAppClientVerificationHandler.Web#handle(String)} push delivery. It returns
+     * {@link LinkedWhatsAppClientVerificationHandler.Web#handle(String)} push delivery. It returns
      * {@code null} before {@link #start()} runs and after the service clears its cache.
      *
      * @implSpec
@@ -54,7 +54,7 @@ public interface CompanionPairingService {
      *
      * @implSpec
      * Implementations must report {@code true} only when the configured verification handler is a
-     * {@link WhatsAppClientVerificationHandler.Web.PairingCode} and the store carries a phone
+     * {@link LinkedWhatsAppClientVerificationHandler.Web.PairingCode} and the store carries a phone
      * number.
      *
      * @return whether the alt-device-linking flow should run
@@ -68,7 +68,7 @@ public interface CompanionPairingService {
      * <p>This is the entry point of the companion-side handshake. It must be invoked before any
      * {@code primary_hello} or {@code refresh_code} notification is routed to this service. On
      * success the user sees the eight-character code via
-     * {@link WhatsAppClientVerificationHandler.Web#handle(String)} and can type it on their primary
+     * {@link LinkedWhatsAppClientVerificationHandler.Web#handle(String)} and can type it on their primary
      * device. The pairing code is published only after the server has acknowledged the IQ, so the
      * caller never sees a code that the server silently rejected.
      *

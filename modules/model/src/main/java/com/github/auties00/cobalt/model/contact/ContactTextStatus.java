@@ -31,7 +31,7 @@ import java.util.OptionalInt;
  * handlers. This class is a local model only: modifying its fields does not
  * send any request to the WhatsApp servers; to update the current user's own
  * text status use the dedicated profile management APIs of
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient}.
+ * {@code LinkedWhatsAppClient}.
  *
  * @see Contact
  */

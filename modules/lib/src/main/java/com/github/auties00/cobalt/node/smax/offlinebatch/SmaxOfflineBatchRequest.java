@@ -15,7 +15,7 @@ import java.util.Objects;
  * the client is ready to absorb in the next batch. The cast-shape RPC has no
  * reply variant; the relay simply resumes flushing offline messages until the
  * announced budget is consumed. Cobalt issues it from
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#acknowledgeOfflineBatch(int)}
+ * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#acknowledgeOfflineBatch(int)}
  * to keep the pump flowing across the connection's post-login backlog drain.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutOfflineBatchRequest")

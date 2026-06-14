@@ -43,6 +43,10 @@ function generateABPropJava(props: readonly ABPropDef[], pkg: string): string {
     lines.push(" *");
     lines.push(" * <p>This record is immutable and thread-safe.");
     lines.push(" *");
+    lines.push(" * <p>The constants in this record are generated automatically by {@code tools/web/ab-props-codegen}");
+    lines.push(" * from the {@code WAWebABPropsConfigs} module; each constant's documentation records its source");
+    lines.push(" * definition. Do not edit the constants manually.");
+    lines.push(" *");
     lines.push(" * @param code              the unique numeric identifier for this configuration property");
     lines.push(" * @param defaultValue      the production default value to use when the server has not provided");
     lines.push(" *                          a value for this property, must not be {@code null}");
@@ -64,9 +68,9 @@ function generateABPropJava(props: readonly ABPropDef[], pkg: string): string {
             .replace(/"/g, '\\"');
         lines.push("");
         lines.push("    /**");
-        lines.push(`     * This constant was generated automatically by {@code tools/web/ab-props-codegen}.`);
+        lines.push(`     * The {@code ${prop.name}} AB prop.`);
         lines.push("     *");
-        lines.push(`     * @implNote WAWebABPropsConfigs: ${prop.sourceDefinition}`);
+        lines.push(`     * <p>Source definition in {@code WAWebABPropsConfigs}: ${prop.sourceDefinition}`);
         lines.push("     */");
         lines.push(`    public static final ABProp ${constName} = new ABProp(${prop.code}, "${escapedDefault}", "${escapedDebugDefault}");`);
     }

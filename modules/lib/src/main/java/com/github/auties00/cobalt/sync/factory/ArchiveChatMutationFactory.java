@@ -20,7 +20,7 @@ import java.util.List;
  * Builds outgoing app-state mutations that archive or unarchive a chat.
  *
  * <p>When the user archives or unarchives a chat through
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient}, the resulting
+ * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient}, the resulting
  * {@link SyncPendingMutation} values are queued for outbound app-state sync so
  * linked devices reflect the same archive state. This factory builds the
  * outgoing mutations; the inbound counterpart is

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.sync.key;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
 import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;

@@ -3,7 +3,7 @@ import com.github.auties00.cobalt.sync.LiveSnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.LiveWebAppStateService;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
-import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;

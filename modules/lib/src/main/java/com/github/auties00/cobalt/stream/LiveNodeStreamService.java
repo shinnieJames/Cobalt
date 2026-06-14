@@ -1,10 +1,10 @@
 package com.github.auties00.cobalt.stream;
 
 import com.github.auties00.cobalt.ack.AckSender;
-import com.github.auties00.cobalt.call.internal.CallService;
-import com.github.auties00.cobalt.call.internal.signaling.CallTerminateReceiver;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.call.CallService;
+import com.github.auties00.cobalt.call.signaling.CallTerminateReceiver;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.call.internal.signaling.CallReceiver;
+import com.github.auties00.cobalt.call.signaling.CallReceiver;
 import com.github.auties00.cobalt.stream.control.ErrorStreamHandler;
 import com.github.auties00.cobalt.stream.control.FailureStreamHandler;
 import com.github.auties00.cobalt.stream.control.InfoBulletinStreamHandler;
@@ -117,7 +117,7 @@ public final class LiveNodeStreamService implements NodeStreamService {
      *                                         {@code <terminate>} call
      *                                         signalling handlers
      * @param webVerificationHandler           the
-     *                                         {@link WhatsAppClientVerificationHandler.Web}
+     *                                         {@link LinkedWhatsAppClientVerificationHandler.Web}
      *                                         used during companion
      *                                         pairing prompts
      * @param lidMigrationService              the {@link LidMigrationService}
@@ -159,7 +159,7 @@ public final class LiveNodeStreamService implements NodeStreamService {
      *                                         connection consumed by the
      *                                         message and success handlers
      */
-    public LiveNodeStreamService(LinkedWhatsAppClient whatsapp, CallService callService, WhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, AckSender ackSender, MediaConnectionService mediaConnectionService) {
+    public LiveNodeStreamService(LinkedWhatsAppClient whatsapp, CallService callService, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, AckSender ackSender, MediaConnectionService mediaConnectionService) {
         var offlineNotificationsReporter = new OfflineNotificationsReporter(whatsapp, wamService);
         var result = new HashMap<String, SocketStreamHandler>();
         addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService, lidMigrationService, companionPairingService, wamService));
@@ -176,7 +176,7 @@ public final class LiveNodeStreamService implements NodeStreamService {
         addHandler(result, "receipt", new ReceiptStreamHandler(whatsapp, messageService, wamService, ackSender));
         addHandler(result, "presence", new PresenceStreamHandler(whatsapp));
         addHandler(result, "chatstate", new ChatStateStreamHandler(whatsapp));
-        addHandler(result, "call", new CallReceiver(whatsapp, callService, ackSender));
+        addHandler(result, "call", new CallReceiver(whatsapp, callService, messageService, ackSender));
         addHandler(result, "terminate", new CallTerminateReceiver(whatsapp, callService));
         addHandler(result, "notification", new NotificationStreamHandler(
                 whatsapp,

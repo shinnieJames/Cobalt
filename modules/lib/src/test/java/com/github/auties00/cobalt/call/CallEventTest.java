@@ -10,7 +10,6 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import com.github.auties00.cobalt.call.internal.CallService;
 
 /**
  * Builder-level tests for the WAM Call event (id 462). Does not run a full

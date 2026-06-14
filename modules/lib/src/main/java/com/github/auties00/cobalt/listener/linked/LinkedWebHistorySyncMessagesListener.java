@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.listener.linked;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.chat.Chat;
 
 import java.util.SequencedCollection;
@@ -17,7 +17,7 @@ import java.util.SequencedCollection;
  * @see LinkedWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface LinkedWebHistorySyncMessagesListener extends WhatsAppLinkedListener {
+public non-sealed interface LinkedWebHistorySyncMessagesListener extends LinkedListener {
     /**
      * Notifies the listener that messages for a batch of chats have been
      * received during history synchronization.

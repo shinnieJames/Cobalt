@@ -1,17 +1,79 @@
 # Cobalt
 
-Cobalt is a Java reimplementation of WhatsApp Web/Desktop/Mobile.
+Cobalt is a Java implementation of the WhatsApp platform. It supports two independent transports behind one sealed API:
+
+1. **Linked clients** (`LinkedWhatsAppClient`) — reimplementation of WhatsApp Web/Desktop (companion, QR or pairing-code) and WhatsApp Mobile (primary, phone-number registration) over the encrypted binary-XMPP socket with Signal/Noise cryptography.
+2. **Cloud API client** (`CloudWhatsAppClient`) — Meta's official WhatsApp Cloud API over `graph.facebook.com` REST plus an embedded webhook receiver.
 
 ## Build
 
 - Maven project: `mvn compile` from root
-- Java 25 with preview features enabled
-- Module system with `module-info.java`
+- Java 25
+- Module system with `module-info.java` in every Maven module
+
+## Maven Modules
+
+| Module                | artifactId           | JPMS name                          | Purpose                                                                                                                                                                                                    |
+|-----------------------|----------------------|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `modules/model`       | `cobalt-model`       | `com.github.auties00.cobalt.model` | Hand-written protobuf domain model. No dependency on `lib`.                                                                                                                                                |
+| `modules/lib`         | `cobalt-lib`         | `com.github.auties00.cobalt`       | The client library: clients, socket, stream handlers, store, sync, media, calls, Cloud API. Depends on `model`, `wam-core`, `source-meta`.                                                                 |
+| `modules/wam-core`    | `cobalt-wam-core`    | `com.github.auties00.cobalt.wam`   | WAM (WhatsApp Metrics) telemetry: `@WamEvent`/`@WamProperty`/`@WamEnum` annotations, binary wire encoder/decoder, and a JavaPoet annotation processor generating `*Impl`/`*Builder`/`WamEventRegistry`.    |
+| `modules/source-meta` | `cobalt-source-meta` | `com.github.auties00.cobalt.meta`  | Source provenance annotations (`@WhatsAppWebModule`, `@WhatsAppWebExport`, `@WhatsAppMobileClass`, `@WhatsAppMobileMethod`) and the processor emitting `META-INF/wa-source-manifest.json` at compile time. |
+
+Dependency direction: `lib -> {model, wam-core, source-meta}`; `model`, `wam-core`, and `source-meta` are independent of each other. Javadoc cross-references must respect this direction (`model` can never `{@link}` a `lib` type).
 
 ## Architecture
 
-### Async Model
-Virtual threads (Project Loom) with direct blocking calls — no `CompletableFuture`. JS `await` maps to a plain blocking call on a virtual thread.
+### Client Hierarchy
+Everything is sealed for exhaustive pattern matching. The `client` package is split by transport: `client` holds the shared surface (`WhatsAppClient`, `WhatsAppClientBuilder`, `WhatsAppClientErrorHandler`, `WhatsAppClientDisconnectReason`, `WhatsAppClientProxy`/`WhatsAppClientProxyAuthenticator`), `client.linked` the Linked flavour, `client.cloud` the Cloud flavour.
+- `WhatsAppClient` (sealed) permits `LinkedWhatsAppClient` and `CloudWhatsAppClient`; carries the transport-agnostic surface: lifecycle (`connect`/`disconnect`/`reconnect`/`waitForDisconnection`), message send, reactions, read receipts (`markChatAsRead` + message-keyed `markMessageAsRead`), typing indicator, own business profile (edit + query), block list (`blockContact`/`unblockContact`/`queryBlockedContacts`), shared-listener registration, and `removeListener(WhatsAppListener)`.
+- `LinkedWhatsAppClient` -> implemented by package-private `LiveLinkedWhatsAppClient`. Flavour selected by `LinkedWhatsAppClientType`: `WEB` (companion device) or `MOBILE` (primary device, SMS/voice/OTP registration via the `registration` package). Linked-only support types carry the `LinkedWhatsAppClient*` prefix (`LinkedWhatsAppClientDevice`, `LinkedWhatsAppClientVerificationHandler`, `LinkedWhatsAppClientSixPartsKeys`, ...).
+- `CloudWhatsAppClient` -> implemented by `LiveCloudWhatsAppClient`. Backed by the `cloud` package: `CloudApiClient` (HTTPS to `graph.facebook.com`, Bearer token + optional `appsecret_proof`), `CloudMessageEncoder` (`MessageContainer` -> `/messages` JSON), `CloudWebhookDecoder` (webhook payloads -> `ChatMessageInfo`/typed update models), `CloudWebhookServer` (`jdk.httpserver` on virtual threads; `hub.challenge` GET handshake, `X-Hub-Signature-256` HmacSHA256 verification on POST). Phone-number verification mirrors the Linked ceremony via `CloudWhatsAppClientVerificationHandler` (`CloudWhatsAppClient.verifyPhoneNumber`).
+- Builders: `WhatsAppClient.builder()` -> `.linkedApi()` (`LinkedWhatsAppClientBuilder` -> `.webClient()` / `.mobileClient()` / `.customClient()`) or `.cloudApi()` (`CloudWhatsAppClientBuilder`, staged like the Linked builder: `.loadConnection(accessToken, phoneNumberId)` -> `Options` (Graph config, proxy, error handler) -> optional `.webhook(verifyToken, port)` sub-stage -> `.build()`; `.loadConnection(CloudWhatsAppStore)` is the pre-built-store branch). Flavour interfaces also expose `LinkedWhatsAppClient.builder()` / `CloudWhatsAppClient.builder()` directly.
+- **Naming rule:** production implementations are `Live<Interface>` (e.g., `LiveLinkedWhatsAppClient`, `LiveCallService`); the interface keeps the clean name. Never `Default*`. When the two transports expose the same operation, the Linked name wins and the Cloud method is renamed to match.
+
+### Threading Model
+Virtual threads (Project Loom) with direct blocking calls — no `CompletableFuture`. JS `await` / native async maps to a plain blocking call on a virtual thread.
+- Every listener invocation runs on its own virtual thread; listeners can block freely without stalling the socket reader.
+- `net` package owns connection resilience: `ReconnectSupervisor` (unbounded backoff + jitter on a dedicated thread), `KeepAliveService` (periodic `w:p` ping), `NetworkConnectivityMonitor` (native OS monitoring via FFM/jextract bindings: `Iphlpapi` on Windows, `Netlink` on Linux, `SCReachability` on macOS; bindings regenerated by `regenerate-bindings.sh`).
+- Locking conventions: `SignalCryptoLocks` serializes Signal session/sender-key ratchets across encryption AND decryption; `MessageSender` hoists a per-conversation send queue (template method: final `send` -> enqueue -> abstract `doSend`); app-state push/pull rounds are serialized behind a single lock.
+- MDBX persistence uses one dedicated platform writer thread with batched transactions (see Persistence).
+
+### Store System
+`WhatsAppStore` (sealed) permits `LinkedWhatsAppStore` and `CloudWhatsAppStore`.
+
+`LinkedWhatsAppStore` replaces WA Web's multi-database architecture (~12 IndexedDB databases, ~100 IDB tables, ~45 reactive Collections, UserPrefs) with **seven composed sub-stores**, each a `ConcurrentHashMap`-backed `@ProtobufMessage`:
+- `SignalStore` — Signal/Noise keys, sessions, sender keys, identity trust, ADV credential (extends `SignalProtocolStore`).
+- `AccountStore` — own identity and profile: JID/LID, device, versions, name, picture, business profile.
+- `ContactStore` — contacts, PN<->LID mapping, per-user device lists, block list.
+- `ChatStore` — chats, newsletters, status, messages, calls. This is the persistence-variant domain: `ProtobufChatStore` is abstract and each persistence strategy supplies its concrete subclass.
+- `SyncStore` — app-state (syncd) per-collection state machines, sync keys, mutation queues, AB-props.
+- `SettingsStore` — privacy, preferences, stickers, labels, quick replies.
+- `BusinessStore` — runtime-only business/payments/bot state (not persisted).
+
+`ProtobufWhatsAppStore` is the abstract in-memory facade composing the sub-stores as protobuf fields; it is delegator-free (consumers call `store.signal().x()`, not flattened pass-through methods). Key WA Web counterparts: `WAWebSignalStorage`, `WAWebModelStorageInitialize`, `WAWebCollections`, `WAWebUserPrefsBase`.
+
+`CloudWhatsAppStore` is deliberately lightweight: access token, phone-number id, WABA id, app secret, webhook config.
+
+**DI pattern:** services (store, client, etc.) are injected via constructor and held as fields, never reached through global getters.
+
+### Persistence (`store/persistent`)
+Obtained via `WhatsAppStoreFactory.persistent()` / `.persistent(Path)` / `.persistent(Path, long mapSize)` or `.temporary()` (RAM-only `TemporaryStore`). Default root `$HOME/.cobalt/proto`, layout `<dir>/<clientType>/<sessionId>/`:
+- `store.proto` — protobuf snapshot of the metadata sub-stores.
+- `messages.mdbx/` — a libmdbx environment (FFM bindings under `store/persistent/mdbx/bindings`, jextract-generated `Mdbx`) holding three named databases: `chat_messages` (key `chatJid+0x00+msgId`, per-chat range scans), `newsletter_messages` (key `newsletterJid+0x00+serverId` big-endian), `status_messages` (flat by `msgId`).
+- Write path: single dedicated platform writer thread (`MdbxWriteQueue`), batched transactions, one fsync per batch. Read path: short transactions with eager heap copies (no mmap references escape). Opened with `MDBX_NOSTICKYTHREADS` (virtual-thread safe) and `MDBX_LIFORECLAIM`.
+
+Other `$HOME/.cobalt/` users: `errors/` (default error-handler dump), `cache/` (Android version metadata), `cache/natives/` (`NativeLibLoader` extraction root).
+
+### Error Model (INTENTIONALLY DIFFERENT FROM WA WEB)
+Cobalt's error handling is **deliberately redesigned** to be configurable — do NOT replicate WA Web's inline recovery logic:
+- **Sealed exception hierarchy:** all extend `WhatsAppException` (sealed abstract `RuntimeException`, ~23 direct permits). Each has `isFatal()` (session-invalidating: BadMac, Banned, LoggedOut, ADV/LID failures, store corruption; non-fatal: single message, media transfer, single AB prop).
+- **Pluggable error handler:** `WhatsAppClientErrorHandler` returns `Result` (`DISCARD`, `DISCONNECT`, `RECONNECT`, `LOG_OUT`, `BAN`). Recovery is user-configurable, NOT hardcoded.
+- **Key families:** `WhatsAppSessionException` (sealed: `BadMac`, `Closed`, `Conflict`, `LoggedOut`, `Banned`, `Reconnect`), `WhatsAppMessageException`, `WhatsAppMediaException`, `WhatsAppWebAppStateSyncException`, `WhatsAppAdvValidationException`, `WhatsAppStreamException`, `WhatsAppRegistrationException`, `WhatsAppCallException`, and for the Cloud transport `WhatsAppCloudException` (sealed: `CloudAuthException` for HTTP 401/Graph code 190, `CloudApiException` carrying code/subcode/`fbtrace_id`).
+- **Validation rule:** when WA Web has inline error recovery (try/catch with retry/disconnect/ignore), Cobalt throws the appropriate exception subtype instead. Only flag as missing if the exception THROW itself is missing, not the recovery logic.
+
+### Listener Model
+`WhatsAppListener` (sealed) permits three branches: `LinkedListener` (~60 single-method per-event interfaces in `listener/linked`, e.g. `LinkedChatsListener`), `CloudListener` (~13 in `listener/cloud`, all with typed payload models, e.g. `CloudTemplateStatusListener` receiving `CloudTemplateStatusUpdate`; the raw-envelope escape hatch is `CloudWebhookReceivedListener`), and five transport-agnostic listeners directly in `listener` that receive the root `WhatsAppClient`: `NewMessageListener`, `MessageStatusListener`, `MessageDeletedListener`, `LoggedInListener`, `DisconnectedListener`. The shared five register through typed `addXxxListener` methods on `WhatsAppClient` itself; flavour events register through `addListener(LinkedListener)`/`addListener(CloudListener)` or their typed conveniences; removal is uniformly `removeListener(WhatsAppListener)`. `LinkedWhatsAppClientListener` / `CloudWhatsAppClientListener` are non-sealed aggregators implementing every event (including the shared five) for subclass-style listeners. Internal always-registered listeners live under `listener/linked/internal`.
 
 ### Protobuf System
 Custom protobuf library (`com.github.auties00:protobuf-serialization-plugin`), NOT Google protobuf:
@@ -23,34 +85,26 @@ Custom protobuf library (`com.github.auties00:protobuf-serialization-plugin`), N
 - **Mixins:** `@ProtobufMixin` classes for type conversion (e.g., `InstantSecondsMixin` converts `Instant` ↔ `Long`).
 - **Custom serializers:** `@ProtobufSerializer`/`@ProtobufDeserializer` on types (e.g., `Jid` has custom `of(ProtobufString)` deserializer).
 
-### Store System
-Single `ProtobufWhatsAppStore` flattens WA Web's multi-database architecture:
-- WA Web uses ~12 IndexedDB databases, ~100 IDB tables, ~45 in-memory reactive Collections, and a key-value UserPrefs store.
-- Cobalt collapses ALL of this into one `ProtobufWhatsAppStore` with `ConcurrentHashMap` fields per entity type.
-- **Key WA Web store modules:** `WAWebSignalStorage` (Signal protocol), `WAWebModelStorageInitialize` (chats/contacts/messages/sync), `WAWebCollections` (in-memory), `WAWebUserPrefsBase` (user preferences).
-- **Cobalt DI pattern:** Services (store, client, etc.) are injected via constructor, NOT accessed via getters. Classes receive dependencies as constructor parameters and store them as fields.
-
-### Error Model (INTENTIONALLY DIFFERENT FROM WA WEB)
-Cobalt's error handling is **deliberately redesigned** to be configurable — do NOT replicate WA Web's inline recovery logic:
-- **Sealed exception hierarchy:** All extend `WhatsAppException` (sealed abstract `RuntimeException`). Each has `isFatal()`.
-- **Pluggable error handler:** `WhatsAppClientErrorHandler` returns `Result` (`DISCARD`, `DISCONNECT`, `RECONNECT`, `LOG_OUT`, `BAN`). Recovery is user-configurable, NOT hardcoded.
-- **Key exception types:** `WhatsAppSessionException` (sealed: `BadMac`, `Closed`, `Conflict`, `LoggedOut`, `Banned`, `Reconnect`), `WhatsAppMessageException.Receive` (Signal crypto), `WhatsAppMediaException` (sealed: `Connection`, `Upload`, `Download`, `Processing`), `WhatsAppWebAppStateSyncException` (15 subtypes), `WhatsAppAdvValidationException` (6 subtypes).
-- **Validation rule:** When WA Web has inline error recovery (try/catch with retry/disconnect/ignore), Cobalt throws the appropriate exception subtype instead. Only flag as missing if the exception THROW itself is missing, not the recovery logic.
+### Nodes/Stanzas
+Built via `NodeBuilder` with `.description()`, `.attribute()`, `.content()`.
+`Node` has convenience methods to get and stream attributes and content: use the best convenience method to improve code readability. Typed stanza models live in `node/iq`, `node/mex`, `node/smax`, `node/usync`.
 
 ### Naming Conventions
 Cobalt class names mirror WA Web modules but drop the `WA`/`WAWeb` prefix:
 
-| Cobalt Pattern                            | Maps to WA Web                      |
-|-------------------------------------------|-------------------------------------|
-| `*Sender` (e.g., `PeerMessageSender`)     | Send/dispatch modules               |
-| `*Receiver` (e.g., `ChatMessageReceiver`) | Message handling/processing modules |
-| `*Handler` (e.g., `ArchiveChatHandler`)   | Sync action handlers                |
-| `*Service` (e.g., `DeviceService`)        | Stateful service modules            |
-| `*Mex` (e.g., `FetchAboutStatusMex`)      | MEX/GraphQL operations              |
-| `*Action` (e.g., `ArchiveChatAction`)     | Sync action protobuf models         |
-| `*Stanza` (e.g., `ChatFanoutStanza`)      | Stanza/node builders                |
+| Cobalt Pattern                            | Maps to WA Web                                                           |
+|-------------------------------------------|--------------------------------------------------------------------------|
+| `*Sender` (e.g., `PeerMessageSender`)     | Send/dispatch modules                                                    |
+| `*Receiver` (e.g., `ChatMessageReceiver`) | Message handling/processing modules                                      |
+| `*Handler` (e.g., `ArchiveChatHandler`)   | Sync action handlers                                                     |
+| `*Service` (e.g., `DeviceService`)        | Stateful service modules                                                 |
+| `*Mex` (e.g., `FetchAboutStatusMex`)      | MEX/GraphQL operations                                                   |
+| `*Action` (e.g., `ArchiveChatAction`)     | Sync action protobuf models                                              |
+| `*Stanza` (e.g., `ChatFanoutStanza`)      | Stanza/node builders                                                     |
+| `Live*` (e.g., `LiveCallService`)         | Production impl of a Cobalt interface (no WA counterpart for the prefix) |
+| `Cloud*` (e.g., `CloudMessageEncoder`)    | Meta Cloud API surface (no WA Web counterpart)                           |
 
-### Source Provenance Annotations (`cobalt-source-meta`)
+### Source Provenance Annotations (`modules/source-meta`)
 Cobalt tracks its relationship to WhatsApp source code via annotations in `com.github.auties00.cobalt.meta`, split into two families:
 
 **WhatsApp Web** (Web + Windows Desktop — same JS codebase; the Electron-era macOS desktop also shared this bundle):
@@ -70,9 +124,34 @@ Cobalt tracks its relationship to WhatsApp source code via annotations in `com.g
 
 **Statement-level traceability** (inline `// WAWebFoo.bar: ...` comments inside method bodies) remains as comments — Java annotations cannot target arbitrary statements.
 
-### Nodes/Stanzas
-Built via `NodeBuilder` with `.description()`, `.attribute()`, `.content()`.
-`Node` has convenience methods to get and stream attributes and content: use the best convenience method to improve code readability.
+The Cloud API surface has no WA Web/Mobile counterpart: `cloud` package classes carry NO provenance annotations; their contract source is Meta's public Cloud API documentation/OpenAPI spec.
+
+## Tools (`tools/`)
+
+Reverse-engineering and codegen tooling. All `tools/web/*` are TypeScript/Node (build `npm run build`, run `npm start` or `node dist/index.js`); they are NOT part of the Maven build.
+
+| Tool                                       | Purpose                                                                                                                                                                                                                                                                                                              |
+|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `tools/web/mcp-server`                     | MCP server exposing the WA Web RE surface used during development: module/export search, dependency graphs, WASM analysis (wabt/Ghidra), live sessions (Playwright/CDP), stanza/WAM/network capture, Android emulator control, snapshot management (multi-version catalogs under `~/.cobalt/`). See its `README.md`. |
+| `tools/web/ab-props-codegen`               | Extracts AB-prop (feature flag) definitions from a live WA Web bundle and regenerates `modules/model/.../model/props/ABProp.java`.                                                                                                                                                                                   |
+| `tools/web/wam-codegen`                    | Extracts WAM event/enum schemas from the WAM runtime and regenerates the per-event Java classes in `modules/lib/.../cobalt/wam/` (consumed by the `wam-core` processor).                                                                                                                                             |
+| `tools/web/proto-extractor`                | Extracts protobuf definitions from WA Web JS chunks (`internalSpec`) and WASM binaries into `whatsapp.proto` — the reference for `modules/model` coverage.                                                                                                                                                           |
+| `tools/web/graphql-extractor`              | Extracts MEX/GraphQL operation specs from the Relay persisted-query layer into `schemas.json` (operation id, kind, variables, transport: `stanza_mex` / `http_relay` / `http_comet`).                                                                                                                                |
+| `tools/web/scripts`                        | Paste-into-console instrumentation for a live WA Web tab: `ab-props.js` (live flag query/override), `stanza-logger.js` (binary XML intercept), `wam-logger.js` (telemetry intercept).                                                                                                                                |
+| `tools/mobile/{android,ios}/frida-scripts` | Frida instrumentation for the native apps (mbedtls hooks, iOS registration key extraction). Reference-only, not maintained. Requires rooted/jailbroken device + frida-compile.                                                                                                                                       |
+
+## Documentation Style Per Module
+
+The full javadoc rules below apply to ALL Java main source. Module-specific deltas:
+
+| Module                | `@implNote`           | `meta.*` provenance annotations    | Notes                                                                                                 |
+|-----------------------|-----------------------|------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `modules/lib`         | Allowed (rules below) | Required where a WA mapping exists | The only module with WA provenance; Cloud API classes are exempt from provenance (no WA counterpart). |
+| `modules/model`       | NO                    | NO                                 | Pure data model; spec lives in summary + body paragraphs; cannot `{@link}` lib types.                 |
+| `modules/wam-core`    | NO                    | NO                                 | Standard javadoc; processor/generator internals documented like any library code.                     |
+| `modules/source-meta` | NO                    | NO                                 | Standard javadoc; the annotations document themselves via their own javadoc.                          |
+| `tools/*`             | n/a (TypeScript/JS)   | n/a                                | Follow each tool's local conventions; no Cobalt javadoc rules.                                        |
+| All `src/test/java`   | NEVER                 | NEVER                              | Lighter rules in the `### Tests` subsection below.                                                    |
 
 ## Javadoc Requirements
 ALL members (public, protected, package-private, private) in main source (`src/main/java`) MUST have JDK 21+ multiline javadoc. No `@since` tags. Use source provenance annotations (`@WhatsAppWebModule`/`@WhatsAppWebExport` for Web, `@WhatsAppMobileClass`/`@WhatsAppMobileMethod` for Mobile) to declare WA source mappings. Test code (`src/test/java`) follows the lighter rules in the `### Tests` subsection below.
@@ -157,14 +236,3 @@ mvn -Pjavadoc-check -pl modules/lib compile javadoc:javadoc-no-fork -DskipTests
 ```
 
 Cross-module references must respect the dependency direction: `model` cannot link to `lib` types (`lib` depends on `model`, not the reverse), so a `{@link WhatsAppClient}` from `modules/model` can never resolve.
-
-## Validation System
-The `/validate` command validates Cobalt's Java against WhatsApp Web's JS source via MCP tools.
-- **Orchestrator:** `.claude/commands/validate.md` — discovery, manifest building, dependency-ordered agent spawning, cross-cutting flow validation, phantom sweep, synthesis.
-- **Module validator agent:** `.claude/agents/validate-module.md` — per-module exhaustive comparison and fixes.
-- **Cross-cutting flow agent:** `.claude/agents/validate-flow.md` — multi-file architectural pattern fixes (delegation, type mismatches across boundaries, batched-vs-per-item).
-- **Phantom sweep agent:** `.claude/agents/validate-phantom.md` — whole-codebase dead-code removal, verified against WA Web before deletion.
-- **MCP server:** `.mcp.json` registers `whatsapp` MCP (HTTP at localhost:8787) from `tools/web/mcp-server`.
-- **Exhaustiveness guarantee:** The orchestrator builds a manifest of ALL WA Web exports via `get_exports`, then validates every entry. The completeness check at the end verifies every export has a verdict.
-- **Source manifest:** The annotation processor generates `META-INF/wa-source-manifest.json` mapping Cobalt types/members to WA Web modules/exports and WA Mobile classes/methods. The validation system consumes this manifest for cross-referencing.
-- **Dependency ordering:** Validation runs in topological order (leaves first, consumers last) so each agent's dependencies are already in place when it runs.

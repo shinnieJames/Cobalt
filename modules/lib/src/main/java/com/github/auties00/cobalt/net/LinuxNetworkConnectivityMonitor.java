@@ -121,7 +121,7 @@ final class LinuxNetworkConnectivityMonitor extends AbstractNativeConnectivityMo
     /**
      * Constructs the monitor, eagerly resolving the libc downcall handles.
      *
-     * @throws Throwable if any required libc symbol cannot be resolved
+     * @throws UnsatisfiedLinkError if any required libc symbol cannot be resolved
      */
     LinuxNetworkConnectivityMonitor() {
         super("cobalt-connectivity-linux");

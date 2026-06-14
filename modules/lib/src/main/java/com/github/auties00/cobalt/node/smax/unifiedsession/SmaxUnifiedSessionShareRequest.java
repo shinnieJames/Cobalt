@@ -15,7 +15,7 @@ import java.util.Objects;
  * surface, the Forward-message flow, the CTWA ad-creation pipeline, and the
  * signup funnel with it. Cobalt does not run those user-journey loggers
  * itself; the request is exposed through
- * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#joinUnifiedSession(String)}
+ * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#joinUnifiedSession(String)}
  * for embedders that mirror that telemetry surface. The operation is a
  * {@code cast}-shape RPC: it is one-way outbound and carries no reply, so it
  * implements only {@link SmaxOperation.Request}.

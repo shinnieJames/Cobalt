@@ -1,10 +1,22 @@
 package com.github.auties00.cobalt.client;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 
+import com.github.auties00.cobalt.listener.DisconnectedListener;
+import com.github.auties00.cobalt.listener.LoggedInListener;
+import com.github.auties00.cobalt.listener.MessageDeletedListener;
+import com.github.auties00.cobalt.listener.MessageStatusListener;
+import com.github.auties00.cobalt.listener.NewMessageListener;
+import com.github.auties00.cobalt.listener.WhatsAppListener;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
+
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Root contract shared by every WhatsApp client flavour Cobalt exposes.
@@ -34,8 +46,8 @@ import com.github.auties00.cobalt.model.message.MessageKey;
  *
  * @apiNote
  * Obtain an instance through {@link #builder()}, which branches into the Linked flavours
- * ({@link WhatsAppClientBuilder#linked()}) or the Cloud flavour
- * ({@link WhatsAppClientBuilder#cloud()}). Because the type is sealed, a {@code switch} over a
+ * ({@link WhatsAppClientBuilder#linkedApi()}) or the Cloud flavour
+ * ({@link WhatsAppClientBuilder#cloudApi()}). Because the type is sealed, a {@code switch} over a
  * {@code WhatsAppClient} is exhaustive with {@link LinkedWhatsAppClient} and
  * {@link CloudWhatsAppClient} as the only cases.
  */
@@ -44,8 +56,8 @@ public sealed interface WhatsAppClient permits LinkedWhatsAppClient, CloudWhatsA
      * Returns the entry point for assembling a configured {@link WhatsAppClient} of either flavour.
      *
      * @apiNote
-     * The returned builder exposes {@link WhatsAppClientBuilder#linked()} for the socket-based
-     * Web/Mobile flavours and {@link WhatsAppClientBuilder#cloud()} for the Cloud API flavour.
+     * The returned builder exposes {@link WhatsAppClientBuilder#linkedApi()} for the socket-based
+     * Web/Mobile flavours and {@link WhatsAppClientBuilder#cloudApi()} for the Cloud API flavour.
      *
      * @return the shared {@link WhatsAppClientBuilder} singleton
      */
@@ -80,8 +92,10 @@ public sealed interface WhatsAppClient permits LinkedWhatsAppClient, CloudWhatsA
      * <p>For {@link LinkedWhatsAppClient} this re-establishes the socket reusing the persisted
      * credentials; for {@link CloudWhatsAppClient} this restarts the webhook receiver and
      * re-validates the access token.
+     *
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
      */
-    void reconnect();
+    WhatsAppClient reconnect();
 
     /**
      * Returns whether the client is currently live.
@@ -182,4 +196,91 @@ public sealed interface WhatsAppClient permits LinkedWhatsAppClient, CloudWhatsA
      * @param contact the contact to unblock
      */
     void unblockContact(JidProvider contact);
+
+    /**
+     * Marks a single message as read.
+     *
+     * <p>On the Linked transport this issues a read receipt for the message; on the Cloud transport
+     * this posts a {@code status: read} update keyed by the message id. This is the precise,
+     * message-keyed counterpart of {@link #markChatAsRead(JidProvider)}.
+     *
+     * @param messageKey the key of the message to mark read
+     */
+    void markMessageAsRead(MessageKey messageKey);
+
+    /**
+     * Shows a typing indicator in the chat of an inbound message.
+     *
+     * <p>The indicator is keyed by an inbound {@link MessageKey} because the Cloud API only allows a
+     * typing indicator in response to a recently received message; the Linked client derives the chat
+     * from the key and broadcasts a composing chat-state. The indicator is dismissed automatically
+     * when a reply is sent or after the server-side timeout elapses.
+     *
+     * @param inboundMessage the key of the inbound message whose chat shows the indicator
+     */
+    void sendTypingIndicator(MessageKey inboundMessage);
+
+    /**
+     * Queries the business profile of the account this client operates.
+     *
+     * @return the own business profile, or {@link Optional#empty()} when none is set
+     */
+    Optional<BusinessProfile> queryBusinessProfile();
+
+    /**
+     * Lists the contacts this account has blocked.
+     *
+     * @return the blocked contacts
+     */
+    List<Jid> queryBlockedContacts();
+
+    /**
+     * Registers a listener for inbound messages.
+     *
+     * @param listener the listener
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
+     */
+    WhatsAppClient addNewMessageListener(NewMessageListener listener);
+
+    /**
+     * Registers a listener for message status transitions.
+     *
+     * @param listener the listener
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
+     */
+    WhatsAppClient addMessageStatusListener(MessageStatusListener listener);
+
+    /**
+     * Registers a listener for message deletions.
+     *
+     * @param listener the listener
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
+     */
+    WhatsAppClient addMessageDeletedListener(MessageDeletedListener listener);
+
+    /**
+     * Registers a listener invoked once the client is connected and authenticated.
+     *
+     * @param listener the listener
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
+     */
+    WhatsAppClient addLoggedInListener(LoggedInListener listener);
+
+    /**
+     * Registers a listener invoked when the client disconnects.
+     *
+     * @param listener the listener
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
+     */
+    WhatsAppClient addDisconnectedListener(DisconnectedListener listener);
+
+    /**
+     * Unregisters a previously registered listener.
+     *
+     * <p>Removing a listener that is not registered is a no-op.
+     *
+     * @param listener the listener to remove
+     * @return {@code this}, narrowed to the concrete flavour, for fluent chaining
+     */
+    WhatsAppClient removeListener(WhatsAppListener listener);
 }

@@ -927,11 +927,15 @@ export class LiveWebSession {
   }
 
   async setWasmBreakpoint(
-    scriptId: string,
+    url: string,
     byteOffset: number,
-    condition?: string
+    logExpression?: string
   ): Promise<SetBreakpointResult> {
-    return this.debuggerBridge.setWasmBreakpoint(scriptId, byteOffset, condition);
+    return this.debuggerBridge.setWasmBreakpoint(url, byteOffset, logExpression);
+  }
+
+  getLogpointCaptures(options: { id?: string; clear?: boolean } = {}) {
+    return this.debuggerBridge.getLogpointCaptures(options);
   }
 
   async readWasmMemory(callFrameId: string, addr: number, len: number) {

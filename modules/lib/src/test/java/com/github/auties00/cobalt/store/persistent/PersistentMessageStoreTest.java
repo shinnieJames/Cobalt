@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.store.persistent;
 
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -35,7 +35,7 @@ class PersistentMessageStoreTest {
     private static final Jid SELF = Jid.of("19999999999@s.whatsapp.net");
 
     private static LinkedWhatsAppStore store(Path dir) throws Exception {
-        return WhatsAppStoreFactory.persistent(dir).create(WhatsAppClientType.WEB, UUID.randomUUID());
+        return WhatsAppStoreFactory.persistent(dir).create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
     }
 
     private static ChatMessageInfo message(String id, Jid parentJid, String body) {

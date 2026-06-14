@@ -248,20 +248,35 @@ public interface DeviceService {
     Optional<IcdcResult> computeIcdc(Jid userJid);
 
     /**
-     * Ensures that Signal sessions exist for every device JID supplied.
+     * Ensures that Signal sessions exist for every device JID supplied, fetching a prekey bundle for
+     * any device that lacks one.
      *
-     * <p>The send pipeline calls this before encrypting outbound messages: any device JID that the
-     * local Signal store does not yet have a session with has its prekey bundle fetched and a
-     * session established.
-     *
-     * @implSpec
-     * Implementations must skip device JIDs that already have a session and must return the count
-     * of sessions newly established.
+     * <p>The send pipeline calls this before encrypting outbound messages. This is a convenience for
+     * {@link #ensureSessions(Collection, boolean)} with {@code force} {@code false}, so only devices
+     * without a cached session are fetched.
      *
      * @param deviceJids the device JIDs whose sessions are needed
-     * @return the number of new sessions established
+     * @return the number of devices whose one-time pre-key pool was depleted during the fetch
      */
-    int ensureSessions(Collection<Jid> deviceJids);
+    default int ensureSessions(Collection<Jid> deviceJids) {
+        return ensureSessions(deviceJids, false);
+    }
+
+    /**
+     * Ensures that Signal sessions exist for every device JID supplied, optionally re-establishing a
+     * fresh session for every device even when one is already cached.
+     *
+     * <p>With {@code force} {@code false} only devices without a cached session are fetched. With
+     * {@code force} {@code true} the existing session for every device is dropped and re-fetched, so a
+     * peer holding a stale or one-sided session is given a fresh, decryptable session; the call path
+     * uses this so a stale session does not make the peer silently reject the offer.
+     *
+     * @param deviceJids the device JIDs whose sessions are needed
+     * @param force      whether to drop and re-establish a session for every device rather than only
+     *                   for devices that lack one
+     * @return the number of devices whose one-time pre-key pool was depleted during the fetch
+     */
+    int ensureSessions(Collection<Jid> deviceJids, boolean force);
 
     /**
      * Handles an incoming ADV device-list change notification.

@@ -1,27 +1,24 @@
 package com.github.auties00.cobalt.listener.cloud;
 
-import com.github.auties00.cobalt.client.CloudWhatsAppClientListener;
-
-import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.client.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
+import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClientListener;
+import com.github.auties00.cobalt.model.cloud.CloudTemplateCategoryUpdate;
 
 /**
- * A functional interface for the {@link CloudWhatsAppClientListener#onTemplateCategory onTemplateCategory}
- * event.
+ * A functional interface for the {@link CloudWhatsAppClientListener#onTemplateCategory onTemplateCategory} event.
  *
  * <p>{@link CloudWhatsAppClientListener} extends this interface and supplies an empty default
- * implementation, so the event can also be observed in isolation as a lambda. The event delivers the
- * {@code template_category_update} webhook change value.
+ * implementation, so the event can also be observed in isolation as a lambda. The event is raised for each webhook delivery whose change field is {@code template_category_update}.
  *
  * @see CloudWhatsAppClientListener
  */
 @FunctionalInterface
-public non-sealed interface CloudTemplateCategoryListener extends WhatsAppCloudListener {
+public non-sealed interface CloudTemplateCategoryListener extends CloudListener {
     /**
-     * Notifies the listener of a message-template category update.
+     * Notifies the listener that a message template changed category.
      *
      * @param whatsapp the client emitting the event
-     * @param value    the raw {@code template_category_update} change value
+     * @param update   the category transition
      */
-    void onTemplateCategory(CloudWhatsAppClient whatsapp, JSONObject value);
+    void onTemplateCategory(CloudWhatsAppClient whatsapp, CloudTemplateCategoryUpdate update);
 }

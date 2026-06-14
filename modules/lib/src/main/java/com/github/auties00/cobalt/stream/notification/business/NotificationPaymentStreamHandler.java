@@ -1,12 +1,12 @@
 package com.github.auties00.cobalt.stream.notification.business;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.listener.linked.LinkedMessageStatusListener;
-import com.github.auties00.cobalt.listener.linked.LinkedNewMessageListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.listener.MessageStatusListener;
+import com.github.auties00.cobalt.listener.NewMessageListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo.StubType;
@@ -161,7 +161,7 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
         chat.addMessage(info);
 
         for (var listener : whatsapp.store().listeners()) {
-            if (listener instanceof LinkedNewMessageListener typed) {
+            if (listener instanceof NewMessageListener typed) {
                 Thread.startVirtualThread(() -> typed.onNewMessage(whatsapp, info));
             }
         }
@@ -266,14 +266,14 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
                     paymentInfo.txnStatus().orElse(PaymentInfo.TxnStatus.UNKNOWN)));
             requestChat.setPaymentInfo(requestPaymentInfo);
             for (var listener : whatsapp.store().listeners()) {
-                if (listener instanceof LinkedMessageStatusListener typed) {
+                if (listener instanceof MessageStatusListener typed) {
                     Thread.startVirtualThread(() -> typed.onMessageStatus(whatsapp, requestChat));
                 }
             }
         });
 
         for (var listener : whatsapp.store().listeners()) {
-            if (listener instanceof LinkedMessageStatusListener typed) {
+            if (listener instanceof MessageStatusListener typed) {
                 Thread.startVirtualThread(() -> typed.onMessageStatus(whatsapp, chatMessageInfo));
             }
         }

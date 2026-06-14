@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.wam;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -424,7 +424,7 @@ public abstract class WamService {
      * Holds the wire value of the {@code platform} global (id {@code 11}).
      *
      * <p>It is {@code 8L} when the bound client is
-     * {@link WhatsAppClientType#WEB}, {@code 2L} otherwise; matches WA
+     * {@link LinkedWhatsAppClientType#WEB}, {@code 2L} otherwise; matches WA
      * Web's {@code WAWebWamPlatform.getWamPlatform()} indirection
      * through the {@code PLATFORM_TYPE} enum.
      */
@@ -881,7 +881,7 @@ public abstract class WamService {
         var store = client.store();
         var version = store.accountStore().clientVersion();
         this.appVersion = version != null ? version.toString() : null;
-        this.platform = store.accountStore().clientType() == WhatsAppClientType.WEB ? 8L : 2L;
+        this.platform = store.accountStore().clientType() == LinkedWhatsAppClientType.WEB ? 8L : 2L;
         this.deviceName = store.accountStore().name().orElse(null);
         this.memClass = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
         this.numCpu = Runtime.getRuntime().availableProcessors();

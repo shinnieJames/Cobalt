@@ -1,11 +1,11 @@
 package com.github.auties00.cobalt.stream.receipt;
 
-import com.github.auties00.cobalt.client.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
-import com.github.auties00.cobalt.client.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.listener.linked.LinkedMessageStatusListener;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.listener.MessageStatusListener;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -1655,7 +1655,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      */
     private void notifyMessageStatus(MessageInfo info) {
         for (var listener : whatsapp.store().listeners()) {
-            if (listener instanceof LinkedMessageStatusListener typed) {
+            if (listener instanceof MessageStatusListener typed) {
                 Thread.startVirtualThread(() -> typed.onMessageStatus(whatsapp, info));
             }
         }
