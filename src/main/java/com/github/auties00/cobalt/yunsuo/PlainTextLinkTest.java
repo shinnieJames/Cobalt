@@ -8,7 +8,6 @@ import com.github.auties00.cobalt.model.message.model.MessageStatus;
 import com.github.auties00.cobalt.node.Node;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -31,8 +30,9 @@ public class PlainTextLinkTest {
             case 2 -> false;
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
-
-        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
+        scanner.nextLine();
+        System.out.println("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ");
+        var proxyUri = YunsuoProxyParser.parse(scanner.nextLine().trim());
         var targetPhone = 60102619686L;
 //        var targetPhone = 85254849927L;
         var recipient = Jid.of(targetPhone);

@@ -44,8 +44,10 @@ public class ImageTemplateCardTest {
             case 2 -> false;
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
+        scanner.nextLine();
+        System.out.println("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ");
+        var proxyUri = YunsuoProxyParser.parse(scanner.nextLine().trim());
 
-        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
         var imagePath = "/Users/admin/Documents/data/gg/pic/djy.jpg";
         var targetPhone = 60102619686L;
 //        var targetPhone = 85254849927L;

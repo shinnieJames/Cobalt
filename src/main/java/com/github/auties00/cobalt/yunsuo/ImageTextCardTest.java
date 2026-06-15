@@ -19,7 +19,6 @@ import com.github.auties00.cobalt.node.Node;
 import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HexFormat;
@@ -64,8 +63,10 @@ public class ImageTextCardTest {
             case 7 -> MessageMode.REAL_PREVIEW_HQ_THUMBNAIL_LINK;
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
+        scanner.nextLine();
+        System.out.println("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ");
+        var proxyUri = YunsuoProxyParser.parse(scanner.nextLine().trim());
 
-        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@45.39.75.133:6047");
         var imagePath = "/Users/admin/Documents/data/gg/pic/djy.jpg";
         var targetPhone = 60102619686L;
 //        var targetPhone = 85254849927L;

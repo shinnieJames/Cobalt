@@ -28,6 +28,7 @@ public class MobileLoginTest {
         var business = promptBusiness();
         var recipient = Jid.of(60102619686L);
         var messageType = promptMessageType();
+        var proxyUri = promptProxyUri();
         var headerImageUrl = "https://picsum.photos/900/500.jpg";
         var bodyText = "this is text";
         var buttonText = "this is a button🚀";
@@ -35,7 +36,7 @@ public class MobileLoginTest {
         WhatsAppClient.builder()
                 .mobileClient()
                 .loadConnection(WhatsAppClientSixPartsKeys.of(sixParts))
-                // .proxy(URI.create("http://username:password@host:port/")) Remember to set an HTTP proxy
+                .proxy(proxyUri)
                 .device(createIphone16(business))
                 .registered()
                 .orElseThrow()
@@ -174,6 +175,11 @@ public class MobileLoginTest {
                 IO.println("Invalid option!");
             }
         }
+    }
+
+    private static URI promptProxyUri() {
+        return YunsuoProxyParser.parse(IO.readln("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ")
+                .trim());
     }
 
     private static Jid promptRecipient() {

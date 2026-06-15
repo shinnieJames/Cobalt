@@ -1,21 +1,13 @@
 package com.github.auties00.cobalt.client.info;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.model.auth.Version;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
 final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
-    private static final URI MOBILE_PERSONAL_IOS_URL = URI.create("https://itunes.apple.com/lookup?bundleId=net.whatsapp.WhatsApp");
-    private static final URI MOBILE_BUSINESS_IOS_URL = URI.create("https://itunes.apple.com/lookup?bundleId=net.whatsapp.WhatsAppSMB");
-    private static final String MOBILE_IOS_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1";
+    private static final Version MOBILE_IOS_VERSION = Version.of("2.25.37.76");
 
     private static volatile WhatsAppIosClientInfo personalIpaInfo;
     private static final Object personalIpaInfoLock = new Object();
@@ -56,40 +48,7 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     private static WhatsAppIosClientInfo queryIpaInfo(boolean business) {
-        try(var httpClient = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.ALWAYS)
-                .build()) {
-            var request = HttpRequest.newBuilder()
-                    .uri(business ? MOBILE_BUSINESS_IOS_URL : MOBILE_PERSONAL_IOS_URL)
-                    .header("User-Agent", MOBILE_IOS_USER_AGENT)
-                    .GET()
-                    .build();
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() != 200) {
-                throw new IOException("HTTP request failed with status code: " + response.statusCode());
-            }
-
-            var jsonObject = JSON.parseObject(response.body());
-            var results = jsonObject.getJSONArray("results");
-            if (results == null || results.isEmpty()) {
-                return null;
-            }
-
-            var result = results.getJSONObject(0);
-            var version = result.getString("version");
-            if (version == null) {
-                return null;
-            }
-
-            if (!version.startsWith("2.")) {
-                version = "2." + version;
-            }
-
-            var parsedVersion = Version.of(version);
-            return new WhatsAppIosClientInfo(parsedVersion, business);
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("Cannot query iOS version", e);
-        }
+        return new WhatsAppIosClientInfo(MOBILE_IOS_VERSION, business);
     }
 
     @Override

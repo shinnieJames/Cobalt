@@ -6,7 +6,6 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidCompanion;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.Scanner;
 
 public class TextMessageTest {
@@ -22,15 +21,15 @@ public class TextMessageTest {
             case 2 -> false;
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
-
-        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
-//        var proxyUri = URI.create("socks5://3221:3221@s10.sgp6.dns.2jj.net:50488");
+        scanner.nextLine();
+//        System.out.println("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ");
+//        var proxyUri = YunsuoProxyParser.parse(scanner.nextLine().trim());
         var targetPhone = 60102619686L;
 
         WhatsAppClient whatsapp = WhatsAppClient.builder()
                 .mobileClient()
                 .loadConnection(WhatsAppClientSixPartsKeys.of(sixParts))
-                .proxy(proxyUri)
+                .proxy(null)
                 .device(JidCompanion.ios(business))
                 .name("yunsuo")
                 .registered()
