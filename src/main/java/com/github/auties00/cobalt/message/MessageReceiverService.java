@@ -38,6 +38,7 @@ import java.util.stream.Stream;
 import static com.github.auties00.cobalt.client.WhatsAppClientErrorHandler.Location.MESSAGE;
 
 public final class MessageReceiverService {
+    private static final System.Logger LOGGER = System.getLogger(MessageReceiverService.class.getName());
     private final WhatsAppClient whatsapp;
     private final SignalMessageDecoder signalMessageDecoder;
     private final DeviceService deviceService;
@@ -214,11 +215,16 @@ public final class MessageReceiverService {
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
 
         ChatMessageKey chatMessageKey = null;
+        var statusBroadcast = false;
         try {
             var pushName = infoNode.getAttributeAsString("notify", null);
             var timestamp = infoNode.getAttributeAsLong("t", 0);
             var id = infoNode.getRequiredAttributeAsString("id");
             var from = infoNode.getRequiredAttributeAsJid("from");
+            statusBroadcast = from.hasServer(JidServer.broadcast());
+            if (statusBroadcast) {
+                LOGGER.log(System.Logger.Level.INFO, "[broadcast_decode] phase=start id={0} from={1} participant={2}", id, from, infoNode.getAttributeAsJid("participant").map(Object::toString).orElse("-"));
+            }
             var messageBuilder = new ChatMessageInfoBuilder()
                     .status(MessageStatus.PENDING);
             var keyBuilder = new ChatMessageKeyBuilder()
@@ -258,6 +264,9 @@ public final class MessageReceiverService {
                 throw new RuntimeException("Unknown value server: " + from.server());
             }
             chatMessageKey = keyBuilder.build();
+            if (statusBroadcast) {
+                LOGGER.log(System.Logger.Level.INFO, "[broadcast_decode] phase=key-built id={0} chatJid={1} fromMe={2}", chatMessageKey.id(), chatMessageKey.chatJid(), chatMessageKey.fromMe());
+            }
 
             var senderJid = chatMessageKey.senderJid()
                     .orElseThrow(() -> new InternalError("Missing sender"));
@@ -274,6 +283,9 @@ public final class MessageReceiverService {
                     .timestampSeconds(timestamp)
                     .message(container)
                     .build();
+            if (statusBroadcast) {
+                LOGGER.log(System.Logger.Level.INFO, "[broadcast_decode] phase=decoded id={0} category={1} statusBroadcast={2}", info.id(), info.message().category(), info.chatJid().equals(Jid.statusBroadcastAccount()));
+            }
             info.message()
                     .senderKeyDistributionMessage()
                     .ifPresent(keyDistributionMessage -> handleSenderKeyDistributionMessage(keyDistributionMessage, info.senderJid().toSignalAddress()));
@@ -283,6 +295,9 @@ public final class MessageReceiverService {
             whatsapp.handleFailure(MESSAGE, throwable);
             return Stream.empty();
         }finally {
+            if (statusBroadcast) {
+                LOGGER.log(System.Logger.Level.INFO, "[broadcast_decode] phase=finally id={0} chatJid={1} peer={2}", chatMessageKey != null ? chatMessageKey.id() : infoNode.getAttributeAsString("id").orElse("-"), chatMessageKey != null ? chatMessageKey.chatJid() : null, infoNode.hasAttribute("category", "peer"));
+            }
             whatsapp.sendAck(infoNode);
             if(chatMessageKey != null) {
                 whatsapp.sendReceipt(
@@ -319,7 +334,8 @@ public final class MessageReceiverService {
 
     private boolean isIgnorableDecryptionFailure(Throwable throwable) {
         var className = throwable.getClass().getName();
-        if ("com.github.auties00.libsignal.exception.SignalMissingSenderKeyException".equals(className)) {
+        if ("com.github.auties00.libsignal.exception.SignalMissingSenderKeyException".equals(className)
+                || "com.github.auties00.libsignal.exception.SignalMissingSessionException".equals(className)) {
             return true;
         }
 

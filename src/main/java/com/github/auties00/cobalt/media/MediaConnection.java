@@ -24,6 +24,8 @@ import java.util.Optional;
 import java.util.SequencedCollection;
 
 public final class MediaConnection {
+    private static final System.Logger LOGGER = System.getLogger(MediaConnection.class.getName());
+
     private final String auth;
     private final int ttl;
     private final int maxBuckets;
@@ -44,7 +46,9 @@ public final class MediaConnection {
 
         var path = provider.mediaPath()
                 .path();
+        LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=start provider={0} mediaPath={1} hostCount={2}", provider.getClass().getSimpleName(), path.orElse("unavailable"), hosts.size());
         if (path.isEmpty()) {
+            LOGGER.log(System.Logger.Level.WARNING, "[media_upload] phase=skip provider={0} reason=missing-media-path", provider.getClass().getSimpleName());
             return false;
         }
 
@@ -63,14 +67,19 @@ public final class MediaConnection {
             var mediaKey = uploadStream.fileKey()
                     .orElse(null);
             var fileLength = uploadStream.fileLength();
+            LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=buffered provider={0} mediaPath={1} fileBytes={2}", provider.getClass().getSimpleName(), path.get(), fileLength);
 
+            var hostIndex = 0;
             for (var host : hosts) {
+                hostIndex++;
                 if(!host.canUpload(provider)) {
+                    LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=host-skip host={0} hostIndex={1} reason=unsupported-path", host.hostname(), hostIndex);
                     continue;
                 }
 
-                var uploadResult = tryUpload(client, host.hostname(), path.get(), fileEncSha256, fileSha256, tempFile)
-                        .or(() -> host.fallbackHostname().flatMap(fallbackHostname -> tryUpload(client, fallbackHostname, path.get(), fileEncSha256, fileSha256, tempFile)));
+                LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=host-attempt host={0} hostIndex={1} mediaPath={2} fallbackAvailable={3}", host.hostname(), hostIndex, path.get(), host.fallbackHostname().isPresent());
+                var uploadResult = tryUpload(client, host.hostname(), path.get(), fileEncSha256, fileSha256, tempFile, false)
+                        .or(() -> host.fallbackHostname().flatMap(fallbackHostname -> tryUpload(client, fallbackHostname, path.get(), fileEncSha256, fileSha256, tempFile, true)));
                 if(uploadResult.isPresent()) {
                     var directPath = uploadResult.get()
                             .getString("direct_path");
@@ -85,24 +94,28 @@ public final class MediaConnection {
                     provider.setMediaDirectPath(directPath);
                     provider.setMediaUrl(url);
                     provider.setMediaKeyTimestamp(timestamp);
+                    LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=complete provider={0} host={1} mediaPath={2} fileBytes={3}", provider.getClass().getSimpleName(), host.hostname(), path.get(), fileLength);
 
                     return true;
                 }
             }
 
+            LOGGER.log(System.Logger.Level.ERROR, "[media_upload] phase=throw provider={0} mediaPath={1} reason=no-host-succeeded", provider.getClass().getSimpleName(), path.get());
             throw new MediaUploadException("Cannot upload media: no hosts available");
         }catch (IOException exception) {
+            LOGGER.log(System.Logger.Level.ERROR, "[media_upload] phase=throw provider={0} mediaPath={1} reason=io-failure error={2}", provider.getClass().getSimpleName(), path.orElse("unavailable"), exception.getMessage());
             throw new MediaUploadException("Cannot upload media", exception);
         }
     }
 
-    private Optional<JSONObject> tryUpload(HttpClient client, String hostname, String path, byte[] fileEncSha256, byte[] fileSha256, Path body) {
+    private Optional<JSONObject> tryUpload(HttpClient client, String hostname, String path, byte[] fileEncSha256, byte[] fileSha256, Path body, boolean fallback) {
         try {
             var auth = URLEncoder.encode(this.auth, StandardCharsets.UTF_8);
             var token = Base64.getUrlEncoder()
                     .withoutPadding()
                     .encodeToString(Objects.requireNonNullElse(fileEncSha256, fileSha256));
             var uri = URI.create("https://%s/%s/%s?auth=%s&token=%s".formatted(hostname, path, token, auth, token));
+            LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=http-start host={0} mediaPath={1} fallback={2}", hostname, path, fallback);
             var requestBuilder = HttpRequest.newBuilder()
                     .uri(uri)
                     .POST(HttpRequest.BodyPublishers.ofFile(body));
@@ -111,13 +124,15 @@ public final class MediaConnection {
                     .headers("Origin", "https://web.whatsapp.com")
                     .build();
             var response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            LOGGER.log(System.Logger.Level.INFO, "[media_upload] phase=http-response host={0} mediaPath={1} fallback={2} status={3}", hostname, path, fallback, response.statusCode());
             if (response.statusCode() != 200) {
                 throw new MediaUploadException("Cannot upload media: status code " + response.statusCode());
             }
 
             var jsonObject = JSON.parseObject(response.body());
             return Optional.ofNullable(jsonObject);
-        }catch (Throwable _) {
+        }catch (Throwable throwable) {
+            LOGGER.log(System.Logger.Level.WARNING, "[media_upload] phase=http-failure host={0} mediaPath={1} fallback={2} errorType={3} error={4}", hostname, path, fallback, throwable.getClass().getSimpleName(), throwable.getMessage());
             return Optional.empty();
         }
     }

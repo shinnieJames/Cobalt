@@ -13,7 +13,7 @@ import java.util.OptionalLong;
  * A sealed interface that represents a class that can provide data about a media
  */
 public sealed interface MediaProvider
-        permits StickerAction, MediaMessage, Sticker, ExternalBlobReference, HistorySyncNotification {
+        permits StickerAction, MediaMessage, Sticker, ExternalBlobReference, HistorySyncNotification, ThumbnailLinkMediaProvider {
     /**
      * Returns the url to the media
      *

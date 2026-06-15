@@ -22,6 +22,7 @@ import com.github.auties00.cobalt.socket.state.*;
 import java.util.*;
 
 public final class SocketStream {
+    private static final System.Logger LOGGER = System.getLogger(SocketStream.class.getName());
     private final Map<String, SequencedCollection<Handler>> handlers;
 
     public SocketStream(WhatsAppClient whatsapp, DeviceService deviceService, MessageReceiverService messageReceiverService, LidMigrationService lidMigrationService, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
@@ -84,6 +85,9 @@ public final class SocketStream {
     public void digest(Node node) {
         var handlers = this.handlers.get(node.description());
         if(handlers != null) {
+            if (node.description().equals("stream:error") || node.description().equals("xmlstreamend") || node.description().equals("notification") || node.description().equals("message")) {
+                LOGGER.log(System.Logger.Level.INFO, "[handler_dispatch] desc={0} handlers={1}", node.description(), handlers.stream().map(handler -> handler.getClass().getSimpleName()).toList());
+            }
             for(var handler : handlers) {
                 Thread.startVirtualThread(() -> handler.handle(node));
             }

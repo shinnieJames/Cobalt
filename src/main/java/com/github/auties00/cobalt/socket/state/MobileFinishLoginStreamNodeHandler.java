@@ -6,8 +6,11 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.socket.SocketStream;
 
 public final class MobileFinishLoginStreamNodeHandler extends SocketStream.Handler {
+    private final MediaConnectionBootstrap mediaConnectionBootstrap;
+
     public MobileFinishLoginStreamNodeHandler(WhatsAppClient whatsapp) {
         super(whatsapp, "success");
+        this.mediaConnectionBootstrap = new MediaConnectionBootstrap(whatsapp);
     }
 
     @Override
@@ -36,8 +39,20 @@ public final class MobileFinishLoginStreamNodeHandler extends SocketStream.Handl
                     .serialize();
         }
 
+        try {
+            mediaConnectionBootstrap.start();
+        } catch (Exception exception) {
+            whatsapp.handleFailure(com.github.auties00.cobalt.client.WhatsAppClientErrorHandler.Location.MEDIA_CONNECTION, exception);
+            return;
+        }
+
         for (var listener : store.listeners()) {
             Thread.startVirtualThread(() -> listener.onLoggedIn(whatsapp));
         }
+    }
+
+    @Override
+    public void reset() {
+        mediaConnectionBootstrap.reset();
     }
 }

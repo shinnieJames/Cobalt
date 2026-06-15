@@ -89,6 +89,7 @@ import static com.github.auties00.cobalt.model.contact.ContactStatus.*;
  */
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public final class WhatsAppClient {
+    private static final System.Logger LOGGER = System.getLogger(WhatsAppClient.class.getName());
     private static final byte[] WHATSAPP_VERSION_HEADER = "WA".getBytes(StandardCharsets.UTF_8);
     private static final byte[] WEB_VERSION = new byte[]{6, NodeTokens.DICTIONARY_VERSION};
     private static final byte[] WEB_PROLOGUE = SecureBytes.concat(WHATSAPP_VERSION_HEADER, WEB_VERSION);
@@ -323,6 +324,7 @@ public final class WhatsAppClient {
     }
 
     private void disconnect(WhatsAppClientDisconnectReason reason, boolean canRemoveShutdownHook) {
+        LOGGER.log(System.Logger.Level.WARNING, "[disconnect] reason={0} connected={1} pendingRequests={2}", reason, isConnected(), pendingSocketRequests.size());
         if (!isConnected()) {
             return;
         }
@@ -364,6 +366,9 @@ public final class WhatsAppClient {
         try (var decoder = new NodeDecoder(message)) {
             while (decoder.hasData()) {
                 var node = decoder.decode();
+                if (shouldLogDiagnosticNode(node)) {
+                    LOGGER.log(System.Logger.Level.INFO, "[inbound_node] desc={0} id={1} from={2} type={3}", node.description(), node.getAttributeAsString("id").orElse("-"), node.getAttributeAsJid("from").map(this::maskJid).orElse("-"), node.getAttributeAsString("type").orElse("-"));
+                }
                 for (var listener : store.listeners()) {
                     Thread.startVirtualThread(() -> listener.onNodeReceived(this, node));
                 }
@@ -1688,11 +1693,13 @@ public final class WhatsAppClient {
         if (recipient.hasServer(JidServer.newsletter())) {
             throw new IllegalArgumentException("Use sendNewsletterMessage to send a message in a newsletter");
         }
+        LOGGER.log(System.Logger.Level.INFO, "[message_send] phase=start messageId={0} recipient={1} compose={2} category={3}", info.id(), maskJid(recipient), compose, info.message().category());
         var timestamp = Clock.nowSeconds();
         if (compose) {
             changePresence(recipient, COMPOSING);
         }
         messageSenderService.sendMessage(info, Map.of());
+        LOGGER.log(System.Logger.Level.INFO, "[message_send] phase=dispatch messageId={0} recipient={1}", info.id(), maskJid(recipient));
         if (compose) {
             var pausedNode = new NodeBuilder()
                     .description("paused")
@@ -1705,6 +1712,7 @@ public final class WhatsAppClient {
             sendNodeWithNoResponse(node);
             updatePresence(recipient, AVAILABLE);
         }
+        LOGGER.log(System.Logger.Level.INFO, "[message_send] phase=return messageId={0} recipient={1} timestamp={2}", info.id(), maskJid(recipient), timestamp);
         return info;
     }
 
@@ -4601,7 +4609,29 @@ public final class WhatsAppClient {
                     .ifPresent(type -> ackBuilder.attribute("type", type));
         }
 
-        sendNodeWithNoResponse(ackBuilder.build());
+        var ackNode = ackBuilder.build();
+        if (shouldLogDiagnosticNode(node)) {
+            LOGGER.log(System.Logger.Level.INFO, "[send_ack] id={0} class={1} to={2} type={3}", id, ackClass, maskJid(ackTo), ackNode.getAttributeAsString("type").orElse("-"));
+        }
+        sendNodeWithNoResponse(ackNode);
+    }
+
+    private boolean shouldLogDiagnosticNode(Node node) {
+        return switch (node.description()) {
+            case "stream:error", "xmlstreamend", "notification" -> true;
+            case "message" -> node.getAttributeAsJid("from")
+                    .map(from -> from.hasServer(JidServer.broadcast()))
+                    .orElse(false);
+            default -> false;
+        };
+    }
+
+    private String maskJid(Jid jid) {
+        var user = jid.user();
+        var visibleSuffix = user == null || user.length() <= 4 ? user : user.substring(user.length() - 4);
+        var maskedUser = visibleSuffix == null || visibleSuffix.isBlank() ? "unknown" : "***" + visibleSuffix;
+        var device = jid.device() == 0 ? "" : ":" + jid.device();
+        return maskedUser + "@" + jid.server() + device;
     }
 
     public void sendPreKeys(long keysCount) {

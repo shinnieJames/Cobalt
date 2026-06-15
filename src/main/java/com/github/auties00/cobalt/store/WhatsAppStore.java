@@ -90,6 +90,7 @@ import java.util.concurrent.ConcurrentMap;
 public final class WhatsAppStore implements SignalProtocolStore {
     private static final WhatsappStoreSerializer DEFAULT_DESERIALIZER = WhatsappStoreSerializer.discarding();
     private static final String DEFAULT_NAME = "User";
+    private static final System.Logger LOGGER = System.getLogger(WhatsAppStore.class.getName());
 
     // =====================================================
     // SECTION: Core Identity & Configuration
@@ -2290,13 +2291,18 @@ public final class WhatsAppStore implements SignalProtocolStore {
 
 
     public MediaConnection waitForMediaConnection() throws InterruptedException {
+        LOGGER.log(System.Logger.Level.INFO, "[media_wait] phase=enter thread={0} mediaPresent={1}", Thread.currentThread().getName(), mediaConnection != null);
+        var waitStartedAt = System.currentTimeMillis();
         if(mediaConnection == null) {
             synchronized (mediaConnectionLock) {
                 if(mediaConnection == null) {
+                    LOGGER.log(System.Logger.Level.INFO, "[media_wait] phase=waiting thread={0}", Thread.currentThread().getName());
                     mediaConnectionLock.wait();
+                    LOGGER.log(System.Logger.Level.INFO, "[media_wait] phase=woke thread={0} waitMs={1} mediaPresent={2}", Thread.currentThread().getName(), System.currentTimeMillis() - waitStartedAt, mediaConnection != null);
                 }
             }
         }
+        LOGGER.log(System.Logger.Level.INFO, "[media_wait] phase=return thread={0} waitMs={1} mediaPresent={2} hostCount={3} ttl={4}", Thread.currentThread().getName(), System.currentTimeMillis() - waitStartedAt, mediaConnection != null, mediaConnection != null ? mediaConnection.hosts().size() : 0, mediaConnection != null ? mediaConnection.ttl() : 0);
         return mediaConnection;
     }
 
@@ -2307,6 +2313,7 @@ public final class WhatsAppStore implements SignalProtocolStore {
      * @return this store instance for method chaining
      */
     public WhatsAppStore setMediaConnection(MediaConnection mediaConnection) {
+        LOGGER.log(System.Logger.Level.INFO, "[media_set] phase=update mediaPresent={0} hostCount={1} ttl={2}", mediaConnection != null, mediaConnection != null ? mediaConnection.hosts().size() : 0, mediaConnection != null ? mediaConnection.ttl() : 0);
         this.mediaConnection = mediaConnection;
         synchronized (mediaConnectionLock) {
             this.mediaConnectionLock.notifyAll();

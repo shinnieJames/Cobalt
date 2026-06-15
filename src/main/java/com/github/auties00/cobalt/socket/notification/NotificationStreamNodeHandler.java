@@ -45,6 +45,7 @@ import java.util.Optional;
 
 public final class NotificationStreamNodeHandler extends SocketStream.Handler {
     private static final int DEFAULT_NEWSLETTER_MESSAGES = 100;
+    private static final System.Logger LOGGER = System.getLogger(NotificationStreamNodeHandler.class.getName());
 
     private final SocketPhonePairing pairingCode;
     private final LidMigrationService lidMigrationService;
@@ -56,8 +57,17 @@ public final class NotificationStreamNodeHandler extends SocketStream.Handler {
 
     @Override
     public void handle(Node node) {
+        var type = node.getRequiredAttributeAsString("type");
+        var from = node.getAttributeAsJid("from")
+                .map(Object::toString)
+                .orElse("unknown");
+        var participant = node.getAttributeAsJid("participant")
+                .map(Object::toString)
+                .orElse("-");
+        if (shouldLogNotification(node, type)) {
+            LOGGER.log(System.Logger.Level.INFO, "[notification] phase=handle id={0} type={1} from={2} participant={3}", node.getAttributeAsString("id").orElse("-"), type, from, participant);
+        }
         try {
-            var type = node.getRequiredAttributeAsString("type");
             switch (type) {
                 case "w:gp2" -> handleGroupNotification(node);
                 case "server_sync" -> handleServerSyncNotification(node);
@@ -70,8 +80,21 @@ public final class NotificationStreamNodeHandler extends SocketStream.Handler {
                 case "mex" -> handleMexNamespace(node);
             }
         } finally {
+            if (shouldLogNotification(node, type)) {
+                LOGGER.log(System.Logger.Level.INFO, "[notification] phase=ack id={0} type={1}", node.getAttributeAsString("id").orElse("-"), type);
+            }
             whatsapp.sendAck(node);
         }
+    }
+
+    private boolean shouldLogNotification(Node node, String type) {
+        if (type.equals("mex")) {
+            return true;
+        }
+
+        return node.getAttributeAsJid("from")
+                .map(from -> from.hasServer(JidServer.broadcast()))
+                .orElse(false);
     }
 
     private void handleNewsletter(Node node) {
@@ -133,6 +156,11 @@ public final class NotificationStreamNodeHandler extends SocketStream.Handler {
 
         var operationName = update.getRequiredAttribute("op_name")
                 .toString();
+        if (operationName.equals("TextStatusUpdateNotification")
+                || operationName.equals("TextStatusUpdateNotificationSideSub")
+                || operationName.equals("NotificationUserReachoutTimelockUpdate")) {
+            LOGGER.log(System.Logger.Level.INFO, "[notification] phase=mex op={0} id={1}", operationName, node.getAttributeAsString("id").orElse("-"));
+        }
         switch (operationName) {
             case "MexNotificationEvent" -> {
                 // TODO MexNotificationEvent
