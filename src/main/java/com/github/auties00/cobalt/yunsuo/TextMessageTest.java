@@ -40,14 +40,14 @@ public class TextMessageTest {
                 .addDisconnectedListener((ignored, reason) -> System.out.println("Disconnected: " + reason))
                 .addLoggedInListener(api -> {
                     System.out.println("Logged in");
-                    try {
-                        Thread.sleep(5000);
-                        var info = api.sendMessage(Jid.of(targetPhone), "hi");
-                        System.out.println("Image-text card sent successfully: " + info.id());
-                    } catch (Throwable error) {
-                        System.err.println("Failed to send image-text card: " + error.getMessage());
-                        error.printStackTrace();
-                    }
+//                    try {
+//                        Thread.sleep(5000);
+//                        var info = api.sendMessage(Jid.of(targetPhone), "hi");
+//                        System.out.println("Image-text card sent successfully: " + info.id());
+//                    } catch (Throwable error) {
+//                        System.err.println("Failed to send image-text card: " + error.getMessage());
+//                        error.printStackTrace();
+//                    }
                 })
                 .connect()
                 .waitForDisconnection();
