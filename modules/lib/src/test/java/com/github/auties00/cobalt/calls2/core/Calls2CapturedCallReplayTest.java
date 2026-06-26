@@ -79,12 +79,12 @@ class Calls2CapturedCallReplayTest {
     }
 
     private static AcceptStanza oneToOneAccept() {
-        return new AcceptStanza(ONE_TO_ONE_CALL_ID, CALLER_LID_DEVICE, 3, List.of(), List.of(), List.of(),
+        return new AcceptStanza(ONE_TO_ONE_CALL_ID, CALLER_LID_DEVICE, 3, List.of(), List.of(), List.of(), List.of(),
                 null, null, null, null);
     }
 
     private static PreacceptStanza oneToOnePreaccept() {
-        return new PreacceptStanza(ONE_TO_ONE_CALL_ID, CALLER_LID_DEVICE, List.of(), List.of(), null, null);
+        return new PreacceptStanza(ONE_TO_ONE_CALL_ID, CALLER_LID_DEVICE, List.of(), List.of(), List.of(), null, null);
     }
 
     private static TransportStanza oneToOneTransport() {

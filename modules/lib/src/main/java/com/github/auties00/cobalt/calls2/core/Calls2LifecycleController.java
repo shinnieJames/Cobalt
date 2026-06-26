@@ -1046,7 +1046,8 @@ public final class Calls2LifecycleController {
 
             var creator = call.creator();
             var to = call.isGroup() ? Jid.of(callId + "@call") : orchestrated.peerDeviceJid().orElse(call.peer());
-            var accept = buildAccept(callId, creator, relay);
+            var offerVideo = orchestrated.incomingOffer().map(offer -> !offer.videoCodecs().isEmpty()).orElse(false);
+            var accept = buildAccept(callId, creator, relay, offerVideo);
             // The accept is shipped fire-and-forget: unlike the offer's synchronous relay-bearing ack, the
             // <ack class="call" type="accept"> is asynchronous and is consumed by handleIncomingAck, which
             // ends the call on an accept NACK (404 -> CallDoesNotExistForRejoin, 434 -> CallIsFull).
@@ -1090,7 +1091,8 @@ public final class Calls2LifecycleController {
             var call = orchestrated.call();
             var creator = call.creator();
             var to = call.isGroup() ? Jid.of(callId + "@call") : orchestrated.peerDeviceJid().orElse(call.peer());
-            var preaccept = buildPreaccept(callId, creator);
+            var offerVideo = orchestrated.incomingOffer().map(offer -> !offer.videoCodecs().isEmpty()).orElse(false);
+            var preaccept = buildPreaccept(callId, creator, offerVideo);
             host.sendSignaling(Calls2CallStanza.toCall(preaccept, to, callId));
         } finally {
             orchestrated.lock().unlock();
@@ -3097,35 +3099,46 @@ public final class Calls2LifecycleController {
      *
      * <p>The accept echoes the server-allocated {@code <relay>} block as its first child (with each
      * endpoint's client-to-relay round-trip hints stripped) so the server can complete relay allocation,
-     * and advertises the callee's standard capability (which encodes video support as a bit, not as a
-     * codec descriptor) and the offered audio codecs; the video intent flows to the media-plane bring-up
-     * rather than to the accept element, so this builder takes no video flag.
+     * and advertises the callee's standard capability and the offered audio codecs; when the offer carried
+     * video it also echoes the video codec descriptor ({@code <video dec="H264" device_orientation="0"/>},
+     * no {@code enc}) so the caller learns the callee will decode the video stream. The camera-on intent
+     * flows to the media-plane bring-up and the {@code <video>} state announcement rather than to this
+     * element.
      *
      * @param callId  the call identifier
      * @param creator the call creator's device JID
      * @param relay   the offered {@code <relay>} block to echo, or {@code null} when none was offered
+     * @param video   whether the offered call carried video, so the accept echoes the video codec
      * @return the accept action
      */
-    private AcceptStanza buildAccept(String callId, Jid creator, Stanza relay) {
+    private AcceptStanza buildAccept(String callId, Jid creator, Stanza relay, boolean video) {
         var capabilities = List.of(standardCapability());
         var audioCodecs = standardAudioCodecs();
+        var videoCodecs = video ? acceptVideoCodecs() : List.<CallCodecDescriptor>of();
         var acceptRelay = relay == null ? null
                 : RelayInfo.of(relay).map(RelayInfo::withoutEndpointRoundTripHints).orElse(null);
-        return new AcceptStanza(callId, creator, NET_MEDIUM_ACCEPT, capabilities, audioCodecs, List.of(), null,
-                CallEncOptions.standard(), null, acceptRelay);
+        return new AcceptStanza(callId, creator, NET_MEDIUM_ACCEPT, capabilities, audioCodecs, videoCodecs,
+                List.of(), null, CallEncOptions.standard(), null, acceptRelay);
     }
 
     /**
      * Builds the {@code <preaccept>} action acknowledging an inbound offer.
      *
+     * <p>When the offer carried video the preaccept echoes the video codec descriptor
+     * ({@code <video dec="H264" device_orientation="0" screen_width="0" screen_height="0"/>}, no
+     * {@code enc}) alongside the audio so the caller learns the alerting device will decode the video.
+     *
      * @param callId  the call identifier
      * @param creator the call creator's device JID
+     * @param video   whether the offered call carried video, so the preaccept echoes the video codec
      * @return the preaccept action
      */
-    private PreacceptStanza buildPreaccept(String callId, Jid creator) {
+    private PreacceptStanza buildPreaccept(String callId, Jid creator, boolean video) {
         var capabilities = List.of(standardCapability());
         var audioCodecs = standardAudioCodecs();
-        return new PreacceptStanza(callId, creator, capabilities, audioCodecs, null, CallEncOptions.standard());
+        var videoCodecs = video ? preacceptVideoCodecs() : List.<CallCodecDescriptor>of();
+        return new PreacceptStanza(callId, creator, capabilities, audioCodecs, videoCodecs, null,
+                CallEncOptions.standard());
     }
 
     /**
@@ -3505,6 +3518,33 @@ public final class Calls2LifecycleController {
      */
     private static List<CallCodecDescriptor> standardVideoCodecs() {
         return List.of(CallCodecDescriptor.video(VIDEO_DEC_TOKEN, VIDEO_ENC_NAME, 0, 0, 0));
+    }
+
+    /**
+     * Returns the callee video codec descriptor echoed in an accept for a video call.
+     *
+     * <p>The accept advertises the negotiated decode codec without an {@code enc} encode name or screen
+     * geometry: the live captures show the answer carrying a flat
+     * {@code <video dec="H264" device_orientation="0"/>}, the lighter form the offer's full descriptor is
+     * trimmed to once the codec is agreed.
+     *
+     * @return the accept video format descriptor
+     */
+    private static List<CallCodecDescriptor> acceptVideoCodecs() {
+        return List.of(CallCodecDescriptor.video(VIDEO_DEC_TOKEN, null, 0, -1, -1));
+    }
+
+    /**
+     * Returns the callee video codec descriptor echoed in a preaccept for a video call.
+     *
+     * <p>The preaccept advertises the decode codec with the screen geometry but without an {@code enc}
+     * encode name: the live captures show the early ring-ack carrying a flat
+     * {@code <video dec="H264" device_orientation="0" screen_width="0" screen_height="0"/>}.
+     *
+     * @return the preaccept video format descriptor
+     */
+    private static List<CallCodecDescriptor> preacceptVideoCodecs() {
+        return List.of(CallCodecDescriptor.video(VIDEO_DEC_TOKEN, null, 0, 0, 0));
     }
 
     /**

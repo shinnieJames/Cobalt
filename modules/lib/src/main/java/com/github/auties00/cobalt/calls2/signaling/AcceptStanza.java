@@ -17,8 +17,9 @@ import java.util.OptionalInt;
  * <p>An accept is the callee's answer to an offer. For a relay call it carries, as its first child, the
  * server-allocated {@code <relay>} block (the caller's relay credentials the server delivered in the
  * offer ack), which the server consumes to complete relay allocation before forwarding the accept; an
- * accept that omits it is torn down with {@code setup_failed}. It also carries the chosen network medium
- * and the offered audio codecs. The data-channel cert-fingerprint HMAC, e2e public-key {@code <enc>}
+ * accept that omits it is torn down with {@code setup_failed}. It also carries the chosen network medium,
+ * the offered audio codecs, and a video codec for a video call. The data-channel cert-fingerprint HMAC,
+ * e2e public-key {@code <enc>}
  * blobs, the {@code <media>} descriptor, and the embedded {@code <transport>} block belong to the
  * conditional Web-P2P/DTLS data-channel path and are absent from a plain relay accept; the relay block is
  * modeled by {@link RelayInfo}, while the key blobs and transport block are held as raw subtrees because
@@ -53,6 +54,7 @@ import java.util.OptionalInt;
  * @param netMedium     the chosen network-medium classification, or {@code -1} when absent
  * @param capabilities  the callee's capability advertisements; never {@code null}, possibly empty
  * @param audioCodecs   the offered audio codec descriptors; never {@code null}, possibly empty
+ * @param videoCodecs   the offered video codec descriptors; never {@code null}, possibly empty
  * @param encKeys       the raw {@code <enc>} key-blob subtrees; never {@code null}, possibly empty
  * @param media         the negotiated media descriptor, or {@code null} when absent
  * @param encOptions    the encryption options, or {@code null} when absent
@@ -63,8 +65,9 @@ import java.util.OptionalInt;
  * @see Calls2SignalingType#ACCEPT
  */
 public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<CallCapability> capabilities,
-                           List<CallCodecDescriptor> audioCodecs, List<Stanza> encKeys, CallMediaDescriptor media,
-                           CallEncOptions encOptions, Stanza transport, RelayInfo relay) implements CallMessage {
+                           List<CallCodecDescriptor> audioCodecs, List<CallCodecDescriptor> videoCodecs,
+                           List<Stanza> encKeys, CallMediaDescriptor media, CallEncOptions encOptions,
+                           Stanza transport, RelayInfo relay) implements CallMessage {
     /**
      * The wire element tag for an accept signal.
      */
@@ -86,6 +89,11 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
     private static final String AUDIO_ELEMENT = CallCodecDescriptor.AUDIO_ELEMENT;
 
     /**
+     * The wire element tag for a video-format advertisement.
+     */
+    private static final String VIDEO_ELEMENT = CallCodecDescriptor.VIDEO_ELEMENT;
+
+    /**
      * The wire element tag for a callee key-material blob.
      */
     private static final String ENC_ELEMENT = "enc";
@@ -104,17 +112,19 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
      * Canonicalizes the record components, copying the capability, codec, and key lists.
      *
      * @throws NullPointerException if {@code callId}, {@code callCreator}, {@code capabilities},
-     *                              {@code audioCodecs}, or {@code encKeys} is {@code null}, or if any
-     *                              of those lists contains a {@code null} element
+     *                              {@code audioCodecs}, {@code videoCodecs}, or {@code encKeys} is
+     *                              {@code null}, or if any of those lists contains a {@code null} element
      */
     public AcceptStanza {
         Objects.requireNonNull(callId, "callId cannot be null");
         Objects.requireNonNull(callCreator, "callCreator cannot be null");
         Objects.requireNonNull(capabilities, "capabilities cannot be null");
         Objects.requireNonNull(audioCodecs, "audioCodecs cannot be null");
+        Objects.requireNonNull(videoCodecs, "videoCodecs cannot be null");
         Objects.requireNonNull(encKeys, "encKeys cannot be null");
         capabilities = List.copyOf(capabilities);
         audioCodecs = List.copyOf(audioCodecs);
+        videoCodecs = List.copyOf(videoCodecs);
         encKeys = List.copyOf(encKeys);
     }
 
@@ -174,13 +184,14 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
     }
 
     /**
-     * Builds the {@code <accept>} action stanza with its relay, capability, audio, key, media, encryption,
-     * and transport children.
+     * Builds the {@code <accept>} action stanza with its relay, capability, audio, video, key, media,
+     * encryption, and transport children.
      *
-     * <p>Children are emitted in the order relay, capabilities, audio formats, network medium, key blobs,
-     * media, encryption options, transport; the relay block leads when present, each audio format is a flat
-     * {@code <audio>} element, the network medium a {@code <net medium>} element emitted only when present,
-     * and absent optional children are omitted.
+     * <p>Children are emitted in the order relay, capabilities, audio formats, video formats, network medium,
+     * key blobs, media, encryption options, transport; the relay block leads when present, each audio format
+     * is a flat {@code <audio>} element and each video format a flat {@code <video>} element, the network
+     * medium a {@code <net medium>} element emitted only when present, and absent optional children are
+     * omitted.
      *
      * @return the accept action stanza
      */
@@ -194,6 +205,9 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
             children.add(capability.toStanza());
         }
         for (var codec : audioCodecs) {
+            children.add(codec.toStanza());
+        }
+        for (var codec : videoCodecs) {
             children.add(codec.toStanza());
         }
         if (netMedium >= 0) {
@@ -222,11 +236,11 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
     /**
      * Decodes an {@code <accept>} action stanza into an {@link AcceptStanza}.
      *
-     * <p>The {@code <relay>} block, capability children, the flat {@code <audio>} format children, the
-     * {@code <net medium>} child, the {@code <enc>} key blobs, the {@code <media>} descriptor, the
-     * {@code <encopt>} options, and the embedded {@code <transport>} subtree are each decoded when present;
-     * the relay block is parsed into a {@link RelayInfo}, and the key blobs and transport subtree are
-     * retained verbatim.
+     * <p>The {@code <relay>} block, capability children, the flat {@code <audio>} and {@code <video>} format
+     * children, the {@code <net medium>} child, the {@code <enc>} key blobs, the {@code <media>} descriptor,
+     * the {@code <encopt>} options, and the embedded {@code <transport>} subtree are each decoded when
+     * present; the relay block is parsed into a {@link RelayInfo}, and the key blobs and transport subtree
+     * are retained verbatim.
      *
      * @param stanza the {@code <accept>} stanza
      * @return the decoded accept signal
@@ -247,6 +261,9 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
         var audioCodecs = stanza.streamChildren(AUDIO_ELEMENT)
                 .flatMap(audio -> CallCodecDescriptor.of(audio).stream())
                 .toList();
+        var videoCodecs = stanza.streamChildren(VIDEO_ELEMENT)
+                .flatMap(video -> CallCodecDescriptor.of(video).stream())
+                .toList();
         var encKeys = stanza.getChildren(ENC_ELEMENT)
                 .stream()
                 .toList();
@@ -254,7 +271,7 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
         var encOptions = stanza.getChild(CallEncOptions.ELEMENT).flatMap(CallEncOptions::of).orElse(null);
         var transport = stanza.getChild(TRANSPORT_ELEMENT).orElse(null);
         var relay = stanza.getChild(RELAY_ELEMENT).flatMap(RelayInfo::of).orElse(null);
-        return new AcceptStanza(callId, callCreator, netMedium, capabilities, audioCodecs, encKeys, media,
-                encOptions, transport, relay);
+        return new AcceptStanza(callId, callCreator, netMedium, capabilities, audioCodecs, videoCodecs, encKeys,
+                media, encOptions, transport, relay);
     }
 }

@@ -77,7 +77,7 @@ class Calls2SignalingRoundTripTest {
                 .attribute("transport-message-type", 13)
                 .build();
         var media = new CallMediaDescriptor(5, 48000);
-        var original = new AcceptStanza(CALL_ID, CALL_CREATOR, 2, capabilities, audio, encKeys, media,
+        var original = new AcceptStanza(CALL_ID, CALL_CREATOR, 2, capabilities, audio, List.of(), encKeys, media,
                 null, transport, null);
 
         var reparsed = Calls2CallStanza.parse(original.toStanza()).orElseThrow();

@@ -148,7 +148,7 @@ class Calls2SignalingWireFormatTest {
             var encKey = new StanzaBuilder().description("enc").content(HexFormat.of().parseHex("cafe")).build();
             var transport = new StanzaBuilder().description("transport").attribute("call-id", CALL_ID).build();
             var media = new CallMediaDescriptor(5, 48000);
-            var accept = new AcceptStanza(CALL_ID, CALL_CREATOR, 2, capabilities, audio,
+            var accept = new AcceptStanza(CALL_ID, CALL_CREATOR, 2, capabilities, audio, List.of(),
                     List.of(encKey), media, null, transport, null);
 
             var node = accept.toStanza();
